@@ -220,7 +220,7 @@
             <span class="edit-review-whatsapp-text">{{ whatsapp_atualizacao.texto_resumo }} Envie a nota atualizada pelo WhatsApp e confirme o reenvio.</span>
             <div class="edit-review-whatsapp-flow">
               {% if whatsapp_atualizacao.tem_whatsapp %}
-                <a class="edit-review-btn whatsapp-pulse" id="abrirWhatsappAtualizacao" href="{{ whatsapp_atualizacao.url }}" target="_blank" rel="noopener">Enviar nota atualizada pelo WhatsApp</a>
+                <a class="edit-review-btn whatsapp-pulse" id="abrirWhatsappAtualizacao" href="{% url 'estoque:preparar_whatsapp_venda' venda.id %}">Enviar nota atualizada pelo WhatsApp</a>
               {% else %}
                 <span class="edit-review-whatsapp-text">Cliente sem WhatsApp cadastrado para envio automatico.</span>
               {% endif %}

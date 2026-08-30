@@ -1689,7 +1689,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertIn("if (linha === linhaIgnorada) return false;", html)
         self.assertIn("linha.dataset.produtoId", html)
         self.assertIn("const idLinha = obterProdutoIdLinhaVenda(linha);", html)
-        self.assertIn('normalizarTextoVendaEstoque(linha.children[0]?.textContent || "");', html)
+        self.assertIn("normalizarTextoVendaEstoque(obterNomeProdutoLinhaVenda(linha));", html)
         self.assertIn('mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);', html)
 
     def test_vendas_template_bloqueia_duplicidade_no_enter_do_produto(self):
@@ -3683,11 +3683,11 @@ class ComprasListaFornecedorConferenciaTests(TestCase):
 
         self.assertContains(resposta, f'href="{url_edicao}"', count=2)
         self.assertIn(
-            f'<a class="listas-fornecedor-btn" href="{url_edicao}">Editar Lista</a>',
+            f'<a class="listas-fornecedor-btn" href="{url_edicao}">Editar</a>',
             html,
         )
         self.assertIn(
-            f'<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{url_edicao}">Editar Lista</a>',
+            f'<a class="listas-fornecedor-btn listas-fornecedor-mobile-action" data-mobile-action-feedback href="{url_edicao}">Editar</a>',
             html,
         )
         self.assertNotIn(f'<button type="button" class="listas-fornecedor-btn" href="{url_edicao}">Editar Lista</button>', html)
@@ -7500,13 +7500,27 @@ class ComprasListaFinanceiroTests(TestCase):
         resposta = self.client.get(reverse("estoque:compras_lista"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Nota paga", count=4)  # Desktop e mobile, duas compras.
+        self.assertContains(
+            resposta,
+            '<span class="compras-lista-financeiro paga">Nota paga</span>',
+            count=4,
+            html=True,
+        )
         self.assertContains(resposta, f"Vence em {(hoje + timedelta(days=5)):%d/%m/%Y}", count=2)
         self.assertContains(resposta, f"Vencida desde {(hoje - timedelta(days=2)):%d/%m/%Y}", count=2)
         self.assertContains(resposta, f"Parcial - vence em {(hoje + timedelta(days=3)):%d/%m/%Y}", count=2)
         self.assertContains(resposta, "Financeiro não localizado", count=2)
-        self.assertContains(resposta, "Cancelada", count=2)
-        self.assertNotContains(resposta, ">Finalizada<")
+        self.assertContains(
+            resposta,
+            '<span class="compras-lista-financeiro cancelada">Cancelada</span>',
+            count=2,
+            html=True,
+        )
+        self.assertNotContains(
+            resposta,
+            '<span class="compras-lista-financeiro">Finalizada</span>',
+            html=True,
+        )
         self.assertContains(
             resposta,
             f'href="{reverse("estoque:compras_detalhe", kwargs={"pk": avista.pk})}"',
@@ -9203,15 +9217,19 @@ class ComprasListaFornecedorGravarTests(TestCase):
         data_visita = date(2026, 7, 14)
         self.ativar_frequencia_fornecedor(referencia=data_visita)
 
-        resposta = self.client.get(
-            reverse("estoque:sugestao_compra_fornecedor"),
-            {
-                "fornecedor": str(self.fornecedor.id),
-                "fornecedor_ciclo": str(self.fornecedor.id),
-                "data_visita": data_visita.isoformat(),
-            },
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_visita,
+        ):
+            resposta = self.client.get(
+                reverse("estoque:sugestao_compra_fornecedor"),
+                {
+                    "fornecedor": str(self.fornecedor.id),
+                    "fornecedor_ciclo": str(self.fornecedor.id),
+                    "data_visita": data_visita.isoformat(),
+                },
+                secure=True,
+            )
 
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(resposta.context["fornecedor"], self.fornecedor)
@@ -9396,11 +9414,15 @@ class ComprasListaFornecedorGravarTests(TestCase):
         payload["dataVisitaFornecedor"] = data_visita.isoformat()
         payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        self.client.post(
-            reverse("estoque:compras_lista_fornecedor_gravar"),
-            {"lista_payload": json.dumps(payload)},
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=date(2026, 7, 14),
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
 
         self.assertFalse(ListaCompraFornecedor.objects.exists())
 
@@ -9412,11 +9434,15 @@ class ComprasListaFornecedorGravarTests(TestCase):
         payload["dataVisitaFornecedor"] = data_visita.isoformat()
         payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        self.client.post(
-            reverse("estoque:compras_lista_fornecedor_gravar"),
-            {"lista_payload": json.dumps(payload)},
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=date(2026, 7, 15),
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
 
         self.assertEqual(ListaCompraFornecedor.objects.get().data_visita_fornecedor, data_visita)
 
@@ -10584,7 +10610,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         resposta = self.client.get(reverse("estoque:compras_listas_fornecedor"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Cancelar Lista")
+        self.assertContains(resposta, ">Cancelar<")
         self.assertNotContains(resposta, "Excluir Lista")
         self.assertContains(resposta, reverse("estoque:compras_lista_fornecedor_cancelar", kwargs={"pk": lista.pk}))
         self.assertContains(resposta, "Tem certeza que deseja cancelar esta lista?")
@@ -12362,6 +12388,26 @@ class PixRecebidoTests(TestCase):
             ).exists()
         )
 
+    def test_gravar_venda_registra_snapshot_historico_de_estoque(self):
+        produto = self._produto_teste("Produto Snapshot Estoque Venda", quantidade=10)
+
+        resposta = self._post_gravar_venda(produto, quantidade="5")
+
+        self.assertEqual(resposta.status_code, 200)
+        venda = Venda.objects.get(pk=resposta.json()["venda_id"])
+        item = venda.itens.get()
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "un")
+
+        produto.quantidade = Decimal("30.000")
+        produto.save(update_fields=["quantidade"])
+        item.refresh_from_db()
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+
     def test_gravar_venda_bloqueia_estoque_insuficiente(self):
         produto = self._produto_teste("Produto Estoque Insuficiente Venda", quantidade=1)
 
@@ -12403,6 +12449,199 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(venda.total, Decimal("4.00"))
         self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).exists())
 
+    def test_adicionar_item_na_nota_registra_snapshot_historico_de_estoque(self):
+        cliente = Cliente.objects.create(nome="Cliente Snapshot Adicao", ativo=True)
+        produto = self._produto_teste("Produto Snapshot Adicao", quantidade=10)
+        produto.unidade_compra = "un"
+        produto.unidade_venda_1 = "un"
+        produto.save(update_fields=["unidade_compra", "unidade_venda_1"])
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("0.00"),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}),
+            data={
+                "produto_id": str(produto.id),
+                "quantidade": "5",
+                "preco_unitario": "2.00",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item = ItemVenda.objects.get(venda=venda, produto=produto)
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "un")
+
+    def test_item_venda_antigo_sem_snapshot_continua_funcionando(self):
+        cliente = Cliente.objects.create(nome="Cliente Item Antigo Snapshot", ativo=True)
+        produto = self._produto_teste("Produto Item Antigo Snapshot", quantidade=30)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("5.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("10.00"),
+        )
+
+        item.refresh_from_db()
+        self.assertIsNone(item.estoque_antes)
+        self.assertIsNone(item.estoque_movimentado)
+        self.assertIsNone(item.estoque_depois)
+        self.assertEqual(item.estoque_unidade_snapshot, "")
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+        self.assertEqual(resposta.status_code, 200)
+
+    def test_nota_nao_exibe_snapshot_historico_do_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Snapshot", ativo=True)
+        produto = self._produto_teste("Produto Nota Snapshot", quantidade=30)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("5.000"),
+            unidade="KG",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("10.00"),
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("5.000"),
+            estoque_depois=Decimal("5.000"),
+            estoque_unidade_snapshot="KG",
+        )
+
+        produto.quantidade = Decimal("30.000")
+        produto.save(update_fields=["quantidade"])
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Produto Nota Snapshot")
+        self.assertNotContains(resposta, "Estoque antes:")
+        self.assertNotContains(resposta, "Saida:")
+        self.assertNotContains(resposta, "Saldo apos:")
+        self.assertNotContains(resposta, "30 KG")
+
+    def test_nota_nao_exibe_snapshot_inventado_para_item_antigo(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Snapshot Antigo", ativo=True)
+        produto = self._produto_teste("Produto Nota Snapshot Antigo", quantidade=30)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("5.000"),
+            unidade="KG",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("10.00"),
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Produto Nota Snapshot Antigo")
+        self.assertNotContains(resposta, "Estoque antes:")
+        self.assertNotContains(resposta, "Saida:")
+        self.assertNotContains(resposta, "Saldo apos:")
+
+    def test_nota_nao_exibe_snapshot_historico_do_item_removido(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Removido Snapshot", ativo=True)
+        produto = self._produto_teste("Produto Nota Removido Snapshot", quantidade=10)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("10.00"),
+        )
+        ItemVendaRemovido.objects.create(
+            venda=venda,
+            produto=produto,
+            produto_nome_snapshot=produto.nome,
+            quantidade_snapshot=Decimal("5.000"),
+            unidade_snapshot="KG",
+            preco_unitario_snapshot=Decimal("2.00"),
+            valor_total_snapshot=Decimal("10.00"),
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("5.000"),
+            estoque_depois=Decimal("5.000"),
+            estoque_unidade_snapshot="KG",
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "ITENS REMOVIDOS DA NOTA")
+        self.assertContains(resposta, "Produto Nota Removido Snapshot")
+        self.assertNotContains(resposta, "Estoque antes:")
+        self.assertNotContains(resposta, "Saida:")
+        self.assertNotContains(resposta, "Saldo apos:")
+
+    def test_nota_nao_exibe_snapshot_fracionado(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Snapshot Fracionado", ativo=True)
+        produto = self._produto_teste("Produto Nota Snapshot Fracionado", quantidade=30)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            total=Decimal("11.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("5500.000"),
+            unidade="G",
+            preco_unitario=Decimal("0.01"),
+            valor_total=Decimal("11.00"),
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("5.500"),
+            estoque_depois=Decimal("4.500"),
+            estoque_unidade_snapshot="KG",
+        )
+        ItemVendaRemovido.objects.create(
+            venda=venda,
+            produto=produto,
+            produto_nome_snapshot="Produto Removido Snapshot Fracionado",
+            quantidade_snapshot=Decimal("750.000"),
+            unidade_snapshot="G",
+            preco_unitario_snapshot=Decimal("0.01"),
+            valor_total_snapshot=Decimal("1.50"),
+            estoque_antes=Decimal("1.000"),
+            estoque_movimentado=Decimal("0.750"),
+            estoque_depois=Decimal("0.250"),
+            estoque_unidade_snapshot="KG",
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Produto Nota Snapshot Fracionado")
+        self.assertContains(resposta, "Produto Removido Snapshot Fracionado")
+        self.assertNotContains(resposta, "Estoque antes:")
+        self.assertNotContains(resposta, "Saida:")
+        self.assertNotContains(resposta, "Saldo apos:")
+
     def test_remover_item_da_nota_devolve_estoque_do_item(self):
         cliente = Cliente.objects.create(nome="Cliente Remove Estoque", ativo=True)
         produto = self._produto_teste("Produto Remove Estoque", quantidade=3)
@@ -12442,6 +12681,81 @@ class PixRecebidoTests(TestCase):
                 descricao__icontains="Estoque devolvido",
             ).exists()
         )
+
+    def test_remover_item_preserva_snapshot_historico_no_item_removido(self):
+        produto = self._produto_teste("Produto Remove Snapshot", quantidade=10)
+        produto.unidade_compra = "un"
+        produto.unidade_venda_1 = "un"
+        produto.save(update_fields=["unidade_compra", "unidade_venda_1"])
+        resposta_venda = self._post_gravar_venda(produto, quantidade="5")
+        venda = Venda.objects.get(pk=resposta_venda.json()["venda_id"])
+        item = venda.itens.get()
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        self.assertEqual(produto.quantidade, Decimal("10.000"))
+        self.assertEqual(remocao.estoque_antes, Decimal("10.000"))
+        self.assertEqual(remocao.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(remocao.estoque_depois, Decimal("5.000"))
+        self.assertEqual(remocao.estoque_unidade_snapshot, "un")
+
+    def test_remover_item_fracionado_preserva_snapshot_convertido(self):
+        cliente = Cliente.objects.create(nome="Cliente Remove Snapshot Fracionado", ativo=True)
+        produto = Produto.objects.create(
+            nome="Produto Remove Snapshot Fracionado",
+            quantidade=Decimal("5.000"),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+            unidade_venda_2="G",
+            fator_conversao=Decimal("1000.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("20.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2000.000"),
+            unidade="G",
+            preco_unitario=Decimal("0.01"),
+            valor_total=Decimal("20.00"),
+            estoque_antes=Decimal("5.000"),
+            estoque_movimentado=Decimal("2.000"),
+            estoque_depois=Decimal("3.000"),
+            estoque_unidade_snapshot="KG",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        self.assertEqual(remocao.estoque_antes, Decimal("5.000"))
+        self.assertEqual(remocao.estoque_movimentado, Decimal("2.000"))
+        self.assertEqual(remocao.estoque_depois, Decimal("3.000"))
+        self.assertEqual(remocao.estoque_unidade_snapshot, "KG")
 
     def test_desfazer_remocao_baixa_estoque_novamente(self):
         cliente = Cliente.objects.create(nome="Cliente Desfaz Estoque", ativo=True)
@@ -12492,6 +12806,219 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
         self.assertFalse(remocao.estoque_devolvido)
         self.assertTrue(ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).exists())
+
+    def test_desfazer_remocao_registra_novo_snapshot_do_estoque_atual(self):
+        produto = self._produto_teste("Produto Desfaz Snapshot", quantidade=10)
+        produto.unidade_compra = "un"
+        produto.unidade_venda_1 = "un"
+        produto.save(update_fields=["unidade_compra", "unidade_venda_1"])
+        resposta_venda = self._post_gravar_venda(produto, quantidade="5")
+        venda = Venda.objects.get(pk=resposta_venda.json()["venda_id"])
+        item = venda.itens.get()
+        produto_extra = self._produto_teste("Produto Extra Desfaz Snapshot", quantidade=4)
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_extra,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("2.00"),
+        )
+
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda, produto=produto)
+        produto.quantidade = Decimal("8.000")
+        produto.save(update_fields=["quantidade"])
+
+        resposta = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        remocao.refresh_from_db()
+        novo_item = ItemVenda.objects.get(venda=venda, produto=produto)
+        self.assertEqual(produto.quantidade, Decimal("3.000"))
+        self.assertEqual(novo_item.estoque_antes, Decimal("8.000"))
+        self.assertEqual(novo_item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(novo_item.estoque_depois, Decimal("3.000"))
+        self.assertEqual(novo_item.estoque_unidade_snapshot, "un")
+        self.assertEqual(
+            ItemVenda.objects.filter(venda=venda, produto=produto).count(),
+            1,
+        )
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertEqual(remocao.estoque_antes, Decimal("10.000"))
+        self.assertEqual(remocao.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(remocao.estoque_depois, Decimal("5.000"))
+
+    def test_cancelar_venda_preserva_snapshot_dos_itens(self):
+        produto = self._produto_teste("Produto Cancela Snapshot", quantidade=10)
+        produto.unidade_compra = "un"
+        produto.unidade_venda_1 = "un"
+        produto.save(update_fields=["unidade_compra", "unidade_venda_1"])
+        resposta_venda = self._post_gravar_venda(produto, quantidade="5")
+        venda = Venda.objects.get(pk=resposta_venda.json()["venda_id"])
+        item = venda.itens.get()
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("10.000"))
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "un")
+
+    def test_fluxos_de_item_antigo_sem_snapshot_continuam_funcionando(self):
+        cliente = Cliente.objects.create(nome="Cliente Snapshot Antigo Fluxos", ativo=True)
+        produto = self._produto_teste("Produto Snapshot Antigo Fluxos", quantidade=5)
+        produto_extra = self._produto_teste("Produto Extra Snapshot Antigo Fluxos", quantidade=4)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("6.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_extra,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("2.00"),
+        )
+
+        resposta_remocao = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+        self.assertEqual(resposta_remocao.status_code, 200)
+        remocao = ItemVendaRemovido.objects.get(venda=venda, produto=produto)
+        self.assertIsNone(remocao.estoque_antes)
+        self.assertIsNone(remocao.estoque_movimentado)
+        self.assertIsNone(remocao.estoque_depois)
+        self.assertEqual(remocao.estoque_unidade_snapshot, "")
+
+        resposta_desfazer = self.client.post(
+            reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id}),
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+        self.assertEqual(resposta_desfazer.status_code, 200)
+        novo_item = ItemVenda.objects.get(venda=venda, produto=produto)
+        self.assertEqual(novo_item.estoque_antes, Decimal("7.000"))
+        self.assertEqual(novo_item.estoque_movimentado, Decimal("2.000"))
+        self.assertEqual(novo_item.estoque_depois, Decimal("5.000"))
+
+        novo_item.estoque_antes = None
+        novo_item.estoque_movimentado = None
+        novo_item.estoque_depois = None
+        novo_item.estoque_unidade_snapshot = ""
+        novo_item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+        resposta_cancelamento = self._post_cancelar_venda(venda)
+        self.assertEqual(resposta_cancelamento.status_code, 200)
+        novo_item.refresh_from_db()
+        self.assertIsNone(novo_item.estoque_antes)
+        self.assertIsNone(novo_item.estoque_movimentado)
+        self.assertIsNone(novo_item.estoque_depois)
+        self.assertEqual(novo_item.estoque_unidade_snapshot, "")
+
+    def test_nota_usa_modal_para_desfazer_remocao_e_backend_nao_duplica_item(self):
+        cliente = Cliente.objects.create(nome="Cliente Modal Desfaz", ativo=True)
+        produto = self._produto_teste("Produto Modal Desfaz", quantidade=3)
+        produto_extra = self._produto_teste("Produto Extra Modal Desfaz", quantidade=4)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("6.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("4.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_extra,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("2.00"),
+            valor_total=Decimal("2.00"),
+        )
+        self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+        remocao = ItemVendaRemovido.objects.get(venda=venda)
+        desfazer_url = reverse("estoque:venda_desfazer_remocao_item", kwargs={"pk": venda.id, "remocao_id": remocao.id})
+
+        detalhe = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+
+        self.assertEqual(detalhe.status_code, 200)
+        self.assertContains(detalhe, 'id="desfazerRemocaoModal"')
+        self.assertContains(detalhe, f'action="{desfazer_url}"')
+        self.assertContains(detalhe, 'name="confirmacao_desfazer" value="DESFAZER"')
+        self.assertContains(detalhe, 'data-desfazer-remocao-abrir')
+        self.assertContains(detalhe, 'data-produto="Produto Modal Desfaz"')
+        self.assertNotContains(detalhe, f'<a href="{desfazer_url}">Desfazer remo&ccedil;&atilde;o</a>', html=True)
+
+        primeira_resposta = self.client.post(
+            desfazer_url,
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+            follow=True,
+        )
+        segunda_resposta = self.client.post(
+            desfazer_url,
+            data={"confirmacao_desfazer": "DESFAZER"},
+            secure=True,
+        )
+
+        self.assertEqual(primeira_resposta.status_code, 200)
+        mensagens_primeira = [str(mensagem) for mensagem in get_messages(primeira_resposta.wsgi_request)]
+        self.assertIn("Remocao do item desfeita com sucesso.", mensagens_primeira)
+        self.assertEqual(segunda_resposta.status_code, 302)
+        remocao.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(remocao.status, ItemVendaRemovido.STATUS_REVERTIDO)
+        self.assertEqual(
+            ItemVenda.objects.filter(venda=venda, produto=produto, quantidade=Decimal("2.000")).count(),
+            1,
+        )
+        self.assertEqual(produto.quantidade, 3)
 
     def test_desfazer_remocao_bloqueia_estoque_insuficiente_sem_alterar_nota(self):
         cliente = Cliente.objects.create(nome="Cliente Desfaz Sem Estoque", ativo=True)
@@ -23885,3 +24412,1824 @@ class CartoesAReceberFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="liquidacao_cartao").count(), 0)
         self.assertEqual(views._saldo_conta_financeira(self.conta_cartoes), Decimal("100.00"))
         self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+
+
+
+class VendaEdicaoUnificadaTests(TestCase):
+    def criar_produto(self, nome, estoque):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal(str(estoque)),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_venda_1="UN",
+            ativo=True,
+            excluido=False,
+        )
+
+    def criar_venda_base(self, quantidade="2.000", preco="10.00", estoque="10.000"):
+        cliente = Cliente.objects.create(
+            nome="Cliente Edicao Unificada",
+            ativo=True,
+        )
+        produto = self.criar_produto(
+            "Produto Edicao Unificada",
+            estoque,
+        )
+        quantidade_decimal = Decimal(quantidade)
+        preco_decimal = Decimal(preco)
+        total = (quantidade_decimal * preco_decimal).quantize(Decimal("0.01"))
+
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=total,
+        )
+
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade_decimal,
+            unidade="UN",
+            preco_unitario=preco_decimal,
+            valor_total=total,
+        )
+
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=total,
+            valor_em_aberto=total,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        return cliente, produto, venda, item
+
+    def payload_edicao(self, venda, item, quantidade, preco):
+        return {
+            "venda_id": venda.id,
+            "cliente_id": venda.cliente_id,
+            "data_venda": venda.data_venda.isoformat(),
+            "data_vencimento": (
+                venda.data_vencimento.isoformat()
+                if venda.data_vencimento
+                else ""
+            ),
+            "tipo_pagamento": venda.tipo_pagamento,
+            "operador": venda.operador,
+            "itens": [
+                {
+                    "item_id": item.id,
+                    "produto_id": item.produto_id,
+                    "produto_nome": item.produto.nome,
+                    "quantidade": str(quantidade),
+                    "unidade": item.unidade,
+                    "preco_unitario": str(preco),
+                    "valor_total": "0",
+                }
+            ],
+        }
+
+    def preparar_venda_a_vista_com_movimentos(self, caixa="0.00", banco="0.00", criar_movimentos=True):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        venda.tipo_pagamento = "A vista"
+        venda.data_vencimento = None
+        venda.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.status = ContaReceber.STATUS_PAGA
+        conta.valor_em_aberto = Decimal("0.00")
+        conta.save(update_fields=["status", "valor_em_aberto", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=venda.total,
+            forma_pagamento="A vista",
+            observacao="Baixa automatica pela conversao da venda de A prazo para A vista.",
+        )
+
+        if criar_movimentos:
+            valores = {
+                "caixa": Decimal(caixa).quantize(Decimal("0.01")),
+                "banco": Decimal(banco).quantize(Decimal("0.01")),
+            }
+            contas = {
+                "caixa": views._conta_financeira_padrao("caixa"),
+                "banco": views._conta_financeira_padrao("banco"),
+            }
+            for chave, valor in valores.items():
+                if valor <= Decimal("0.00"):
+                    continue
+                MovimentoFinanceiro.objects.create(
+                    conta=contas[chave],
+                    tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                    valor=valor,
+                    data=venda.data_venda,
+                    descricao=views._descricao_venda_a_vista(venda, contas[chave]),
+                    operador=venda.operador,
+                    origem="venda",
+                )
+
+        return cliente, produto, venda, item, conta
+
+    def payload_conversao_a_prazo(self, venda, item, vencimento=None):
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload["tipo_pagamento"] = "A prazo"
+        payload["data_vencimento"] = (vencimento or (timezone.localdate() + timedelta(days=7))).isoformat()
+        return payload
+
+    def payload_venda_nova(self, cliente, produto, quantidade="1.000", tipo_pagamento="A prazo"):
+        return {
+            "cliente_id": cliente.id,
+            "data_venda": timezone.localdate().isoformat(),
+            "data_vencimento": (timezone.localdate() + timedelta(days=7)).isoformat(),
+            "tipo_pagamento": tipo_pagamento,
+            "operador": "Teste",
+            "itens": [
+                {
+                    "produto_id": produto.id,
+                    "produto_nome": produto.nome,
+                    "quantidade": quantidade,
+                    "unidade": "UN",
+                    "preco_unitario": "10.00",
+                    "valor_total": "0",
+                }
+            ],
+        }
+
+    def criar_contas_abertas_cliente(self, cliente, valores=None):
+        valores = valores or [
+            "10.00",
+            "12.50",
+            "15.00",
+            "18.20",
+            "20.00",
+            "22.30",
+            "25.00",
+            "35.00",
+            "60.86",
+        ]
+        contas = []
+        for indice, valor in enumerate(valores, start=1):
+            valor_decimal = Decimal(valor)
+            contas.append(ContaReceber.objects.create(
+                cliente=cliente,
+                data_emissao=timezone.localdate(),
+                data_vencimento=timezone.localdate() + timedelta(days=indice),
+                valor_original=valor_decimal,
+                valor_em_aberto=valor_decimal,
+                status=ContaReceber.STATUS_ABERTA,
+            ))
+        return contas
+
+    def test_tela_vendas_modo_edicao_exibe_alerta_e_acao_nova_venda(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["venda_edicao"]["id"], venda.id)
+        self.assertContains(resposta, f"Editando venda #{venda.id}")
+        self.assertContains(resposta, 'id="btnNovaVendaEdicao"')
+        self.assertContains(resposta, "Salvar Alteracoes")
+        self.assertContains(resposta, "venda_id: vendaEdicaoVenda?.id || null")
+        self.assertNotContains(resposta, "Para iniciar outra venda")
+        self.assertNotContains(resposta, "carregada para edicao")
+        conteudo = resposta.content.decode()
+        inicio_funcao = conteudo.index("function sairModoEdicaoParaNovaVenda()")
+        fim_funcao = conteudo.index("function criarLinhaItemVenda", inicio_funcao)
+        corpo_funcao = conteudo[inicio_funcao:fim_funcao]
+        self.assertIn("window.location.href = vendasUrl;", corpo_funcao)
+        self.assertNotIn("limparItensVenda();", corpo_funcao)
+        self.assertNotIn("limparCabecalhoVenda(true);", corpo_funcao)
+        self.assertNotIn("clienteSelecionado = clientePreviewFinanceiro;", conteudo)
+        self.assertIn("preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);", conteudo)
+
+    def test_tela_vendas_edicao_exibe_snapshot_historico_do_item_sem_usar_estoque_atual(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        item.estoque_antes = Decimal("26.000")
+        item.estoque_movimentado = Decimal("1.000")
+        item.estoque_depois = Decimal("25.000")
+        item.estoque_unidade_snapshot = "PCT"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+        produto.quantidade = Decimal("999.000")
+        produto.save(update_fields=["quantidade"])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item_contexto = resposta.context["venda_edicao"]["itens"][0]
+        self.assertEqual(item_contexto["estoque_antes"], "26.000")
+        self.assertEqual(item_contexto["estoque_movimentado"], "1.000")
+        self.assertEqual(item_contexto["estoque_depois"], "25.000")
+        self.assertEqual(item_contexto["estoque_unidade_snapshot"], "PCT")
+        self.assertNotIn("999.000", [
+            item_contexto["estoque_antes"],
+            item_contexto["estoque_movimentado"],
+            item_contexto["estoque_depois"],
+        ])
+        self.assertContains(resposta, "item-venda-estoque-badge")
+        self.assertContains(resposta, "criarTextoEstoqueSnapshotVenda")
+        self.assertContains(resposta, "Est:")
+        self.assertNotContains(resposta, "Estoque antes:")
+        self.assertNotContains(resposta, "Saida:")
+        self.assertNotContains(resposta, "Saldo apos:")
+
+    def test_tela_vendas_payload_usa_nome_real_sem_badge_estoque(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        item.estoque_antes = Decimal("26.000")
+        item.estoque_movimentado = Decimal("1.000")
+        item.estoque_depois = Decimal("25.000")
+        item.estoque_unidade_snapshot = "PCT"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "item-venda-estoque-badge")
+        self.assertContains(resposta, "produto_nome: obterNomeProdutoLinhaVenda(tr)")
+        self.assertNotContains(resposta, "produto_nome: tr.children[0].textContent.trim()")
+
+    def test_tela_vendas_clique_edicao_usa_nome_real_sem_badge_estoque(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        item.estoque_antes = Decimal("26.000")
+        item.estoque_movimentado = Decimal("1.000")
+        item.estoque_depois = Decimal("25.000")
+        item.estoque_unidade_snapshot = "PCT"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "function obterNomeProdutoLinhaVenda(linha)")
+        self.assertContains(resposta, "const nome = obterNomeProdutoLinhaVenda(linha);")
+        self.assertContains(resposta, "produtoBusca.value = nome;")
+        self.assertNotContains(resposta, "const nome = linha.children[0].textContent.trim()")
+
+    def test_tela_vendas_edicao_nao_envia_snapshot_para_item_antigo_sem_snapshot(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item_contexto = resposta.context["venda_edicao"]["itens"][0]
+        self.assertEqual(item_contexto["estoque_antes"], "")
+        self.assertEqual(item_contexto["estoque_movimentado"], "")
+        self.assertEqual(item_contexto["estoque_depois"], "")
+        self.assertEqual(item_contexto["estoque_unidade_snapshot"], "")
+        self.assertContains(resposta, "if (!item || !item.estoque_antes)")
+
+    def test_tela_vendas_nova_venda_nao_carrega_contexto_de_edicao(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIsNone(resposta.context["venda_edicao"])
+        self.assertNotContains(resposta, f"Editando venda #{venda.id}")
+        self.assertNotContains(resposta, 'id="btnNovaVendaEdicao"')
+        self.assertContains(resposta, "<button type=\"button\" id=\"btnGravarVenda\" class=\"acao-venda-btn primaria\">Gravar Venda</button>", html=True)
+
+    def test_resumo_financeiro_vendas_mostra_pendencias_gerais_apos_venda_atual_a_vista(self):
+        cliente, produto, venda, item, conta_venda = self.preparar_venda_a_vista_com_movimentos(
+            banco="39.80",
+            criar_movimentos=False,
+        )
+        self.criar_contas_abertas_cliente(cliente)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        financeiro = resposta.context["cliente_inicial"]["financeiro"]
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(conta_venda.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(financeiro["contas_abertas_qtd"], 9)
+        self.assertEqual(Decimal(financeiro["contas_abertas_total"]), Decimal("218.86"))
+        self.assertContains(resposta, 'contexto: "venda"')
+        self.assertContains(resposta, 'contexto: "venda_rapida"')
+
+        resposta_autocomplete = self.client.get(
+            reverse("estoque:clientes_autocomplete"),
+            {"q": cliente.nome, "contexto": "venda_rapida"},
+            secure=True,
+        )
+        dados_cliente = resposta_autocomplete.json()["clientes"][0]
+        self.assertEqual(dados_cliente["financeiro"]["contas_abertas_qtd"], 0)
+        self.assertEqual(Decimal(dados_cliente["financeiro"]["contas_abertas_total"]), Decimal("0.00"))
+
+        resposta_cliente_selecionado = self.client.get(
+            reverse("estoque:clientes_autocomplete"),
+            {"cliente_id": cliente.id, "contexto": "venda"},
+            secure=True,
+        )
+        cliente_selecionado = resposta_cliente_selecionado.json()["clientes"][0]
+        self.assertEqual(cliente_selecionado["financeiro"]["contas_abertas_qtd"], 9)
+        self.assertEqual(Decimal(cliente_selecionado["financeiro"]["contas_abertas_total"]), Decimal("218.86"))
+
+    def test_resumo_financeiro_cliente_sem_contas_abertas_permanece_zerado(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Pendencias Venda", ativo=True)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?cliente_id={cliente.id}",
+            secure=True,
+        )
+        financeiro = resposta.context["cliente_inicial"]["financeiro"]
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(financeiro["contas_abertas_qtd"], 0)
+        self.assertEqual(Decimal(financeiro["contas_abertas_total"]), Decimal("0.00"))
+        self.assertEqual(financeiro["contas_vencidas_qtd"], 0)
+        self.assertEqual(Decimal(financeiro["credito_disponivel"]), Decimal("0.00"))
+
+    def test_resumo_financeiro_edicao_e_nova_venda_usam_mesmas_pendencias_do_cliente(self):
+        cliente, produto, venda, item, conta_venda = self.preparar_venda_a_vista_com_movimentos(
+            banco="39.80",
+            criar_movimentos=False,
+        )
+        self.criar_contas_abertas_cliente(cliente)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        resposta_nova = self.client.get(
+            f"{reverse('estoque:vendas')}?cliente_id={cliente.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_nova.status_code, 200)
+        self.assertEqual(
+            resposta_edicao.context["cliente_inicial"]["financeiro"],
+            resposta_nova.context["cliente_inicial"]["financeiro"],
+        )
+        self.assertEqual(resposta_edicao.context["cliente_inicial"]["financeiro"]["contas_abertas_qtd"], 9)
+        self.assertEqual(Decimal(resposta_nova.context["cliente_inicial"]["financeiro"]["contas_abertas_total"]), Decimal("218.86"))
+
+    def test_conversao_venda_a_vista_nao_altera_outras_contas_do_cliente(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="1.000",
+            preco="96.30",
+            estoque="8.000",
+        )
+        contas_outras = self.criar_contas_abertas_cliente(cliente)
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="1.000",
+            preco="96.30",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "0,00",
+            "banco": "96,30",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        conta_venda = ContaReceber.objects.get(venda=venda)
+        conta_venda.refresh_from_db()
+        self.assertEqual(conta_venda.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta_venda.valor_em_aberto, Decimal("0.00"))
+
+        for conta in contas_outras:
+            conta.refresh_from_db()
+            self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+            self.assertGreater(conta.valor_em_aberto, Decimal("0.00"))
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        financeiro = resposta_edicao.context["cliente_inicial"]["financeiro"]
+        self.assertEqual(financeiro["contas_abertas_qtd"], 9)
+        self.assertEqual(Decimal(financeiro["contas_abertas_total"]), Decimal("218.86"))
+
+    def test_nova_venda_para_mesmo_cliente_nao_altera_venda_em_edicao_anterior(self):
+        cliente, produto_antigo, venda_antiga, item_antigo = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        produto_novo = self.criar_produto("Produto Nova Venda Sem Editar Antiga", "10.000")
+        vendas_antes = Venda.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_venda_nova(cliente, produto_novo, quantidade="3.000")),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(Venda.objects.count(), vendas_antes + 1)
+        venda_antiga.refresh_from_db()
+        item_antigo.refresh_from_db()
+        produto_antigo.refresh_from_db()
+        produto_novo.refresh_from_db()
+        venda_nova = Venda.objects.get(pk=resposta.json()["venda_id"])
+        self.assertNotEqual(venda_nova.id, venda_antiga.id)
+        self.assertEqual(venda_antiga.total, Decimal("20.00"))
+        self.assertEqual(item_antigo.quantidade, Decimal("2.000"))
+        self.assertEqual(produto_antigo.quantidade, Decimal("8.000"))
+        self.assertEqual(produto_novo.quantidade, Decimal("7.000"))
+
+    def test_venda_antiga_com_pagamento_nao_bloqueia_venda_nova_sem_venda_id(self):
+        cliente, produto_antigo, venda_antiga, item_antigo, conta_antiga = self.preparar_venda_a_vista_com_movimentos(
+            caixa="19.90",
+            banco="19.90",
+        )
+        produto_novo = self.criar_produto("Produto Nova Venda Ignora Pagamento Antigo", "10.000")
+        payload = self.payload_venda_nova(cliente, produto_novo, quantidade="1.000", tipo_pagamento="A prazo")
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda_antiga.refresh_from_db()
+        conta_antiga.refresh_from_db()
+        self.assertEqual(venda_antiga.tipo_pagamento, "A vista")
+        self.assertEqual(conta_antiga.status, ContaReceber.STATUS_PAGA)
+        venda_nova = Venda.objects.get(pk=resposta.json()["venda_id"])
+        self.assertNotEqual(venda_nova.id, venda_antiga.id)
+        self.assertEqual(venda_nova.tipo_pagamento, "A prazo")
+
+    def test_salvar_edicao_continua_mantendo_contexto_da_propria_venda(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        payload = self.payload_edicao(venda, item, quantidade="3.000", preco="10.00")
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["venda_id"], venda.id)
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["id"], venda.id)
+        self.assertContains(resposta_edicao, f"Editando venda #{venda.id}")
+        self.assertContains(resposta_edicao, "if (vendaEdicaoVenda?.id) {")
+        self.assertContains(resposta_edicao, "limparFechamentoVenda();")
+
+    def test_edicao_unificada_aumenta_quantidade_baixando_apenas_diferenca(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="10.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="3.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("9.000"))
+        self.assertEqual(item.quantidade, Decimal("3.000"))
+        self.assertEqual(venda.total, Decimal("30.00"))
+        self.assertEqual(conta.valor_original, Decimal("30.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("30.00"))
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="quantidade_item_alterada",
+            ).exists()
+        )
+
+    def test_edicao_unificada_reduz_quantidade_devolvendo_apenas_diferenca(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="3.000",
+            preco="10.00",
+            estoque="7.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(venda.total, Decimal("20.00"))
+        self.assertEqual(conta.valor_original, Decimal("20.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+
+    def test_edicao_unificada_atualiza_snapshot_ao_aumentar_e_reduzir_quantidade(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        item.estoque_antes = Decimal("10.000")
+        item.estoque_movimentado = Decimal("2.000")
+        item.estoque_depois = Decimal("8.000")
+        item.estoque_unidade_snapshot = "UN"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+
+        resposta_aumento = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_edicao(venda, item, quantidade="5.000", preco="10.00")),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_aumento.status_code, 200)
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(item.quantidade, Decimal("5.000"))
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("5.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "UN")
+
+        resposta_reducao = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_edicao(venda, item, quantidade="3.000", preco="10.00")),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_reducao.status_code, 200)
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("7.000"))
+        self.assertEqual(item.quantidade, Decimal("3.000"))
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("3.000"))
+        self.assertEqual(item.estoque_depois, Decimal("7.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "UN")
+
+        produto.quantidade = Decimal("30.000")
+        produto.save(update_fields=["quantidade"])
+        item.refresh_from_db()
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("3.000"))
+        self.assertEqual(item.estoque_depois, Decimal("7.000"))
+
+    def test_edicao_unificada_snapshot_quantidade_respeita_unidade_fracionada(self):
+        cliente = Cliente.objects.create(nome="Cliente Snapshot Fracionado", ativo=True)
+        produto = Produto.objects.create(
+            nome="Produto Snapshot Fracionado",
+            quantidade=Decimal("9.000"),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+            unidade_venda_2="G",
+            fator_conversao=Decimal("1000.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("10.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1000.000"),
+            unidade="G",
+            preco_unitario=Decimal("0.01"),
+            valor_total=Decimal("10.00"),
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("1.000"),
+            estoque_depois=Decimal("9.000"),
+            estoque_unidade_snapshot="KG",
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=venda.total,
+            valor_em_aberto=venda.total,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_edicao(venda, item, quantidade="1500.000", preco="0.01")),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("8.500"))
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("1.500"))
+        self.assertEqual(item.estoque_depois, Decimal("8.500"))
+        self.assertEqual(item.estoque_unidade_snapshot, "KG")
+
+    def test_edicao_unificada_troca_produto_recalcula_snapshot_pelo_produto_novo(self):
+        cliente, produto_a, venda, item = self.criar_venda_base(
+            quantidade="5.000",
+            preco="10.00",
+            estoque="5.000",
+        )
+        item.estoque_antes = Decimal("10.000")
+        item.estoque_movimentado = Decimal("5.000")
+        item.estoque_depois = Decimal("5.000")
+        item.estoque_unidade_snapshot = "UN"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+        produto_b = self.criar_produto("Produto B Snapshot Troca", "20.000")
+        payload = self.payload_edicao(venda, item, quantidade="5.000", preco="10.00")
+        payload["itens"][0]["produto_id"] = produto_b.id
+        payload["itens"][0]["produto_nome"] = produto_b.nome
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_a.refresh_from_db()
+        produto_b.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto_a.quantidade, Decimal("10.000"))
+        self.assertEqual(produto_b.quantidade, Decimal("15.000"))
+        self.assertEqual(item.produto, produto_b)
+        self.assertEqual(item.estoque_antes, Decimal("20.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
+        self.assertEqual(item.estoque_depois, Decimal("15.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "UN")
+
+    def test_edicao_unificada_troca_produto_com_quantidade_diferente_baixa_apenas_novo_item(self):
+        cliente, produto_a, venda, item = self.criar_venda_base(
+            quantidade="5.000",
+            preco="10.00",
+            estoque="5.000",
+        )
+        item.estoque_antes = Decimal("10.000")
+        item.estoque_movimentado = Decimal("5.000")
+        item.estoque_depois = Decimal("5.000")
+        item.estoque_unidade_snapshot = "UN"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+        produto_b = self.criar_produto("Produto B Snapshot Troca Qtd", "20.000")
+        payload = self.payload_edicao(venda, item, quantidade="3.000", preco="10.00")
+        payload["itens"][0]["produto_id"] = produto_b.id
+        payload["itens"][0]["produto_nome"] = produto_b.nome
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_a.refresh_from_db()
+        produto_b.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto_a.quantidade, Decimal("10.000"))
+        self.assertEqual(produto_b.quantidade, Decimal("17.000"))
+        self.assertEqual(item.quantidade, Decimal("3.000"))
+        self.assertEqual(item.estoque_antes, Decimal("20.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("3.000"))
+        self.assertEqual(item.estoque_depois, Decimal("17.000"))
+
+    def test_edicao_unificada_troca_unidade_recalcula_snapshot_na_unidade_base(self):
+        cliente = Cliente.objects.create(nome="Cliente Troca Unidade Snapshot", ativo=True)
+        produto = Produto.objects.create(
+            nome="Produto Troca Unidade Snapshot",
+            quantidade=Decimal("9.000"),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+            unidade_venda_2="G",
+            fator_conversao=Decimal("1000.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("10.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="KG",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("1.000"),
+            estoque_depois=Decimal("9.000"),
+            estoque_unidade_snapshot="KG",
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=venda.total,
+            valor_em_aberto=venda.total,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        payload = self.payload_edicao(venda, item, quantidade="2000.000", preco="0.01")
+        payload["itens"][0]["unidade"] = "G"
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(item.quantidade, Decimal("2000.000"))
+        self.assertEqual(item.unidade, "G")
+        self.assertEqual(item.estoque_antes, Decimal("10.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("2.000"))
+        self.assertEqual(item.estoque_depois, Decimal("8.000"))
+        self.assertEqual(item.estoque_unidade_snapshot, "KG")
+
+    def test_edicao_unificada_troca_produto_em_item_antigo_sem_snapshot_continua_funcionando(self):
+        cliente, produto_a, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        produto_b = self.criar_produto("Produto B Item Antigo Sem Snapshot", "20.000")
+        payload = self.payload_edicao(venda, item, quantidade="2.000", preco="10.00")
+        payload["itens"][0]["produto_id"] = produto_b.id
+        payload["itens"][0]["produto_nome"] = produto_b.nome
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_a.refresh_from_db()
+        produto_b.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto_a.quantidade, Decimal("10.000"))
+        self.assertEqual(produto_b.quantidade, Decimal("18.000"))
+        self.assertEqual(item.estoque_antes, Decimal("20.000"))
+        self.assertEqual(item.estoque_movimentado, Decimal("2.000"))
+        self.assertEqual(item.estoque_depois, Decimal("18.000"))
+
+
+    def test_edicao_unificada_inclui_item_baixa_estoque_e_atualiza_conta(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        produto_novo = self.criar_produto(
+            "Produto Novo Edicao Unificada",
+            "5.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+        payload["itens"].append({
+            "item_id": "",
+            "produto_id": produto_novo.id,
+            "produto_nome": produto_novo.nome,
+            "quantidade": "2.000",
+            "unidade": "UN",
+            "preco_unitario": "10.00",
+            "valor_total": "20.00",
+        })
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        produto_novo.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(venda.itens.count(), 2)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(produto_novo.quantidade, Decimal("3.000"))
+        self.assertEqual(venda.total, Decimal("40.00"))
+        self.assertEqual(conta.valor_original, Decimal("40.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+
+    def test_edicao_unificada_remove_item_devolve_estoque_e_atualiza_conta(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        produto_removido = self.criar_produto(
+            "Produto Removido Edicao Unificada",
+            "7.000",
+        )
+        item_removido = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_removido,
+            quantidade=Decimal("3.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("30.00"),
+        )
+
+        venda.total = Decimal("50.00")
+        venda.save(update_fields=["total"])
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("50.00")
+        conta.valor_em_aberto = Decimal("50.00")
+        conta.save(update_fields=["valor_original", "valor_em_aberto"])
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        produto_removido.refresh_from_db()
+        conta.refresh_from_db()
+
+        self.assertFalse(ItemVenda.objects.filter(pk=item_removido.id).exists())
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(produto_removido.quantidade, Decimal("10.000"))
+        self.assertEqual(venda.total, Decimal("20.00"))
+        self.assertEqual(conta.valor_original, Decimal("20.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertTrue(
+            ItemVendaRemovido.objects.filter(
+                venda=venda,
+                produto=produto_removido,
+            ).exists()
+        )
+
+    def test_edicao_unificada_preserva_valor_ja_recebido_na_conta_parcial(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="10.000",
+            preco="10.00",
+            estoque="20.000",
+        )
+
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("100.00")
+        conta.valor_em_aberto = Decimal("60.00")
+        conta.status = ContaReceber.STATUS_PARCIAL
+        conta.save(update_fields=[
+            "valor_original",
+            "valor_em_aberto",
+            "status",
+        ])
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="8.000",
+            preco="10.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+
+        self.assertEqual(venda.total, Decimal("80.00"))
+        self.assertEqual(conta.valor_original, Decimal("80.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+
+    def test_edicao_unificada_altera_preco_sem_mexer_no_estoque(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="12.50",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(item.preco_unitario, Decimal("12.50"))
+        self.assertEqual(item.valor_total, Decimal("25.00"))
+        self.assertEqual(venda.total, Decimal("25.00"))
+        self.assertEqual(conta.valor_original, Decimal("25.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("25.00"))
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_quitando_conta_vinculada(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=5),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("12.34"),
+        )
+        outra_conta = ContaReceber.objects.create(
+            venda=outra_venda,
+            cliente=cliente,
+            data_emissao=outra_venda.data_venda,
+            data_vencimento=outra_venda.data_vencimento,
+            valor_original=Decimal("12.34"),
+            valor_em_aberto=Decimal("12.34"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "A vista"
+        payload["origem_recebimento"] = {
+            "caixa": "39,80",
+            "banco": "0,00",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+        resposta_duplicada = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta_duplicada.status_code, 409)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        outra_conta.refresh_from_db()
+        movimento = MovimentoFinanceiro.objects.get(origem="venda")
+
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
+        self.assertEqual(venda.total, Decimal("39.80"))
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 1)
+        self.assertEqual(conta.recebimentos.get().valor, Decimal("39.80"))
+        self.assertEqual(outra_conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(outra_conta.valor_em_aberto, Decimal("12.34"))
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(movimento.valor, Decimal("39.80"))
+        self.assertEqual(movimento.conta.tipo, ContaFinanceira.TIPO_CAIXA)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.filter(conta=conta).count(), 1)
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_persistindo_contextos_e_movimentos(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "20,00",
+            "banco": "19,80",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        movimentos = MovimentoFinanceiro.objects.filter(origem="venda").order_by("conta__tipo", "valor")
+        valores_por_tipo = {
+            movimento.conta.tipo: movimento.valor
+            for movimento in movimentos
+        }
+
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
+        self.assertIsNone(venda.data_vencimento)
+        self.assertEqual(venda.total, Decimal("39.80"))
+        self.assertFalse(
+            ContaReceber.objects.filter(
+                venda=venda,
+                status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                valor_em_aberto__gt=Decimal("0.00"),
+            ).exists()
+        )
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 1)
+        self.assertEqual(movimentos.count(), 2)
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_CAIXA], Decimal("20.00"))
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_BANCO], Decimal("19.80"))
+
+        resposta_consulta = self.client.get(
+            f"{reverse('estoque:consultar_vendas')}?numero={venda.id}",
+            secure=True,
+        )
+        resposta_nota = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_consulta.status_code, 200)
+        self.assertEqual(resposta_nota.status_code, 200)
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_consulta.context["vendas"][0].tipo_pagamento, "\u00c0 vista")
+        self.assertEqual(resposta_nota.context["venda"].tipo_pagamento, "\u00c0 vista")
+        self.assertTrue(resposta_nota.context["venda_a_vista"])
+        self.assertEqual(len(resposta_nota.context["movimentos_financeiros_venda"]), 2)
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["caixa"], Decimal("20.00"))
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["banco"], Decimal("19.80"))
+        conteudo_nota = resposta_nota.content.decode()
+        self.assertRegex(conteudo_nota, r"Caixa:\s*R\$\s*20[,.]00")
+        self.assertRegex(conteudo_nota, r"Banco/Pix:\s*R\$\s*19[,.]80")
+        self.assertRegex(conteudo_nota, r"Movimentos:\s*2")
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["tipo_pagamento"], "\u00c0 vista")
+
+    def test_edicao_unificada_converte_a_prazo_para_a_vista_com_recebimento_tecnico_estornado(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="1.000",
+            preco="96.30",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_original = Decimal("96.30")
+        conta.valor_em_aberto = Decimal("96.30")
+        conta.status = ContaReceber.STATUS_ABERTA
+        conta.save(update_fields=["valor_original", "valor_em_aberto", "status", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=Decimal("39.80"),
+            forma_pagamento="A vista",
+            observacao=views.RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA,
+        )
+        movimento_antigo = MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_padrao("caixa"),
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("39.80"),
+            data=venda.data_venda,
+            descricao=views._descricao_venda_a_vista(venda, views._conta_financeira_padrao("caixa")),
+            operador=venda.operador,
+            origem="venda",
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=movimento_antigo.conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("39.80"),
+            data=venda.data_venda,
+            descricao=f"Estorno venda a vista #{venda.id} - movimento #{movimento_antigo.id}",
+            operador=venda.operador,
+            origem="venda_estorno",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="1.000",
+            preco="96.30",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "0,00",
+            "banco": "96,30",
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        movimentos_banco = MovimentoFinanceiro.objects.filter(
+            origem="venda",
+            descricao__startswith=f"Venda a vista #{venda.id}",
+            conta__tipo=ContaFinanceira.TIPO_BANCO,
+        )
+
+        self.assertEqual(venda.tipo_pagamento, "\u00c0 vista")
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.recebimentos.count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(descricao__icontains=f"#{venda.id}").count(), 3)
+        self.assertEqual(movimentos_banco.count(), 1)
+        self.assertEqual(movimentos_banco.get().valor, Decimal("96.30"))
+
+        resposta_nota = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_nota.status_code, 200)
+        self.assertEqual(len(resposta_nota.context["movimentos_financeiros_venda"]), 1)
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["caixa"], Decimal("0.00"))
+        self.assertEqual(resposta_nota.context["alocacao_financeira_venda"]["banco"], Decimal("96.30"))
+        conteudo_nota = resposta_nota.content.decode()
+        self.assertRegex(conteudo_nota, r"Caixa:\s*R\$\s*0[,.]00")
+        self.assertRegex(conteudo_nota, r"Banco/Pix:\s*R\$\s*96[,.]30")
+        self.assertRegex(conteudo_nota, r"Movimentos:\s*1")
+
+    def test_edicao_unificada_conversao_a_prazo_para_a_vista_falha_movimento_faz_rollback(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload["tipo_pagamento"] = "\u00c0 vista"
+        payload["data_vencimento"] = ""
+        payload["origem_recebimento"] = {
+            "caixa": "39,80",
+            "banco": "0,00",
+        }
+
+        with self.assertRaises(RuntimeError):
+            with patch("estoque.views.MovimentoFinanceiro.objects.create", side_effect=RuntimeError("falha simulada")):
+                self.client.post(
+                    reverse("estoque:gravar_venda"),
+                    data=json.dumps(payload),
+                    content_type="application/json",
+                    secure=True,
+                )
+
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.data_vencimento, timezone.localdate())
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(conta=conta).count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 0)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+
+    def test_edicao_unificada_carrega_tipo_pagamento_a_vista_no_select(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 10
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        venda.tipo_pagamento = "A vista"
+        venda.save(update_fields=["tipo_pagamento", "atualizado_em"])
+        ContaReceber.objects.filter(venda=venda).update(
+            status=ContaReceber.STATUS_PAGA,
+            valor_em_aberto=Decimal("0.00"),
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertEqual(resposta.context["venda_edicao"]["tipo_pagamento"], "À vista")
+        self.assertContains(resposta, "<option>À vista</option>", html=True)
+        self.assertContains(resposta, "if (vendaEdicaoVenda?.id) return;")
+
+    def test_edicao_unificada_visualizar_preserva_id_da_venda_apos_salvar_sem_alterar(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        vendas_antes = Venda.objects.count()
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["venda_id"], venda.id)
+        self.assertEqual(
+            dados["visualizar_url"],
+            reverse("estoque:venda_detalhe", args=[venda.id]) + "?nota_atualizada=1",
+        )
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["id"], venda.id)
+        self.assertEqual(
+            resposta_edicao.context["venda_edicao"]["visualizar_url"],
+            reverse("estoque:venda_detalhe", args=[venda.id]),
+        )
+        self.assertContains(resposta_edicao, "vendaGravadaId = vendaEdicaoVenda.id;")
+        self.assertContains(
+            resposta_edicao,
+            "vendaGravadaUrl = vendaEdicaoVenda.visualizar_url || \"\";",
+        )
+
+    def test_edicao_unificada_reabre_com_vencimento_atual_apos_alterar_apenas_vencimento(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 7
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        vencimento_antigo = date(2026, 8, 17)
+        vencimento_novo = date(2026, 8, 20)
+        venda.data_venda = date(2026, 8, 10)
+        venda.data_vencimento = vencimento_antigo
+        venda.save(update_fields=["data_venda", "data_vencimento", "atualizado_em"])
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.data_emissao = venda.data_venda
+        conta.data_vencimento = vencimento_antigo
+        conta.save(update_fields=["data_emissao", "data_vencimento", "atualizado_em"])
+        estoque_antes = produto.quantidade
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload["data_vencimento"] = vencimento_novo.isoformat()
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.data_vencimento, vencimento_novo)
+        self.assertEqual(conta.data_vencimento, vencimento_novo)
+        self.assertEqual(produto.quantidade, estoque_antes)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(
+            resposta_edicao.context["venda_edicao"]["data_vencimento"],
+            vencimento_novo.isoformat(),
+        )
+        conteudo = resposta_edicao.content.decode()
+        self.assertIn(vencimento_novo.isoformat(), conteudo)
+        self.assertNotIn(vencimento_antigo.isoformat(), conteudo)
+        self.assertLess(
+            conteudo.index("if (vendaEdicaoVenda?.id) return;"),
+            conteudo.index("vencimentoVenda.value = calcularVencimentoCliente();"),
+        )
+
+    def test_edicao_unificada_converte_a_vista_para_a_prazo_estornando_caixa(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        vencimento = timezone.localdate() + timedelta(days=10)
+        payload = self.payload_conversao_a_prazo(venda, item, vencimento)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        estorno = MovimentoFinanceiro.objects.get(origem="venda_estorno")
+
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.data_vencimento, vencimento)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(ContaReceber.objects.filter(venda=venda).count(), 1)
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(conta.data_vencimento, vencimento)
+        self.assertEqual(conta.cliente_id, cliente.id)
+        self.assertEqual(estorno.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(estorno.valor, Decimal("39.80"))
+        self.assertEqual(estorno.conta.tipo, ContaFinanceira.TIPO_CAIXA)
+
+    def test_edicao_unificada_converte_a_vista_para_a_prazo_estornando_caixa_e_banco(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="20.00",
+            banco="19.80",
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        estornos = MovimentoFinanceiro.objects.filter(origem="venda_estorno").order_by("conta__tipo", "valor")
+        valores_por_tipo = {
+            estorno.conta.tipo: estorno.valor
+            for estorno in estornos
+        }
+        conta.refresh_from_db()
+
+        self.assertEqual(estornos.count(), 2)
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_CAIXA], Decimal("20.00"))
+        self.assertEqual(valores_por_tipo[ContaFinanceira.TIPO_BANCO], Decimal("19.80"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_duplicada_nao_duplica_estorno_nem_conta(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+        resposta_duplicada = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta_duplicada.status_code, 200)
+        self.assertEqual(ContaReceber.objects.filter(venda=venda).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 1)
+
+    def test_edicao_unificada_apos_ciclo_prazo_vista_prazo_permite_salvar_sem_alterar(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="19.90",
+            estoque="8.000",
+        )
+        cliente.prazo_padrao_dias = 7
+        cliente.save(update_fields=["prazo_padrao_dias"])
+        vencimento_antigo = date(2026, 8, 17)
+        vencimento_novo = date(2026, 8, 20)
+        venda.data_venda = date(2026, 8, 10)
+        venda.data_vencimento = vencimento_antigo
+        venda.save(update_fields=["data_venda", "data_vencimento", "atualizado_em"])
+        conta_inicial = ContaReceber.objects.get(venda=venda)
+        conta_inicial.data_emissao = venda.data_venda
+        conta_inicial.data_vencimento = vencimento_antigo
+        conta_inicial.save(update_fields=["data_emissao", "data_vencimento", "atualizado_em"])
+        estoque_antes = produto.quantidade
+        total_antes = venda.total
+        vendas_antes = Venda.objects.count()
+        payload_vista = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="19.90",
+        )
+        payload_vista["tipo_pagamento"] = "A vista"
+        payload_vista["origem_recebimento"] = {
+            "caixa": "20,00",
+            "banco": "19,80",
+        }
+
+        resposta_vista = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_vista),
+            content_type="application/json",
+            secure=True,
+        )
+        self.assertEqual(resposta_vista.status_code, 200)
+
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        payload_prazo = self.payload_conversao_a_prazo(venda, item, vencimento_antigo)
+        resposta_prazo = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_prazo),
+            content_type="application/json",
+            secure=True,
+        )
+        self.assertEqual(resposta_prazo.status_code, 200)
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+        self.assertEqual(resposta_edicao.status_code, 200)
+        self.assertEqual(resposta_edicao.context["venda_edicao"]["id"], venda.id)
+
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        payload_neutro = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+
+        resposta_neutra = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_neutro),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_neutra.status_code, 200)
+        self.assertEqual(resposta_neutra.json()["venda_id"], venda.id)
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A prazo")
+        self.assertEqual(venda.total, total_antes)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_original, Decimal("39.80"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("39.80"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 2)
+
+        item.refresh_from_db()
+        payload_vencimento = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+        payload_vencimento["data_vencimento"] = vencimento_novo.isoformat()
+        movimentos_antes_vencimento = MovimentoFinanceiro.objects.count()
+        resposta_vencimento = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload_vencimento),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_vencimento.status_code, 200)
+        venda.refresh_from_db()
+        conta.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(venda.data_vencimento, vencimento_novo)
+        self.assertEqual(conta.data_vencimento, vencimento_novo)
+        self.assertEqual(produto.quantidade, estoque_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes_vencimento)
+
+        resposta_edicao_atualizada = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao_atualizada.status_code, 200)
+        self.assertEqual(
+            resposta_edicao_atualizada.context["venda_edicao"]["data_vencimento"],
+            vencimento_novo.isoformat(),
+        )
+        conteudo = resposta_edicao_atualizada.content.decode()
+        self.assertIn(vencimento_novo.isoformat(), conteudo)
+        self.assertNotIn(vencimento_antigo.isoformat(), conteudo)
+
+    def test_edicao_unificada_com_baixa_financeira_ativa_continua_bloqueada(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.valor_em_aberto = Decimal("10.00")
+        conta.status = ContaReceber.STATUS_PARCIAL
+        conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            data_recebimento=venda.data_venda,
+            valor=Decimal("10.00"),
+            forma_pagamento="Pix",
+            observacao="Baixa manual parcial.",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade=str(item.quantidade),
+            preco=str(item.preco_unitario),
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("pagamento/baixa financeira", resposta.json()["mensagem"])
+        self.assertEqual(Venda.objects.count(), 1)
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_preserva_outra_conta_do_cliente(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="39.80",
+            banco="0.00",
+        )
+        outra_venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=3),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=Decimal("18.50"),
+        )
+        outra_conta = ContaReceber.objects.create(
+            venda=outra_venda,
+            cliente=cliente,
+            data_emissao=outra_venda.data_venda,
+            data_vencimento=outra_venda.data_vencimento,
+            valor_original=Decimal("18.50"),
+            valor_em_aberto=Decimal("18.50"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        outra_conta.refresh_from_db()
+        self.assertEqual(outra_conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(outra_conta.valor_original, Decimal("18.50"))
+        self.assertEqual(outra_conta.valor_em_aberto, Decimal("18.50"))
+        self.assertEqual(outra_conta.data_vencimento, outra_venda.data_vencimento)
+
+    def test_edicao_unificada_conversao_a_vista_para_a_prazo_sem_movimento_seguro_bloqueia_sem_parcial(self):
+        cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
+            caixa="0.00",
+            banco="0.00",
+            criar_movimentos=False,
+        )
+        payload = self.payload_conversao_a_prazo(venda, item)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn(
+            "movimento financeiro original da venda nao foi identificado",
+            resposta.json()["mensagem"],
+        )
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(venda.tipo_pagamento, "A vista")
+        self.assertIsNone(venda.data_vencimento)
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)

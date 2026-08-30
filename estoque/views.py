@@ -2199,6 +2199,30 @@ def _venda_pagamento_imediato(tipo_pagamento):
     } or forma_compacta in {"avista"}
 
 
+def _tipo_pagamento_venda_formulario(tipo_pagamento):
+    if _venda_pagamento_imediato(tipo_pagamento):
+        return "\u00c0 vista"
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    if forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo":
+        return "A prazo"
+    return tipo_pagamento or ""
+
+
+def _normalizar_tipo_pagamento_venda(tipo_pagamento):
+    if _venda_pagamento_imediato(tipo_pagamento):
+        return "\u00c0 vista"
+    if _tipo_pagamento_a_prazo_texto(tipo_pagamento):
+        return "A prazo"
+    return str(tipo_pagamento or "").strip()
+
+
+def _tipo_pagamento_a_prazo_texto(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento)
+    forma_compacta = re.sub(r"\s+", "", forma)
+    return forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo"
+
+
 def _conta_financeira_venda_a_vista(tipo_pagamento):
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -2233,6 +2257,96 @@ def _movimentos_financeiros_venda(venda):
     )
 
 
+def _movimentos_estorno_venda_a_vista(venda):
+    return (
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            origem="venda_estorno",
+            descricao__startswith=f"Estorno venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+
+
+def _movimentos_financeiros_venda_ativos(venda):
+    estornos = list(_movimentos_estorno_venda_a_vista(venda))
+    movimentos_ativos = []
+
+    for movimento in _movimentos_financeiros_venda(venda):
+        valor_movimento = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        valor_estornado = sum(
+            (
+                _financeiro_dinheiro(estorno.valor).quantize(Decimal("0.01"))
+                for estorno in estornos
+                if estorno.conta_id == movimento.conta_id
+                and f"movimento #{movimento.id}" in (estorno.descricao or "")
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        if valor_estornado >= valor_movimento:
+            continue
+        movimentos_ativos.append(movimento)
+
+    return movimentos_ativos
+
+
+RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA = (
+    "Baixa automatica pela conversao da venda de A prazo para A vista."
+)
+
+
+def _total_movimentos_por_conta(movimentos):
+    totais = {}
+    for movimento in movimentos:
+        valor = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if valor <= Decimal("0.00"):
+            continue
+        totais[movimento.conta_id] = (
+            totais.get(movimento.conta_id, Decimal("0.00")) + valor
+        ).quantize(Decimal("0.01"))
+    return totais
+
+
+def _movimentos_venda_a_vista_integralmente_estornados(venda):
+    entradas_por_conta = _total_movimentos_por_conta(_movimentos_financeiros_venda(venda))
+    if not entradas_por_conta:
+        return False
+    estornos_por_conta = _total_movimentos_por_conta(_movimentos_estorno_venda_a_vista(venda))
+    return entradas_por_conta == estornos_por_conta
+
+
+def _recebimento_conversao_prazo_para_vista(recebimento):
+    return (
+        (recebimento.forma_pagamento or "").strip() == "A vista"
+        and (recebimento.observacao or "").strip()
+        == RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA
+    )
+
+
+def _recebimentos_ativos_conta_venda(conta, venda):
+    recebimentos = list(conta.recebimentos.all()) if conta else []
+    if not recebimentos:
+        return []
+
+    if conta.status != ContaReceber.STATUS_ABERTA:
+        return recebimentos
+
+    valor_original = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
+    valor_aberto = _financeiro_dinheiro(conta.valor_em_aberto).quantize(Decimal("0.01"))
+    if valor_original != valor_aberto:
+        return recebimentos
+
+    if not all(_recebimento_conversao_prazo_para_vista(recebimento) for recebimento in recebimentos):
+        return recebimentos
+
+    if not _movimentos_venda_a_vista_integralmente_estornados(venda):
+        return recebimentos
+
+    return []
+
+
 def _alocacao_financeira_venda(venda):
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
@@ -2242,7 +2356,7 @@ def _alocacao_financeira_venda(venda):
     alocacao = {chave: Decimal("0.00") for chave in contas}
     conta_para_chave = {conta.pk: chave for chave, conta in contas.items() if conta}
 
-    for movimento in _movimentos_financeiros_venda(venda):
+    for movimento in _movimentos_financeiros_venda_ativos(venda):
         chave = conta_para_chave.get(movimento.conta_id)
         if not chave:
             continue
@@ -2283,7 +2397,8 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
 
     movimentos_existentes = list(_movimentos_financeiros_venda(venda))
     if movimentos_existentes:
-        return movimentos_existentes
+        if not _movimentos_venda_a_vista_integralmente_estornados(venda):
+            return movimentos_existentes
 
     contas = {
         "caixa": _conta_financeira_padrao("caixa"),
@@ -2307,7 +2422,9 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
             continue
         conta_financeira = contas.get(chave)
         if not conta_financeira:
-            continue
+            raise ValueError(
+                "Conta financeira nao encontrada para registrar o recebimento da venda."
+            )
         movimentos.append(MovimentoFinanceiro.objects.create(
             conta=conta_financeira,
             tipo=MovimentoFinanceiro.TIPO_ENTRADA,
@@ -2323,6 +2440,188 @@ def _registrar_movimentos_venda_a_vista(venda, valores_origem=None):
 def _registrar_movimento_venda_a_vista(venda):
     movimentos = _registrar_movimentos_venda_a_vista(venda)
     return movimentos[0] if movimentos else None
+
+
+def _validar_itens_edicao_inalterados(venda, itens_validados):
+    itens_atuais = list(
+        ItemVenda.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .order_by("id")
+    )
+    if len(itens_atuais) != len(itens_validados):
+        raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+    atuais_por_id = {item.id: item for item in itens_atuais}
+    for item_novo in itens_validados:
+        item_id = item_novo.get("item_id")
+        item_atual = atuais_por_id.get(item_id)
+        if not item_atual:
+            raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+        quantidade_atual = Decimal(item_atual.quantidade or "0").quantize(Decimal("0.001"))
+        quantidade_nova = Decimal(item_novo["quantidade"] or "0").quantize(Decimal("0.001"))
+        preco_atual = Decimal(item_atual.preco_unitario or "0").quantize(Decimal("0.01"))
+        preco_novo = Decimal(item_novo["preco_unitario"] or "0").quantize(Decimal("0.01"))
+        if (
+            item_atual.produto_id != item_novo["produto"].id
+            or quantidade_atual != quantidade_nova
+            or _normalizar_unidade_estoque(item_atual.unidade or "") != _normalizar_unidade_estoque(item_novo["unidade"] or "")
+            or preco_atual != preco_novo
+        ):
+            raise ValueError("Para mudar uma venda de A vista para A prazo, nao altere os itens nesta operacao.")
+
+
+def _estornar_movimentos_venda_a_vista_para_prazo(venda):
+    movimentos = list(
+        MovimentoFinanceiro.objects
+        .select_for_update()
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            origem="venda",
+            descricao__startswith=f"Venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+    estornos_existentes = list(
+        MovimentoFinanceiro.objects
+        .select_for_update()
+        .filter(
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            origem="venda_estorno",
+            descricao__startswith=f"Estorno venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+    if estornos_existentes:
+        raise ValueError("Esta venda ja possui estorno financeiro registrado para mudanca de A vista para A prazo.")
+    if not movimentos:
+        raise ValueError(
+            "Nao foi possivel converter para A prazo automaticamente porque o movimento financeiro original da venda nao foi identificado."
+        )
+
+    total_movimentos = Decimal("0.00")
+    for movimento in movimentos:
+        valor_movimento = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if movimento.tipo != MovimentoFinanceiro.TIPO_ENTRADA or valor_movimento <= Decimal("0.00"):
+            raise ValueError(
+                "Nao foi possivel converter para A prazo automaticamente porque o movimento financeiro original da venda nao esta seguro para estorno."
+            )
+        total_movimentos = (total_movimentos + valor_movimento).quantize(Decimal("0.01"))
+
+    total_venda = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    if total_movimentos != total_venda:
+        raise ValueError(
+            "Nao foi possivel converter para A prazo automaticamente porque o total dos movimentos financeiros da venda nao bate com o total atual."
+        )
+
+    estornos = []
+    for movimento in movimentos:
+        valor_estorno = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        estornos.append(MovimentoFinanceiro.objects.create(
+            conta=movimento.conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=valor_estorno,
+            data=timezone.localdate(),
+            descricao=(f"Estorno venda a vista #{venda.id} - movimento #{movimento.id}")[:255],
+            operador=venda.operador or "",
+            origem="venda_estorno",
+        ))
+    return estornos
+
+
+def _abrir_conta_receber_conversao_venda_a_prazo(venda):
+    valor = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    conta = (
+        ContaReceber.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .first()
+    )
+    if conta is None:
+        return ContaReceber.objects.create(
+            venda=venda,
+            cliente=venda.cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=valor,
+            valor_em_aberto=valor,
+            status=ContaReceber.STATUS_ABERTA,
+            observacao="Aberta automaticamente pela conversao da venda de A vista para A prazo.",
+        )
+
+    conta.cliente = venda.cliente
+    conta.data_emissao = venda.data_venda
+    conta.data_vencimento = venda.data_vencimento
+    conta.valor_original = valor
+    conta.valor_em_aberto = valor
+    conta.status = ContaReceber.STATUS_ABERTA
+    conta.observacao = "Reaberta automaticamente pela conversao da venda de A vista para A prazo."
+    conta.save(update_fields=[
+        "cliente",
+        "data_emissao",
+        "data_vencimento",
+        "valor_original",
+        "valor_em_aberto",
+        "status",
+        "observacao",
+        "atualizado_em",
+    ])
+    return conta
+
+
+def _regularizar_conta_receber_conversao_venda_a_vista(venda):
+    conta = (
+        ContaReceber.objects
+        .select_for_update()
+        .filter(venda=venda)
+        .first()
+    )
+    if not conta:
+        return None
+
+    recebimentos_ativos = _recebimentos_ativos_conta_venda(conta, venda)
+    if recebimentos_ativos or conta.status in {
+        ContaReceber.STATUS_PARCIAL,
+        ContaReceber.STATUS_PAGA,
+    }:
+        raise ValueError(
+            "Esta venda ja possui pagamento/baixa financeira e nao pode ser convertida para a vista por esta tela."
+        )
+
+    if conta.status == ContaReceber.STATUS_CANCELADA:
+        return conta
+
+    valor = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+    conta.cliente = venda.cliente
+    conta.data_emissao = venda.data_venda
+    conta.data_vencimento = venda.data_vencimento
+    conta.valor_original = valor
+    conta.valor_em_aberto = valor
+    conta.status = ContaReceber.STATUS_ABERTA
+    conta.observacao = (
+        "Preparada para baixa automatica pela conversao da venda de A prazo para A vista."
+    )
+    conta.save(update_fields=[
+        "cliente",
+        "data_emissao",
+        "data_vencimento",
+        "valor_original",
+        "valor_em_aberto",
+        "status",
+        "observacao",
+        "atualizado_em",
+    ])
+
+    _aplicar_recebimento_conta(
+        conta,
+        venda.data_venda or timezone.localdate(),
+        valor,
+        "A vista",
+        RECEBIMENTO_OBS_CONVERSAO_PRAZO_PARA_VISTA,
+        "troco",
+    )
+    return conta
 
 
 def _registrar_movimento_conta_pagar_fornecedor(conta, valor_pago, data_pagamento, forma_pagamento):
@@ -10041,7 +10340,7 @@ def clientes_autocomplete(request):
     limite = 12 if contexto == "pix_detalhe" else 12
 
     clientes = []
-    calcular_financeiro_completo = contexto in {"venda", "venda_detalhe"}
+    calcular_financeiro_completo = contexto == "venda_detalhe"
 
     for cliente in clientes_qs[:limite]:
         if calcular_financeiro_completo:
@@ -10768,6 +11067,45 @@ def vendas(request):
     cliente_id = request.GET.get("cliente_id")
     pedido_importado = None
     pedido_importado_aviso = ""
+    venda_edicao = None
+
+    venda_edicao_id = request.GET.get("editar")
+    if venda_edicao_id:
+        venda_para_editar = (
+            Venda.objects
+            .filter(pk=venda_edicao_id)
+            .select_related("cliente")
+            .prefetch_related("itens__produto")
+            .first()
+        )
+        if venda_para_editar:
+            venda_edicao = {
+                "id": venda_para_editar.id,
+                "visualizar_url": reverse("estoque:venda_detalhe", args=[venda_para_editar.id]),
+                "cliente_id": venda_para_editar.cliente_id,
+                "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
+                "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
+                "tipo_pagamento": _tipo_pagamento_venda_formulario(venda_para_editar.tipo_pagamento),
+                "operador": venda_para_editar.operador or "",
+                "itens": [
+                    {
+                        "item_id": item.id,
+                        "produto_id": item.produto_id,
+                        "produto_nome": item.produto.nome if item.produto else "",
+                        "quantidade": str(item.quantidade),
+                        "unidade": item.unidade or "",
+                        "preco_unitario": str(item.preco_unitario),
+                        "valor_total": str(item.valor_total),
+                        "estoque_antes": str(item.estoque_antes) if item.estoque_antes is not None else "",
+                        "estoque_movimentado": str(item.estoque_movimentado) if item.estoque_movimentado is not None else "",
+                        "estoque_depois": str(item.estoque_depois) if item.estoque_depois is not None else "",
+                        "estoque_unidade_snapshot": item.estoque_unidade_snapshot or "",
+                    }
+                    for item in venda_para_editar.itens.all()
+                ],
+            }
+            if venda_para_editar.cliente:
+                cliente_inicial = _resumo_cliente_venda(venda_para_editar.cliente)
     if cliente_id:
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if cliente:
@@ -10864,6 +11202,7 @@ def vendas(request):
         'cliente_inicial': cliente_inicial,
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
+        'venda_edicao': venda_edicao,
         'tem_pix_em_atencao': _tem_pix_em_atencao(),
         'cobrancas_acionaveis_hoje_qtd': len(cobrancas_acionaveis_vendas),
         'cobrancas_acionaveis_vendas': cobrancas_acionaveis_vendas,
@@ -15377,7 +15716,12 @@ def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=N
         f"baixado={quantidade_movimento}",
         f"depois={produto.quantidade}",
     )
-    return estoque_atual, produto.quantidade
+    return {
+        "estoque_antes": estoque_atual,
+        "estoque_movimentado": quantidade_movimento,
+        "estoque_depois": produto.quantidade,
+        "estoque_unidade_snapshot": unidade_base or "",
+    }
 
 
 def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
@@ -15400,7 +15744,7 @@ def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade
 
 def _baixar_estoque_movimentos(movimentos):
     movimentos_normalizados = []
-    for movimento in movimentos:
+    for indice, movimento in enumerate(movimentos):
         if len(movimento) == 2:
             produto, quantidade = movimento
             unidade = None
@@ -15408,13 +15752,32 @@ def _baixar_estoque_movimentos(movimentos):
             produto, quantidade, unidade = movimento
         if not produto:
             raise ValueError("Produto informado nao foi encontrado no estoque.")
-        movimentos_normalizados.append((produto.pk, produto.nome, quantidade, unidade))
+        movimentos_normalizados.append((indice, produto.pk, produto.nome, quantidade, unidade))
 
-    for produto_id, produto_nome, quantidade, unidade in sorted(
+    snapshots = [None] * len(movimentos_normalizados)
+    for indice, produto_id, produto_nome, quantidade, unidade in sorted(
         movimentos_normalizados,
-        key=lambda movimento: (movimento[0], movimento[1]),
+        key=lambda movimento: (movimento[1], movimento[2]),
     ):
-        _baixar_estoque_produto(produto_id, quantidade, produto_nome, unidade)
+        snapshots[indice] = _baixar_estoque_produto(produto_id, quantidade, produto_nome, unidade)
+
+    return snapshots
+
+
+def _snapshot_item_venda_quantidade_atual(produto, quantidade, unidade):
+    quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_movimentada = (
+        quantidade_base
+        if produto.vende_fracionado
+        else _quantidade_estoque_inteira(quantidade_base, produto.nome, unidade_base)
+    )
+    estoque_depois = _quantidade_decimal_estoque(produto.quantidade)
+    return {
+        "estoque_antes": (estoque_depois + quantidade_movimentada).quantize(Decimal("0.001")),
+        "estoque_movimentado": quantidade_movimentada,
+        "estoque_depois": estoque_depois,
+        "estoque_unidade_snapshot": unidade_base or "",
+    }
 
 
 def _atualizar_saldo_pendente_pedido(pedido, itens_vendidos):
@@ -15495,24 +15858,53 @@ def gravar_venda(request):
     try:
         dados = json.loads(request.body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
+        logger.warning("gravar_venda retorno 400 | motivo=%s", "Nao foi possivel ler os dados da venda.")
         return JsonResponse(
             {"sucesso": False, "mensagem": "Nao foi possivel ler os dados da venda."},
             status=400,
         )
 
     itens = dados.get("itens") or []
-    if not itens:
-        return JsonResponse(
-            {"sucesso": False, "mensagem": "Inclua pelo menos 1 item antes de gravar a venda."},
-            status=400,
+
+    def erro_gravar_venda(mensagem, status=400):
+        origem = dados.get("origem_recebimento") or {}
+        logger.warning(
+            "gravar_venda retorno %s | motivo=%s | venda_id=%r | tipo_pagamento=%r | "
+            "total=%r | origem_recebimento=%r | valor_caixa=%r | valor_banco=%r | itens_qtd=%s | itens=%r",
+            status,
+            mensagem,
+            dados.get("venda_id"),
+            dados.get("tipo_pagamento"),
+            dados.get("total"),
+            origem,
+            origem.get("caixa"),
+            origem.get("banco"),
+            len(itens),
+            itens,
         )
+        return JsonResponse({"sucesso": False, "mensagem": mensagem}, status=status)
+
+    venda_edicao_id = str(dados.get("venda_id") or "").strip()
+    venda_em_edicao = None
+
+    if venda_edicao_id:
+        if not venda_edicao_id.isdigit():
+            return erro_gravar_venda("Venda informada para edicao e invalida.")
+
+        venda_em_edicao = Venda.objects.filter(
+            pk=int(venda_edicao_id),
+            cancelada=False,
+        ).first()
+
+        if not venda_em_edicao:
+            return erro_gravar_venda("Venda informada para edicao nao foi encontrada.", status=404)
+
+    if not itens:
+        return erro_gravar_venda("Inclua pelo menos 1 item antes de gravar a venda.")
 
     data_venda = parse_date(dados.get("data_venda") or "")
     if not data_venda:
-        return JsonResponse(
-            {"sucesso": False, "mensagem": "Informe uma data valida para a venda."},
-            status=400,
-        )
+        return erro_gravar_venda("Informe uma data valida para a venda.")
 
     data_vencimento = (
         parse_date(dados.get("data_vencimento") or "")
@@ -15525,10 +15917,7 @@ def gravar_venda(request):
     if cliente_id:
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if not cliente:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Cliente selecionado nao foi encontrado."},
-                status=400,
-            )
+            return erro_gravar_venda("Cliente selecionado nao foi encontrado.")
 
     itens_validados = []
     total_calculado = Decimal("0.00")
@@ -15539,37 +15928,57 @@ def gravar_venda(request):
         unidade = str(item.get("unidade") or "").strip()
 
         if not produto_nome:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": "Existe item sem produto informado."},
-                status=400,
-            )
+            return erro_gravar_venda("Existe item sem produto informado.")
 
         try:
             quantidade = _decimal_do_front(item.get("quantidade"), "0.001")
             preco_unitario = _decimal_do_front(item.get("preco_unitario"), "0.01")
         except ValueError:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f"Revise quantidade e preco do item {produto_nome}."},
-                status=400,
-            )
+            return erro_gravar_venda(f"Revise quantidade e preco do item {produto_nome}.")
 
         if quantidade <= 0 or preco_unitario <= 0:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f"Quantidade e preco precisam ser maiores que zero em {produto_nome}."},
-                status=400,
-            )
+            return erro_gravar_venda(f"Quantidade e preco precisam ser maiores que zero em {produto_nome}.")
 
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
+        item_id = str(item.get("item_id") or "").strip()
+
         produto = None
-        if produto_id.isdigit():
-            produto = Produto.objects.filter(pk=int(produto_id), excluido=False, ativo=True).first()
-        if not produto:
-            produto = Produto.objects.filter(nome__iexact=produto_nome, excluido=False, ativo=True).first()
-        if not produto:
-            return JsonResponse(
-                {"sucesso": False, "mensagem": f'Produto "{produto_nome}" nao foi encontrado no estoque.'},
-                status=400,
+
+        # Na edicao, um item antigo pode continuar usando um produto que
+        # foi desativado depois da venda. Se o produto estiver sendo trocado
+        # ou se for um item novo, continua obrigatorio usar produto ativo.
+        item_existente_edicao = None
+        if venda_em_edicao and item_id.isdigit():
+            item_existente_edicao = (
+                ItemVenda.objects
+                .select_related("produto")
+                .filter(pk=int(item_id), venda=venda_em_edicao)
+                .first()
             )
+
+        if (
+            item_existente_edicao
+            and produto_id.isdigit()
+            and item_existente_edicao.produto_id == int(produto_id)
+        ):
+            produto = item_existente_edicao.produto
+
+        if not produto and produto_id.isdigit():
+            produto = Produto.objects.filter(
+                pk=int(produto_id),
+                excluido=False,
+                ativo=True,
+            ).first()
+
+        if not produto:
+            produto = Produto.objects.filter(
+                nome__iexact=produto_nome,
+                excluido=False,
+                ativo=True,
+            ).first()
+
+        if not produto:
+            return erro_gravar_venda(f'Produto "{produto_nome}" nao foi encontrado no estoque.')
         print(
             "[venda item recebido]",
             f"produto_nome={produto_nome}",
@@ -15581,7 +15990,9 @@ def gravar_venda(request):
             f"estoque_cadastro={produto.quantidade}",
         )
         total_calculado += valor_total
+
         itens_validados.append({
+            "item_id": int(item_id) if item_id.isdigit() else None,
             "produto": produto,
             "quantidade": quantidade,
             "unidade": unidade,
@@ -15589,7 +16000,7 @@ def gravar_venda(request):
             "valor_total": valor_total,
         })
 
-    tipo_pagamento_venda = str(dados.get("tipo_pagamento") or "").strip()
+    tipo_pagamento_venda = _normalizar_tipo_pagamento_venda(dados.get("tipo_pagamento"))
     valores_origem_venda = None
     if (
         _venda_pagamento_imediato(tipo_pagamento_venda)
@@ -15602,7 +16013,409 @@ def gravar_venda(request):
                 total_calculado.quantize(Decimal("0.01")),
             )
         except ValueError as exc:
-            return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+            return erro_gravar_venda(str(exc))
+
+    # ============================================================
+    # EDICAO UNIFICADA DE VENDA EXISTENTE
+    # ============================================================
+    if venda_em_edicao:
+        pagamento_antigo_imediato_pre = _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
+        pagamento_novo_imediato_pre = _venda_pagamento_imediato(tipo_pagamento_venda)
+        conversao_vista_para_prazo_pre = (
+            pagamento_antigo_imediato_pre
+            and not pagamento_novo_imediato_pre
+            and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
+        )
+        contexto_quitada = _contexto_venda_quitada(venda_em_edicao)
+        if contexto_quitada.get("quitada") and not conversao_vista_para_prazo_pre:
+            return erro_gravar_venda(
+                (
+                    "Esta venda ja possui pagamento/baixa financeira e nao pode ser "
+                    "alterada por esta edicao simplificada."
+                ),
+                status=409,
+            )
+
+        try:
+            with transaction.atomic():
+                venda = (
+                    Venda.objects
+                    .select_for_update()
+                    .get(pk=venda_em_edicao.pk, cancelada=False)
+                )
+                pagamento_antigo_imediato = _venda_pagamento_imediato(venda.tipo_pagamento)
+                pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
+                conversao_prazo_para_vista = (
+                    not pagamento_antigo_imediato
+                    and pagamento_novo_imediato
+                )
+                conversao_vista_para_prazo = (
+                    pagamento_antigo_imediato
+                    and not pagamento_novo_imediato
+                    and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
+                )
+                contexto_quitada_atual = _contexto_venda_quitada(venda)
+                if contexto_quitada_atual.get("quitada") and not conversao_vista_para_prazo:
+                    raise ValueError(
+                        "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
+                    )
+
+                if conversao_prazo_para_vista and valores_origem_venda is None:
+                    raise ValueError(
+                        "Informe a origem do recebimento para converter a venda para A vista."
+                    )
+                if conversao_vista_para_prazo:
+                    if not data_vencimento:
+                        raise ValueError("Informe o vencimento para converter a venda para A prazo.")
+                    _validar_itens_edicao_inalterados(venda, itens_validados)
+
+                itens_atuais = list(
+                    ItemVenda.objects
+                    .select_for_update()
+                    .filter(venda=venda)
+                    .order_by("id")
+                )
+                itens_atuais_por_id = {item.id: item for item in itens_atuais}
+                ids_recebidos = set()
+
+                # Impede item_id de outra venda e IDs duplicados no payload.
+                for item_novo in itens_validados:
+                    item_id = item_novo.get("item_id")
+                    if not item_id:
+                        continue
+
+                    if item_id in ids_recebidos:
+                        raise ValueError(
+                            f"Item #{item_id} foi enviado mais de uma vez na edicao."
+                        )
+
+                    if item_id not in itens_atuais_por_id:
+                        raise ValueError(
+                            f"Item #{item_id} nao pertence a esta venda."
+                        )
+
+                    ids_recebidos.add(item_id)
+
+                total_anterior = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+                cliente_anterior_id = venda.cliente_id
+                data_anterior = venda.data_venda
+                vencimento_anterior = venda.data_vencimento
+                pagamento_anterior = venda.tipo_pagamento or ""
+                operador_anterior = venda.operador or ""
+
+                # ------------------------------------------------------------
+                # Itens existentes: atualizar quantidade/preco/produto/unidade.
+                # ------------------------------------------------------------
+                for item_novo in itens_validados:
+                    item_id = item_novo.get("item_id")
+                    if not item_id:
+                        continue
+
+                    item_antigo = itens_atuais_por_id[item_id]
+                    produto_antigo = item_antigo.produto
+                    produto_novo = item_novo["produto"]
+
+                    quantidade_antiga = Decimal(item_antigo.quantidade or "0").quantize(Decimal("0.001"))
+                    quantidade_nova = Decimal(item_novo["quantidade"] or "0").quantize(Decimal("0.001"))
+
+                    unidade_antiga = item_antigo.unidade or ""
+                    unidade_nova = item_novo["unidade"] or ""
+
+                    preco_antigo = Decimal(item_antigo.preco_unitario or "0").quantize(Decimal("0.01"))
+                    preco_novo = Decimal(item_novo["preco_unitario"] or "0").quantize(Decimal("0.01"))
+
+                    produto_nome_antigo = (
+                        produto_antigo.nome if produto_antigo else "Produto nao identificado"
+                    )
+                    produto_nome_novo = produto_novo.nome
+
+                    produto_ou_unidade_mudou = (
+                        item_antigo.produto_id != produto_novo.id
+                        or _normalizar_unidade_estoque(unidade_antiga)
+                           != _normalizar_unidade_estoque(unidade_nova)
+                    )
+                    snapshot_estoque = None
+
+                    if produto_ou_unidade_mudou:
+                        if item_antigo.produto_id:
+                            _devolver_estoque_produto(
+                                item_antigo.produto_id,
+                                quantidade_antiga,
+                                produto_nome_antigo,
+                                unidade_antiga,
+                            )
+
+                        snapshot_estoque = _baixar_estoque_produto(
+                            produto_novo.id,
+                            quantidade_nova,
+                            produto_nome_novo,
+                            unidade_nova,
+                        )
+
+                        _registrar_evento_venda(
+                            venda,
+                            "item_removido_da_nota",
+                            (
+                                f"Item removido da nota: {produto_nome_antigo}, "
+                                f"quantidade {quantidade_antiga} {unidade_antiga}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+                        _registrar_evento_venda(
+                            venda,
+                            "item_adicionado_na_nota",
+                            (
+                                f"Item adicionado na nota: {produto_nome_novo}, "
+                                f"quantidade {quantidade_nova} {unidade_nova}, "
+                                f"preco unitario R$ {preco_novo}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    elif quantidade_nova != quantidade_antiga:
+                        diferenca = (quantidade_nova - quantidade_antiga).quantize(Decimal("0.001"))
+
+                        if diferenca > 0:
+                            _baixar_estoque_produto(
+                                produto_novo.id,
+                                diferenca,
+                                produto_nome_novo,
+                                unidade_nova,
+                            )
+                        else:
+                            _devolver_estoque_produto(
+                                produto_novo.id,
+                                abs(diferenca),
+                                produto_nome_novo,
+                                unidade_nova,
+                            )
+
+                        produto_novo.refresh_from_db(fields=["quantidade"])
+                        snapshot_estoque = _snapshot_item_venda_quantidade_atual(
+                            produto_novo,
+                            quantidade_nova,
+                            unidade_nova,
+                        )
+
+                        _registrar_evento_venda(
+                            venda,
+                            "quantidade_item_alterada",
+                            (
+                                f"Quantidade alterada na nota: {produto_nome_novo}. "
+                                f"De {quantidade_antiga} {unidade_antiga} "
+                                f"para {quantidade_nova} {unidade_nova}. "
+                                f"Total sera recalculado ao final da edicao."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    if preco_novo != preco_antigo:
+                        _registrar_evento_venda(
+                            venda,
+                            "cabecalho_nota_alterado",
+                            (
+                                f"Preco alterado na nota para {produto_nome_novo}: "
+                                f"R$ {preco_antigo} -> R$ {preco_novo}."
+                            ),
+                            canal="sistema",
+                            usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                        )
+
+                    item_antigo.produto = produto_novo
+                    item_antigo.quantidade = quantidade_nova
+                    item_antigo.unidade = unidade_nova
+                    item_antigo.preco_unitario = preco_novo
+                    item_antigo.valor_total = (
+                        quantidade_nova * preco_novo
+                    ).quantize(Decimal("0.01"))
+                    campos_item_alterados = [
+                        "produto",
+                        "quantidade",
+                        "unidade",
+                        "preco_unitario",
+                        "valor_total",
+                    ]
+                    if snapshot_estoque is not None:
+                        item_antigo.estoque_antes = snapshot_estoque["estoque_antes"]
+                        item_antigo.estoque_movimentado = snapshot_estoque["estoque_movimentado"]
+                        item_antigo.estoque_depois = snapshot_estoque["estoque_depois"]
+                        item_antigo.estoque_unidade_snapshot = snapshot_estoque["estoque_unidade_snapshot"]
+                        campos_item_alterados.extend([
+                            "estoque_antes",
+                            "estoque_movimentado",
+                            "estoque_depois",
+                            "estoque_unidade_snapshot",
+                        ])
+                    item_antigo.save(update_fields=campos_item_alterados)
+
+                # ------------------------------------------------------------
+                # Itens removidos da tela: devolver estoque e excluir.
+                # ------------------------------------------------------------
+                for item_antigo in itens_atuais:
+                    if item_antigo.id in ids_recebidos:
+                        continue
+
+                    produto_nome = (
+                        item_antigo.produto.nome
+                        if item_antigo.produto
+                        else "Produto nao identificado"
+                    )
+
+                    item_removido = ItemVendaRemovido.objects.create(
+                        venda=venda,
+                        produto=item_antigo.produto,
+                        produto_nome_snapshot=produto_nome,
+                        quantidade_snapshot=item_antigo.quantidade,
+                        unidade_snapshot=item_antigo.unidade or "",
+                        preco_unitario_snapshot=item_antigo.preco_unitario,
+                        valor_total_snapshot=item_antigo.valor_total,
+                        estoque_antes=item_antigo.estoque_antes,
+                        estoque_movimentado=item_antigo.estoque_movimentado,
+                        estoque_depois=item_antigo.estoque_depois,
+                        estoque_unidade_snapshot=item_antigo.estoque_unidade_snapshot or "",
+                        item_venda_original_id=item_antigo.id,
+                        operador=str(dados.get("operador") or "").strip() or venda.operador,
+                        observacao="Item removido pela edicao unificada da venda.",
+                    )
+
+                    _devolver_estoque_item_removido(item_removido)
+
+                    _registrar_evento_venda(
+                        venda,
+                        "item_removido_da_nota",
+                        (
+                            f"Item removido da nota: {produto_nome}, "
+                            f"quantidade {item_antigo.quantidade} {item_antigo.unidade or ''}, "
+                            f"valor abatido R$ {item_antigo.valor_total}."
+                        ),
+                        canal="sistema",
+                        usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                    )
+
+                    item_antigo.delete()
+
+                # ------------------------------------------------------------
+                # Itens novos: baixar estoque e criar.
+                # ------------------------------------------------------------
+                produtos_ja_presentes = set(
+                    ItemVenda.objects
+                    .filter(venda=venda)
+                    .values_list("produto_id", flat=True)
+                )
+
+                for item_novo in itens_validados:
+                    if item_novo.get("item_id"):
+                        continue
+
+                    produto_novo = item_novo["produto"]
+
+                    if produto_novo.id in produtos_ja_presentes:
+                        raise ValueError(
+                            f'O produto "{produto_novo.nome}" ja existe nesta venda.'
+                        )
+
+                    snapshot_estoque = _baixar_estoque_produto(
+                        produto_novo.id,
+                        item_novo["quantidade"],
+                        produto_novo.nome,
+                        item_novo["unidade"],
+                    )
+
+                    item_criado = ItemVenda.objects.create(
+                        venda=venda,
+                        produto=produto_novo,
+                        quantidade=item_novo["quantidade"],
+                        unidade=item_novo["unidade"],
+                        preco_unitario=item_novo["preco_unitario"],
+                        valor_total=item_novo["valor_total"],
+                        **snapshot_estoque,
+                    )
+                    produtos_ja_presentes.add(produto_novo.id)
+
+                    _registrar_evento_venda(
+                        venda,
+                        "item_adicionado_na_nota",
+                        (
+                            f"Item adicionado na nota: {produto_novo.nome}, "
+                            f"quantidade {item_novo['quantidade']} {item_novo['unidade'] or ''}, "
+                            f"preco unitario R$ {item_novo['preco_unitario']}, "
+                            f"valor acrescentado R$ {item_novo['valor_total']}."
+                        ),
+                        canal="sistema",
+                        usuario=str(dados.get("operador") or "").strip() or venda.operador,
+                    )
+
+                if not ItemVenda.objects.filter(venda=venda).exists():
+                    raise ValueError("A venda precisa permanecer com pelo menos um item.")
+
+                # ------------------------------------------------------------
+                # Cabecalho e total.
+                # ------------------------------------------------------------
+                venda.cliente = cliente
+                venda.data_venda = data_venda
+                venda.data_vencimento = data_vencimento
+                venda.tipo_pagamento = tipo_pagamento_venda
+                venda.operador = str(dados.get("operador") or "").strip()
+                venda.total = _recalcular_total_venda_pelos_itens(venda)
+
+                venda.save(update_fields=[
+                    "cliente",
+                    "data_venda",
+                    "data_vencimento",
+                    "tipo_pagamento",
+                    "operador",
+                    "total",
+                    "atualizado_em",
+                ])
+
+                cabecalho_mudou = (
+                    cliente_anterior_id != venda.cliente_id
+                    or data_anterior != venda.data_venda
+                    or vencimento_anterior != venda.data_vencimento
+                    or pagamento_anterior != (venda.tipo_pagamento or "")
+                    or operador_anterior != (venda.operador or "")
+                )
+
+                if cabecalho_mudou:
+                    _registrar_evento_venda(
+                        venda,
+                        "cabecalho_nota_alterado",
+                        (
+                            "Cabecalho da nota alterado pela edicao unificada. "
+                            f"Total anterior R$ {total_anterior}; novo total R$ {venda.total}."
+                        ),
+                        canal="sistema",
+                        usuario=venda.operador,
+                    )
+
+                if conversao_prazo_para_vista:
+                    _regularizar_conta_receber_conversao_venda_a_vista(venda)
+                    _validar_origem_venda_a_vista(valores_origem_venda, venda.total)
+                    _registrar_movimentos_venda_a_vista(venda, valores_origem_venda)
+                elif conversao_vista_para_prazo:
+                    _estornar_movimentos_venda_a_vista_para_prazo(venda)
+                    _abrir_conta_receber_conversao_venda_a_prazo(venda)
+                else:
+                    _sincronizar_conta_receber(
+                        venda,
+                        "edicao unificada da venda",
+                    )
+
+        except ValueError as exc:
+            return erro_gravar_venda(str(exc))
+
+        return JsonResponse({
+            "sucesso": True,
+            "mensagem": f"Venda #{venda.id} atualizada com sucesso.",
+            "venda_id": venda.id,
+            "visualizar_url": (
+                reverse("estoque:venda_detalhe", args=[venda.id])
+                + "?nota_atualizada=1"
+            ),
+        })
 
     pedido_pendencias_estoque = []
     try:
@@ -15614,15 +16427,9 @@ def gravar_venda(request):
 
                 pedido_origem = Pedido.objects.select_for_update().filter(pk=pedido_id).first()
                 if not pedido_origem:
-                    return JsonResponse(
-                        {"sucesso": False, "mensagem": "Pedido de origem nao foi encontrado."},
-                        status=400,
-                    )
+                    return erro_gravar_venda("Pedido de origem nao foi encontrado.")
                 if pedido_origem.status not in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]:
-                    return JsonResponse(
-                        {"sucesso": False, "mensagem": "Pedido de origem nao esta aberto nem parcial."},
-                        status=400,
-                    )
+                    return erro_gravar_venda("Pedido de origem nao esta aberto nem parcial.")
 
             itens_para_venda = itens_validados
             total_venda = total_calculado
@@ -15673,6 +16480,12 @@ def gravar_venda(request):
                             "unidade": item["unidade"],
                             "preco_unitario": item["preco_unitario"],
                             "valor_total": valor_total_vendido,
+                            "estoque_antes": estoque_disponivel,
+                            "estoque_movimentado": quantidade_vendida_base.quantize(Decimal("0.001")),
+                            "estoque_depois": (
+                                estoque_disponivel - quantidade_vendida_base
+                            ).quantize(Decimal("0.001")),
+                            "estoque_unidade_snapshot": _unidade_base or "",
                         })
                         total_venda += valor_total_vendido
                         produto_bloqueado.quantidade = (
@@ -15703,22 +16516,21 @@ def gravar_venda(request):
                         pedido_pendencias_estoque.append(pendencia)
 
                 if not itens_para_venda:
-                    return JsonResponse(
-                        {
-                            "sucesso": False,
-                            "mensagem": (
-                                f"Nenhum item do Pedido #{pedido_origem.id} possui estoque disponivel "
-                                "para gerar venda. Os itens continuam pendentes no pedido."
-                            ),
-                            "toast_duracao_ms": 12000,
-                        },
-                        status=400,
+                    mensagem = (
+                        f"Nenhum item do Pedido #{pedido_origem.id} possui estoque disponivel "
+                        "para gerar venda. Os itens continuam pendentes no pedido."
                     )
+                    resposta = erro_gravar_venda(mensagem)
+                    resposta_data = json.loads(resposta.content.decode("utf-8"))
+                    resposta_data["toast_duracao_ms"] = 12000
+                    return JsonResponse(resposta_data, status=400)
             else:
-                _baixar_estoque_movimentos(
+                snapshots_estoque = _baixar_estoque_movimentos(
                     (item["produto"], item["quantidade"], item["unidade"])
                     for item in itens_para_venda
                 )
+                for item, snapshot_estoque in zip(itens_para_venda, snapshots_estoque):
+                    item.update(snapshot_estoque)
 
             venda = Venda.objects.create(
                 cliente=cliente,
@@ -15730,7 +16542,18 @@ def gravar_venda(request):
             )
 
             ItemVenda.objects.bulk_create([
-                ItemVenda(venda=venda, **item)
+                ItemVenda(
+                    venda=venda,
+                    produto=item["produto"],
+                    quantidade=item["quantidade"],
+                    unidade=item["unidade"],
+                    preco_unitario=item["preco_unitario"],
+                    valor_total=item["valor_total"],
+                    estoque_antes=item.get("estoque_antes"),
+                    estoque_movimentado=item.get("estoque_movimentado"),
+                    estoque_depois=item.get("estoque_depois"),
+                    estoque_unidade_snapshot=item.get("estoque_unidade_snapshot", ""),
+                )
                 for item in itens_para_venda
             ])
 
@@ -15774,7 +16597,7 @@ def gravar_venda(request):
                         usuario=venda.operador,
                     )
     except ValueError as exc:
-        return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+        return erro_gravar_venda(str(exc))
 
     mensagem = f"Venda #{venda.id} gravada com sucesso."
     if pedido_pendencias_estoque:
@@ -15949,7 +16772,7 @@ def venda_detalhe(request, pk):
             "venda_a_prazo": _venda_a_prazo(venda),
             "venda_a_vista": _venda_pagamento_imediato(venda.tipo_pagamento),
             "alocacao_financeira_venda": _alocacao_financeira_venda(venda),
-            "movimentos_financeiros_venda": _movimentos_financeiros_venda(venda),
+            "movimentos_financeiros_venda": _movimentos_financeiros_venda_ativos(venda),
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),
             "modo_pendencia_resolvida": modo_pendencia_resolvida,
@@ -16048,7 +16871,8 @@ def _contexto_desfazer_item_removido(item_removido):
 
 def _contexto_venda_quitada(venda, conta_receber=None):
     conta = conta_receber if conta_receber is not None else _conta_receber_da_venda(venda)
-    recebimentos_count = conta.recebimentos.count() if conta else 0
+    recebimentos_ativos = _recebimentos_ativos_conta_venda(conta, venda) if conta else []
+    recebimentos_count = len(recebimentos_ativos)
     conta_paga = bool(conta and conta.status == ContaReceber.STATUS_PAGA)
     venda_a_vista = normalizar_texto_cliente(venda.tipo_pagamento) in {"a vista", "avista"}
     motivos = []
@@ -16358,9 +17182,12 @@ def _sincronizar_conta_receber(venda, observacao_origem="", permitir_reabrir_can
             (valor_original_anterior - valor_aberto_anterior).quantize(Decimal("0.01")),
             Decimal("0.00"),
         )
-        valor_recebido_registrado = (
-            conta.recebimentos.aggregate(total=Sum("valor")).get("total")
-            or Decimal("0.00")
+        valor_recebido_registrado = sum(
+            (
+                _financeiro_dinheiro(recebimento.valor).quantize(Decimal("0.01"))
+                for recebimento in _recebimentos_ativos_conta_venda(conta, venda)
+            ),
+            Decimal("0.00"),
         ).quantize(Decimal("0.01"))
         valor_ja_recebido = max(valor_ja_recebido, valor_recebido_registrado)
         novo_valor_aberto = max((valor - valor_ja_recebido).quantize(Decimal("0.01")), Decimal("0.00"))
@@ -16477,29 +17304,142 @@ def _status_whatsapp_consulta_venda(venda, eventos=None):
     return selos
 
 
+def _nome_produto_evento_remocao(evento):
+    descricao = (evento.descricao or "").strip()
+
+    if evento.tipo_evento == "item_removido_da_nota":
+        prefixo = "Item removido da nota: "
+        if descricao.startswith(prefixo):
+            return descricao[len(prefixo):].split(", quantidade ", 1)[0].strip()
+
+    if evento.tipo_evento == "remocao_item_desfeita":
+        prefixo = "Remocao de item desfeita: "
+        if descricao.startswith(prefixo):
+            return descricao[len(prefixo):].split(", quantidade ", 1)[0].strip()
+
+    return ""
+
+
+def _filtrar_eventos_edicao_nota_ativos(eventos):
+    pendentes = []
+
+    for evento in eventos:
+        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado":
+            pendentes = []
+            continue
+
+        if evento.tipo_evento == "remocao_item_desfeita":
+            produto_desfeito = _nome_produto_evento_remocao(evento).casefold()
+
+            if produto_desfeito:
+                for indice in range(len(pendentes) - 1, -1, -1):
+                    evento_pendente = pendentes[indice]
+
+                    if evento_pendente.tipo_evento != "item_removido_da_nota":
+                        continue
+
+                    produto_removido = _nome_produto_evento_remocao(
+                        evento_pendente
+                    ).casefold()
+
+                    if produto_removido == produto_desfeito:
+                        pendentes.pop(indice)
+                        break
+
+            continue
+
+        if evento.tipo_evento == "item_removido_da_nota":
+            produto_removido = _nome_produto_evento_remocao(evento).casefold()
+
+            if produto_removido:
+                for indice in range(len(pendentes) - 1, -1, -1):
+                    evento_pendente = pendentes[indice]
+
+                    if evento_pendente.tipo_evento not in (
+                        "produto_adicionado_na_nota",
+                        "item_adicionado_na_nota",
+                    ):
+                        continue
+
+                    descricao_adicao = (evento_pendente.descricao or "").strip()
+                    prefixo_adicao = "Item adicionado na nota: "
+                    produto_adicionado = ""
+
+                    if descricao_adicao.startswith(prefixo_adicao):
+                        produto_adicionado = (
+                            descricao_adicao[len(prefixo_adicao):]
+                            .split(", quantidade ", 1)[0]
+                            .strip()
+                            .casefold()
+                        )
+
+                    if produto_adicionado == produto_removido:
+                        pendentes.pop(indice)
+                        break
+                else:
+                    pendentes.append(evento)
+
+                if any(
+                    evento_pendente.tipo_evento in (
+                        "produto_adicionado_na_nota",
+                        "item_adicionado_na_nota",
+                    )
+                    and (
+                        (evento_pendente.descricao or "")
+                        .strip()
+                        .startswith("Item adicionado na nota: ")
+                    )
+                    and (
+                        (evento_pendente.descricao or "")
+                        .strip()[len("Item adicionado na nota: "):]
+                        .split(", quantidade ", 1)[0]
+                        .strip()
+                        .casefold()
+                        == produto_removido
+                    )
+                    for evento_pendente in pendentes
+                ):
+                    continue
+
+            if evento not in pendentes:
+                pendentes.append(evento)
+
+            continue
+
+        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
+            pendentes.append(evento)
+
+    return pendentes
+
+
 def _eventos_edicao_nota_para_whatsapp(venda):
     eventos = list(
         EventoVenda.objects.filter(
             venda=venda,
         )
-        .filter(Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP) | Q(canal="whatsapp", tipo_evento="whatsapp_confirmado"))
+        .filter(
+            Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP)
+            | Q(tipo_evento="remocao_item_desfeita")
+            | Q(canal="whatsapp", tipo_evento="whatsapp_confirmado")
+        )
         .order_by("criado_em", "id")
     )
-    if not any(evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado" for evento in eventos):
+
+    if not any(
+        evento.canal == "whatsapp"
+        and evento.tipo_evento == "whatsapp_confirmado"
+        for evento in eventos
+    ):
         return EventoVenda.objects.none()
 
-    pendentes_ids = []
-    for evento in eventos:
-        if evento.canal == "whatsapp" and evento.tipo_evento == "whatsapp_confirmado":
-            pendentes_ids = []
-            continue
-        if evento.tipo_evento in TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP:
-            pendentes_ids.append(evento.id)
+    pendentes = _filtrar_eventos_edicao_nota_ativos(eventos)
 
-    if not pendentes_ids:
+    if not pendentes:
         return EventoVenda.objects.none()
 
-    return EventoVenda.objects.filter(pk__in=pendentes_ids).order_by("criado_em", "id")
+    return EventoVenda.objects.filter(
+        pk__in=[evento.id for evento in pendentes]
+    ).order_by("criado_em", "id")
 
 
 def _produto_evento_por_nome(itens_nota, nome_produto):
@@ -16537,12 +17477,17 @@ def _linha_resumo_visual_alteracao_item(evento):
 def _resumo_alteracoes_pendentes_whatsapp(venda, itens_nota, incluir_edicoes_registradas=False):
     eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
     if incluir_edicoes_registradas and not eventos:
-        eventos = list(
+        eventos_registrados = list(
             EventoVenda.objects.filter(
                 venda=venda,
-                tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP,
-            ).order_by("criado_em", "id")
+            )
+            .filter(
+                Q(tipo_evento__in=TIPOS_EVENTO_EDICAO_NOTA_WHATSAPP)
+                | Q(tipo_evento="remocao_item_desfeita")
+            )
+            .order_by("criado_em", "id")
         )
+        eventos = _filtrar_eventos_edicao_nota_ativos(eventos_registrados)
     resumo = {
         "itens_adicionados_ids": set(),
         "itens_quantidade_ids": set(),
@@ -16626,6 +17571,55 @@ def _linhas_evento_edicao_nota(evento):
     return [descricao] if descricao else []
 
 
+def _consolidar_linhas_whatsapp_edicao(eventos):
+    linhas = []
+    quantidades = {}
+    ordem = []
+
+    for evento in eventos:
+        if evento.tipo_evento == "quantidade_item_alterada":
+            descricao = (evento.descricao or "").strip()
+            prefixo = "Quantidade alterada na nota: "
+
+            if (
+                descricao.startswith(prefixo)
+                and ". De " in descricao
+                and ". Total" in descricao
+            ):
+                produto, resto = descricao[len(prefixo):].split(". De ", 1)
+                quantidades_texto = resto.split(". Total", 1)[0]
+
+                if " para " in quantidades_texto:
+                    anterior, nova = quantidades_texto.split(" para ", 1)
+                    produto = produto.strip()
+
+                    if produto not in quantidades:
+                        quantidades[produto] = {
+                            "anterior": anterior.strip(),
+                            "nova": nova.strip(),
+                        }
+                        ordem.append(("quantidade", produto))
+                    else:
+                        quantidades[produto]["nova"] = nova.strip()
+
+                    continue
+
+        ordem.append(("evento", evento))
+
+    for tipo, valor in ordem:
+        if tipo == "quantidade":
+            dados = quantidades[valor]
+            linhas.append([
+                f'O item "{valor}" teve a quantidade alterada:',
+                f'Quantidade anterior: {dados["anterior"]}',
+                f'Nova quantidade: {dados["nova"]}',
+            ])
+        else:
+            linhas.append(_linhas_evento_edicao_nota(valor))
+
+    return linhas
+
+
 def _montar_whatsapp_atualizacao_nota(request, venda):
     eventos = list(_eventos_edicao_nota_para_whatsapp(venda))
     if not eventos:
@@ -16649,10 +17643,12 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
         "Sua nota foi atualizada.",
         "",
     ]
-    for indice, evento in enumerate(eventos):
+    grupos_mensagem = _consolidar_linhas_whatsapp_edicao(eventos)
+
+    for indice, linhas_evento in enumerate(grupos_mensagem):
         if indice:
             linhas_mensagem.append("")
-        linhas_mensagem.extend(_linhas_evento_edicao_nota(evento))
+        linhas_mensagem.extend(linhas_evento)
 
     linhas_mensagem.extend([
         "",
@@ -16662,7 +17658,7 @@ def _montar_whatsapp_atualizacao_nota(request, venda):
         nota_url,
     ])
     mensagem_whatsapp = "\n".join(linhas_mensagem)
-    quantidade_eventos = len(eventos)
+    quantidade_eventos = len(grupos_mensagem)
     texto_resumo = (
         "Nota atualizada com 1 alteracao desde o ultimo WhatsApp."
         if quantidade_eventos == 1
@@ -16765,7 +17761,8 @@ def venda_editar_cabecalho(request, pk):
         }
         nova_data_venda = parse_date(valores["data_venda"])
         novo_vencimento = parse_date(valores["data_vencimento"]) if valores["data_vencimento"] else None
-        novo_pagamento = valores["tipo_pagamento"]
+        novo_pagamento = _normalizar_tipo_pagamento_venda(valores["tipo_pagamento"])
+        valores["tipo_pagamento"] = novo_pagamento
 
         if not nova_data_venda:
             messages.warning(request, "Informe uma data da venda valida.")
@@ -17052,10 +18049,11 @@ def venda_adicionar_produto_item(request, pk):
             try:
                 with transaction.atomic():
                     validar_produto_novo_na_venda(produto_selecionado)
-                    _baixar_estoque_produto(
+                    snapshot_estoque = _baixar_estoque_produto(
                         produto_selecionado.pk,
                         quantidade_preview,
                         produto_nome,
+                        unidade,
                     )
                     item_criado = ItemVenda.objects.create(
                         venda=venda,
@@ -17064,6 +18062,7 @@ def venda_adicionar_produto_item(request, pk):
                         unidade=unidade,
                         preco_unitario=preco_unitario,
                         valor_total=valor_novo_item,
+                        **snapshot_estoque,
                     )
                     total_recalculado = _recalcular_total_venda_pelos_itens(venda)
                     venda.total = total_recalculado
@@ -17222,6 +18221,10 @@ def venda_revisar_remocao_item(request, pk, item_id):
                 unidade_snapshot=unidade_removida or "",
                 preco_unitario_snapshot=item_venda.preco_unitario,
                 valor_total_snapshot=valor_abatido,
+                estoque_antes=item_venda.estoque_antes,
+                estoque_movimentado=item_venda.estoque_movimentado,
+                estoque_depois=item_venda.estoque_depois,
+                estoque_unidade_snapshot=item_venda.estoque_unidade_snapshot or "",
                 item_venda_original_id=item_venda.id,
                 operador=venda.operador or "",
                 observacao="Item removido da nota por edicao.",
@@ -17360,11 +18363,13 @@ def venda_desfazer_remocao_item(request, pk, remocao_id):
                     total_anterior = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
                     ajuste_cancelado = item_removido_locked.ajuste_origem
                     estoque_baixado = False
+                    snapshot_estoque = {}
                     if not ajuste_cancelado and item_removido_locked.produto_id:
-                        _baixar_estoque_produto(
+                        snapshot_estoque = _baixar_estoque_produto(
                             item_removido_locked.produto_id,
                             item_removido_locked.quantidade_snapshot,
                             item_removido_locked.produto_nome_snapshot,
+                            item_removido_locked.unidade_snapshot,
                         )
                         estoque_baixado = True
 
@@ -17407,6 +18412,7 @@ def venda_desfazer_remocao_item(request, pk, remocao_id):
                             unidade=item_removido_locked.unidade_snapshot,
                             preco_unitario=item_removido_locked.preco_unitario_snapshot,
                             valor_total=item_removido_locked.valor_total_snapshot,
+                            **snapshot_estoque,
                         )
                     total_recalculado = _recalcular_total_venda_pelos_itens(venda)
                     venda.total = total_recalculado
@@ -17710,13 +18716,19 @@ def preparar_whatsapp_venda(request, pk):
     bloqueio = _bloquear_venda_cancelada(request, venda)
     if bloqueio:
         return bloqueio
-    whatsapp_url = montar_link_whatsapp_venda(venda)
+    whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
+    whatsapp_url = (
+        whatsapp_atualizacao["url"]
+        if whatsapp_atualizacao and whatsapp_atualizacao.get("tem_whatsapp")
+        else montar_link_whatsapp_venda(venda)
+    )
     return render(
         request,
         "estoque/preparar_whatsapp.html",
         {
             "venda": venda,
             "whatsapp_url": whatsapp_url,
+            "whatsapp_atualizacao": whatsapp_atualizacao,
         },
     )
 
