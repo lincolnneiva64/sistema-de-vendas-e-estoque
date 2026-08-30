@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 {% load l10n %}
 <html lang="pt-br">
 <head>
@@ -1620,7 +1620,7 @@ td:first-child {
 
         {% if venda_edicao %}
             <div class="venda-edicao-alerta" id="vendaEdicaoAlerta">
-                <strong>Editando venda #{{ venda_edicao.id }}</strong>
+                <button type="button" id="btnAlternarEdicaoVenda" class="acao-venda-btn" disabled>Editando venda #{{ venda_edicao.id }}</button>
                 <button type="button" id="btnNovaVendaEdicao" class="acao-venda-btn">Nova venda</button>
             </div>
         {% endif %}
@@ -2791,6 +2791,7 @@ const btnGravarVenda = document.getElementById("btnGravarVenda");
 const btnVisualizarVenda = document.getElementById("btnVisualizarVenda");
 const btnNovaVenda = document.getElementById("btnNovaVenda");
 const btnNovaVendaEdicao = document.getElementById("btnNovaVendaEdicao");
+const btnAlternarEdicaoVenda = document.getElementById("btnAlternarEdicaoVenda");
 const btnLimparItens = document.getElementById("btnLimparItens");
 const btnConsultarVendas = document.getElementById("btnConsultarVendas");
 const btnContasReceberVenda = document.getElementById("btnContasReceberVenda");
@@ -2979,6 +2980,45 @@ let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVe
 const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").textContent || "null");
 
 let vendaEdicaoSemAlteracoesPendentes = false;
+let vendaEdicaoBloqueada = false;
+
+function aplicarBloqueioEdicaoVenda(bloquear) {
+    if (!vendaEdicaoVenda?.id) return;
+
+    vendaEdicaoBloqueada = Boolean(bloquear);
+
+    [
+        dataVenda,
+        clienteBusca,
+        vencimentoVenda,
+        tipoVenda,
+        operadorVenda,
+        produtoBusca,
+        quantidade,
+        unidade,
+        preco,
+        btnAdicionarItemVenda,
+        btnLimparItens,
+    ].forEach((controle) => {
+        if (controle) controle.disabled = vendaEdicaoBloqueada;
+    });
+
+    if (vendaEdicaoBloqueada) {
+        limparEstadoEdicaoItemVenda();
+        sugestoesBox.style.display = "none";
+        clienteSugestoesBox.style.display = "none";
+
+        if (btnAlternarEdicaoVenda) {
+            btnAlternarEdicaoVenda.disabled = false;
+            btnAlternarEdicaoVenda.textContent = "Editar venda #" + vendaEdicaoVenda.id;
+            btnAlternarEdicaoVenda.title = "Habilitar esta venda para uma nova edicao.";
+        }
+    } else if (btnAlternarEdicaoVenda) {
+        btnAlternarEdicaoVenda.disabled = true;
+        btnAlternarEdicaoVenda.textContent = "Editando venda #" + vendaEdicaoVenda.id;
+        btnAlternarEdicaoVenda.title = "Esta venda esta habilitada para edicao.";
+    }
+}
 
 function consolidarReferenciaPersistidaItensVenda() {
     if (!vendaEdicaoVenda?.id || !tabelaBody) return;
@@ -3003,6 +3043,7 @@ function marcarVendaEdicaoComoSalva() {
     btnGravarVenda.textContent = "Alterações salvas";
     btnGravarVenda.title = "Todas as alterações desta venda já foram salvas.";
     consolidarReferenciaPersistidaItensVenda();
+    aplicarBloqueioEdicaoVenda(true);
 }
 
 function marcarVendaEdicaoComoAlterada() {
@@ -4125,6 +4166,11 @@ function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null) {
 }
 
 tabelaBody.addEventListener("click", function (e) {
+  if (vendaEdicaoBloqueada) {
+      e.preventDefault();
+      return;
+  }
+
   const linha = e.target.closest("tr");
   linhaSelecionada = linha;
 if (!linha) {
@@ -5318,6 +5364,21 @@ btnNovaVenda.addEventListener("click", async () => {
     mostrarToastVenda("Venda atual limpa.");
 });
 
+btnAlternarEdicaoVenda?.addEventListener("click", () => {
+    if (!vendaEdicaoVenda?.id || !vendaEdicaoBloqueada) return;
+
+    aplicarBloqueioEdicaoVenda(false);
+    vendaEdicaoSemAlteracoesPendentes = false;
+
+    if (btnGravarVenda) {
+        btnGravarVenda.disabled = false;
+        btnGravarVenda.textContent = "Salvar Alterações";
+        btnGravarVenda.title = "Salvar as alterações realizadas nesta venda.";
+    }
+
+    if (produtoBusca) produtoBusca.focus();
+});
+
 btnNovaVendaEdicao?.addEventListener("click", async () => {
     const confirmou = await confirmarAcaoVenda(
         "Sair da edicao da venda #" + vendaEdicaoVenda.id + " e iniciar uma nova venda?",
@@ -5581,6 +5642,10 @@ quantidade.addEventListener("keydown", (e) => {
     });
 }
   document.addEventListener("keydown", async function (e) {
+if (vendaEdicaoBloqueada && (e.key === "Delete" || (e.ctrlKey && e.key.toLowerCase() === "z"))) {
+    return;
+}
+
 if (e.key === "Delete") {
 
     if (linhaSelecionada) {
