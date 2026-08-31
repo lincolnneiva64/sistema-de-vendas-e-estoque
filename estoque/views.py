@@ -4441,7 +4441,11 @@ def clientes_consulta(request):
             return redirect(destino)
 
         if acao == "excluir" and cliente_id:
-            cliente = get_object_or_404(Cliente, pk=cliente_id)
+            cliente = Cliente.objects.filter(pk=cliente_id).first()
+            if not cliente:
+                messages.info(request, "O cliente ja nao existe ou ja foi excluido.")
+                return redirect(destino)
+
             if cliente.vendas.exists():
                 messages.warning(
                     request,
