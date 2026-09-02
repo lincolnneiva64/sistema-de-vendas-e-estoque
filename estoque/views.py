@@ -4548,6 +4548,7 @@ def _conta_pagar_payload(conta):
     return {
         "id": conta.id,
         "compra_id": conta.compra_id,
+        "documento_legado": conta.documento_legado or "",
         "data_emissao": conta.data_emissao.strftime("%d/%m/%Y") if conta.data_emissao else "",
         "data_vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
         "data_vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "",
@@ -4564,6 +4565,7 @@ def _pagamento_conta_pagar_payload(pagamento):
         "id": pagamento.id,
         "conta_id": pagamento.conta_id,
         "compra_id": conta.compra_id if conta else "",
+        "documento_legado": conta.documento_legado if conta else "",
         "data_pagamento": pagamento.data_pagamento.strftime("%d/%m/%Y") if pagamento.data_pagamento else "",
         "valor": str(pagamento.valor),
         "juros_bancarios": str(pagamento.juros_bancarios),
@@ -4684,6 +4686,7 @@ def fornecedor_contas_pagar_abertas(request, fornecedor_id):
             "valor_em_aberto",
             "status",
             "observacao",
+            "documento_legado",
         )
         .order_by("data_vencimento", "id")
     )
@@ -4711,6 +4714,7 @@ def fornecedor_contas_pagar_abertas(request, fornecedor_id):
             "observacao",
             "conta__id",
             "conta__compra_id",
+            "conta__documento_legado",
         )
         .order_by("-data_pagamento", "-id")[:5]
     )
@@ -4748,6 +4752,7 @@ def contas_pagar_abertas_geral(request):
         contas_payload.append({
             "id": conta.id,
             "compra_id": conta.compra_id,
+            "documento_legado": conta.documento_legado or "",
             "fornecedor_id": conta.fornecedor_id,
             "fornecedor": conta.fornecedor.nome if conta.fornecedor else "Fornecedor nao informado",
             "data_vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
@@ -5010,6 +5015,7 @@ def pagar_fornecedor(request):
                     aplicacoes.append({
                         "conta_id": conta.id,
                         "compra_id": conta.compra_id,
+                        "documento_legado": conta.documento_legado or "",
                         "vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
                         "saldo_antes": str(saldo_antes),
                         "valor_aplicado": str(valor_aplicar),
@@ -5074,6 +5080,7 @@ def pagar_fornecedor(request):
         item["contas"].append({
             "id": conta.id,
             "compra_id": conta.compra_id,
+            "documento_legado": conta.documento_legado or "",
             "vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
             "vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
             "saldo": str(saldo),
@@ -20681,6 +20688,7 @@ def contas_pagar(request):
         contas_base = contas_base.filter(
             Q(fornecedor__nome__icontains=termo)
             | Q(compra__id__icontains=termo)
+            | Q(documento_legado__icontains=termo)
             | Q(observacao__icontains=termo)
         )
 

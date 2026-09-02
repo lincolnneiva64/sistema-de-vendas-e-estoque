@@ -26233,3 +26233,68 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
         self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)
+
+
+class ContaPagarLegadaTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Legado")
+        self.conta = ContaPagar.objects.create(
+            compra=None,
+            fornecedor=self.fornecedor,
+            documento_legado="FB-2026-0001",
+            data_emissao=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            valor_original=Decimal("125.00"),
+            valor_em_aberto=Decimal("125.00"),
+            status=ContaPagar.STATUS_ABERTA,
+        )
+
+    def test_conta_legada_renderiza_sem_link_de_compra_e_pode_ser_baixada(self):
+        resposta = self.client.get(reverse("estoque:contas_pagar"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Documento FB-2026-0001")
+        self.assertContains(resposta, 'data-compra=""')
+        self.assertContains(resposta, 'data-documento="FB-2026-0001"')
+        self.assertNotContains(resposta, "Ver compra")
+        self.assertNotContains(resposta, f"/estoque/compras/{self.conta.pk}/")
+
+        resposta_busca = self.client.get(
+            reverse("estoque:contas_pagar"),
+            {"q": "FB-2026-0001"},
+            secure=True,
+        )
+        self.assertContains(resposta_busca, "Documento FB-2026-0001")
+
+        resposta_baixa = self.client.post(
+            reverse("estoque:conta_pagar_baixar", kwargs={"pk": self.conta.pk}),
+            {
+                "valor_pago": "125,00",
+                "juros_bancarios": "0,00",
+                "data_pagamento": timezone.localdate().isoformat(),
+                "forma_pagamento": "Pix",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta_baixa.status_code, 200)
+        payload = resposta_baixa.json()
+        self.assertEqual(payload["conta"]["compra_id"], None)
+        self.assertEqual(payload["conta"]["documento_legado"], "FB-2026-0001")
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+
+    def test_payloads_de_conta_e_pagamento_preservam_documento_legado(self):
+        payload = views._conta_pagar_payload(self.conta)
+        self.assertIsNone(payload["compra_id"])
+        self.assertEqual(payload["documento_legado"], "FB-2026-0001")
+
+        pagamento = PagamentoContaPagar.objects.create(
+            conta=self.conta,
+            data_pagamento=timezone.localdate(),
+            valor=Decimal("10.00"),
+            forma_pagamento="Pix",
+        )
+        pagamento_payload = views._pagamento_conta_pagar_payload(pagamento)
+        self.assertEqual(pagamento_payload["compra_id"], None)
+        self.assertEqual(pagamento_payload["documento_legado"], "FB-2026-0001")

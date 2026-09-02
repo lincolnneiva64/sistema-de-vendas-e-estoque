@@ -2055,6 +2055,8 @@ class ContaPagar(models.Model):
         Compra,
         on_delete=models.CASCADE,
         related_name="conta_pagar",
+        blank=True,
+        null=True,
     )
     fornecedor = models.ForeignKey(
         Fornecedor,
@@ -2076,7 +2078,11 @@ class ContaPagar(models.Model):
         ordering = ["data_vencimento", "id"]
 
     def __str__(self):
-        return f"Conta a pagar - Compra #{self.compra_id}"
+        if self.compra_id:
+            return f"Conta a pagar - Compra #{self.compra_id}"
+        if self.documento_legado:
+            return f"Conta a pagar - Documento {self.documento_legado}"
+        return f"Conta a pagar #{self.pk or '-'}"
 
 
 class PagamentoContaPagar(models.Model):

@@ -627,10 +627,22 @@ input[placeholder*="fornecedor" i]:focus {
     document.getElementById("resumoTotalVencido").textContent = moeda(resumoGeral.total_vencido || 0);
   }
 
+  function escaparHtml(texto) {
+    const elemento = document.createElement("div");
+    elemento.textContent = texto;
+    return elemento.innerHTML;
+  }
+
+  function referenciaConta(conta) {
+    if (conta.compra_id) return "Compra #" + conta.compra_id;
+    if (conta.documento_legado) return "Documento " + escaparHtml(conta.documento_legado);
+    return "Conta #" + conta.id;
+  }
+
   function filtrarFornecedores() {
     const termo = normalizar(busca.value);
     return fornecedores.filter((fornecedor) => {
-      const texto = normalizar(fornecedor.nome + " " + (fornecedor.contas || []).map((conta) => "#" + conta.compra_id).join(" "));
+      const texto = normalizar(fornecedor.nome + " " + (fornecedor.contas || []).map(referenciaConta).join(" "));
       return !termo || texto.includes(termo);
     });
   }
@@ -709,7 +721,7 @@ input[placeholder*="fornecedor" i]:focus {
     info.textContent = fornecedorAtual.nome + " - " + fornecedorAtual.quantidade + " conta(s), total " + moeda(fornecedorAtual.total_aberto);
     lista.innerHTML = contas.map((conta) => (
       '<div class="pf-conta' + (conta.vencida ? " vencida" : "") + '">' +
-        '<div class="pf-conta-top"><span>Compra #' + conta.compra_id + '</span><span>' + moeda(conta.saldo) + '</span></div>' +
+        '<div class="pf-conta-top"><span>' + referenciaConta(conta) + '</span><span>' + moeda(conta.saldo) + '</span></div>' +
         '<div class="pf-conta-meta">Vencimento: ' + conta.vencimento + ' - Status: ' + conta.status + '</div>' +
       '</div>'
     )).join("");
@@ -753,7 +765,7 @@ input[placeholder*="fornecedor" i]:focus {
       itens.map((item) => {
         const quitada = item.saldoDepois <= 0;
         return '<div class="pf-previa-item">' +
-          '<div><strong>Compra #' + item.conta.compra_id + '</strong><br><span>Venc. ' + item.conta.vencimento + '</span></div>' +
+          '<div><strong>' + referenciaConta(item.conta) + '</strong><br><span>Venc. ' + item.conta.vencimento + '</span></div>' +
           '<div><span class="pf-label">Antes</span><strong>' + moeda(item.saldoAntes) + '</strong></div>' +
           '<div><span class="pf-label">Aplica</span><strong>' + moeda(item.aplicado) + '</strong></div>' +
           '<div><span class="pf-label">Depois</span><strong>' + moeda(item.saldoDepois) + '</strong></div>' +

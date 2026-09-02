@@ -149,7 +149,15 @@
         {% for conta in contas %}
           <tr data-conta-pagar-id="{{ conta.pk }}">
             <td>{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</td>
-            <td><a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">#{{ conta.compra.id }}</a></td>
+            <td>
+              {% if conta.compra_id %}
+                <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Compra #{{ conta.compra.id }}</a>
+              {% elif conta.documento_legado %}
+                Documento {{ conta.documento_legado }}
+              {% else %}
+                Conta #{{ conta.pk }}
+              {% endif %}
+            </td>
             <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
             <td><span class="contas-pagar-status">{{ conta.get_status_display }}</span></td>
             <td class="contas-pagar-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
@@ -161,7 +169,8 @@
                   class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
                   data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
                   data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
-                  data-compra="{{ conta.compra.id }}"
+                  data-compra="{% if conta.compra_id %}{{ conta.compra.id }}{% endif %}"
+                  data-documento="{{ conta.documento_legado|default:'' }}"
                   data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
                   data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
                   data-original="{{ conta.valor_original|floatformat:2 }}"
@@ -225,8 +234,16 @@
         </div>
         <div class="contas-pagar-mobile-grid">
           <div>
-            <span class="contas-pagar-mobile-label">Compra</span>
-            <span class="contas-pagar-mobile-value">#{{ conta.compra.id }}</span>
+            <span class="contas-pagar-mobile-label">{% if conta.compra_id %}Compra{% else %}Referencia{% endif %}</span>
+            <span class="contas-pagar-mobile-value">
+              {% if conta.compra_id %}
+                Compra #{{ conta.compra.id }}
+              {% elif conta.documento_legado %}
+                Documento {{ conta.documento_legado }}
+              {% else %}
+                Conta #{{ conta.pk }}
+              {% endif %}
+            </span>
           </div>
           <div>
             <span class="contas-pagar-mobile-label">Vencimento</span>
@@ -242,14 +259,17 @@
           </div>
         </div>
         <div class="contas-pagar-actions">
-          <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Ver compra</a>
+          {% if conta.compra_id %}
+            <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Ver compra</a>
+          {% endif %}
           {% if conta.status != "paga" and conta.status != "cancelada" %}
             <button
               type="button"
               class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
               data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
               data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
-              data-compra="{{ conta.compra.id }}"
+              data-compra="{% if conta.compra_id %}{{ conta.compra.id }}{% endif %}"
+              data-documento="{{ conta.documento_legado|default:'' }}"
               data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
               data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
               data-original="{{ conta.valor_original|floatformat:2 }}"
@@ -379,6 +399,12 @@
   let vencimentoIsoAtual = "";
   let focoAnterior = null;
 
+  function referenciaConta(botao) {
+    if (botao.dataset.compra) return "Compra #" + botao.dataset.compra;
+    if (botao.dataset.documento) return "Documento " + botao.dataset.documento;
+    return "Conta #" + (botao.closest("[data-conta-pagar-id]")?.dataset.contaPagarId || "-");
+  }
+
   function hojeISO() {
     const hoje = new Date();
     const offset = hoje.getTimezoneOffset() * 60000;
@@ -403,7 +429,7 @@
     vencimentoIsoAtual = botao.dataset.vencimentoIso || "";
     focoAnterior = document.activeElement;
     document.getElementById("baixaContaFornecedor").textContent = botao.dataset.fornecedor || "-";
-    document.getElementById("baixaContaCompra").textContent = "#" + (botao.dataset.compra || "-");
+    document.getElementById("baixaContaCompra").textContent = referenciaConta(botao);
     document.getElementById("baixaContaVencimento").textContent = botao.dataset.vencimento || "-";
     document.getElementById("baixaContaOriginal").textContent = "R$ " + (botao.dataset.original || "0,00");
     document.getElementById("baixaContaAberto").textContent = "R$ " + (botao.dataset.aberto || "0,00");
