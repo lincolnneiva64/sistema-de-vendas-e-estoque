@@ -6469,15 +6469,33 @@ class FornecedorExclusaoTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertFalse(fornecedor.ativo)
 
-    def test_lista_renderiza_controles_e_ids_de_exclusao(self):
+    def test_lista_oculta_controles_de_exclusao_em_massa(self):
         fornecedor = self.criar_fornecedor("Fornecedor Controles")
 
         resposta = self.client.get(reverse("estoque:fornecedores"), secure=True)
 
-        self.assertContains(resposta, "Selecionar visiveis")
-        self.assertContains(resposta, "Excluir selecionados (0)")
         self.assertContains(resposta, f'id="fornecedor-{fornecedor.pk}"')
-        self.assertContains(resposta, 'input.name = "fornecedor_ids"')
+        self.assertContains(resposta, "form-excluir-fornecedor")
+        self.assertNotContains(resposta, "Selecionar visiveis")
+        self.assertNotContains(resposta, "Excluir selecionados")
+        self.assertNotContains(resposta, 'input.name = "fornecedor_ids"')
+        self.assertNotContains(resposta, 'id="formExcluirFornecedoresSelecionados"')
+        self.assertNotContains(resposta, 'id="btnExcluirFornecedoresSelecionados"')
+
+
+class ClienteConsultaInterfaceTests(TestCase):
+    def test_consulta_oculta_controles_de_exclusao_em_massa(self):
+        cliente = Cliente.objects.create(nome="Cliente Interface Segura", ativo=True)
+
+        resposta = self.client.get(reverse("estoque:clientes_consulta"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, cliente.nome)
+        self.assertContains(resposta, "form-excluir-cliente")
+        self.assertNotContains(resposta, "Excluir selecionados")
+        self.assertNotContains(resposta, "data-cliente-checkbox")
+        self.assertNotContains(resposta, 'id="formExcluirClientesSelecionados"')
+        self.assertNotContains(resposta, 'id="btnExcluirClientesSelecionados"')
 
 
 class FornecedorProdutosFormTests(TestCase):
@@ -7070,6 +7088,20 @@ class ProdutoAtivacaoTests(TestCase):
     def mensagens(self, resposta):
         return [str(mensagem) for mensagem in resposta.context["messages"]]
 
+    def test_home_oculta_controles_perigosos_de_exclusao_e_revisao(self):
+        self.criar_produto("Produto Interface Segura")
+
+        resposta = self.client.get(reverse("estoque:home"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "Revisar produtos importados")
+        self.assertNotContains(resposta, 'id="btnRevisaoProdutosPainel"')
+        self.assertNotContains(resposta, 'id="btnExcluirProduto"')
+        self.assertNotContains(resposta, "Excluir selecionados")
+        self.assertNotContains(resposta, "checkbox-produto-exclusao")
+        self.assertNotContains(resposta, 'id="formExcluirProdutosSelecionados"')
+        self.assertNotContains(resposta, 'e.key === "Delete"')
+
     def test_produto_ativo_pode_ser_desativado(self):
         produto = self.criar_produto()
 
@@ -7161,7 +7193,7 @@ class ProdutoAtivacaoTests(TestCase):
             follow=True,
         )
 
-        self.assertNotIn(produto.pk, [item.pk for item in resposta_reativar.context["produtos"]])
+        self.assertIn(produto.pk, [item.pk for item in resposta_reativar.context["produtos"]])
 
     def test_desativar_preserva_aba_filtros_e_foco_no_redirect(self):
         produto = self.criar_produto("Produto Foco Atual")
@@ -7187,7 +7219,7 @@ class ProdutoAtivacaoTests(TestCase):
             secure=True,
         )
 
-        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?ativos=0&q=Reativar&f=normal&foco_produto={proximo.pk}#produto-{proximo.pk}")
+        self.assertEqual(resposta["Location"], f"{reverse('estoque:home')}?q=Reativar&f=normal&foco_produto={proximo.pk}#produto-{proximo.pk}")
 
     def test_exclusao_individual_preserva_foco_e_contexto(self):
         produto = self.criar_produto("Produto Excluir Atual")

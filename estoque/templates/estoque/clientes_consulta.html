@@ -483,23 +483,10 @@
       </div>
 
       {% if clientes %}
-        <form method="post" id="formExcluirClientesSelecionados">
-          {% csrf_token %}
-          <input type="hidden" name="acao" value="excluir_selecionados">
-          <input type="hidden" name="confirmacao_exclusao_lote" value="1">
-          <div id="clientesSelecionadosInputs"></div>
-        </form>
-        <div class="clientes-bulk-bar" aria-live="polite">
-          <span class="clientes-bulk-info" id="clientesSelecionadosResumo">0 cliente(s) selecionado(s)</span>
-          <button type="button" class="clientes-btn clientes-btn-danger" id="btnExcluirClientesSelecionados" disabled>
-            Excluir selecionados (0)
-          </button>
-        </div>
         <div class="clientes-table-wrap">
           <table class="clientes-table">
             <thead>
               <tr>
-                <th>Selecionar</th>
                 <th>Cliente</th>
                 <th>CPF/CNPJ</th>
                 <th>WhatsApp</th>
@@ -517,16 +504,6 @@
                   class="clientes-row {% if cliente_salvo_id == cliente.id|stringformat:'s' %}cliente-salvo-destaque{% endif %}"
                   data-cliente-search="{{ cliente.nome|lower }} {{ cliente.apelido_nome_conhecido|default:''|lower }} {{ cliente.cpf_cnpj|default:''|lower }} {{ cliente.whatsapp|default:''|lower }} {{ cliente.whatsapp_normalizado|default:''|lower }} {{ cliente.bairro|default:''|lower }} {{ cliente.cidade|default:''|lower }}"
                 >
-                  <td class="clientes-select-cell">
-                    <label class="clientes-select-label" aria-label="Selecionar {{ cliente.nome|escape }}">
-                      <input
-                        type="checkbox"
-                        class="clientes-select-checkbox"
-                        value="{{ cliente.id }}"
-                        data-cliente-checkbox
-                      >
-                    </label>
-                  </td>
                   <td>
                     <div class="cliente-nome">{{ cliente.nome }}</div>
                     {% if cliente.apelido_nome_conhecido %}
@@ -632,14 +609,7 @@
     const modalNome = document.getElementById("modalExcluirClienteNome");
     const btnCancelarExclusao = document.getElementById("btnCancelarExclusaoCliente");
     const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusaoCliente");
-    const checkboxesClientes = Array.from(document.querySelectorAll("[data-cliente-checkbox]"));
-    const btnExcluirSelecionados = document.getElementById("btnExcluirClientesSelecionados");
-    const resumoSelecionados = document.getElementById("clientesSelecionadosResumo");
-    const barraExclusaoSelecionados = document.querySelector(".clientes-bulk-bar");
-    const formExcluirSelecionados = document.getElementById("formExcluirClientesSelecionados");
-    const clientesSelecionadosInputs = document.getElementById("clientesSelecionadosInputs");
     let formExclusaoSelecionado = null;
-    let modoExclusaoSelecionado = "individual";
     const chaveScrollExclusao = "clientesConsultaScrollY";
     const clienteSalvoDestacado = document.querySelector(".cliente-salvo-destaque");
     if (clienteSalvoDestacado) {
@@ -689,56 +659,16 @@
     buscaLocalidade?.addEventListener("input", filtrarClientes);
     filtrarClientes();
 
-    function clientesSelecionados() {
-      return checkboxesClientes.filter(function (checkbox) {
-        return checkbox.checked;
-      });
-    }
-
-    function atualizarSelecaoClientes() {
-      const selecionados = clientesSelecionados();
-      const total = selecionados.length;
-
-      checkboxesClientes.forEach(function (checkbox) {
-        checkbox.closest(".clientes-row")?.classList.toggle("cliente-marcado", checkbox.checked);
-      });
-
-      if (resumoSelecionados) {
-        resumoSelecionados.textContent = `${total} cliente(s) selecionado(s)`;
-      }
-      if (btnExcluirSelecionados) {
-        btnExcluirSelecionados.disabled = total === 0;
-        btnExcluirSelecionados.textContent = `Excluir selecionados (${total})`;
-      }
-      barraExclusaoSelecionados?.classList.toggle("tem-selecao", total > 0);
-    }
-
-    function preencherClientesSelecionados() {
-      if (!clientesSelecionadosInputs) return 0;
-      clientesSelecionadosInputs.innerHTML = "";
-      const selecionados = clientesSelecionados();
-      selecionados.forEach(function (checkbox) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "cliente_ids";
-        input.value = checkbox.value;
-        clientesSelecionadosInputs.appendChild(input);
-      });
-      return selecionados.length;
-    }
-
     function fecharModalExclusao() {
       if (!modalExcluir) return;
       modalExcluir.classList.remove("aberto");
       modalExcluir.setAttribute("aria-hidden", "true");
       formExclusaoSelecionado = null;
-      modoExclusaoSelecionado = "individual";
     }
 
     document.querySelectorAll(".btn-abrir-modal-excluir").forEach(function (botao) {
       botao.addEventListener("click", function () {
         formExclusaoSelecionado = botao.closest("form");
-        modoExclusaoSelecionado = "individual";
         if (modalTitulo) modalTitulo.textContent = "Excluir cliente?";
         if (modalTexto) modalTexto.textContent = "Este cliente nao possui vendas vinculadas. A exclusao sera definitiva.";
         if (modalNome) modalNome.textContent = botao.dataset.clienteNome || "Cliente selecionado";
@@ -751,32 +681,6 @@
       });
     });
 
-    checkboxesClientes.forEach(function (checkbox) {
-      checkbox.addEventListener("change", atualizarSelecaoClientes);
-      checkbox.closest(".clientes-select-cell")?.addEventListener("click", function (evento) {
-        evento.stopPropagation();
-      });
-    });
-
-    btnExcluirSelecionados?.addEventListener("click", function () {
-      const total = preencherClientesSelecionados();
-      if (!total || !formExcluirSelecionados) return;
-
-      formExclusaoSelecionado = formExcluirSelecionados;
-      modoExclusaoSelecionado = "lote";
-      if (modalTitulo) modalTitulo.textContent = "Excluir clientes selecionados?";
-      if (modalTexto) {
-        modalTexto.textContent = `Esta exclusao e definitiva. Ao confirmar, somente os ${total} cliente(s) marcado(s) e os dados operacionais ligados a eles serao excluidos. Clientes nao marcados permanecerao intactos.`;
-      }
-      if (modalNome) modalNome.textContent = `${total} cliente(s) selecionado(s)`;
-      if (btnConfirmarExclusao) btnConfirmarExclusao.textContent = "Excluir selecionados";
-      if (modalExcluir) {
-        modalExcluir.classList.add("aberto");
-        modalExcluir.setAttribute("aria-hidden", "false");
-      }
-      btnCancelarExclusao?.focus();
-    });
-
     btnCancelarExclusao?.addEventListener("click", fecharModalExclusao);
     modalExcluir?.addEventListener("click", function (evento) {
       if (evento.target === modalExcluir) fecharModalExclusao();
@@ -786,11 +690,9 @@
     });
     btnConfirmarExclusao?.addEventListener("click", function () {
       if (!formExclusaoSelecionado) return;
-      if (modoExclusaoSelecionado === "lote" && !preencherClientesSelecionados()) return;
       sessionStorage.setItem(chaveScrollExclusao, String(window.scrollY || 0));
       formExclusaoSelecionado.submit();
     });
-    atualizarSelecaoClientes();
   });
 </script>
 {% endblock %}

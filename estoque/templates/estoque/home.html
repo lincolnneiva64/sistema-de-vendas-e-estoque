@@ -1700,13 +1700,6 @@ align-items: center;
           <span class="novo-produto-prefixo">+ </span>Novo Produto
         </a>
         <a
-          href="{% url 'estoque:revisao_produtos' %}"
-          id="btnRevisaoProdutosPainel"
-          class="btn-acao-principal-painel"
-        >
-          Revisar produtos importados
-        </a>
-        <a
           href="{% url 'estoque:unidades_produto' %}"
           id="btnUnidadesPainel"
           class="btn-acao-principal-painel"
@@ -1883,9 +1876,6 @@ align-items: center;
         <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
           Ver Lixeira
         </a>
-        <a href="#" id="btnExcluirProduto" class="btn-tarja btn-tarja-perigo">
-          Excluir Produto
-        </a>
       </div>
     </section>
   </div>
@@ -1991,22 +1981,10 @@ align-items: center;
   </button>
 </div>
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
-  <div style="padding:10px 14px; border-bottom:1px solid #eef0f2; display:flex; align-items:center; gap:12px;">
-    <form method="post" id="formExcluirProdutosSelecionados">
-      {% csrf_token %}
-      <input type="hidden" name="acao" value="excluir_selecionados">
-      <input type="hidden" name="foco_produto" id="focoProdutoExclusao" value="">
-      <input type="hidden" name="next" value="{{ request.get_full_path }}#produtos-lista">
-      <div id="produtosSelecionadosInputs"></div>
-    </form>
-    <span id="produtosSelecionadosResumo" style="font-weight:700; color:#444;">0 produto(s) selecionado(s)</span>
-    <button type="button" id="btnExcluirProdutosSelecionados" class="btn-tarja btn-tarja-perigo" disabled>Excluir selecionados (0)</button>
-  </div>
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
     
     <thead style="background: #f8f9fa;">
     <tr>
-        <th style="font-weight: 600; font-size: 13px; width:72px; text-align:center;">Selecionar</th>
         <th style="font-weight: 600; font-size: 13px;">Produto</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque</th>
         <th style="font-weight: 600; font-size: 13px;">Estoque Mínimo</th>
@@ -2019,9 +1997,6 @@ align-items: center;
     <tbody>
       {% for produto in produtos %}
       <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-produto-search="{{ produto.nome|default:'Produto sem nome' }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}{% if not produto.ativo %} produto-inativo{% endif %}" style="transition: all 0.15s ease;">
-    <td style="text-align:center;">
-      <input type="checkbox" class="checkbox-produto-exclusao" data-produto-id="{{ produto.id }}" aria-label="Selecionar produto {{ produto.nome }}">
-    </td>
     <td class="produto-card-nome">
       <div class="produto-nome-linha">
         <span class="produto-nome-texto">{{ produto.nome|default:"Produto sem nome" }}</span>
@@ -2183,96 +2158,6 @@ document.querySelectorAll(".produto-status-form").forEach(function(formStatus) {
         }
     });
 });
-  // --- Seleção em massa para exclusão lógica ---
-  function atualizarResumoSelecionados() {
-    const checkboxes = document.querySelectorAll('.checkbox-produto-exclusao');
-    const produtosSelecionadosResumo = document.getElementById('produtosSelecionadosResumo');
-    const btnExcluirProdutosSelecionados = document.getElementById('btnExcluirProdutosSelecionados');
-    const produtosSelecionadosInputs = document.getElementById('produtosSelecionadosInputs');
-    if (!produtosSelecionadosResumo || !btnExcluirProdutosSelecionados || !produtosSelecionadosInputs) return;
-
-    const selecionados = Array.from(checkboxes).filter(cb => cb.checked);
-    const count = selecionados.length;
-    produtosSelecionadosResumo.textContent = `${count} produto(s) selecionado(s)`;
-    btnExcluirProdutosSelecionados.textContent = `Excluir selecionados (${count})`;
-    btnExcluirProdutosSelecionados.disabled = count === 0;
-
-    produtosSelecionadosInputs.innerHTML = '';
-    selecionados.forEach(cb => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'produto_ids';
-      input.value = cb.dataset.produtoId;
-      produtosSelecionadosInputs.appendChild(input);
-    });
-  }
-
-  // attach per-checkbox handlers so stopPropagation runs before row click
-  const cbList = document.querySelectorAll('.checkbox-produto-exclusao');
-  cbList.forEach(cb => {
-    cb.addEventListener('click', function(e) { e.stopPropagation(); });
-    cb.addEventListener('change', atualizarResumoSelecionados);
-  });
-
-  // initialize UI state
-  atualizarResumoSelecionados();
-
-  const btnExcluirSel = document.getElementById('btnExcluirProdutosSelecionados');
-  if (btnExcluirSel) {
-    btnExcluirSel.addEventListener('click', function() {
-      const selecionados = document.querySelectorAll('.checkbox-produto-exclusao:checked');
-      if (!selecionados || selecionados.length === 0) {
-        alert('Nenhum produto selecionado.');
-        return;
-      }
-      const confirma = confirm(`Excluir ${selecionados.length} produto(s)?\nIsto apenas marcará como excluído.`);
-      if (!confirma) return;
-
-      const linhas = Array.from(document.querySelectorAll('tr.linha-produto'))
-        .filter(linha => linha.offsetParent !== null);
-
-      const idsSelecionados = new Set(
-        Array.from(selecionados).map(cb => String(cb.dataset.produtoId))
-      );
-
-      const linhasSelecionadas = linhas.filter(linha =>
-        idsSelecionados.has(String(linha.dataset.produtoId))
-      );
-
-      const ultimaLinhaSelecionada = linhasSelecionadas[linhasSelecionadas.length - 1];
-      let linhaFoco = null;
-
-      if (ultimaLinhaSelecionada) {
-        const indiceReferencia = linhas.indexOf(ultimaLinhaSelecionada);
-
-        // Preferir o primeiro produto que permanecer logo depois
-        for (let i = indiceReferencia + 1; i < linhas.length; i++) {
-          if (!idsSelecionados.has(String(linhas[i].dataset.produtoId))) {
-            linhaFoco = linhas[i];
-            break;
-          }
-        }
-
-        // Se nao houver nenhum depois, usar o anterior que permanecer
-        if (!linhaFoco) {
-          for (let i = indiceReferencia - 1; i >= 0; i--) {
-            if (!idsSelecionados.has(String(linhas[i].dataset.produtoId))) {
-              linhaFoco = linhas[i];
-              break;
-            }
-          }
-        }
-      }
-
-      const inputFoco = document.getElementById('focoProdutoExclusao');
-      if (inputFoco) {
-        inputFoco.value = linhaFoco?.dataset.produtoId || '';
-      }
-
-      const form = document.getElementById('formExcluirProdutosSelecionados');
-      if (form) form.submit();
-    });
-  }
 document.addEventListener("keydown", function (e) {
 
   // Alt + N → Novo Produto
@@ -2297,19 +2182,6 @@ document.addEventListener("keydown", function (e) {
       alert("Selecione um produto primeiro.")
     }
   }
-// Delete → Excluir produto selecionado
-if (e.key === "Delete") {
-
-  if (produtoSelecionado) {
-    const btnExcluir = document.getElementById("btnExcluirProduto")
-    if (btnExcluir) {
-      btnExcluir.click()
-    }
-  } else {
-    alert("Selecione um produto para excluir.")
-  }
-}
-
 // ESC → Limpar seleção
 if (e.key === "Escape") {
 
@@ -2324,65 +2196,6 @@ if (e.key === "Escape") {
 
 }
 })
-const btnExcluirProduto = document.getElementById("btnExcluirProduto");
-
-if (btnExcluirProduto) {
-btnExcluirProduto.addEventListener("click", function() {
-    if (!produtoSelecionado) {
-        alert("Selecione um produto para excluir.");
-        return;
-    }
-
-    document.getElementById("textoModalExclusao").textContent =
-  `Tem certeza que deseja excluir "${nomeProdutoSelecionado}"?`;
-document.getElementById("modalConfirmarExclusao").style.display = "flex";
-// foco inicial no botão Excluir
-const btnConfirmar = document.getElementById("btnConfirmarModalExclusao")
-const btnCancelar = document.getElementById("btnCancelarModalExclusao")
-
-btnConfirmar.focus()
-
-// controle de teclado dentro do modal
-document.addEventListener("keydown", function modalHandler(e) {
-
-  const modal = document.getElementById("modalConfirmarExclusao")
-
-  // só funciona se o modal estiver aberto
-  if (modal.style.display !== "flex") return
-
-  // ← vai para Cancelar
-  if (e.key === "ArrowLeft") {
-    e.preventDefault()
-    btnCancelar.focus()
-  }
-
-  // → vai para Excluir
-  if (e.key === "ArrowRight") {
-    e.preventDefault()
-    btnConfirmar.focus()
-  }
-
-  // Enter executa o botão focado
-  if (e.key === "Enter") {
-    e.preventDefault()
-    document.activeElement.click()
-  }
-
-  // ESC fecha modal
-  if (e.key === "Escape") {
-    modal.style.display = "none"
-  }
-
-})
-document.getElementById("btnConfirmarModalExclusao").onclick = function () {
-    window.location.href = "/estoque/excluir/" + produtoSelecionado + "/";
-};
-
-document.getElementById("btnCancelarModalExclusao").onclick = function () {
-    document.getElementById("modalConfirmarExclusao").style.display = "none";
-};
-});
-}
   // Função para normalizar texto (remove acentos e converte para minúsculas)
   function normalizarTexto(texto) {
     return texto

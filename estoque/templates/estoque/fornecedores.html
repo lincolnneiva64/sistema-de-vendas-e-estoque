@@ -398,26 +398,11 @@
           <h2 class="fornecedores-panel-title">Fornecedores cadastrados</h2>
           <span class="fornecedores-count">{{ total_fornecedores }} fornecedor(es) - {{ fornecedores_ativos }} ativo(s)</span>
         </div>
-        <div class="fornecedores-bulk-bar" id="fornecedores-lista">
-          <label class="fornecedores-select-all">
-            <input type="checkbox" class="fornecedores-checkbox" id="selecionarTodosFornecedores">
-            Selecionar visiveis
-          </label>
-          <form method="post" action="{% url 'estoque:fornecedores_excluir_massa' %}" id="formExcluirFornecedoresSelecionados">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}#fornecedores-lista">
-            <div id="fornecedoresSelecionadosInputs"></div>
-            <span class="fornecedores-bulk-summary" id="fornecedoresSelecionadosResumo">0 fornecedor(es) selecionado(s)</span>
-            <button type="submit" class="status-action-btn excluir" id="btnExcluirFornecedoresSelecionados" disabled>Excluir selecionados (0)</button>
-          </form>
-        </div>
-
         {% if fornecedores %}
           <div class="fornecedores-table-wrap">
             <table class="fornecedores-table">
               <thead>
                 <tr>
-                  <th><span class="visually-hidden">Selecionar</span></th>
                   <th>Fornecedor</th>
                   <th>Contatos</th>
                   <th>Localidade</th>
@@ -431,7 +416,6 @@
               <tbody>
                 {% for fornecedor in fornecedores %}
                   <tr id="fornecedor-{{ fornecedor.id }}" class="fornecedores-row {% if fornecedor_selecionado and fornecedor.id == fornecedor_selecionado.id %}selecionado{% elif request.GET.fornecedor_salvo and fornecedor.id|stringformat:'s' == request.GET.fornecedor_salvo %}selecionado{% endif %}">
-                    <td><input type="checkbox" class="fornecedores-checkbox checkbox-fornecedor" value="{{ fornecedor.id }}" aria-label="Selecionar fornecedor {{ fornecedor.nome }}"></td>
                     <td>
                       <div class="fornecedor-nome">{{ fornecedor.nome }}</div>
                       {% if fornecedor.nome_fantasia %}
@@ -535,50 +519,6 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  const checkboxes = Array.from(document.querySelectorAll(".checkbox-fornecedor"));
-  const selecionarTodos = document.getElementById("selecionarTodosFornecedores");
-  const resumo = document.getElementById("fornecedoresSelecionadosResumo");
-  const botaoExcluir = document.getElementById("btnExcluirFornecedoresSelecionados");
-  const inputs = document.getElementById("fornecedoresSelecionadosInputs");
-
-  function atualizarSelecao() {
-    const selecionados = checkboxes.filter(function(checkbox) { return checkbox.checked; });
-    if (resumo) resumo.textContent = selecionados.length + " fornecedor(es) selecionado(s)";
-    if (botaoExcluir) {
-      botaoExcluir.textContent = "Excluir selecionados (" + selecionados.length + ")";
-      botaoExcluir.disabled = selecionados.length === 0;
-    }
-    if (inputs) {
-      inputs.innerHTML = "";
-      selecionados.forEach(function(checkbox) {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "fornecedor_ids";
-        input.value = checkbox.value;
-        inputs.appendChild(input);
-      });
-    }
-    if (selecionarTodos) {
-      selecionarTodos.checked = checkboxes.length > 0 && selecionados.length === checkboxes.length;
-      selecionarTodos.indeterminate = selecionados.length > 0 && selecionados.length < checkboxes.length;
-    }
-    checkboxes.forEach(function(checkbox) {
-      const linha = checkbox.closest(".fornecedores-row");
-      if (linha) linha.classList.toggle("selecionado", checkbox.checked);
-    });
-  }
-
-  checkboxes.forEach(function(checkbox) {
-    checkbox.addEventListener("change", atualizarSelecao);
-  });
-  if (selecionarTodos) {
-    selecionarTodos.addEventListener("change", function() {
-      checkboxes.forEach(function(checkbox) { checkbox.checked = selecionarTodos.checked; });
-      atualizarSelecao();
-    });
-  }
-  atualizarSelecao();
-
   document.querySelectorAll(".form-excluir-fornecedor").forEach(function(formulario) {
     formulario.addEventListener("submit", function(evento) {
       const linhaAtual = formulario.closest(".fornecedores-row");
@@ -596,19 +536,6 @@ document.addEventListener("DOMContentLoaded", function() {
       if (!window.confirm('Excluir o fornecedor "' + nome + '"?')) evento.preventDefault();
     });
   });
-
-  const formularioMassa = document.getElementById("formExcluirFornecedoresSelecionados");
-  if (formularioMassa) {
-    formularioMassa.addEventListener("submit", function(evento) {
-      const quantidade = checkboxes.filter(function(checkbox) { return checkbox.checked; }).length;
-      if (!quantidade) {
-        evento.preventDefault();
-        window.alert("Nenhum fornecedor foi selecionado.");
-        return;
-      }
-      if (!window.confirm("Excluir " + quantidade + " fornecedores selecionados?")) evento.preventDefault();
-    });
-  }
 
   const focoId = new URLSearchParams(window.location.search).get("foco_fornecedor");
   if (focoId) {
