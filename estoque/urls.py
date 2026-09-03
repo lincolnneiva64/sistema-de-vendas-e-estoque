@@ -5,6 +5,7 @@ app_name = "estoque"
 
 urlpatterns = [
     path("", views.home, name="home"),
+    path("sincronizacao-firebird/", views.sincronizacao_firebird, name="sincronizacao_firebird"),
     path("painel-financeiro/", views.painel_financeiro, name="painel_financeiro"),
     path("caixa-banco/", views.caixa_banco, name="caixa_banco"),
     path(

@@ -132,6 +132,13 @@
 
 <!-- AVISO PRODUTOS INCOMPLETOS - FIM -->
 
+<section style="max-width: 1180px; margin: 8px auto 12px; padding: 10px 12px; border: 1px solid #dbe7f3; border-radius: 8px; background: #fff;">
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+    <div style="font-weight: 800; color: #172033;">Sistema antigo Firebird</div>
+    <a href="{% url 'estoque:sincronizacao_firebird' %}" style="display: inline-flex; align-items: center; min-height: 34px; padding: 7px 11px; border-radius: 8px; background: #0d6efd; color: #fff; font-weight: 800; text-decoration: none;">Atualizacao segura</a>
+  </div>
+</section>
+
 
 <style>
 .linha-destacada {
@@ -1867,7 +1874,7 @@ align-items: center;
     <section class="produtos-nav-card" aria-labelledby="produtos-nav-admin">
       <h4 class="produtos-nav-titulo" id="produtos-nav-admin">Administracao</h4>
       <div class="produtos-topo-acoes">
-        <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-secundario">
+        <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-perigo">
           Ver Lixeira
         </a>
       </div>

@@ -45,6 +45,14 @@ from .services.avisos_fornecedores import (
     data_ciclo_visita_valida,
     obter_avisos_visitas_fornecedores,
 )
+from .services.sincronizacao_firebird import (
+    AREAS as SINCRONIZACAO_AREAS,
+    CONFIRMACAO_TEXTO as SINCRONIZACAO_CONFIRMACAO_TEXTO,
+    aplicar_com_releitura as sincronizacao_aplicar_com_releitura,
+    consumir_token_previa as sincronizacao_consumir_token_previa,
+    gerar_previa as sincronizacao_gerar_previa,
+    registrar_token_previa as sincronizacao_registrar_token_previa,
+)
 from locacoes.services import painel_operacional_rapido_locacoes
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1744,6 +1752,63 @@ def home(request):
             "margem_percent": margem_percent,
         }
     )
+
+
+def sincronizacao_firebird(request):
+    contexto = {
+        "areas": SINCRONIZACAO_AREAS,
+        "confirmacao_texto": SINCRONIZACAO_CONFIRMACAO_TEXTO,
+        "preview": None,
+    }
+
+    if request.method == "GET":
+        return render(request, "estoque/sincronizacao_firebird.html", contexto)
+
+    acao = (request.POST.get("acao") or "").strip()
+    area = (request.POST.get("area") or "").strip()
+    if area not in SINCRONIZACAO_AREAS:
+        messages.error(request, "Escolha uma area valida para sincronizacao.")
+        return render(request, "estoque/sincronizacao_firebird.html", contexto, status=400)
+
+    if acao == "preview":
+        try:
+            preview = sincronizacao_gerar_previa(area)
+        except ValueError as exc:
+            logger.warning("Previa Firebird bloqueada area=%s: %s", area, exc)
+            messages.error(request, f"Nao foi possivel gerar a previa: {exc}")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto)
+        except (OSError, RuntimeError) as exc:
+            logger.exception("Falha ao gerar previa Firebird area=%s", area)
+            messages.error(request, f"Nao foi possivel gerar a previa: {exc}")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto, status=502)
+        contexto["preview"] = preview
+        contexto["preview_token"] = sincronizacao_registrar_token_previa(request.session, area)
+        return render(request, "estoque/sincronizacao_firebird.html", contexto)
+
+    if acao == "aplicar":
+        token = (request.POST.get("preview_token") or "").strip()
+        confirmacao = (request.POST.get("confirmacao") or "").strip()
+        if confirmacao != SINCRONIZACAO_CONFIRMACAO_TEXTO:
+            messages.error(request, "Digite CONFIRMAR para aplicar uma sincronizacao.")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto, status=400)
+        if not sincronizacao_consumir_token_previa(request.session, token, area):
+            messages.error(request, "A previa expirou ou ja foi usada. Gere uma nova previa antes de aplicar.")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto, status=409)
+        try:
+            resultado = sincronizacao_aplicar_com_releitura(area)
+        except ValueError as exc:
+            logger.warning("Aplicacao Firebird bloqueada area=%s: %s", area, exc)
+            messages.error(request, f"Nenhuma aplicacao foi confirmada: {exc}")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto)
+        except (OSError, RuntimeError) as exc:
+            logger.exception("Falha ao aplicar sincronizacao Firebird area=%s", area)
+            messages.error(request, f"Nenhuma aplicacao foi confirmada: {exc}")
+            return render(request, "estoque/sincronizacao_firebird.html", contexto, status=502)
+        messages.success(request, f"{resultado.titulo}: sincronizacao aplicada apos nova leitura do Firebird.")
+        return redirect("estoque:sincronizacao_firebird")
+
+    messages.error(request, "Acao de sincronizacao invalida.")
+    return render(request, "estoque/sincronizacao_firebird.html", contexto, status=400)
 
 
 def _financeiro_dinheiro(valor):

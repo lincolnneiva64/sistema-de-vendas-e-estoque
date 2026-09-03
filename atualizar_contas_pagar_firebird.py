@@ -55,6 +55,13 @@ NOME_SEM_CODI_PARA_FORNECEDOR = {
     "COCA COLA": 64,
     "COMERCIAL AMAZONIA": 126,
 }
+CONTAS_EXCLUIDAS_EXPLICITAMENTE = {
+    ("00098", "27007-01/2-CA"),
+    ("00098", "27008-02/2-CA"),
+    ("00098", "27007-02/2-CA"),
+}
+CONTAS_EXCLUIDAS_EXPLICITAMENTE_QTD_ESPERADA = 5
+CONTAS_EXCLUIDAS_EXPLICITAMENTE_TOTAL_ESPERADO = Decimal("1711.66")
 QUERY = """
 SET LIST OFF;
 SET HEADING OFF;
@@ -165,6 +172,12 @@ def extrair_firebird(isql_path, banco, usuario, senha):
             continue
         try:
             conta = parse_linha(linha, numero, permitir_fornecedor_nao_mapeado=True)
+            if conta_excluida_explicitamente(conta):
+                ignoradas.append({
+                    **conta,
+                    "motivo_ignorada": "Exclusao explicita: Cafe Santa Clara removido da migracao",
+                })
+                continue
             if conta["fornecedor_id"] is None:
                 ignoradas.append(conta)
             else:
@@ -174,6 +187,29 @@ def extrair_firebird(isql_path, banco, usuario, senha):
     if erros:
         raise ValueError("\n".join(erros))
     return contas, ignoradas
+
+
+def conta_excluida_explicitamente(conta):
+    """Bloqueia documentos legados removidos manualmente da migracao."""
+    chave = ((conta.get("codi") or "").strip(), (conta.get("documento") or "").strip())
+    return chave in CONTAS_EXCLUIDAS_EXPLICITAMENTE
+
+
+def validar_exclusoes_explicitamente_configuradas(contas_ignoradas):
+    contas_santa_clara = [
+        conta for conta in contas_ignoradas
+        if conta.get("motivo_ignorada") == "Exclusao explicita: Cafe Santa Clara removido da migracao"
+    ]
+    total = sum((conta["valres"] for conta in contas_santa_clara), Decimal("0.00"))
+    if (
+        len(CONTAS_EXCLUIDAS_EXPLICITAMENTE) != CONTAS_EXCLUIDAS_EXPLICITAMENTE_QTD_ESPERADA
+        or len(contas_santa_clara) != CONTAS_EXCLUIDAS_EXPLICITAMENTE_QTD_ESPERADA
+        or total != CONTAS_EXCLUIDAS_EXPLICITAMENTE_TOTAL_ESPERADO
+    ):
+        raise ValueError(
+            "aplicacao de Contas a Pagar bloqueada: exclusao explicita do Cafe Santa Clara "
+            "ainda nao confere com 5 contas / R$ 1.711,66"
+        )
 
 
 def carregar_django(contas):

@@ -1,0 +1,40 @@
+<section class="sync-preview">
+  <div class="sync-preview-head">
+    <h2>{{ preview.titulo }}</h2>
+    <div class="sync-summary">
+      <div><span>Novos</span><strong>{{ preview.resumo.novos }}</strong></div>
+      <div><span>Alterados</span><strong>{{ preview.resumo.alterados }}</strong></div>
+      <div><span>Sem alteracao</span><strong>{{ preview.resumo.sem_alteracao }}</strong></div>
+      <div><span>Fora do escopo</span><strong>{{ preview.resumo.fora_escopo }}</strong></div>
+      <div><span>Problemas</span><strong>{{ preview.resumo.problemas }}</strong></div>
+      <div><span>Possiveis fechamentos</span><strong>{{ preview.resumo.possiveis_fechamentos }}</strong></div>
+    </div>
+  </div>
+
+  {% if preview.etapas %}
+    {% for etapa in preview.etapas %}
+      <div class="sync-section">
+        {% include "estoque/includes/sincronizacao_preview.html" with preview=etapa %}
+      </div>
+    {% endfor %}
+  {% else %}
+    {% for secao in preview.secoes %}
+      <section class="sync-section{% if secao.destaque %} warn{% endif %}">
+        <h3>{{ secao.titulo }} ({{ secao.total }})</h3>
+        {% for item in secao.itens %}
+          <div class="sync-item">
+            <strong>{{ item.titulo }}</strong>
+            {% for detalhe in item.detalhes %}
+              <small>{{ detalhe }}</small>
+            {% endfor %}
+          </div>
+        {% empty %}
+          <div class="sync-item"><small>Nenhum item nesta categoria.</small></div>
+        {% endfor %}
+        {% if secao.total > secao.itens|length %}
+          <div class="sync-item"><small>Exibindo apenas os primeiros itens desta categoria.</small></div>
+        {% endif %}
+      </section>
+    {% endfor %}
+  {% endif %}
+</section>
