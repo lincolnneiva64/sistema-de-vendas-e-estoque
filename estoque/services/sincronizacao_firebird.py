@@ -19,13 +19,11 @@ SESSION_TOKENS_KEY = "sincronizacao_firebird_tokens"
 ISQL_PADRAO = r"C:\Program Files (x86)\Firebird\Firebird_2_5\bin\isql.exe"
 BANCO_PADRAO = r"C:\Ariramba\Dados\BDados.fdb"
 # Trava temporaria de identidade/consistencia da fonte Firebird.
-# O valor 750 foi observado e validado na base operacional do desktop durante
-# a preparacao desta sincronizacao. Este notebook apontou outra copia/estado
-# do Firebird, com 824 produtos ativos, portanto a interface deve bloquear
-# preview e aplicacao quando a contagem divergir. Se a base operacional legitima
-# mudar no futuro, revise conscientemente este valor em vez de remover a trava
-# silenciosamente.
-PRODUTOS_ATIVOS_FIREBIRD_ESPERADO = 750
+# 750 era a referencia validada anteriormente. Em 03/09/2026, a base
+# operacional do desktop foi verificada diretamente e apresentou 748 produtos
+# ativos. 748 passa a ser a assinatura operacional esperada; a trava continua
+# impedindo a operacao contra uma copia Firebird diferente.
+PRODUTOS_ATIVOS_FIREBIRD_ESPERADO = 748
 
 
 @dataclass

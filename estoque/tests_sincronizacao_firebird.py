@@ -137,7 +137,7 @@ class SincronizacaoFirebirdViewTests(TestCase):
                 self.assertEqual(resposta.status_code, 200)
                 self.assertContains(
                     resposta,
-                    "produtos ativos Firebird: 824; esperado: 750",
+                    "produtos ativos Firebird: 824; esperado: 748",
                 )
 
 
@@ -155,7 +155,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
                 with patch.object(sync, correto, return_value=motor) as patch_correto, \
                         patch.object(sync, outro_a) as patch_outro_a, \
                         patch.object(sync, outro_b) as patch_outro_b, \
-                        patch.object(sync, "validar_fonte_firebird", return_value=750):
+                        patch.object(sync, "validar_fonte_firebird", return_value=748):
                     sync.gerar_previa(area)
 
                 patch_correto.assert_called_once()
@@ -171,7 +171,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
                         patch.object(sync, "_engine_estoque") as engine_estoque, \
                         patch.object(sync, "_engine_receber") as engine_receber, \
                         patch.object(sync, "_engine_pagar") as engine_pagar:
-                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 750"):
+                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 748"):
                         sync.gerar_previa(area)
 
                 engine_estoque.assert_not_called()
@@ -185,7 +185,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
             with self.subTest(area=area):
                 with patch.object(sync.subprocess, "run", return_value=resultado), \
                         patch.object(sync, "_aplicar_previa") as aplicar:
-                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 750"):
+                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 748"):
                         sync.aplicar_com_releitura(area)
 
                 aplicar.assert_not_called()
@@ -203,7 +203,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         motor.comparar.return_value = ([], [], [], [fechada])
 
         with patch.object(sync, "_engine_receber", return_value=motor), \
-                patch.object(sync, "validar_fonte_firebird", return_value=750):
+                patch.object(sync, "validar_fonte_firebird", return_value=748):
             sync.aplicar_com_releitura("receber")
 
         args = motor.aplicar.call_args.args
@@ -226,7 +226,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         motor.carregar_django.return_value = ({fornecedor.id: fornecedor}, [], [], [], [fechada])
 
         with patch.object(sync, "_engine_pagar", return_value=motor), \
-                patch.object(sync, "validar_fonte_firebird", return_value=750):
+                patch.object(sync, "validar_fonte_firebird", return_value=748):
             sync.aplicar_com_releitura("pagar")
 
         args = motor.aplicar.call_args.args
@@ -239,7 +239,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         motor.carregar_comparacao.side_effect = ValueError("preflight falhou")
 
         with patch.object(sync, "_engine_estoque", return_value=motor), \
-                patch.object(sync, "validar_fonte_firebird", return_value=750):
+                patch.object(sync, "validar_fonte_firebird", return_value=748):
             with self.assertRaises(ValueError):
                 sync.aplicar_com_releitura("estoque")
 
