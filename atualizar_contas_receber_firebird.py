@@ -194,7 +194,7 @@ def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas):
     print(f"Contas abertas Firebird no universo autorizado: {len(contas)}")
     print(f"Contas novas: {len(novas)} — {dinheiro(total_novas)}")
     print(f"Contas alteradas: {len(alteradas)}")
-    print(f"Possivelmente quitadas/fechadas: {len(fechadas)}")
+    print(f"Nao aparecem entre contas abertas do Firebird: {len(fechadas)}")
     print(f"Sem alteracao: {len(sem_alteracao)}")
     print(f"Registros/clientes fora do universo autorizado: {len(fora)}")
     print("\nNOVAS:")
@@ -204,10 +204,13 @@ def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas):
     for django_conta, firebird, diferencas in alteradas:
         diferenca = firebird["saldo"] - django_conta.valor_em_aberto
         print(f"- {firebird['numero_legado']} | {clientes[firebird['cliente_id']].nome} | Django {dinheiro(django_conta.valor_em_aberto)} | Firebird {dinheiro(firebird['saldo'])} | Diferenca {dinheiro(diferenca)} | Campos: {', '.join(diferencas)}")
-    print("\nPOSSIVELMENTE QUITADAS/FECHADAS:")
+    print("\nNAO APARECEM ENTRE CONTAS ABERTAS DO FIREBIRD:")
     for conta in fechadas:
         nome = conta.cliente.nome if conta.cliente else "Cliente nao informado"
-        print(f"- {conta.numero_legado} | {nome} | Saldo atual Django {dinheiro(conta.valor_em_aberto)}")
+        print(
+            f"- {conta.numero_legado} | {nome} | Saldo atual Django {dinheiro(conta.valor_em_aberto)} "
+            "| Nao sera fechada automaticamente"
+        )
     if fora:
         print("\nFORA DO UNIVERSO AUTORIZADO (nao sincronizados):")
         for conta in fora:

@@ -207,7 +207,7 @@ def _previa_receber():
         _secao("Sem alteracao", [_item_receber_igual(item, clientes) for item in sem_alteracao[:30]], total=len(sem_alteracao)),
         _secao("Fora do escopo / nao mapeados", [_item_fora_receber(conta) for conta in fora]),
         _secao("Problemas de unidade / conversao", []),
-        _secao("Possiveis fechamentos", [_item_receber_fechamento(conta) for conta in fechadas], destaque=True),
+        _secao("Alertas: nao aparecem entre contas abertas do Firebird", [_item_receber_fechamento(conta) for conta in fechadas], destaque=True),
     ]
     return _preview("receber", resumo, secoes, {
         "contas": contas,
@@ -354,13 +354,21 @@ def _item_receber_alterada(item, clientes):
 
 
 def _item_receber_igual(item, clientes):
-    _, firebird = item
+    _, firebird, _ = item
     return _item(firebird["numero_legado"], [clientes[firebird["cliente_id"]].nome, _dinheiro(firebird["saldo"])])
 
 
 def _item_receber_fechamento(conta):
     nome = conta.cliente.nome if conta.cliente else "Cliente nao informado"
-    return _item(conta.numero_legado, [nome, f"Saldo Django: {_dinheiro(conta.valor_em_aberto)}", "Nao sera fechado automaticamente"])
+    return _item(
+        conta.numero_legado,
+        [
+            nome,
+            f"Saldo Django: {_dinheiro(conta.valor_em_aberto)}",
+            "Nao aparece mais entre as contas abertas do Firebird",
+            "Nao sera fechado automaticamente",
+        ],
+    )
 
 
 def _item_fora_receber(conta):

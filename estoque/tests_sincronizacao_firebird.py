@@ -3,7 +3,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import ContaPagar, ContaReceber, Fornecedor
@@ -28,6 +28,7 @@ def previa_fake(area="estoque"):
     }
 
 
+@override_settings(SECURE_SSL_REDIRECT=False, ALLOWED_HOSTS=["testserver"])
 class SincronizacaoFirebirdViewTests(TestCase):
     def setUp(self):
         self.url = reverse("estoque:sincronizacao_firebird")
@@ -211,6 +212,31 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         self.assertEqual(args[2], [])
         self.assertEqual(ContaReceber.objects.get(pk=fechada.pk).status, ContaReceber.STATUS_ABERTA)
 
+    def test_previa_receber_aceita_sem_alteracao_com_tres_elementos(self):
+        motor = _motor_fake("receber")
+        cliente = SimpleNamespace(id=1, nome="Cliente Legado")
+        django_conta = SimpleNamespace(valor_em_aberto=Decimal("10.00"))
+        firebird = {
+            "numero_legado": "AR-IGUAL",
+            "cliente_id": 1,
+            "codigo": "C1",
+            "nome": "Cliente Legado",
+            "saldo": Decimal("10.00"),
+        }
+        motor.carregar_universo.return_value = ({1: cliente}, {"C1": 1})
+        motor.extrair_firebird.return_value = ([firebird], [])
+        motor.comparar.return_value = ([], [], [(django_conta, firebird, {})], [])
+
+        with patch.object(sync, "_engine_receber", return_value=motor), \
+                patch.object(sync, "validar_fonte_firebird", return_value=748):
+            preview = sync.gerar_previa("receber")
+
+        sem_alteracao = next(secao for secao in preview["secoes"] if secao["titulo"] == "Sem alteracao")
+        self.assertEqual(sem_alteracao["total"], 1)
+        self.assertEqual(sem_alteracao["itens"][0]["titulo"], "AR-IGUAL")
+        self.assertIn("Cliente Legado", sem_alteracao["itens"][0]["detalhes"])
+        self.assertIn("R$ 10,00", sem_alteracao["itens"][0]["detalhes"])
+
     def test_possiveis_fechamentos_pagar_nao_sao_aplicados(self):
         fornecedor = Fornecedor.objects.create(nome="Fornecedor Legado")
         motor = _motor_fake("pagar")
@@ -367,7 +393,7 @@ def _motor_fake(area):
         }
         motor.carregar_universo.return_value = ({1: cliente}, {"C1": 1})
         motor.extrair_firebird.return_value = ([conta], [])
-        motor.comparar.return_value = ([], [], [(None, conta)], [])
+        motor.comparar.return_value = ([], [], [(None, conta, {})], [])
     elif area == "pagar":
         fornecedor = SimpleNamespace(id=1, nome="Fornecedor Legado")
         conta = {
