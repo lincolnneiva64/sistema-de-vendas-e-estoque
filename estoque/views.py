@@ -766,6 +766,7 @@ def _contas_receber_abertas_cliente_qs(cliente_id, hoje, bloquear=False):
             "cliente_id",
             "data_emissao",
             "data_vencimento",
+            "numero_legado",
             "valor_original",
             "valor_em_aberto",
             "status",
@@ -10359,7 +10360,23 @@ def clientes_autocomplete(request):
     contexto = request.GET.get("contexto", "").strip()
     rota = request.GET.get("rota", "").strip()
     cliente_id = request.GET.get("cliente_id", "").strip()
+    if contexto == "receber_rapido" and not cliente_id.isdigit() and len(termo) < 2:
+        return JsonResponse({"clientes": [], "cliente_fora_rota": False})
     clientes_base_qs = Cliente.objects.filter(ativo=True).order_by("nome")
+    if contexto == "receber_rapido" and not cliente_id.isdigit():
+        clientes_base_qs = clientes_base_qs.only(
+            "id",
+            "nome",
+            "apelido_nome_conhecido",
+            "cpf_cnpj",
+            "whatsapp",
+            "whatsapp_normalizado",
+            "telefone_alternativo",
+            "bairro",
+            "prazo_padrao_dias",
+            "limite_credito",
+            "status_credito",
+        )
     clientes_qs = clientes_base_qs
 
     aliases_rota = _aliases_rota_cliente(rota)
@@ -13121,6 +13138,10 @@ def receber_cliente_escolher(request):
 
 @ensure_csrf_cookie
 def receber_cliente(request, cliente_id):
+    carregamento_parcial = (
+        request.method == "GET"
+        and request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
     cliente = get_object_or_404(
         Cliente.objects.only(
             "id",
@@ -13139,7 +13160,7 @@ def receber_cliente(request, cliente_id):
         parametros_retorno = parse_qs(urlparse(retorno_url).query)
         rota_filtro = (parametros_retorno.get("rota") or [""])[0].strip()
 
-    rotas_opcoes = _rotas_clientes_opcoes()
+    rotas_opcoes = [] if carregamento_parcial else _rotas_clientes_opcoes()
 
     contas_url = reverse("estoque:contas_receber")
     destino_retorno = retorno_url or f"{contas_url}?{urlencode({'cliente': cliente.nome, 'status': 'em_aberto'})}"
@@ -13148,35 +13169,44 @@ def receber_cliente(request, cliente_id):
         destino_pos_recebimento = f"{destino_pos_recebimento}?{urlencode({'next': retorno_url})}"
     hoje = timezone.localdate()
 
-    contas_abertas_rota = ContaReceber.objects.filter(
-        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-        valor_em_aberto__gt=0,
-    )
-    aliases_rota_filtro = _aliases_rota_cliente(rota_filtro)
-    if aliases_rota_filtro:
-        contas_abertas_rota = contas_abertas_rota.filter(cliente__bairro__in=aliases_rota_filtro)
-
     resumo_receber = {
-        "clientes_devendo": contas_abertas_rota.values("cliente_id").distinct().count(),
-        "contas_abertas": contas_abertas_rota.count(),
-        "total_a_receber": contas_abertas_rota.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
-        "contas_vencidas": contas_abertas_rota.filter(data_vencimento__lt=hoje).count(),
-        "total_vencido": contas_abertas_rota.filter(
-            data_vencimento__lt=hoje
-        ).aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+        "clientes_devendo": 0,
+        "contas_abertas": 0,
+        "total_a_receber": Decimal("0.00"),
+        "contas_vencidas": 0,
+        "total_vencido": Decimal("0.00"),
     }
-
-    clientes_devedores_rota = list(
-        contas_abertas_rota.exclude(cliente__isnull=True)
-        .values("cliente_id", "cliente__nome", "cliente__bairro")
-        .annotate(
-            contas_abertas=Count("id"),
-            total_em_aberto=Sum("valor_em_aberto"),
-            contas_vencidas=Count("id", filter=Q(data_vencimento__lt=hoje)),
-            total_vencido=Sum("valor_em_aberto", filter=Q(data_vencimento__lt=hoje)),
+    clientes_devedores_rota = []
+    if not carregamento_parcial:
+        contas_abertas_rota = ContaReceber.objects.filter(
+            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+            valor_em_aberto__gt=0,
         )
-        .order_by("cliente__nome")
-    )
+        aliases_rota_filtro = _aliases_rota_cliente(rota_filtro)
+        if aliases_rota_filtro:
+            contas_abertas_rota = contas_abertas_rota.filter(cliente__bairro__in=aliases_rota_filtro)
+
+        resumo_receber = {
+            "clientes_devendo": contas_abertas_rota.values("cliente_id").distinct().count(),
+            "contas_abertas": contas_abertas_rota.count(),
+            "total_a_receber": contas_abertas_rota.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+            "contas_vencidas": contas_abertas_rota.filter(data_vencimento__lt=hoje).count(),
+            "total_vencido": contas_abertas_rota.filter(
+                data_vencimento__lt=hoje
+            ).aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00"),
+        }
+
+        clientes_devedores_rota = list(
+            contas_abertas_rota.exclude(cliente__isnull=True)
+            .values("cliente_id", "cliente__nome", "cliente__bairro")
+            .annotate(
+                contas_abertas=Count("id"),
+                total_em_aberto=Sum("valor_em_aberto"),
+                contas_vencidas=Count("id", filter=Q(data_vencimento__lt=hoje)),
+                total_vencido=Sum("valor_em_aberto", filter=Q(data_vencimento__lt=hoje)),
+            )
+            .order_by("cliente__nome")
+        )
 
     formas_pagamento = (
         "Dinheiro",
@@ -13597,7 +13627,7 @@ def receber_cliente(request, cliente_id):
         }
         for conta in contas
     ]
-    tem_pix_em_atencao = _tem_pix_em_atencao()
+    tem_pix_em_atencao = False if carregamento_parcial else _tem_pix_em_atencao()
     recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
 
     contexto = {

@@ -143,28 +143,47 @@
   }
   .rc-pos-confirmacao-layout { display: block; }
   .rc-summary {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px; margin-bottom: 8px;
+    display: grid; grid-template-columns: minmax(320px, 1.7fr) minmax(120px, 0.65fr) minmax(110px, 0.55fr) minmax(170px, 0.8fr);
+    gap: 0; margin-bottom: 7px; align-items: stretch;
   }
   .rc-card {
     border: 1px solid #e1e7ef; border-radius: 8px; background: #fff;
     padding: 7px 9px; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.045);
   }
+  .rc-cliente-faixa {
+    border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff;
+    padding: 0; box-shadow: none; overflow: hidden;
+  }
+  .rc-cliente-faixa .rc-card {
+    display: flex; flex-direction: column; justify-content: center; min-height: 44px;
+    border: 0; border-right: 1px solid #e2e8f0; border-radius: 0; box-shadow: none; background: #ffffff;
+    padding: 6px 10px;
+  }
+  .rc-cliente-faixa .rc-card:last-child { border-right: 0; }
+  .rc-cliente-faixa .rc-card.cliente { background: #f8fafc; }
+  .rc-cliente-faixa .rc-card.total {
+    background: #ecfdf3; align-items: flex-end; text-align: right;
+  }
+  .rc-cliente-faixa-status {
+    display: none;
+  }
   .rc-label { display: block; color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
   .rc-value { display: block; margin-top: 2px; color: #111827; font-size: 0.92rem; font-weight: 950; }
   .rc-value.green { color: #166534; }
+  .rc-card.total .rc-value { font-size: 1.1rem; }
   .rc-panel {
     border: 1px solid #e1e7ef; border-radius: 11px; background: #fff;
     box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05); margin-bottom: 9px; overflow: hidden;
   }
   .rc-panel-head {
-    padding: 8px 11px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
+    padding: 6px 10px; border-bottom: 1px solid #edf1f6; background: #f8fafc;
     display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
   }
-  .rc-panel-title { margin: 0; color: #111827; font-size: 0.9rem; font-weight: 900; }
+  .rc-panel-head span { color: #64748b; font-size: 0.76rem; font-weight: 800; }
+  .rc-panel-title { margin: 0; color: #111827; font-size: 0.86rem; font-weight: 900; }
   .rc-form {
-    padding: 9px 10px; display: grid;
-    grid-template-columns: minmax(170px, 0.8fr) minmax(300px, 1.5fr);
+    padding: 8px 10px; display: grid;
+    grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(150px, 0.7fr) minmax(190px, 0.8fr);
     gap: 8px; align-items: end;
   }
   .rc-field label {
@@ -177,12 +196,12 @@
     padding: 8px 10px; color: #172033; font: inherit; font-weight: 750;
   }
   #valorRecebidoCliente {
-    min-height: 70px;
-    border: 3px solid #16a34a;
-    border-radius: 18px;
+    min-height: 42px;
+    border: 2px solid #16a34a;
+    border-radius: 12px;
     background: #ecfdf3;
     color: #14532d;
-    font-size: 1.35rem;
+    font-size: 1.12rem;
     font-weight: 950;
     box-shadow: 0 10px 24px rgba(22, 163, 74, 0.16);
   }
@@ -206,9 +225,9 @@
     box-shadow: 0 8px 16px rgba(21, 128, 61, 0.18);
   }
   .rc-forma-pagamento-btn {
-    display: block; width: 100%; min-height: 58px; border: 2px solid #1d4ed8;
-    border-radius: 16px; background: #f8fbff; color: #172033;
-    padding: 0 14px; text-align: left; font: inherit; font-size: 1rem; font-weight: 900;
+    display: block; width: 100%; min-height: 42px; border: 2px solid #1d4ed8;
+    border-radius: 10px; background: #f8fbff; color: #172033;
+    padding: 0 12px; text-align: left; font: inherit; font-size: 0.9rem; font-weight: 900;
   }
   #formaPagamentoCliente {
     position: absolute !important;
@@ -252,19 +271,18 @@
   }
   .rc-forma-modal-opcao:active { transform: translateY(1px); filter: brightness(0.98); }
   .rc-forma-modal-check { font-size: 1.05rem; font-weight: 950; }
-  .rc-feedback-campo {
-    margin: 6px 0 0; border: 1px solid #86efac; border-radius: 8px; background: #f0fdf4;
-    color: #166534; padding: 6px 8px; font-size: 0.78rem; font-weight: 880; line-height: 1.28;
-  }
+  .rc-feedback-campo { display: none; }
   .rc-duplicidade-alerta {
     display: none; border: 1px solid #fbbf24; border-radius: 9px;
     background: #ffffff; color: #92400e; padding: 7px 9px;
     font-size: 0.8rem; font-weight: 850; line-height: 1.32;
+    grid-column: 1 / -1; order: 4;
   }
   .rc-duplicidade-alerta.visivel { display: flex; align-items: center; min-height: 38px; }
   .rc-credito-futuro {
     grid-column: 1 / -1; border: 1px dashed #bbf7d0; border-radius: 9px;
     background: #f0fdf4; color: #166534; padding: 7px 9px; font-size: 0.8rem; font-weight: 800;
+    order: 5;
   }
   .rc-creditos-disponiveis {
     border: 1px solid #bbf7d0; border-radius: 10px; background: #f0fdf4;
@@ -287,14 +305,14 @@
   .rc-credito-meta { color: #475569; font-size: 0.78rem; font-weight: 750; line-height: 1.32; }
   .rc-credito-saldo { color: #92400e; font-size: 0.78rem; font-weight: 900; }
   .rc-distribuicao {
-    margin: 0 10px 9px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
+    margin: 0 10px 8px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
   }
   .rc-distribuicao-item {
     border: 1px solid #e1e7ef; border-radius: 8px; background: #fbfdff;
-    padding: 7px 9px;
+    padding: 6px 8px;
   }
-  .rc-distribuicao-item strong { display: block; color: #111827; font-size: 0.9rem; margin-top: 2px; }
+  .rc-distribuicao-item strong { display: block; color: #111827; font-size: 0.84rem; margin-top: 2px; }
   .rc-distribuicao-item.sobra strong { color: #166534; }
   .rc-distribuicao-item.saldo strong { color: #92400e; }
   .rc-distribuicao-label { color: #64748b; font-size: 0.66rem; font-weight: 900; text-transform: uppercase; }
@@ -323,24 +341,36 @@
   }
   .rc-sobra-opcao input { accent-color: #2563eb; }
   .rc-confirmar-cliente-acoes {
-    margin: 0 10px 9px; display: flex; justify-content: flex-end;
+    margin: 0; display: flex; justify-content: flex-end; align-self: end; order: 3;
   }
-  .rc-table-wrap { overflow-x: auto; }
-  .rc-table { width: 100%; min-width: 980px; border-collapse: collapse; }
+  .rc-confirmar-cliente-acoes .rc-btn { width: 100%; min-height: 42px; }
+  .rc-table-wrap { overflow-x: visible; }
+  .rc-table { width: 100%; min-width: 0; border-collapse: collapse; table-layout: fixed; }
   .rc-table th {
-    background: #f8fafc; color: #64748b; font-size: 0.7rem; text-transform: uppercase;
-    padding: 8px 9px; border-bottom: 1px solid #edf1f6; text-align: left;
+    background: #f8fafc; color: #64748b; font-size: 0.64rem; text-transform: uppercase;
+    padding: 5px 6px; border-bottom: 1px solid #edf1f6; text-align: left;
   }
-  .rc-table td { padding: 8px 9px; border-bottom: 1px solid #f0f3f8; font-size: 0.82rem; vertical-align: top; }
+  .rc-table td {
+    padding: 5px 6px; border-bottom: 1px solid #f0f3f8; font-size: 0.76rem;
+    vertical-align: middle; overflow-wrap: anywhere;
+  }
+  .rc-table th:nth-child(1), .rc-table td:nth-child(1) { width: 8%; }
+  .rc-table th:nth-child(2), .rc-table td:nth-child(2) { width: 14%; }
+  .rc-table th:nth-child(3), .rc-table td:nth-child(3) { width: 10%; }
+  .rc-table th:nth-child(4), .rc-table td:nth-child(4) { width: 11%; }
+  .rc-table th:nth-child(5), .rc-table td:nth-child(5) { width: 13%; }
+  .rc-table th:nth-child(6), .rc-table td:nth-child(6) { width: 13%; }
+  .rc-table th:nth-child(7), .rc-table td:nth-child(7) { width: 10%; }
+  .rc-table th:nth-child(8), .rc-table td:nth-child(8) { width: 21%; }
   .rc-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .rc-preview-cell { font-weight: 850; }
+  .rc-preview-cell { font-weight: 850; line-height: 1.18; }
   .rc-row-prevista-quitada td { background: #ecfdf3; }
   .rc-row-prevista-parcial td { background: #fff7ed; }
   .rc-row-prevista-neutra td { background: #f8fafc; }
   .rc-contas-mobile-lista { display: none; }
   .rc-conta-mobile-card {
-    border: 1px solid #e1e7ef; border-radius: 14px; background: #ffffff;
-    margin: 9px 10px; padding: 12px; box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    border: 1px solid #e1e7ef; border-radius: 10px; background: #ffffff;
+    margin: 7px 10px; padding: 9px; box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
   }
   .rc-conta-mobile-card.rc-row-prevista-quitada { background: #ecfdf3; border-color: #bbf7d0; }
   .rc-conta-mobile-card.rc-row-prevista-parcial { background: #fff7ed; border-color: #fed7aa; }
@@ -348,31 +378,34 @@
   .rc-conta-mobile-card.rc-row-atualizada-agora { border-color: #86efac; box-shadow: inset 4px 0 0 #22c55e, 0 8px 20px rgba(15, 23, 42, 0.06); }
   .rc-conta-mobile-topo {
     display: flex; justify-content: space-between; gap: 10px; align-items: flex-start;
-    border-bottom: 1px solid #edf1f6; padding-bottom: 8px; margin-bottom: 9px;
+    border-bottom: 1px solid #edf1f6; padding-bottom: 6px; margin-bottom: 7px;
   }
-  .rc-conta-mobile-numero { color: #1d4ed8; font-size: 1.08rem; font-weight: 950; }
-  .rc-conta-mobile-venda { color: #475569; font-size: 0.82rem; font-weight: 900; text-align: right; }
-  .rc-conta-mobile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .rc-conta-mobile-numero { color: #1d4ed8; font-size: 0.94rem; font-weight: 950; }
+  .rc-conta-mobile-documento {
+    display: block; margin-top: 2px; color: #64748b; font-size: 0.72rem; font-weight: 850;
+  }
+  .rc-conta-mobile-venda { color: #475569; font-size: 0.78rem; font-weight: 900; text-align: right; }
+  .rc-conta-mobile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .rc-conta-mobile-campo {
-    border: 1px solid #edf1f6; border-radius: 10px; background: rgba(255,255,255,0.78);
-    padding: 8px 9px;
+    border: 1px solid #edf1f6; border-radius: 8px; background: rgba(255,255,255,0.78);
+    padding: 6px 7px;
   }
   .rc-conta-mobile-label {
     display: block; color: #64748b; font-size: 0.66rem; font-weight: 950; text-transform: uppercase;
   }
   .rc-conta-mobile-valor {
-    display: block; margin-top: 3px; color: #172033; font-size: 0.9rem; font-weight: 900;
+    display: block; margin-top: 2px; color: #172033; font-size: 0.82rem; font-weight: 900;
   }
   .rc-conta-mobile-valor.dinheiro { color: #166534; }
   .rc-conta-mobile-preview {
-    margin-top: 10px; border-top: 1px solid #edf1f6; padding-top: 9px;
-    color: #172033; font-size: 0.92rem; font-weight: 900; line-height: 1.38;
+    margin-top: 7px; border-top: 1px solid #edf1f6; padding-top: 7px;
+    color: #172033; font-size: 0.84rem; font-weight: 900; line-height: 1.32;
   }
   .rc-row-atualizada-agora td { background: #ecfdf3; }
   .rc-row-atualizada-agora td:first-child { box-shadow: inset 3px 0 0 #22c55e; }
   .rc-pill {
-    display: inline-flex; border-radius: 999px; padding: 3px 7px; margin-bottom: 2px;
-    background: #e2e8f0; color: #334155; font-size: 0.75rem; font-weight: 950;
+    display: inline-flex; border-radius: 999px; padding: 2px 6px; margin-bottom: 2px;
+    background: #e2e8f0; color: #334155; font-size: 0.68rem; font-weight: 950;
   }
   .rc-pill.quitara { background: #dcfce7; color: #166534; }
   .rc-pill.parcial { background: #fef3c7; color: #92400e; }
@@ -380,9 +413,9 @@
   .rc-atualizada-detalhe { color: #166534; font-size: 0.78rem; font-weight: 900; line-height: 1.35; }
   .rc-empty { padding: 20px 12px; color: #64748b; text-align: center; font-weight: 800; }
   .rc-saldo-total {
-    margin: 10px 12px 0; border: 1px solid #bbf7d0; border-radius: 9px;
-    background: #f0fdf4; color: #166534; padding: 8px 10px;
-    font-size: 0.86rem; font-weight: 900; text-align: right; line-height: 1.35;
+    margin: 0 10px 8px; border: 1px solid #bbf7d0; border-radius: 8px;
+    background: #f0fdf4; color: #166534; padding: 6px 8px;
+    font-size: 0.82rem; font-weight: 900; text-align: right; line-height: 1.25;
   }
   .rc-saldo-total span { display: block; }
   .rc-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px; border-top: 1px solid #edf1f6; flex-wrap: wrap; }
@@ -416,6 +449,8 @@
   @media (max-width: 880px) {
     .rc-header { align-items: stretch; flex-direction: column; }
     .rc-summary { grid-template-columns: 1fr 1fr; }
+    .rc-summary .rc-card.cliente,
+    .rc-summary .rc-card.total { grid-column: 1 / -1; align-items: flex-start; text-align: left; }
     .rc-distribuicao { grid-template-columns: 1fr 1fr; }
     .rc-confirmacao-grid { grid-template-columns: 1fr 1fr; }
     .rc-form { grid-template-columns: 1fr; }
@@ -423,17 +458,24 @@
   }
   @media (min-width: 981px) {
     .receber-cliente-page .rc-pos-confirmacao-layout {
-      display: grid; grid-template-columns: minmax(320px, 0.82fr) minmax(560px, 1.18fr);
-      gap: 10px; align-items: start;
+      display: grid; grid-template-columns: 1fr;
+      gap: 7px; align-items: start;
     }
     .receber-cliente-page .rc-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 7px;
+      grid-column: 1 / -1;
+      grid-template-columns: minmax(360px, 1.75fr) minmax(130px, 0.65fr) minmax(120px, 0.55fr) minmax(190px, 0.85fr);
+      gap: 0; margin-bottom: 0;
     }
+    .receber-cliente-page .rc-pos-confirmacao-direita { display: contents; }
+    .receber-cliente-page #contas-do-cliente { order: 2; }
+    .receber-cliente-page .rc-pos-confirmacao-esquerda { order: 3; }
+    .receber-cliente-page .rc-historico { order: 4; margin-top: 0; }
     .receber-cliente-page .rc-confirmacao-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .receber-cliente-page .rc-card { padding: 6px 8px; }
-    .receber-cliente-page .rc-form { padding: 8px 9px; gap: 7px; }
+    .receber-cliente-page .rc-form { padding: 8px 10px; gap: 8px; }
+    .receber-cliente-page .rc-field-forma { order: 1; }
+    .receber-cliente-page .rc-field-data { order: 2; }
     .receber-cliente-page #formaPagamentoCliente {
       position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;
     }
@@ -442,52 +484,40 @@
     }
     .receber-cliente-page .rc-panel-head { padding: 7px 10px; }
     .receber-cliente-page .rc-distribuicao {
-      grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 7px;
+      grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 7px;
     }
     .receber-cliente-page .rc-note { display: none; }
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-panel { margin-bottom: 0; }
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table-wrap {
-      display: none;
-    }
-    .receber-cliente-page .rc-contas-mobile-lista {
-      display: block;
-    }
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(3),
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(3),
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(4),
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(4),
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th:nth-child(5),
-    .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td:nth-child(5) {
-      display: none;
-    }
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-table th,
     .receber-cliente-page .rc-pos-confirmacao-direita .rc-table td {
-      padding: 7px 8px;
+      padding: 5px 6px;
     }
   }
   @media (max-width: 560px) {
     .rc-summary { grid-template-columns: 1fr; }
+    .rc-cliente-faixa { padding: 6px; }
     .rc-distribuicao { grid-template-columns: 1fr; }
     .rc-confirmacao-grid { grid-template-columns: 1fr; }
     .rc-actions .rc-btn { width: 100%; }
     .rc-modal-actions { flex-direction: column-reverse; }
     .rc-modal-btn { width: 100%; }
   }
+  @media (max-width: 720px) {
+    .rc-table-wrap { display: none; }
+    .rc-contas-mobile-lista { display: block; }
+  }
 
   .rc-cliente-busca-card {
     background: #ffffff;
     border: 1px solid rgba(20, 42, 83, 0.14);
-    border-radius: 18px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
-    padding: 16px;
-    margin-bottom: 14px;
+    border-radius: 10px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.055);
+    padding: 7px 9px;
+    margin-bottom: 7px;
   }
   .rc-cliente-busca-topo {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-    margin-bottom: 10px;
+    display: block;
+    margin-bottom: 5px;
   }
   .rc-cliente-busca-titulo {
     font-size: 1.02rem;
@@ -495,7 +525,9 @@
     color: #172033;
     margin: 0;
   }
+  .rc-cliente-busca-card .rc-subtitle { display: none; }
   .rc-cliente-busca-atual {
+    display: none;
     font-weight: 900;
     color: #0f8f3f;
     text-align: right;
@@ -525,11 +557,11 @@
   }
   .rc-cliente-busca-input {
     width: 100%;
-    min-height: 52px;
+    min-height: 38px;
     border: 2px solid #1d4ed8;
-    border-radius: 16px;
-    padding: 0 15px;
-    font-size: 1rem;
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 0.92rem;
     font-weight: 800;
     color: #172033;
     background: #f8fbff;
@@ -548,7 +580,7 @@
     top: calc(100% + 6px);
     background: #ffffff;
     border: 1px solid rgba(29, 78, 216, 0.25);
-    border-radius: 16px;
+    border-radius: 10px;
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
     max-height: 320px;
     overflow-y: auto;
@@ -557,7 +589,7 @@
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    padding: 13px 14px;
+    padding: 9px 12px;
     cursor: pointer;
     border-bottom: 1px solid #e5e7eb;
     font-weight: 900;
@@ -572,7 +604,7 @@
     color: #ffffff;
   }
   .rc-cliente-sugestao-meta {
-    font-size: 0.86rem;
+    font-size: 0.8rem;
     opacity: 0.78;
     white-space: nowrap;
   }
@@ -824,21 +856,21 @@
   .rc-rota-receber-card {
     background: #ffffff;
     border: 1px solid #d7e1ee;
-    border-radius: 16px;
-    padding: 14px;
-    margin: 0 0 14px;
-    box-shadow: 0 10px 24px rgba(15, 35, 69, 0.05);
+    border-radius: 12px;
+    padding: 8px 10px;
+    margin: 0 0 8px;
+    box-shadow: 0 6px 16px rgba(15, 35, 69, 0.04);
   }
   .rc-rota-form {
     display: grid;
     grid-template-columns: minmax(180px, 1fr) auto;
-    gap: 10px;
+    gap: 8px;
     align-items: end;
-    margin-bottom: 12px;
+    margin-bottom: 6px;
   }
   .rc-rota-field label {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
     color: #526782;
     font-size: 12px;
     font-weight: 900;
@@ -859,15 +891,15 @@
   }
   .rc-rota-clientes {
     display: grid;
-    gap: 8px;
+    gap: 6px;
   }
   .rc-rota-cliente-item {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 8px;
     align-items: center;
-    padding: 11px 12px;
-    border-radius: 13px;
+    padding: 8px 10px;
+    border-radius: 10px;
     border: 1px solid #dbeafe;
     background: #f8fbff;
     text-decoration: none;
@@ -880,7 +912,7 @@
   }
   .rc-rota-cliente-meta {
     display: block;
-    margin-top: 3px;
+    margin-top: 2px;
     color: #526782;
     font-size: 13px;
     font-weight: 800;
@@ -913,14 +945,14 @@
 
   .rc-rota-busca-input {
     width: 100%;
-    min-height: 58px;
-    padding: 0 20px;
+    min-height: 42px;
+    padding: 0 12px;
     border: 1px solid #c7d7ee;
-    border-radius: 14px;
+    border-radius: 10px;
     background: #fff;
     color: #111a31;
     font: inherit;
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 800;
     outline: none;
   }
@@ -952,14 +984,14 @@
   .rc-rota-sugestao {
     display: block;
     width: 100%;
-    padding: 13px 16px;
+    padding: 9px 12px;
     border: 0;
     border-bottom: 1px solid #edf2f8;
     background: #fff;
     color: #111a31;
     text-align: left;
     font: inherit;
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 700;
     cursor: pointer;
   }
@@ -974,7 +1006,7 @@
   }
 
   .rc-rota-sem-resultado {
-    padding: 13px 16px;
+    padding: 9px 12px;
     color: #7a3d00;
     font-weight: 700;
   }
@@ -982,19 +1014,20 @@
   .rc-rota-acoes {
     display: flex;
     justify-content: flex-start;
-    margin-top: 12px;
+    margin-top: 6px;
   }
 
   .rc-rota-historico-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
-    padding: 10px 14px;
+    min-height: 34px;
+    padding: 7px 10px;
     border-radius: 8px;
     background: #0f766e;
     color: #fff;
     font-weight: 800;
+    font-size: 0.86rem;
     text-decoration: none;
     white-space: nowrap;
   }
@@ -1309,26 +1342,27 @@
     <div id="receberClienteCarregando" class="rc-carregando-cliente" role="status" aria-live="polite">Carregando contas...</div>
 
     <div class="rc-pos-confirmacao-layout">
-      <div class="rc-pos-confirmacao-esquerda">
-        <section class="rc-summary" aria-label="Resumo do cliente">
-          <div class="rc-card">
-            <span class="rc-label">Cliente</span>
-            <span class="rc-value">{% if cliente %}{{ cliente.nome }}{% else %}Nenhum cliente selecionado{% endif %}</span>
-          </div>
-          <div class="rc-card">
-            <span class="rc-label">Credito disponivel</span>
-            <span class="rc-value green">R$ {{ credito_disponivel|floatformat:2 }}</span>
-          </div>
-          <div class="rc-card">
-            <span class="rc-label">Contas abertas</span>
-            <span class="rc-value">{{ total_contas }}</span>
-          </div>
-          <div class="rc-card">
-            <span class="rc-label">Total em aberto</span>
-            <span class="rc-value green">R$ {{ total_em_aberto|floatformat:2 }}</span>
-          </div>
-        </section>
+      <section class="rc-summary rc-cliente-faixa" aria-label="Resumo do cliente">
+        <div class="rc-card cliente">
+          <span class="rc-cliente-faixa-status">{% if cliente %}Cliente selecionado{% else %}Sem cliente{% endif %}</span>
+          <span class="rc-label">Cliente</span>
+          <span class="rc-value">{% if cliente %}{{ cliente.nome }}{% else %}Nenhum cliente selecionado{% endif %}</span>
+        </div>
+        <div class="rc-card">
+          <span class="rc-label">Credito disponivel</span>
+          <span class="rc-value green">R$ {{ credito_disponivel|floatformat:2 }}</span>
+        </div>
+        <div class="rc-card">
+          <span class="rc-label">Contas abertas</span>
+          <span class="rc-value">{{ total_contas }}</span>
+        </div>
+        <div class="rc-card total">
+          <span class="rc-label">Total em aberto</span>
+          <span class="rc-value green">R$ {{ total_em_aberto|floatformat:2 }}</span>
+        </div>
+      </section>
 
+      <div class="rc-pos-confirmacao-esquerda">
         <form method="post" id="formReceberCliente" {% if cliente %}action="{% url 'estoque:receber_cliente' cliente.id %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}"{% endif %}>
           {% csrf_token %}
           {% if pix_recebido_escolhido %}
@@ -1351,11 +1385,11 @@
                 <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}" tabindex="1">
               </div>
               <div id="alertaDuplicidadeRecebimentoCliente" class="rc-duplicidade-alerta" role="alert" aria-live="polite"></div>
-              <div class="rc-field">
+              <div class="rc-field rc-field-data">
                 <label for="dataRecebimentoCliente">Data do recebimento</label>
                 <input id="dataRecebimentoCliente" name="data_recebimento" type="date" value="{{ valores.data_recebimento }}" tabindex="2">
               </div>
-              <div class="rc-field">
+              <div class="rc-field rc-field-forma">
                 <label for="formaPagamentoCliente">Forma de pagamento</label>
                 <select id="formaPagamentoCliente" name="forma_pagamento" tabindex="3">
                   {% for forma in formas_pagamento %}
@@ -1366,6 +1400,9 @@
                   <span id="textoFormaPagamentoCliente">Dinheiro</span>
                 </button>
                 <div class="rc-feedback-campo">Esse recebimento será lançado automaticamente em Caixa/Banco conforme a forma de pagamento.</div>
+              </div>
+              <div class="rc-confirmar-cliente-acoes">
+                <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente" tabindex="4">Confirmar recebimento</button>
               </div>
               {% if credito_disponivel > 0 %}
                 <div class="rc-credito-futuro">
@@ -1384,9 +1421,6 @@
                 Registrar como crédito do cliente
               </label>
             </div>
-            <div class="rc-confirmar-cliente-acoes">
-              <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente" tabindex="4">Confirmar recebimento do cliente</button>
-            </div>
             <div class="rc-distribuicao" aria-label="Resumo da distribuicao">
               <div class="rc-distribuicao-item">
                 <span class="rc-distribuicao-label">Total recebido</span>
@@ -1404,6 +1438,10 @@
                 <span class="rc-distribuicao-label">Saldo em aberto</span>
                 <strong id="saldoAbertoPreview">R$ {{ total_em_aberto|floatformat:2 }}</strong>
               </div>
+            </div>
+            <div class="rc-saldo-total">
+              <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
+              <span>Saldo após recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
             </div>
             <div class="rc-note">Confira a previa antes de confirmar. A baixa real sera gravada somente apos a confirmacao final.</div>
           </section>
@@ -1472,11 +1510,11 @@
                 <thead>
                   <tr>
                     <th>Conta</th>
-                    <th>Venda</th>
+                    <th>Documento</th>
                     <th>Data da venda</th>
                     <th>Vencimento</th>
-                    <th class="rc-num">Valor original</th>
-                    <th class="rc-num">Valor em aberto</th>
+                    <th class="rc-num">Original</th>
+                    <th class="rc-num">Em aberto</th>
                     <th>Status</th>
                     <th>Previa</th>
                   </tr>
@@ -1486,13 +1524,15 @@
                     <tr id="contaPreview{{ conta.id }}" class="rc-row-prevista-neutra {% if conta.id in contas_atualizadas_ids %}rc-row-atualizada-agora{% endif %}">
                       <td>#{{ conta.id }}</td>
                       <td>
-                        {% if conta.venda_id %}
-                          Venda #{{ conta.venda_id }}
+                        {% if conta.numero_legado %}
+                          {{ conta.numero_legado }}
                         {% else %}
-                          Conta antiga #{{ conta.numero_legado|default:conta.id }}
+                          -
                         {% endif %}
                       </td>
-                      <td>{{ conta.data_emissao|date:"d/m/Y" }}</td>
+                      <td>
+                        {{ conta.data_emissao|date:"d/m/Y" }}
+                      </td>
                       <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
                       <td class="rc-num">R$ {{ conta.valor_original|floatformat:2 }}</td>
                       <td class="rc-num">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
@@ -1515,6 +1555,9 @@
                   <div class="rc-conta-mobile-topo">
                     <div>
                       <span class="rc-conta-mobile-numero">Conta #{{ conta.id }}</span>
+                      {% if conta.numero_legado %}
+                        <span class="rc-conta-mobile-documento">Doc. {{ conta.numero_legado }}</span>
+                      {% endif %}
                     </div>
                     <div class="rc-conta-mobile-venda">
                       {% if conta.venda_id %}
@@ -1561,10 +1604,6 @@
               Nenhuma conta em aberto.
             </div>
           {% endif %}
-          <div class="rc-saldo-total">
-            <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
-            <span>Saldo após recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
-          </div>
           {% if pix_recebido_escolhido %}
             <div class="rc-pix-safe-actions">
               {% if total_contas == 0 %}
@@ -1661,7 +1700,7 @@
   const retornoUrl = rotaAtual
     ? retornoUrlBase + "?rota=" + encodeURIComponent(rotaAtual)
     : retornoUrlBase;
-  const atrasoAutoSelecaoCliente = 450;
+  const atrasoAutoSelecaoCliente = 80;
   let clientes = [];
   let timer = null;
   let autoSelecaoTimer = null;
@@ -1911,6 +1950,15 @@
     ultimoTermo = termo;
     const idBuscaAtual = ++buscaId;
 
+    if (termo.length < 2) {
+      clientes = [];
+      indiceAtivo = -1;
+      cancelarAutoSelecao();
+      mostrarAvisoRota(termo ? "Digite pelo menos 2 caracteres." : "");
+      renderizar();
+      return;
+    }
+
     const parametrosBusca = new URLSearchParams({
       contexto: "receber_rapido",
       q: termo
@@ -1970,6 +2018,13 @@
     cancelarAutoSelecao();
     if (!input.value.trim()) {
       fecharSugestoes();
+      return;
+    }
+    if (input.value.trim().length < 2) {
+      clientes = [];
+      indiceAtivo = -1;
+      mostrarAvisoRota("Digite pelo menos 2 caracteres.");
+      renderizar();
       return;
     }
     timer = setTimeout(() => buscarClientes(false, true), 120);
@@ -2504,16 +2559,12 @@
       if (event.key !== "Enter") return;
       event.preventDefault();
       calcularPrevia();
-      if (dataRecebimento) {
-        dataRecebimento.focus();
-      } else {
-        btnFormaPagamento?.focus();
-      }
+      focarFormaPagamentoVisual();
     }, listenerOptions);
     dataRecebimento?.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
-      focarFormaPagamentoVisual();
+      confirmar?.focus();
     }, listenerOptions);
     btnFormaPagamento?.addEventListener("keydown", function (event) {
       if (event.key === "ArrowDown" || event.key === "ArrowRight") {
@@ -2530,7 +2581,10 @@
 
       event.preventDefault();
 
-      if (confirmar) {
+      if (dataRecebimento) {
+        dataRecebimento.focus();
+        dataRecebimento.select?.();
+      } else if (confirmar) {
         confirmar.focus({ preventScroll: true });
         confirmar.classList.add("rc-foco-confirmar");
         window.setTimeout(function () {
@@ -2542,14 +2596,8 @@
       if (event.key !== "Enter") return;
       event.preventDefault();
       calcularPrevia();
-      window.setTimeout(function () {
-        const primeira = primeiraOpcaoSobraDisponivel();
-        if (primeira) {
-          primeira.focus();
-        } else {
-          confirmar?.focus();
-        }
-      }, 0);
+      dataRecebimento?.focus();
+      dataRecebimento?.select?.();
     }, listenerOptions);
     labelsSobra.forEach(function (label, indice) {
       if (!label) return;
@@ -2698,6 +2746,8 @@
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {
+    if (document.getElementById("formReceberCliente")) return;
+
     const receberClienteFocoEnter = true;
 
     const valorRecebido = document.querySelector(
