@@ -7,7 +7,8 @@
       <div><span>Sem alteracao</span><strong>{{ preview.resumo.sem_alteracao }}</strong></div>
       <div><span>Fora do escopo</span><strong>{{ preview.resumo.fora_escopo }}</strong></div>
       <div><span>Problemas</span><strong>{{ preview.resumo.problemas }}</strong></div>
-      <div><span>Possiveis fechamentos</span><strong>{{ preview.resumo.possiveis_fechamentos }}</strong></div>
+      <div><span>Quitadas confirmadas</span><strong>{{ preview.resumo.quitadas_confirmadas|default:0 }}</strong></div>
+      <div><span>Alertas de quitacao</span><strong>{{ preview.resumo.alertas_fechamento|default:0 }}</strong></div>
     </div>
   </div>
 

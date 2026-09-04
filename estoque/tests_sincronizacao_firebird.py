@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from .models import ContaPagar, ContaReceber, Fornecedor
+from .models import Cliente, ContaPagar, ContaReceber, Fornecedor
 from .services import sincronizacao_firebird as sync
 
 
@@ -25,6 +25,15 @@ def previa_fake(area="estoque"):
         "secoes": [],
         "etapas": [],
         "dados_aplicacao": {},
+    }
+
+
+def config_firebird(banco=sync.BANCO_PADRAO):
+    return {
+        "isql_path": "isql",
+        "banco": banco,
+        "usuario": "SYSDBA",
+        "senha": "masterkey",
     }
 
 
@@ -127,18 +136,23 @@ class SincronizacaoFirebirdViewTests(TestCase):
         for area in ("estoque", "receber", "pagar", "tudo"):
             self.assertIn(f'name="area" value="{area}"', html)
 
-    def test_post_preview_das_quatro_areas_retorna_bloqueio_de_fonte_invalida(self):
-        resultado = SimpleNamespace(returncode=0, stdout="824\n", stderr="")
+    def test_post_preview_das_quatro_areas_bloqueia_banco_firebird_diferente(self):
+        resultado = SimpleNamespace(
+            returncode=0,
+            stdout="TABLE=PRODUTOS\nTABLE=CLIENTES\nTABLE=CRCLIENTES\nTABLE=CPAGAR\n",
+            stderr="",
+        )
 
         for area in ("estoque", "receber", "pagar", "tudo"):
             with self.subTest(area=area):
-                with patch.object(sync.subprocess, "run", return_value=resultado):
+                with patch.object(sync, "credenciais_firebird", return_value=config_firebird(r"C:\Notebook\BDados.fdb")), \
+                        patch.object(sync.subprocess, "run", return_value=resultado):
                     resposta = self.client.post(self.url, {"acao": "preview", "area": area})
 
                 self.assertEqual(resposta.status_code, 200)
                 self.assertContains(
                     resposta,
-                    "produtos ativos Firebird: 824; esperado: 748",
+                    "banco configurado diferente do operacional",
                 )
 
 
@@ -164,15 +178,16 @@ class SincronizacaoFirebirdServiceTests(TestCase):
                 patch_outro_b.assert_not_called()
 
     def test_fonte_firebird_errada_bloqueia_as_quatro_previas(self):
-        resultado = SimpleNamespace(returncode=0, stdout="824\n", stderr="")
+        resultado = SimpleNamespace(returncode=0, stdout="", stderr="")
 
         for area in ("estoque", "receber", "pagar", "tudo"):
             with self.subTest(area=area):
-                with patch.object(sync.subprocess, "run", return_value=resultado), \
+                with patch.object(sync, "credenciais_firebird", return_value=config_firebird(r"C:\Notebook\BDados.fdb")), \
+                    patch.object(sync.subprocess, "run", return_value=resultado), \
                         patch.object(sync, "_engine_estoque") as engine_estoque, \
                         patch.object(sync, "_engine_receber") as engine_receber, \
                         patch.object(sync, "_engine_pagar") as engine_pagar:
-                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 748"):
+                    with self.assertRaisesMessage(ValueError, "banco configurado diferente do operacional"):
                         sync.gerar_previa(area)
 
                 engine_estoque.assert_not_called()
@@ -180,16 +195,73 @@ class SincronizacaoFirebirdServiceTests(TestCase):
                 engine_pagar.assert_not_called()
 
     def test_fonte_firebird_errada_bloqueia_aplicacao_antes_de_escrever(self):
-        resultado = SimpleNamespace(returncode=0, stdout="824\n", stderr="")
+        resultado = SimpleNamespace(returncode=0, stdout="", stderr="")
 
         for area in ("estoque", "receber", "pagar", "tudo"):
             with self.subTest(area=area):
-                with patch.object(sync.subprocess, "run", return_value=resultado), \
+                with patch.object(sync, "credenciais_firebird", return_value=config_firebird(r"C:\Notebook\BDados.fdb")), \
+                        patch.object(sync.subprocess, "run", return_value=resultado), \
                         patch.object(sync, "_aplicar_previa") as aplicar:
-                    with self.assertRaisesMessage(ValueError, "produtos ativos Firebird: 824; esperado: 748"):
+                    with self.assertRaisesMessage(ValueError, "banco configurado diferente do operacional"):
                         sync.aplicar_com_releitura(area)
 
                 aplicar.assert_not_called()
+
+    def test_mudanca_na_quantidade_de_produtos_nao_bloqueia_ar_nem_ap(self):
+        resultado = SimpleNamespace(
+            returncode=0,
+            stdout="TABLE=CLIENTES\nTABLE=CRCLIENTES\nTABLE=CPAGAR\n",
+            stderr="",
+        )
+
+        for area, tabelas in (("receber", ("CLIENTES", "CRCLIENTES")), ("pagar", ("CPAGAR",))):
+            with self.subTest(area=area), patch.object(sync.subprocess, "run", return_value=resultado) as executar:
+                sync.validar_fonte_firebird(area)
+
+            self.assertNotIn("COUNT(*)", executar.call_args.kwargs["input"])
+
+    def test_tabela_esperada_ausente_bloqueia_previa(self):
+        resultado = SimpleNamespace(
+            returncode=0,
+            stdout="TABLE=CLIENTES\n",
+            stderr="",
+        )
+
+        with patch.object(sync.subprocess, "run", return_value=resultado):
+            with self.assertRaisesMessage(ValueError, "tabelas esperadas ausentes: CRCLIENTES"):
+                sync.validar_fonte_firebird("receber")
+
+    def test_erro_de_conexao_bloqueia_previa(self):
+        resultado = SimpleNamespace(returncode=1, stdout="", stderr="conexao recusada")
+
+        with patch.object(sync.subprocess, "run", return_value=resultado):
+            with self.assertRaisesMessage(RuntimeError, "isql falhou (1): conexao recusada"):
+                sync.validar_fonte_firebird("receber")
+
+    def test_confirmacao_ignora_prompts_reais_do_isql(self):
+        import atualizar_contas_receber_firebird as motor
+
+        cliente = Cliente.objects.create(nome="Cliente Isql", codigo_legado="C-I")
+        conta = ContaReceber.objects.create(
+            numero_legado="AR-I",
+            cliente=cliente,
+            data_emissao=date(2026, 1, 1),
+            data_vencimento=date(2026, 1, 2),
+            valor_original=Decimal("10.00"),
+            valor_em_aberto=Decimal("10.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        resultado = SimpleNamespace(
+            returncode=0,
+            stdout="Database:  C:\\Ariramba\\Dados\\BDados.fdb\nSQL> CON>\nAR-I|C-I|10.00|10.00|0.00                                                                           \nSQL> ",
+            stderr="",
+        )
+
+        with patch.object(motor.subprocess, "run", return_value=resultado):
+            confirmadas = motor.confirmar_quitadas("isql", "banco", "SYSDBA", "masterkey", [conta])
+
+        self.assertEqual(confirmadas[0][0], conta)
+        self.assertEqual(confirmadas[0][1]["saldo"], Decimal("0.00"))
 
     def test_possiveis_fechamentos_receber_nao_sao_aplicados(self):
         motor = _motor_fake("receber")
@@ -201,7 +273,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
             valor_em_aberto=Decimal("10.00"),
             status=ContaReceber.STATUS_ABERTA,
         )
-        motor.comparar.return_value = ([], [], [], [fechada])
+        motor.comparar.return_value = ([], [], [], [], [fechada])
 
         with patch.object(sync, "_engine_receber", return_value=motor), \
                 patch.object(sync, "validar_fonte_firebird", return_value=748):
@@ -211,6 +283,104 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         self.assertEqual(args[1], [])
         self.assertEqual(args[2], [])
         self.assertEqual(ContaReceber.objects.get(pk=fechada.pk).status, ContaReceber.STATUS_ABERTA)
+
+    def test_conta_ausente_com_vrest_zero_e_marcada_como_quitada(self):
+        import atualizar_contas_receber_firebird as motor
+
+        cliente = Cliente.objects.create(nome="Cliente Quitado", codigo_legado="C-Q")
+        conta = ContaReceber.objects.create(
+            numero_legado="AR-Q",
+            cliente=cliente,
+            data_emissao=date(2026, 1, 1),
+            data_vencimento=date(2026, 1, 2),
+            valor_original=Decimal("125.00"),
+            valor_em_aberto=Decimal("125.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        confirmada = (conta, {"numero_legado": "AR-Q", "codigo": "C-Q", "valor": Decimal("125.00"), "pago": Decimal("125.00"), "saldo": Decimal("0.00")})
+        aberta = {"numero_legado": "AR-Q-ABERTA", "cliente_id": cliente.id, "codigo": "C-Q", "nome": cliente.nome, "emissao": date(2026, 1, 1), "vencimento": date(2026, 1, 2), "valor": Decimal("10.00"), "pago": Decimal("0.00"), "saldo": Decimal("10.00"), "status": "aberta"}
+
+        with patch.object(motor, "confirmar_quitadas", return_value=[confirmada]):
+            novas, alteradas, sem_alteracao, quitadas, alertas = motor.comparar([aberta])
+
+        self.assertEqual(quitadas, [confirmada])
+        self.assertEqual(alertas, [])
+        motor.aplicar([], novas, alteradas, [], quitadas)
+        conta.refresh_from_db()
+        self.assertEqual(conta.status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(conta.valor_original, Decimal("125.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+
+    def test_conta_ausente_sem_confirmacao_continua_alerta_e_nao_fecha(self):
+        import atualizar_contas_receber_firebird as motor
+
+        cliente = Cliente.objects.create(nome="Cliente Alerta", codigo_legado="C-A")
+        conta = ContaReceber.objects.create(
+            numero_legado="AR-A",
+            cliente=cliente,
+            data_emissao=date(2026, 1, 1),
+            data_vencimento=date(2026, 1, 2),
+            valor_original=Decimal("50.00"),
+            valor_em_aberto=Decimal("50.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        aberta = {"numero_legado": "AR-A-ABERTA", "cliente_id": cliente.id, "codigo": "C-A", "nome": cliente.nome, "emissao": date(2026, 1, 1), "vencimento": date(2026, 1, 2), "valor": Decimal("10.00"), "pago": Decimal("0.00"), "saldo": Decimal("10.00"), "status": "aberta"}
+
+        with patch.object(motor, "confirmar_quitadas", return_value=[]):
+            _, _, _, quitadas, alertas = motor.comparar([aberta])
+
+        self.assertEqual(quitadas, [])
+        self.assertEqual(alertas, [conta])
+        motor.aplicar([], [], [], [], quitadas)
+        conta.refresh_from_db()
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("50.00"))
+
+    def test_pagamento_parcial_continua_funcionando(self):
+        import atualizar_contas_receber_firebird as motor
+
+        cliente = Cliente.objects.create(nome="Cliente Parcial", codigo_legado="C-P")
+        conta = ContaReceber.objects.create(
+            numero_legado="AR-P",
+            cliente=cliente,
+            data_emissao=date(2026, 1, 1),
+            data_vencimento=date(2026, 1, 2),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("40.00"),
+            status=ContaReceber.STATUS_PARCIAL,
+        )
+        aberta = {"numero_legado": "AR-P", "cliente_id": cliente.id, "codigo": "C-P", "nome": cliente.nome, "emissao": date(2026, 1, 1), "vencimento": date(2026, 1, 2), "valor": Decimal("100.00"), "pago": Decimal("60.00"), "saldo": Decimal("40.00"), "status": "parcial"}
+
+        with patch.object(motor, "confirmar_quitadas") as confirmar:
+            _, alteradas, _, quitadas, alertas = motor.comparar([aberta])
+
+        confirmar.assert_not_called()
+        self.assertEqual(alteradas, [])
+        self.assertEqual(quitadas, [])
+        self.assertEqual(alertas, [])
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+
+    def test_duas_contas_do_mesmo_cliente_sao_independentes(self):
+        import atualizar_contas_receber_firebird as motor
+
+        cliente = Cliente.objects.create(nome="Cliente Duplo", codigo_legado="C-D")
+        contas = [
+            ContaReceber.objects.create(numero_legado="AR-D1", cliente=cliente, data_emissao=date(2026, 1, 1), data_vencimento=date(2026, 1, 2), valor_original=Decimal("30.00"), valor_em_aberto=Decimal("30.00"), status=ContaReceber.STATUS_ABERTA),
+            ContaReceber.objects.create(numero_legado="AR-D2", cliente=cliente, data_emissao=date(2026, 1, 3), data_vencimento=date(2026, 1, 4), valor_original=Decimal("70.00"), valor_em_aberto=Decimal("70.00"), status=ContaReceber.STATUS_ABERTA),
+        ]
+        confirmada = (contas[0], {"numero_legado": "AR-D1", "codigo": "C-D", "valor": Decimal("30.00"), "pago": Decimal("30.00"), "saldo": Decimal("0.00")})
+        aberta = {"numero_legado": "AR-D-ABERTA", "cliente_id": cliente.id, "codigo": "C-D", "nome": cliente.nome, "emissao": date(2026, 1, 5), "vencimento": date(2026, 1, 6), "valor": Decimal("10.00"), "pago": Decimal("0.00"), "saldo": Decimal("10.00"), "status": "aberta"}
+
+        with patch.object(motor, "confirmar_quitadas", return_value=[confirmada]):
+            _, _, _, quitadas, alertas = motor.comparar([aberta])
+
+        self.assertEqual([item[0] for item in quitadas], [contas[0]])
+        self.assertEqual(alertas, [contas[1]])
+        motor.aplicar([], [], [], [], quitadas)
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+        self.assertEqual(contas[0].status, ContaReceber.STATUS_PAGA)
+        self.assertEqual(contas[1].status, ContaReceber.STATUS_ABERTA)
 
     def test_previa_receber_aceita_sem_alteracao_com_tres_elementos(self):
         motor = _motor_fake("receber")
@@ -225,7 +395,7 @@ class SincronizacaoFirebirdServiceTests(TestCase):
         }
         motor.carregar_universo.return_value = ({1: cliente}, {"C1": 1})
         motor.extrair_firebird.return_value = ([firebird], [])
-        motor.comparar.return_value = ([], [], [(django_conta, firebird, {})], [])
+        motor.comparar.return_value = ([], [], [(django_conta, firebird, {})], [], [])
 
         with patch.object(sync, "_engine_receber", return_value=motor), \
                 patch.object(sync, "validar_fonte_firebird", return_value=748):
@@ -393,7 +563,7 @@ def _motor_fake(area):
         }
         motor.carregar_universo.return_value = ({1: cliente}, {"C1": 1})
         motor.extrair_firebird.return_value = ([conta], [])
-        motor.comparar.return_value = ([], [], [(None, conta, {})], [])
+        motor.comparar.return_value = ([], [], [(None, conta, {})], [], [])
     elif area == "pagar":
         fornecedor = SimpleNamespace(id=1, nome="Fornecedor Legado")
         conta = {

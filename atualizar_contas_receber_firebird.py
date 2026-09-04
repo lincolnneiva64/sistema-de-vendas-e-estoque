@@ -49,6 +49,33 @@ QUIT;
 """
 
 
+def _sql_literal(valor):
+    return "'" + str(valor).replace("'", "''") + "'"
+
+
+def _query_quitadas(candidatas):
+    pares = [
+        f"(NUME = {_sql_literal(conta.numero_legado)} AND CODI = {_sql_literal(conta.cliente.codigo_legado.strip())})"
+        for conta in candidatas
+        if conta.cliente and conta.cliente.codigo_legado
+    ]
+    if not pares:
+        return ""
+    return """
+SET LIST OFF;
+SET HEADING OFF;
+SET ECHO OFF;
+SET COUNT OFF;
+SELECT TRIM(NUME) || '|' || TRIM(CODI) || '|' || CAST(VALOR AS VARCHAR(30)) || '|' ||
+       CAST(VPAGO AS VARCHAR(30)) || '|' || CAST(VREST AS VARCHAR(30))
+FROM CRCLIENTES
+WHERE VREST = 0
+  AND ({})
+;
+QUIT;
+""".format(" OR ".join(pares))
+
+
 def decimal_obrigatorio(texto, contexto, campo):
     try:
         valor = Decimal(texto.strip().replace(",", "."))
@@ -124,6 +151,44 @@ def extrair_firebird(isql_path, banco, usuario, senha, cliente_ids):
     return contas, fora
 
 
+def confirmar_quitadas(isql_path, banco, usuario, senha, candidatas):
+    query = _query_quitadas(candidatas)
+    if not query:
+        return []
+    resultado = subprocess.run(
+        [isql_path, "-q", "-user", usuario, "-password", senha, banco],
+        input=query,
+        text=True,
+        capture_output=True,
+        encoding="cp1252",
+        errors="replace",
+        check=False,
+    )
+    if resultado.returncode != 0:
+        raise RuntimeError(f"isql falhou ({resultado.returncode}): {resultado.stderr.strip() or resultado.stdout.strip()}")
+    confirmadas = []
+    por_chave = {
+        (conta.numero_legado, conta.cliente.codigo_legado.strip()): conta
+        for conta in candidatas
+        if conta.cliente and conta.cliente.codigo_legado
+    }
+    for numero, linha in enumerate(resultado.stdout.splitlines(), start=1):
+        linha = linha.strip()
+        if not linha or "|" not in linha:
+            continue
+        partes = [parte.strip() for parte in linha.split("|")]
+        if len(partes) != 5:
+            raise ValueError(f"linha {numero}: esperado formato com 5 campos na confirmacao de quitadas")
+        numero_legado, codigo, valor, pago, saldo = partes
+        conta = por_chave.get((numero_legado, codigo))
+        if conta is None:
+            raise ValueError(f"linha {numero}: conta quitada nao corresponde ao cliente esperado")
+        if Decimal(saldo.replace(",", ".")).quantize(Decimal("0.01")) != Decimal("0.00"):
+            raise ValueError(f"linha {numero}: conta confirmada com VREST diferente de zero")
+        confirmadas.append((conta, {"numero_legado": numero_legado, "codigo": codigo, "valor": decimal_obrigatorio(valor, f"linha {numero}", "VALOR"), "pago": decimal_obrigatorio(pago, f"linha {numero}", "VPAGO"), "saldo": Decimal("0.00")}))
+    return confirmadas
+
+
 def carregar_universo():
     clientes = list(
         Cliente.objects
@@ -157,7 +222,7 @@ def dinheiro(valor):
     return f"R$ {valor.quantize(Decimal('0.01')):.2f}".replace(".", ",")
 
 
-def comparar(contas):
+def comparar(contas, isql_path=ISQL_PADRAO, banco=BANCO_PADRAO, usuario="SYSDBA", senha="masterkey"):
     documentos = [conta["numero_legado"] for conta in contas]
     if len(documentos) != len(set(documentos)):
         raise ValueError("numero_legado duplicado na extracao Firebird")
@@ -178,23 +243,27 @@ def comparar(contas):
             (alteradas if diferencas else sem_alteracao).append((django_conta, firebird, diferencas))
 
     cliente_ids = {conta["cliente_id"] for conta in contas}
-    fechadas = list(ContaReceber.objects.filter(
+    candidatas = list(ContaReceber.objects.filter(
         numero_legado__isnull=False,
         cliente_id__in=cliente_ids,
         venda__isnull=True,
         status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
     ).exclude(numero_legado__in=documentos).select_related("cliente"))
-    return novas, alteradas, sem_alteracao, fechadas
+    quitadas = confirmar_quitadas(isql_path, banco, usuario, senha, candidatas) if candidatas else []
+    quitadas_ids = {conta.pk for conta, _ in quitadas}
+    alertas = [conta for conta in candidatas if conta.pk not in quitadas_ids]
+    return novas, alteradas, sem_alteracao, quitadas, alertas
 
 
-def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas):
+def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, quitadas, alertas):
     total_novas = sum((conta["saldo"] for conta in novas), Decimal("0.00"))
     print("Modo: DRY-RUN (nenhuma escrita sera executada)")
     print(f"Contas abertas Firebird encontradas: {len(contas) + len(fora)}")
     print(f"Contas abertas Firebird no universo autorizado: {len(contas)}")
     print(f"Contas novas: {len(novas)} — {dinheiro(total_novas)}")
     print(f"Contas alteradas: {len(alteradas)}")
-    print(f"Nao aparecem entre contas abertas do Firebird: {len(fechadas)}")
+    print(f"Quitadas confirmadas no Firebird: {len(quitadas)}")
+    print(f"Alertas nao confirmados: {len(alertas)}")
     print(f"Sem alteracao: {len(sem_alteracao)}")
     print(f"Registros/clientes fora do universo autorizado: {len(fora)}")
     print("\nNOVAS:")
@@ -204,12 +273,15 @@ def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas):
     for django_conta, firebird, diferencas in alteradas:
         diferenca = firebird["saldo"] - django_conta.valor_em_aberto
         print(f"- {firebird['numero_legado']} | {clientes[firebird['cliente_id']].nome} | Django {dinheiro(django_conta.valor_em_aberto)} | Firebird {dinheiro(firebird['saldo'])} | Diferenca {dinheiro(diferenca)} | Campos: {', '.join(diferencas)}")
-    print("\nNAO APARECEM ENTRE CONTAS ABERTAS DO FIREBIRD:")
-    for conta in fechadas:
+    print("\nQUITADAS CONFIRMADAS NO FIREBIRD:")
+    for conta, firebird in quitadas:
+        print(f"- {conta.numero_legado} | {conta.cliente.nome} | Valor original preservado {dinheiro(conta.valor_original)}")
+    print("\nALERTAS: NAO APARECEM ENTRE CONTAS ABERTAS DO FIREBIRD:")
+    for conta in alertas:
         nome = conta.cliente.nome if conta.cliente else "Cliente nao informado"
         print(
             f"- {conta.numero_legado} | {nome} | Saldo atual Django {dinheiro(conta.valor_em_aberto)} "
-            "| Nao sera fechada automaticamente"
+            "| Quitacao nao confirmada; nao sera fechada"
         )
     if fora:
         print("\nFORA DO UNIVERSO AUTORIZADO (nao sincronizados):")
@@ -217,7 +289,8 @@ def mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas):
             print(f"- {conta['numero_legado']} | CODI {conta['codigo'] or '(vazio)'} | {conta['nome']}")
 
 
-def aplicar(contas, novas, alteradas, documentos):
+def aplicar(contas, novas, alteradas, documentos, quitadas=None):
+    quitadas = quitadas or []
     with transaction.atomic():
         for conta in novas:
             ContaReceber.objects.create(
@@ -244,6 +317,11 @@ def aplicar(contas, novas, alteradas, documentos):
             django_conta.status = ContaReceber.STATUS_PARCIAL if firebird["status"] == "parcial" else ContaReceber.STATUS_ABERTA
             django_conta.save(update_fields=["cliente", "data_emissao", "data_vencimento", "valor_original", "valor_em_aberto", "status", "atualizado_em"])
 
+        for django_conta, _ in quitadas:
+            django_conta.valor_em_aberto = Decimal("0.00")
+            django_conta.status = ContaReceber.STATUS_PAGA
+            django_conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
         reconciliadas = list(ContaReceber.objects.filter(numero_legado__in=documentos, venda__isnull=True))
         esperadas = {conta["numero_legado"]: conta for conta in contas}
         if len(reconciliadas) != len(documentos) or len({conta.numero_legado for conta in reconciliadas}) != len(documentos):
@@ -263,10 +341,10 @@ def main():
     args = parser.parse_args()
     clientes, cliente_ids = carregar_universo()
     contas, fora = extrair_firebird(args.isql, args.banco, args.usuario, args.senha, cliente_ids)
-    novas, alteradas, sem_alteracao, fechadas = comparar(contas)
-    mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, fechadas)
+    novas, alteradas, sem_alteracao, quitadas, alertas = comparar(contas)
+    mostrar(contas, fora, clientes, novas, alteradas, sem_alteracao, quitadas, alertas)
     if args.aplicar:
-        aplicar(contas, novas, alteradas, [conta["numero_legado"] for conta in contas])
+        aplicar(contas, novas, alteradas, [conta["numero_legado"] for conta in contas], quitadas)
         print("SINCRONIZACAO CONCLUIDA")
 
 

@@ -16,14 +16,13 @@ AREAS = {
 }
 CONFIRMACAO_TEXTO = "CONFIRMAR"
 SESSION_TOKENS_KEY = "sincronizacao_firebird_tokens"
-ISQL_PADRAO = r"C:\Program Files (x86)\Firebird\Firebird_2_5\bin\isql.exe"
+ISQL_PADRAO = r"C:\FIREBIRD_25_X64_MIGRACAO\bin\isql.exe"
 BANCO_PADRAO = r"C:\Ariramba\Dados\BDados.fdb"
-# Trava temporaria de identidade/consistencia da fonte Firebird.
-# 750 era a referencia validada anteriormente. Em 03/09/2026, a base
-# operacional do desktop foi verificada diretamente e apresentou 748 produtos
-# ativos. 748 passa a ser a assinatura operacional esperada; a trava continua
-# impedindo a operacao contra uma copia Firebird diferente.
-PRODUTOS_ATIVOS_FIREBIRD_ESPERADO = 748
+TABELAS_FIREBIRD_POR_AREA = {
+    "estoque": {"PRODUTOS"},
+    "receber": {"CRCLIENTES", "CLIENTES"},
+    "pagar": {"CPAGAR"},
+}
 
 
 @dataclass
@@ -61,16 +60,27 @@ def consumir_token_previa(session, token, area):
     return True
 
 
-def validar_fonte_firebird():
+def validar_fonte_firebird(area=None):
     cfg = credenciais_firebird()
+    areas = ("estoque", "receber", "pagar") if area in (None, "tudo") else (area,)
+    tabelas_esperadas = set().union(*(TABELAS_FIREBIRD_POR_AREA[item] for item in areas))
+    tabela_sql = ", ".join(f"'{tabela}'" for tabela in sorted(tabelas_esperadas))
     query = """
 SET LIST OFF;
 SET HEADING OFF;
 SET ECHO OFF;
 SET COUNT OFF;
-SELECT COUNT(*) FROM PRODUTOS WHERE ST = 'A';
+SELECT 'TABLE=' || TRIM(RDB$RELATION_NAME)
+FROM RDB$RELATIONS
+WHERE RDB$RELATION_NAME IN ({tabela_sql});
 QUIT;
-"""
+""".format(tabela_sql=tabela_sql)
+    caminho_configurado = os.path.normcase(os.path.normpath(os.path.abspath(cfg["banco"])))
+    caminho_operacional = os.path.normcase(os.path.normpath(os.path.abspath(BANCO_PADRAO)))
+    if caminho_configurado != caminho_operacional:
+        raise ValueError(
+            f"Fonte Firebird bloqueada: banco configurado diferente do operacional: {cfg['banco']}"
+        )
     resultado = subprocess.run(
         [cfg["isql_path"], "-q", "-user", cfg["usuario"], "-password", cfg["senha"], cfg["banco"]],
         input=query,
@@ -86,18 +96,17 @@ QUIT;
             f"{resultado.stderr.strip() or resultado.stdout.strip()}"
         )
 
-    quantidade = _extrair_inteiro(resultado.stdout)
-    if quantidade != PRODUTOS_ATIVOS_FIREBIRD_ESPERADO:
-        raise ValueError(
-            f"Fonte Firebird bloqueada: produtos ativos Firebird: {quantidade}; "
-            f"esperado: {PRODUTOS_ATIVOS_FIREBIRD_ESPERADO}"
-        )
-    return quantidade
+    marcadores = _extrair_marcadores(resultado.stdout)
+    tabelas_encontradas = marcadores.get("TABLE", set())
+    faltantes = sorted(tabelas_esperadas - tabelas_encontradas)
+    if faltantes:
+        raise ValueError(f"Fonte Firebird bloqueada: tabelas esperadas ausentes: {', '.join(faltantes)}")
+    return caminho_configurado
 
 
 def gerar_previa(area, validar_fonte=True):
     if validar_fonte:
-        validar_fonte_firebird()
+        validar_fonte_firebird(area)
     if area == "tudo":
         etapas = []
         for etapa in ("estoque", "receber", "pagar"):
@@ -147,6 +156,7 @@ def _aplicar_previa(preview, validar_preflight=True):
             dados["novas"],
             dados["alteradas"],
             [conta["numero_legado"] for conta in dados["contas"]],
+            dados.get("quitadas", []),
         )
     elif area == "pagar":
         _engine_pagar().aplicar(
@@ -192,14 +202,16 @@ def _previa_receber():
     cfg = credenciais_firebird()
     clientes, cliente_ids = engine.carregar_universo()
     contas, fora = engine.extrair_firebird(**cfg, cliente_ids=cliente_ids)
-    novas, alteradas, sem_alteracao, fechadas = engine.comparar(contas)
+    novas, alteradas, sem_alteracao, quitadas, alertas = engine.comparar(contas, **cfg)
     resumo = {
         "novos": len(novas),
         "alterados": len(alteradas),
         "sem_alteracao": len(sem_alteracao),
         "fora_escopo": len(fora),
         "problemas": 0,
-        "possiveis_fechamentos": len(fechadas),
+        "possiveis_fechamentos": len(quitadas) + len(alertas),
+        "quitadas_confirmadas": len(quitadas),
+        "alertas_fechamento": len(alertas),
     }
     secoes = [
         _secao("Novos", [_item_receber_nova(conta, clientes) for conta in novas]),
@@ -207,12 +219,14 @@ def _previa_receber():
         _secao("Sem alteracao", [_item_receber_igual(item, clientes) for item in sem_alteracao[:30]], total=len(sem_alteracao)),
         _secao("Fora do escopo / nao mapeados", [_item_fora_receber(conta) for conta in fora]),
         _secao("Problemas de unidade / conversao", []),
-        _secao("Alertas: nao aparecem entre contas abertas do Firebird", [_item_receber_fechamento(conta) for conta in fechadas], destaque=True),
+        _secao("Quitadas no Firebird", [_item_receber_quitada(item) for item in quitadas], destaque=True),
+        _secao("Alertas: quitacao nao confirmada no Firebird", [_item_receber_fechamento(conta) for conta in alertas], destaque=True),
     ]
     return _preview("receber", resumo, secoes, {
         "contas": contas,
         "novas": novas,
         "alteradas": alteradas,
+        "quitadas": quitadas,
     })
 
 
@@ -257,16 +271,23 @@ def _previa_tudo(etapas):
 
 
 def _resumo_tudo(resumos):
-    chaves = ("novos", "alterados", "sem_alteracao", "fora_escopo", "problemas", "possiveis_fechamentos")
+    chaves = ("novos", "alterados", "sem_alteracao", "fora_escopo", "problemas", "possiveis_fechamentos", "quitadas_confirmadas", "alertas_fechamento")
     return {chave: sum(item.get(chave, 0) for item in resumos) for chave in chaves}
 
 
-def _extrair_inteiro(texto):
+def _extrair_marcadores(texto):
+    marcadores = {}
     for linha in texto.splitlines():
         linha = linha.strip()
-        if linha.isdigit():
-            return int(linha)
-    raise ValueError("nao foi possivel validar a fonte Firebird: contagem de produtos ativa ausente")
+        if "=" not in linha:
+            continue
+        chave, valor = linha.split("=", 1)
+        chave = chave.strip()
+        valor = valor.strip()
+        if chave == "TABLE" and valor:
+            if chave == "TABLE":
+                marcadores.setdefault(chave, set()).add(valor.upper())
+    return marcadores
 
 
 def _preview(area, resumo, secoes, dados):
@@ -366,7 +387,21 @@ def _item_receber_fechamento(conta):
             nome,
             f"Saldo Django: {_dinheiro(conta.valor_em_aberto)}",
             "Nao aparece mais entre as contas abertas do Firebird",
-            "Nao sera fechado automaticamente",
+            "Quitacao nao confirmada no Firebird; nao sera fechada",
+        ],
+    )
+
+
+def _item_receber_quitada(item):
+    conta, firebird = item
+    nome = conta.cliente.nome if conta.cliente else "Cliente nao informado"
+    return _item(
+        conta.numero_legado,
+        [
+            nome,
+            f"Conta confirmada em CRCLIENTES com VREST: {_dinheiro(firebird['saldo'])}",
+            f"Valor original preservado: {_dinheiro(conta.valor_original)}",
+            "Sera marcada como quitada; nenhum recebimento historico sera criado",
         ],
     )
 
