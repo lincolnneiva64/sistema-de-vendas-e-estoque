@@ -29,8 +29,9 @@ from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
+from django.contrib.auth.decorators import login_required
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -53,6 +54,7 @@ from .services.sincronizacao_firebird import (
     gerar_previa as sincronizacao_gerar_previa,
     registrar_token_previa as sincronizacao_registrar_token_previa,
 )
+from .services.estoque_manual import conferir_ou_ajustar_estoque
 from locacoes.services import painel_operacional_rapido_locacoes
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -60,7 +62,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from PIL import Image, ImageDraw, ImageFont
 from uuid import uuid4
 
@@ -4666,6 +4668,150 @@ def produto_ultimas_compras(request, produto_id):
         })
 
     return JsonResponse({"compras": compras})
+
+
+def _decimal_3_casas(valor):
+    valor = Decimal(str(valor if valor is not None else "0"))
+    return f"{valor.quantize(Decimal('0.001')):.3f}"
+
+
+def _datetime_frontend(valor):
+    if not valor:
+        return None
+    return timezone.localtime(valor).isoformat()
+
+
+def _contadores_conferencia_estoque():
+    base = Produto.objects.filter(excluido=False, ativo=True)
+    total_produtos = base.count()
+    total_conferidos = base.filter(estoque_conferido=True).count()
+    return {
+        "total_produtos": total_produtos,
+        "total_conferidos": total_conferidos,
+        "total_faltantes": total_produtos - total_conferidos,
+    }
+
+
+def _ultima_movimentacao_estoque_manual_payload(produto):
+    movimentacao = (
+        MovimentacaoEstoqueManual.objects
+        .select_related("usuario")
+        .filter(produto=produto)
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+    if not movimentacao:
+        return None
+
+    operador = movimentacao.operador_nome or ""
+    if not operador and movimentacao.usuario_id:
+        operador = movimentacao.usuario.get_username()
+
+    return {
+        "tipo": movimentacao.tipo,
+        "estoque_antes": _decimal_3_casas(movimentacao.estoque_antes),
+        "estoque_depois": _decimal_3_casas(movimentacao.estoque_depois),
+        "diferenca": _decimal_3_casas(movimentacao.diferenca),
+        "motivo": movimentacao.motivo or "",
+        "observacao": movimentacao.observacao or "",
+        "criado_em": _datetime_frontend(movimentacao.criado_em),
+        "operador": operador,
+    }
+
+
+def _produto_conferencia_estoque_payload(produto):
+    return {
+        "id": produto.id,
+        "nome": produto.nome,
+        "estoque_atual": _decimal_3_casas(produto.quantidade),
+        "estoque_conferido": bool(produto.estoque_conferido),
+        "estoque_conferido_em": _datetime_frontend(produto.estoque_conferido_em),
+        "ultima_movimentacao": _ultima_movimentacao_estoque_manual_payload(produto),
+    }
+
+
+def _estado_conferencia_estoque_payload(produto):
+    return {
+        "sucesso": True,
+        "produto": _produto_conferencia_estoque_payload(produto),
+        "conferencia": _contadores_conferencia_estoque(),
+    }
+
+
+def _produto_conferencia_estoque_ativo(produto_id):
+    return Produto.objects.filter(pk=produto_id, ativo=True, excluido=False).first()
+
+
+def _json_request_data(request):
+    content_type = request.META.get("CONTENT_TYPE", "")
+    if "application/json" not in content_type:
+        return request.POST
+    try:
+        dados = json.loads(request.body.decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise ValueError("Nao foi possivel ler os dados enviados.")
+    if not isinstance(dados, dict):
+        raise ValueError("Envie os dados em um objeto JSON valido.")
+    return dados
+
+
+def _status_erro_conferencia_estoque(exc):
+    mensagem = str(exc)
+    if "Produto inexistente" in mensagem:
+        return 404
+    return 400
+
+
+@login_required
+@require_GET
+def conferencia_estoque_produto(request, produto_id):
+    produto = _produto_conferencia_estoque_ativo(produto_id)
+    if not produto:
+        return JsonResponse(
+            {"sucesso": False, "mensagem": "Produto inexistente, inativo ou excluido."},
+            status=404,
+        )
+    return JsonResponse(_estado_conferencia_estoque_payload(produto))
+
+
+@login_required
+@require_POST
+def conferencia_estoque_confirmar(request, produto_id):
+    try:
+        resultado = conferir_ou_ajustar_estoque(
+            produto_id,
+            MovimentacaoEstoqueManual.TIPO_CONFERENCIA,
+            usuario=request.user,
+        )
+    except ValueError as exc:
+        return JsonResponse(
+            {"sucesso": False, "mensagem": str(exc)},
+            status=_status_erro_conferencia_estoque(exc),
+        )
+
+    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
+
+
+@login_required
+@require_POST
+def conferencia_estoque_corrigir(request, produto_id):
+    try:
+        dados = _json_request_data(request)
+        resultado = conferir_ou_ajustar_estoque(
+            produto_id,
+            MovimentacaoEstoqueManual.TIPO_AJUSTE,
+            novo_estoque=dados.get("novo_estoque"),
+            motivo=dados.get("motivo"),
+            observacao=dados.get("observacao", ""),
+            usuario=request.user,
+        )
+    except ValueError as exc:
+        return JsonResponse(
+            {"sucesso": False, "mensagem": str(exc)},
+            status=_status_erro_conferencia_estoque(exc),
+        )
+
+    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
 
 
 def _ultimas_compras_produtos_para_lista_fornecedor(produto_ids, limite=3):
