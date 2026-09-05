@@ -56,6 +56,15 @@ class Produto(models.Model):
         null=True,
         blank=True,
     )
+    estoque_conferido = models.BooleanField(default=False, db_index=True)
+    estoque_conferido_em = models.DateTimeField(null=True, blank=True)
+    estoque_conferido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="produtos_conferidos_estoque",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -104,6 +113,43 @@ class Produto(models.Model):
             self.preco_prazo_fracionado = self.preco_prazo_fracionado or 0
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class MovimentacaoEstoqueManual(models.Model):
+    TIPO_CONFERENCIA = "conferencia"
+    TIPO_AJUSTE = "ajuste"
+    TIPO_CHOICES = [
+        (TIPO_CONFERENCIA, "Conferencia"),
+        (TIPO_AJUSTE, "Ajuste manual"),
+    ]
+
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.PROTECT,
+        related_name="movimentacoes_estoque_manuais",
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    estoque_antes = models.DecimalField(max_digits=12, decimal_places=3)
+    estoque_depois = models.DecimalField(max_digits=12, decimal_places=3)
+    diferenca = models.DecimalField(max_digits=12, decimal_places=3)
+    motivo = models.TextField(blank=True)
+    observacao = models.TextField(blank=True)
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="movimentacoes_estoque_manuais",
+    )
+    operador_nome = models.CharField(max_length=150, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.produto.nome}"
+
 
 class Unidade(models.Model):
     nome = models.CharField(max_length=60)
