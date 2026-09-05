@@ -97,12 +97,27 @@ class EstoqueManualServiceTests(TestCase):
         self.assertEqual(self.produto.quantidade, Decimal("6.125"))
         self.assertEqual(historico.diferenca, Decimal("2.125"))
 
-    def test_ajuste_exige_motivo_e_rejeita_estoque_negativo(self):
-        with self.assertRaisesMessage(ValueError, "Informe o motivo"):
+    def test_ajuste_sem_motivo_registra_historico_com_motivo_vazio(self):
+        conferir_ou_ajustar_estoque(
+            self.produto.id,
+            MovimentacaoEstoqueManual.TIPO_AJUSTE,
+            novo_estoque=Decimal("3.000"),
+        )
+
+        self.produto.refresh_from_db()
+        historico = MovimentacaoEstoqueManual.objects.get()
+        self.assertEqual(self.produto.quantidade, Decimal("3.000"))
+        self.assertTrue(self.produto.estoque_conferido)
+        self.assertEqual(historico.estoque_antes, Decimal("4.000"))
+        self.assertEqual(historico.estoque_depois, Decimal("3.000"))
+        self.assertEqual(historico.diferenca, Decimal("-1.000"))
+        self.assertEqual(historico.motivo, "")
+
+    def test_ajuste_rejeita_novo_estoque_obrigatorio_e_negativo(self):
+        with self.assertRaisesMessage(ValueError, "Informe o novo estoque"):
             conferir_ou_ajustar_estoque(
                 self.produto.id,
                 MovimentacaoEstoqueManual.TIPO_AJUSTE,
-                novo_estoque=Decimal("3.000"),
             )
 
         with self.assertRaisesMessage(ValueError, "nao pode ser negativo"):

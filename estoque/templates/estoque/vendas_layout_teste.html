@@ -273,9 +273,17 @@ select {
     width: 100%;
     min-width: 0;
 }
-#produtoBusca {
-    width: 100%;
-}
+    #produtoBusca {
+        width: 100%;
+    }
+
+    .conferencia-estoque-contador {
+        margin-top: 4px;
+        color: #475569;
+        font-size: 11.5px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
 #clienteBusca {
     width: 100%;
 }
@@ -353,6 +361,36 @@ select {
 }
 
 .produto-sugestao-item.ativo .estoque-item-sugestao {
+    color: #5f3700;
+    background: #ffe08a;
+    border-color: #e0a800;
+}
+
+.estoque-item-sugestao {
+    cursor: pointer;
+}
+
+.estoque-item-sugestao.estoque-conferido {
+    color: #166534;
+    background: #dcfce7;
+    border-color: #86efac;
+}
+
+.estoque-item-sugestao.estoque-nao-conferido {
+    color: #8a5a00;
+    background: #fff3cd;
+    border-color: #f4c542;
+}
+
+.produto-sugestao-item:hover .estoque-item-sugestao.estoque-conferido,
+.produto-sugestao-item.ativo .estoque-item-sugestao.estoque-conferido {
+    color: #14532d;
+    background: #bbf7d0;
+    border-color: #22c55e;
+}
+
+.produto-sugestao-item:hover .estoque-item-sugestao.estoque-nao-conferido,
+.produto-sugestao-item.ativo .estoque-item-sugestao.estoque-nao-conferido {
     color: #5f3700;
     background: #ffe08a;
     border-color: #e0a800;
@@ -2393,6 +2431,152 @@ td:first-child {
 }
 /* ===== FIM TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
 
+.modal-conferencia-estoque-backdrop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.28);
+    z-index: 99980;
+}
+
+.modal-conferencia-estoque-backdrop.ativo {
+    display: flex;
+}
+
+.modal-conferencia-estoque-card {
+    width: min(440px, calc(100vw - 32px));
+    padding: 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 20px 42px rgba(15, 23, 42, 0.22);
+}
+
+.modal-conferencia-estoque-topo {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.modal-conferencia-estoque-titulo {
+    margin: 0;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1.15;
+}
+
+.modal-conferencia-estoque-fechar {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 18px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.modal-conferencia-estoque-info {
+    display: grid;
+    gap: 7px;
+    margin-bottom: 10px;
+    color: #334155;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.modal-conferencia-estoque-valor {
+    color: #0f172a;
+    font-size: 24px;
+    font-weight: 950;
+    font-variant-numeric: tabular-nums;
+}
+
+.modal-conferencia-estoque-status.conferido {
+    color: #166534;
+}
+
+.modal-conferencia-estoque-status.pendente {
+    color: #8a5a00;
+}
+
+.modal-conferencia-estoque-historico {
+    min-height: 34px;
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 750;
+    line-height: 1.35;
+    white-space: pre-line;
+}
+
+.modal-conferencia-estoque-form {
+    display: grid;
+    gap: 8px;
+}
+
+.modal-conferencia-estoque-form label {
+    display: grid;
+    gap: 4px;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.modal-conferencia-estoque-form input {
+    width: 100%;
+}
+
+.modal-conferencia-estoque-acoes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.modal-conferencia-estoque-btn {
+    min-height: 36px;
+    border: 1px solid #2563eb;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.modal-conferencia-estoque-btn.secundario {
+    border-color: #16a34a;
+    background: #16a34a;
+}
+
+.modal-conferencia-estoque-btn:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.modal-conferencia-estoque-feedback {
+    min-height: 18px;
+    color: #166534;
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.modal-conferencia-estoque-feedback.erro {
+    color: #b91c1c;
+}
+
 /* Compacta a passagem entre cabecalho da venda e lancamento de produto. */
 .bloco-lancamento .linha-cabecalho-venda {
     margin-bottom: 0 !important;
@@ -2416,6 +2600,40 @@ td:first-child {
 }
 </style>
 
+<div id="modalConferenciaEstoque" class="modal-conferencia-estoque-backdrop" aria-hidden="true">
+    <div class="modal-conferencia-estoque-card" role="dialog" aria-modal="true" aria-labelledby="modalConferenciaEstoqueTitulo">
+        <div class="modal-conferencia-estoque-topo">
+            <h3 id="modalConferenciaEstoqueTitulo" class="modal-conferencia-estoque-titulo">Conferência de estoque</h3>
+            <button type="button" id="modalConferenciaEstoqueFechar" class="modal-conferencia-estoque-fechar" aria-label="Fechar">×</button>
+        </div>
+        <div class="modal-conferencia-estoque-info">
+            <div id="modalConferenciaEstoqueProduto">Produto</div>
+            <div>
+                Estoque atual
+                <div id="modalConferenciaEstoqueAtual" class="modal-conferencia-estoque-valor">0.000</div>
+            </div>
+            <div id="modalConferenciaEstoqueStatus" class="modal-conferencia-estoque-status pendente">Ainda não conferido</div>
+        </div>
+        <div id="modalConferenciaEstoqueHistorico" class="modal-conferencia-estoque-historico">Sem histórico de conferência.</div>
+        <div class="modal-conferencia-estoque-form">
+            <button type="button" id="btnConfirmarConferenciaEstoque" class="modal-conferencia-estoque-btn secundario">Confirmar estoque atual</button>
+            <label>
+                Novo estoque
+                <input type="number" id="modalConferenciaNovoEstoque" inputmode="decimal" step="0.001" min="0">
+            </label>
+            <label>
+                Motivo
+                <input type="text" id="modalConferenciaMotivo" maxlength="180">
+            </label>
+            <div class="modal-conferencia-estoque-acoes">
+                <button type="button" id="btnCorrigirConferenciaEstoque" class="modal-conferencia-estoque-btn">Corrigir estoque</button>
+                <button type="button" id="btnCancelarConferenciaEstoque" class="modal-conferencia-estoque-btn secundario">Fechar</button>
+            </div>
+            <div id="modalConferenciaEstoqueFeedback" class="modal-conferencia-estoque-feedback" aria-live="polite"></div>
+        </div>
+    </div>
+</div>
+
         <div id="msgEdicao" class="msg-edicao">Modo edição ativado</div>
         <div class="linha">
             <div class="produto-autocomplete-wrap">
@@ -2423,6 +2641,15 @@ td:first-child {
     <div id="produtoSugestoes" class="produto-sugestoes"></div>
 <div id="estoquePreview" class="estoque-preview"></div>
 <div id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></div>
+<div
+    id="conferenciaEstoqueContador"
+    class="conferencia-estoque-contador"
+    data-total-produtos="{{ conferencia_estoque_contador.total_produtos }}"
+    data-total-conferidos="{{ conferencia_estoque_contador.total_conferidos }}"
+    data-total-faltantes="{{ conferencia_estoque_contador.total_faltantes }}"
+>
+    Conferidos: {{ conferencia_estoque_contador.total_conferidos }} / {{ conferencia_estoque_contador.total_produtos }} · Faltam: {{ conferencia_estoque_contador.total_faltantes }}
+</div>
 
     <select id="produto" hidden>
         <option value="">Selecione um produto</option>
@@ -2434,6 +2661,7 @@ td:first-child {
     data-unidade1="{{ produto.unidade_venda_1|default_if_none:'' }}"
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
     data-estoque="{{ produto.quantidade|default_if_none:0|unlocalize }}"
+    data-estoque-conferido="{{ produto.estoque_conferido|yesno:'true,false' }}"
     data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
     data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
     data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
@@ -2855,6 +3083,26 @@ const receberClienteUrlBase = "{% url 'estoque:receber_cliente' 0 %}";
 const vendasUrl = "{% url 'estoque:vendas' %}";
 const gravarVendaUrl = "{% url 'estoque:gravar_venda' %}";
 const historicoClienteProdutoUrl = "{% url 'estoque:vendas_cliente_produto_historico' %}";
+const conferenciaEstoqueConsultaUrlBase = "{% url 'estoque:conferencia_estoque_produto' 0 %}";
+const conferenciaEstoqueConfirmarUrlBase = "{% url 'estoque:conferencia_estoque_confirmar' 0 %}";
+const conferenciaEstoqueCorrigirUrlBase = "{% url 'estoque:conferencia_estoque_corrigir' 0 %}";
+const modalConferenciaEstoque = document.getElementById("modalConferenciaEstoque");
+const modalConferenciaEstoqueProduto = document.getElementById("modalConferenciaEstoqueProduto");
+const modalConferenciaEstoqueAtual = document.getElementById("modalConferenciaEstoqueAtual");
+const modalConferenciaEstoqueStatus = document.getElementById("modalConferenciaEstoqueStatus");
+const modalConferenciaEstoqueHistorico = document.getElementById("modalConferenciaEstoqueHistorico");
+const modalConferenciaNovoEstoque = document.getElementById("modalConferenciaNovoEstoque");
+const modalConferenciaMotivo = document.getElementById("modalConferenciaMotivo");
+const modalConferenciaEstoqueFeedback = document.getElementById("modalConferenciaEstoqueFeedback");
+const btnConfirmarConferenciaEstoque = document.getElementById("btnConfirmarConferenciaEstoque");
+const btnCorrigirConferenciaEstoque = document.getElementById("btnCorrigirConferenciaEstoque");
+const btnCancelarConferenciaEstoque = document.getElementById("btnCancelarConferenciaEstoque");
+const btnFecharConferenciaEstoque = document.getElementById("modalConferenciaEstoqueFechar");
+const conferenciaEstoqueContador = document.getElementById("conferenciaEstoqueContador");
+let conferenciaEstoqueProdutoAtualId = "";
+let conferenciaEstoqueOptionAtual = null;
+let conferenciaEstoqueRequisicaoEmAndamento = false;
+let conferenciaEstoqueToqueAbriu = false;
 
 // ===== BLOQUEIO PRODUTO ESTOQUE ZERADO NA VENDA NORMAL - CHATGPT 2026-06-21 =====
 function vendaProdutoSelecionadoOption() {
@@ -4583,6 +4831,298 @@ function obterCookie(nome) {
     return "";
 }
 
+function urlConferenciaEstoque(base, produtoId) {
+    return base.replace("/0/", "/" + encodeURIComponent(produtoId) + "/");
+}
+
+function formatarEstoqueConferencia(valor) {
+    const numero = Number(String(valor || "0").replace(",", "."));
+    if (!Number.isFinite(numero)) return "0.000";
+    return numero.toFixed(3);
+}
+
+function formatarDataConferenciaEstoque(valor) {
+    if (!valor) return "";
+    const data = new Date(valor);
+    if (Number.isNaN(data.getTime())) return "";
+    const dois = (numero) => String(numero).padStart(2, "0");
+    return `${dois(data.getDate())}/${dois(data.getMonth() + 1)}/${data.getFullYear()} ${dois(data.getHours())}:${dois(data.getMinutes())}`;
+}
+
+function classeBadgeConferenciaEstoque(opt) {
+    return opt?.dataset?.estoqueConferido === "true" ? "estoque-conferido" : "estoque-nao-conferido";
+}
+
+function atualizarContadorConferenciaEstoque(conferencia) {
+    if (!conferenciaEstoqueContador || !conferencia) return;
+    conferenciaEstoqueContador.dataset.totalProdutos = String(conferencia.total_produtos ?? "");
+    conferenciaEstoqueContador.dataset.totalConferidos = String(conferencia.total_conferidos ?? "");
+    conferenciaEstoqueContador.dataset.totalFaltantes = String(conferencia.total_faltantes ?? "");
+    conferenciaEstoqueContador.textContent = `Conferidos: ${conferencia.total_conferidos} / ${conferencia.total_produtos} · Faltam: ${conferencia.total_faltantes}`;
+}
+
+function atualizarOptionConferenciaEstoque(produtoDados) {
+    if (!produtoDados) return null;
+    const opt = Array.from(produto.options).find((option) => option.dataset.produtoId === String(produtoDados.id));
+    if (!opt) return null;
+    opt.dataset.estoque = formatarEstoqueConferencia(produtoDados.estoque_atual);
+    opt.dataset.estoqueConferido = produtoDados.estoque_conferido ? "true" : "false";
+    return opt;
+}
+
+function atualizarBadgesConferenciaEstoque(produtoDados) {
+    if (!produtoDados) return;
+    const opt = atualizarOptionConferenciaEstoque(produtoDados);
+    document.querySelectorAll(`.estoque-item-sugestao[data-produto-id="${produtoDados.id}"]`).forEach((badge) => {
+        badge.textContent = "Est: " + formatarEstoqueConferencia(produtoDados.estoque_atual);
+        badge.dataset.estoque = formatarEstoqueConferencia(produtoDados.estoque_atual);
+        badge.dataset.estoqueConferido = produtoDados.estoque_conferido ? "true" : "false";
+        badge.classList.toggle("estoque-conferido", !!produtoDados.estoque_conferido);
+        badge.classList.toggle("estoque-nao-conferido", !produtoDados.estoque_conferido);
+    });
+    if (opt && produto.value === opt.value) {
+        const estoqueBase = parseFloat(opt.dataset.estoque || "0");
+        estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(
+            estoqueBase,
+            opt.dataset.unidade1 || opt.dataset.unidade || "",
+            parseFloat(opt.dataset.fator || "0"),
+            opt.dataset.unidade2 || "",
+            opt.dataset.fracionado === "true"
+        )}`;
+        estoquePreview.style.display = "inline-block";
+    }
+}
+
+function mostrarFeedbackConferenciaEstoque(mensagem, erro = false) {
+    if (!modalConferenciaEstoqueFeedback) return;
+    modalConferenciaEstoqueFeedback.textContent = mensagem || "";
+    modalConferenciaEstoqueFeedback.classList.toggle("erro", !!erro);
+}
+
+async function lerJsonConferenciaEstoque(resposta, mensagemPadrao) {
+    const contentType = resposta.headers.get("Content-Type") || "";
+    if (!resposta.ok) {
+        if (!contentType.includes("application/json")) {
+            throw new Error(resposta.redirected
+                ? "Sessao expirada ou autenticacao necessaria para consultar o estoque."
+                : mensagemPadrao);
+        }
+        const erroDados = await resposta.json();
+        throw new Error(erroDados.mensagem || mensagemPadrao);
+    }
+    if (!contentType.includes("application/json")) {
+        throw new Error(resposta.redirected
+            ? "Sessao expirada ou autenticacao necessaria para consultar o estoque."
+            : "Resposta inesperada do servidor ao consultar o estoque.");
+    }
+    return resposta.json();
+}
+
+function operadorConferenciaEstoqueAtual() {
+    return operadorVenda ? operadorVenda.value.trim() : "";
+}
+
+function focarNovoEstoqueConferencia() {
+    if (!modalConferenciaNovoEstoque) return;
+    setTimeout(() => {
+        modalConferenciaNovoEstoque.focus();
+        modalConferenciaNovoEstoque.select();
+    }, 0);
+}
+
+function bloquearAcoesConferenciaEstoque(bloquear) {
+    conferenciaEstoqueRequisicaoEmAndamento = bloquear;
+    [
+        btnConfirmarConferenciaEstoque,
+        btnCorrigirConferenciaEstoque,
+        btnCancelarConferenciaEstoque,
+        btnFecharConferenciaEstoque,
+    ].forEach((botao) => {
+        if (botao) botao.disabled = bloquear;
+    });
+}
+
+function alternarFocoAcoesConferenciaEstoque(evento) {
+    if (!["ArrowLeft", "ArrowRight"].includes(evento.key)) return;
+    if (!btnCorrigirConferenciaEstoque || !btnCancelarConferenciaEstoque) return;
+    evento.preventDefault();
+    const proximoBotao = document.activeElement === btnCorrigirConferenciaEstoque
+        ? btnCancelarConferenciaEstoque
+        : btnCorrigirConferenciaEstoque;
+    proximoBotao.focus();
+}
+
+function configurarTecladoConferenciaEstoque() {
+    if (modalConferenciaNovoEstoque && modalConferenciaMotivo) {
+        modalConferenciaNovoEstoque.addEventListener("keydown", (evento) => {
+            if (evento.key !== "Enter") return;
+            evento.preventDefault();
+            evento.stopPropagation();
+            modalConferenciaMotivo.focus();
+            modalConferenciaMotivo.select();
+        });
+    }
+
+    if (modalConferenciaMotivo && btnCorrigirConferenciaEstoque) {
+        modalConferenciaMotivo.addEventListener("keydown", (evento) => {
+            if (evento.key !== "Enter") return;
+            evento.preventDefault();
+            evento.stopPropagation();
+            btnCorrigirConferenciaEstoque.focus();
+        });
+    }
+
+    [btnCorrigirConferenciaEstoque, btnCancelarConferenciaEstoque].forEach((botao) => {
+        if (!botao) return;
+        botao.addEventListener("keydown", alternarFocoAcoesConferenciaEstoque);
+    });
+}
+
+function renderizarHistoricoConferenciaEstoque(movimentacao) {
+    if (!modalConferenciaEstoqueHistorico) return;
+    if (!movimentacao) {
+        modalConferenciaEstoqueHistorico.textContent = "Sem histórico de conferência.";
+        return;
+    }
+    const data = formatarDataConferenciaEstoque(movimentacao.criado_em);
+    if (movimentacao.tipo === "conferencia") {
+        modalConferenciaEstoqueHistorico.textContent = `Conferido em ${data}. Estoque ${formatarEstoqueConferencia(movimentacao.estoque_depois)} estava correto.`;
+        return;
+    }
+    const linhas = [
+        `Corrigido em ${data}.`,
+        `${formatarEstoqueConferencia(movimentacao.estoque_antes)} -> ${formatarEstoqueConferencia(movimentacao.estoque_depois)}`,
+    ];
+    if (movimentacao.motivo) linhas.push(`Motivo: ${movimentacao.motivo}`);
+    modalConferenciaEstoqueHistorico.textContent = linhas.join("\n");
+}
+
+function renderizarModalConferenciaEstoque(dados) {
+    const produtoDados = dados?.produto;
+    if (!produtoDados) return;
+    conferenciaEstoqueProdutoAtualId = String(produtoDados.id);
+    conferenciaEstoqueOptionAtual = atualizarOptionConferenciaEstoque(produtoDados) || conferenciaEstoqueOptionAtual;
+    if (modalConferenciaEstoqueProduto) modalConferenciaEstoqueProduto.textContent = produtoDados.nome || "Produto";
+    if (modalConferenciaEstoqueAtual) modalConferenciaEstoqueAtual.textContent = formatarEstoqueConferencia(produtoDados.estoque_atual);
+    if (modalConferenciaNovoEstoque) modalConferenciaNovoEstoque.value = formatarEstoqueConferencia(produtoDados.estoque_atual);
+    if (modalConferenciaEstoqueStatus) {
+        modalConferenciaEstoqueStatus.textContent = produtoDados.estoque_conferido ? "Conferido" : "Ainda não conferido";
+        modalConferenciaEstoqueStatus.classList.toggle("conferido", !!produtoDados.estoque_conferido);
+        modalConferenciaEstoqueStatus.classList.toggle("pendente", !produtoDados.estoque_conferido);
+    }
+    renderizarHistoricoConferenciaEstoque(produtoDados.ultima_movimentacao);
+    atualizarBadgesConferenciaEstoque(produtoDados);
+    atualizarContadorConferenciaEstoque(dados.conferencia);
+}
+
+function abrirModalConferenciaEstoque(opt) {
+    const produtoId = opt?.dataset?.produtoId;
+    if (!produtoId || !modalConferenciaEstoque || conferenciaEstoqueRequisicaoEmAndamento) return;
+    conferenciaEstoqueOptionAtual = opt;
+    conferenciaEstoqueProdutoAtualId = String(produtoId);
+    modalConferenciaEstoque.classList.add("ativo");
+    modalConferenciaEstoque.setAttribute("aria-hidden", "false");
+    if (modalConferenciaEstoqueProduto) modalConferenciaEstoqueProduto.textContent = opt.value || "Produto";
+    if (modalConferenciaEstoqueAtual) modalConferenciaEstoqueAtual.textContent = "--";
+    if (modalConferenciaEstoqueStatus) {
+        modalConferenciaEstoqueStatus.textContent = "Carregando...";
+        modalConferenciaEstoqueStatus.classList.remove("conferido", "pendente");
+    }
+    if (modalConferenciaEstoqueHistorico) modalConferenciaEstoqueHistorico.textContent = "";
+    mostrarFeedbackConferenciaEstoque("Carregando estoque...");
+    bloquearAcoesConferenciaEstoque(true);
+
+    fetch(urlConferenciaEstoque(conferenciaEstoqueConsultaUrlBase, produtoId), {
+        headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "X-Operador-Venda": operadorConferenciaEstoqueAtual(),
+        },
+    })
+        .then((resposta) => lerJsonConferenciaEstoque(resposta, "Nao foi possivel consultar o estoque."))
+        .then((dados) => {
+            renderizarModalConferenciaEstoque(dados);
+            mostrarFeedbackConferenciaEstoque("");
+            focarNovoEstoqueConferencia();
+        })
+        .catch((erro) => {
+            mostrarFeedbackConferenciaEstoque(erro.message || "Falha ao consultar o estoque.", true);
+        })
+        .finally(() => {
+            bloquearAcoesConferenciaEstoque(false);
+        });
+}
+
+function fecharModalConferenciaEstoque() {
+    if (!modalConferenciaEstoque || conferenciaEstoqueRequisicaoEmAndamento) return;
+    modalConferenciaEstoque.classList.remove("ativo");
+    modalConferenciaEstoque.setAttribute("aria-hidden", "true");
+    mostrarFeedbackConferenciaEstoque("");
+}
+
+async function enviarConferenciaEstoque(url, payload, mensagemSucesso) {
+    if (!conferenciaEstoqueProdutoAtualId || conferenciaEstoqueRequisicaoEmAndamento) return;
+    mostrarFeedbackConferenciaEstoque("Salvando...");
+    bloquearAcoesConferenciaEstoque(true);
+    try {
+        const resposta = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": obterCookie("csrftoken"),
+                "X-Requested-With": "XMLHttpRequest",
+                "X-Operador-Venda": operadorConferenciaEstoqueAtual(),
+            },
+            body: JSON.stringify({
+                ...(payload || {}),
+                operador: operadorConferenciaEstoqueAtual(),
+            }),
+        });
+        const dados = await lerJsonConferenciaEstoque(resposta, "Nao foi possivel salvar a conferencia.");
+        renderizarModalConferenciaEstoque(dados);
+        mostrarFeedbackConferenciaEstoque(mensagemSucesso);
+    } catch (erro) {
+        mostrarFeedbackConferenciaEstoque(erro.message || "Falha de comunicacao ao salvar.", true);
+    } finally {
+        bloquearAcoesConferenciaEstoque(false);
+    }
+}
+
+if (btnConfirmarConferenciaEstoque) {
+    btnConfirmarConferenciaEstoque.addEventListener("click", () => {
+        enviarConferenciaEstoque(
+            urlConferenciaEstoque(conferenciaEstoqueConfirmarUrlBase, conferenciaEstoqueProdutoAtualId),
+            {},
+            "Estoque confirmado."
+        );
+    });
+}
+
+if (btnCorrigirConferenciaEstoque) {
+    btnCorrigirConferenciaEstoque.addEventListener("click", () => {
+        enviarConferenciaEstoque(
+            urlConferenciaEstoque(conferenciaEstoqueCorrigirUrlBase, conferenciaEstoqueProdutoAtualId),
+            {
+                novo_estoque: modalConferenciaNovoEstoque ? modalConferenciaNovoEstoque.value : "",
+                motivo: modalConferenciaMotivo ? modalConferenciaMotivo.value : "",
+            },
+            "Estoque corrigido."
+        );
+    });
+}
+
+[btnCancelarConferenciaEstoque, btnFecharConferenciaEstoque].forEach((botao) => {
+    if (!botao) return;
+    botao.addEventListener("click", fecharModalConferenciaEstoque);
+});
+
+if (modalConferenciaEstoque) {
+    modalConferenciaEstoque.addEventListener("click", (evento) => {
+        if (evento.target === modalConferenciaEstoque) fecharModalConferenciaEstoque();
+    });
+}
+
+configurarTecladoConferenciaEstoque();
+
 function normalizarNumeroVenda(valor) {
     const texto = String(valor || "")
         .replace("R$", "")
@@ -5945,15 +6485,47 @@ function renderSugestoes() {
 
     const texto = opt.value;
     const termo = produtoBusca.value.trim();
-    const estoque = opt.dataset.estoque || "0";
+    const estoque = formatarEstoqueConferencia(opt.dataset.estoque || "0");
+    const estoqueConferido = opt.dataset.estoqueConferido === "true";
+    const classeEstoque = classeBadgeConferenciaEstoque(opt);
 
     const regex = termo ? new RegExp(`(${termo})`, "i") : null;
     const textoHighlight = regex ? texto.replace(regex, `<strong>$1</strong>`) : texto;
 
     div.innerHTML = `
     <span class="nome-item-sugestao">${textoHighlight}</span>
-    <span class="estoque-item-sugestao">Est: ${estoque}</span>
+    <span
+        class="estoque-item-sugestao ${classeEstoque}"
+        data-produto-id="${opt.dataset.produtoId || ""}"
+        data-estoque="${estoque}"
+        data-estoque-conferido="${estoqueConferido ? "true" : "false"}"
+    >Est: ${estoque}</span>
 `;
+
+    const badgeEstoqueSugestao = div.querySelector(".estoque-item-sugestao");
+    if (badgeEstoqueSugestao) {
+        badgeEstoqueSugestao.addEventListener("mousedown", (evento) => {
+            evento.preventDefault();
+            evento.stopPropagation();
+        });
+
+        badgeEstoqueSugestao.addEventListener("click", (evento) => {
+            evento.preventDefault();
+            evento.stopPropagation();
+            if (conferenciaEstoqueToqueAbriu) return;
+            abrirModalConferenciaEstoque(opt);
+        });
+
+        badgeEstoqueSugestao.addEventListener("touchend", (evento) => {
+            evento.preventDefault();
+            evento.stopPropagation();
+            conferenciaEstoqueToqueAbriu = true;
+            abrirModalConferenciaEstoque(opt);
+            setTimeout(() => {
+                conferenciaEstoqueToqueAbriu = false;
+            }, 500);
+        }, { passive: false });
+    }
 
     div.addEventListener("mouseenter", () => {
         const unidadeBaseSug = opt.dataset.unidade1 || "";
@@ -5996,6 +6568,7 @@ if (fracionadoSug && unidadeFracSug) {
     }, { passive: true });
 
     div.addEventListener("touchend", (evento) => {
+        if (evento.target.closest(".estoque-item-sugestao")) return;
         if (produtoToqueMoveu) return;
 
         evento.preventDefault();
@@ -6010,12 +6583,14 @@ if (fracionadoSug && unidadeFracSug) {
     }, { passive: false });
 
     div.addEventListener("mousedown", (evento) => {
+        if (evento.target.closest(".estoque-item-sugestao")) return;
         evento.preventDefault();
         evento.stopPropagation();
         selecionarProduto(opt);
     });
 
     div.addEventListener("click", (evento) => {
+        if (evento.target.closest(".estoque-item-sugestao")) return;
         if (produtoToqueSelecionou) return;
 
         evento.preventDefault();

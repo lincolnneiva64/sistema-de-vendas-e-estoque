@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import MovimentacaoEstoqueManual, Produto
+from .models import Funcionario, MovimentacaoEstoqueManual, Produto
 from .services.estoque_manual import conferir_ou_ajustar_estoque
 
 
@@ -56,6 +56,32 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertEqual(dados["produto"]["estoque_atual"], "4.000")
         self.assertFalse(dados["produto"]["estoque_conferido"])
         self.assertIsNone(dados["produto"]["estoque_conferido_em"])
+
+    def test_get_consulta_produto_com_operador_da_tela_vendas_sem_login_django(self):
+        self.client.logout()
+        operador = Funcionario.objects.create(
+            nome="Operador Vendas Estoque",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        resposta = self.client.get(
+            self._url_consulta(),
+            HTTP_X_OPERADOR_VENDA=operador.nome,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()["produto"]["id"], self.produto.id)
+
+    def test_get_consulta_produto_sem_operador_retorna_json_403_sem_redirect(self):
+        self.client.logout()
+
+        resposta = self.client.get(self._url_consulta())
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(resposta.headers["Content-Type"], "application/json")
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIsNone(resposta.headers.get("Location"))
 
     def test_consulta_retorna_estoque_real_do_banco(self):
         produto_memoria = Produto.objects.get(pk=self.produto.pk)
@@ -116,6 +142,25 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertEqual(dados["produto"]["ultima_movimentacao"]["tipo"], "conferencia")
         self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 1)
 
+    def test_post_confirmacao_com_operador_da_tela_vendas_sem_login_django(self):
+        self.client.logout()
+        operador = Funcionario.objects.create(
+            nome="Operador Confirmacao Vendas",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        resposta = self.client.post(
+            self._url_confirmar(),
+            HTTP_X_OPERADOR_VENDA=operador.nome,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        historico = MovimentacaoEstoqueManual.objects.get()
+        self.assertIsNone(historico.usuario)
+        self.assertEqual(historico.operador_nome, operador.nome)
+        self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["operador"], operador.nome)
+
     def test_post_ajuste_positivo(self):
         resposta = self.client.post(
             self._url_corrigir(),
@@ -128,6 +173,53 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertEqual(self.produto.quantidade, Decimal("8.250"))
         self.assertEqual(resposta.json()["produto"]["estoque_atual"], "8.250")
         self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["diferenca"], "4.250")
+
+    def test_post_corrigir_com_operador_da_tela_vendas_sem_login_django(self):
+        self.client.logout()
+        operador = Funcionario.objects.create(
+            nome="Operador Correcao Vendas",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+        resposta = self.client.post(
+            self._url_corrigir(),
+            data=json.dumps({
+                "novo_estoque": "9.000",
+                "motivo": "Contagem no balcao",
+                "operador": operador.nome,
+            }),
+            content_type="application/json",
+            HTTP_X_OPERADOR_VENDA=operador.nome,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.produto.refresh_from_db()
+        historico = MovimentacaoEstoqueManual.objects.get()
+        self.assertEqual(self.produto.quantidade, Decimal("9.000"))
+        self.assertIsNone(historico.usuario)
+        self.assertEqual(historico.operador_nome, operador.nome)
+        self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["operador"], operador.nome)
+
+    def test_post_com_operador_nao_autorizado_retorna_json_403_sem_alterar(self):
+        self.client.logout()
+        operador = Funcionario.objects.create(
+            nome="Operador Sem Permissao",
+            ativo=True,
+            pode_operar_sistema=False,
+        )
+
+        resposta = self.client.post(
+            self._url_corrigir(),
+            data={"novo_estoque": "9.000", "motivo": "Contagem"},
+            HTTP_X_OPERADOR_VENDA=operador.nome,
+        )
+
+        self.assertEqual(resposta.status_code, 403)
+        self.assertEqual(resposta.headers["Content-Type"], "application/json")
+        self.assertFalse(resposta.json()["sucesso"])
+        self._assert_produto_sem_conferencia(self.produto, Decimal("4.000"))
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 0)
 
     def test_post_ajuste_negativo_de_diferenca_sem_permitir_estoque_final_negativo(self):
         resposta = self.client.post(
@@ -149,15 +241,43 @@ class EstoqueManualEndpointTests(TestCase):
         self.produto.refresh_from_db()
         self.assertEqual(self.produto.quantidade, Decimal("1.250"))
 
-    def test_motivo_obrigatorio(self):
+    def test_corrigir_sem_motivo_e_aceito(self):
         resposta = self.client.post(
             self._url_corrigir(),
             data={"novo_estoque": "5.000", "motivo": ""},
         )
 
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        self.produto.refresh_from_db()
+        historico = MovimentacaoEstoqueManual.objects.get()
+        self.assertEqual(self.produto.quantidade, Decimal("5.000"))
+        self.assertEqual(historico.motivo, "")
+        self.assertEqual(historico.estoque_antes, Decimal("4.000"))
+        self.assertEqual(historico.estoque_depois, Decimal("5.000"))
+        self.assertEqual(historico.diferenca, Decimal("1.000"))
+
+    def test_corrigir_com_motivo_continua_aceito(self):
+        resposta = self.client.post(
+            self._url_corrigir(),
+            data={"novo_estoque": "5.500", "motivo": "Contagem fisica"},
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        historico = MovimentacaoEstoqueManual.objects.get()
+        self.assertEqual(historico.motivo, "Contagem fisica")
+        self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["motivo"], "Contagem fisica")
+
+    def test_corrigir_exige_novo_estoque(self):
+        resposta = self.client.post(
+            self._url_corrigir(),
+            data={"novo_estoque": "", "motivo": ""},
+        )
+
         self.assertEqual(resposta.status_code, 400)
         self.assertFalse(resposta.json()["sucesso"])
-        self.assertIn("Informe o motivo", resposta.json()["mensagem"])
+        self.assertIn("Informe o novo estoque", resposta.json()["mensagem"])
+        self._assert_produto_sem_conferencia(self.produto, Decimal("4.000"))
         self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 0)
 
     def test_corrigir_rejeita_array_json(self):

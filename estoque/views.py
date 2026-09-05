@@ -29,7 +29,6 @@ from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
-from django.contrib.auth.decorators import login_required
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
@@ -4762,9 +4761,52 @@ def _status_erro_conferencia_estoque(exc):
     return 400
 
 
-@login_required
+def _operador_conferencia_estoque(request, dados=None):
+    if getattr(request.user, "is_authenticated", False):
+        return request.user, request.user.get_username(), None
+
+    operador = (
+        request.headers.get("X-Operador-Venda")
+        or request.headers.get("X-Operador-Estoque")
+        or request.GET.get("operador")
+        or ""
+    ).strip()
+    if dados is not None and not operador:
+        operador = str(dados.get("operador") or "").strip()
+
+    if not operador:
+        return None, "", JsonResponse(
+            {"sucesso": False, "mensagem": "Selecione um operador autorizado para consultar o estoque."},
+            status=403,
+        )
+
+    funcionario = Funcionario.objects.filter(
+        nome=operador,
+        ativo=True,
+        pode_operar_sistema=True,
+    ).first()
+    if not funcionario:
+        return None, "", JsonResponse(
+            {"sucesso": False, "mensagem": "Operador nao autorizado para consultar o estoque."},
+            status=403,
+        )
+
+    return None, funcionario.nome, None
+
+
+def _registrar_operador_conferencia_estoque(resultado, operador_nome):
+    historico = resultado.get("historico")
+    if operador_nome and historico and not historico.operador_nome:
+        historico.operador_nome = operador_nome
+        historico.save(update_fields=["operador_nome"])
+
+
 @require_GET
 def conferencia_estoque_produto(request, produto_id):
+    _usuario, _operador_nome, resposta_operador = _operador_conferencia_estoque(request)
+    if resposta_operador:
+        return resposta_operador
+
     produto = _produto_conferencia_estoque_ativo(produto_id)
     if not produto:
         return JsonResponse(
@@ -4774,14 +4816,17 @@ def conferencia_estoque_produto(request, produto_id):
     return JsonResponse(_estado_conferencia_estoque_payload(produto))
 
 
-@login_required
 @require_POST
 def conferencia_estoque_confirmar(request, produto_id):
+    usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request)
+    if resposta_operador:
+        return resposta_operador
+
     try:
         resultado = conferir_ou_ajustar_estoque(
             produto_id,
             MovimentacaoEstoqueManual.TIPO_CONFERENCIA,
-            usuario=request.user,
+            usuario=usuario,
         )
     except ValueError as exc:
         return JsonResponse(
@@ -4789,21 +4834,25 @@ def conferencia_estoque_confirmar(request, produto_id):
             status=_status_erro_conferencia_estoque(exc),
         )
 
+    _registrar_operador_conferencia_estoque(resultado, operador_nome)
     return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
 
 
-@login_required
 @require_POST
 def conferencia_estoque_corrigir(request, produto_id):
     try:
         dados = _json_request_data(request)
+        usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request, dados)
+        if resposta_operador:
+            return resposta_operador
+
         resultado = conferir_ou_ajustar_estoque(
             produto_id,
             MovimentacaoEstoqueManual.TIPO_AJUSTE,
             novo_estoque=dados.get("novo_estoque"),
             motivo=dados.get("motivo"),
             observacao=dados.get("observacao", ""),
-            usuario=request.user,
+            usuario=usuario,
         )
     except ValueError as exc:
         return JsonResponse(
@@ -4811,6 +4860,7 @@ def conferencia_estoque_corrigir(request, produto_id):
             status=_status_erro_conferencia_estoque(exc),
         )
 
+    _registrar_operador_conferencia_estoque(resultado, operador_nome)
     return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
 
 
@@ -11304,6 +11354,7 @@ def resolver_visita_fornecedor_atrasada(request):
 
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
+    conferencia_estoque_contador = _contadores_conferencia_estoque()
     cliente_inicial = None
     cliente_id = request.GET.get("cliente_id")
     pedido_importado = None
@@ -11439,6 +11490,7 @@ def vendas(request):
         'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
         'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,
         'produtos': produtos,
+        'conferencia_estoque_contador': conferencia_estoque_contador,
         'operadores_venda': operadores_venda,
         'cliente_inicial': cliente_inicial,
         'pedido_importado': pedido_importado,

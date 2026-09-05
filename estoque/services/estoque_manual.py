@@ -41,8 +41,6 @@ def conferir_ou_ajustar_estoque(
         raise ValueError("Tipo de movimentacao de estoque invalido.")
 
     motivo = str(motivo or "").strip()
-    if tipo == MovimentacaoEstoqueManual.TIPO_AJUSTE and not motivo:
-        raise ValueError("Informe o motivo do ajuste manual.")
 
     produto = (
         Produto.objects
@@ -57,6 +55,8 @@ def conferir_ou_ajustar_estoque(
     if tipo == MovimentacaoEstoqueManual.TIPO_CONFERENCIA:
         estoque_depois = estoque_antes
     else:
+        if novo_estoque is None or str(novo_estoque).strip() == "":
+            raise ValueError("Informe o novo estoque.")
         estoque_depois = _quantidade_estoque(novo_estoque, "Novo estoque")
         if estoque_depois < QUANTIDADE_ZERO:
             raise ValueError("O novo estoque nao pode ser negativo.")
