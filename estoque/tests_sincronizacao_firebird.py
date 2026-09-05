@@ -507,31 +507,43 @@ class ContasPagarSantaClaraTests(TestCase):
         import atualizar_contas_pagar_firebird as motor
 
         saida = (
-            "27007-01/2-CA|00098|CAFE SANTA CLARA|2025-05-15|2025-05-30|322.45|0.00|322.45\n"
-            "27008-02/2-CA|00098|CAFE SANTA CLARA|2025-05-16|2025-05-31|374.06|0.00|374.06\n"
-            "27007-02/2-CA|00098|CAFE SANTA CLARA|2025-06-15|2025-06-30|322.44|0.00|322.44\n"
+            "27928-02/3-BO|00098|CAFE SANTA CLARA|2026-08-01|2026-08-15|292.00|0.00|292.00\n"
+            "27928-03/3-BO|00098|CAFE SANTA CLARA|2026-08-01|2026-09-15|292.00|0.00|292.00\n"
+            "28038-01/3-BO|00098|CAFE SANTA CLARA|2026-08-02|2026-08-16|375.89|0.00|375.89\n"
+            "28038-02/3-BO|00098|CAFE SANTA CLARA|2026-08-02|2026-09-16|375.89|0.00|375.89\n"
+            "28038-03/3-BO|00098|CAFE SANTA CLARA|2026-08-02|2026-10-16|375.88|0.00|375.88\n"
+            "OUTRA-SANTA|00098|CAFE SANTA CLARA|2026-08-03|2026-10-17|10.00|0.00|10.00\n"
+            "OUTRO-FORNECEDOR|00011|OUTRO FORNECEDOR|2026-08-04|2026-10-18|20.00|0.00|20.00\n"
         )
         resultado = SimpleNamespace(returncode=0, stdout=saida, stderr="")
 
         with patch.object(motor.subprocess, "run", return_value=resultado):
             contas, ignoradas = motor.extrair_firebird("isql", "banco", "SYSDBA", "masterkey")
 
-        self.assertEqual(contas, [])
-        self.assertEqual(len(ignoradas), 3)
+        self.assertEqual(
+            {conta["documento"] for conta in contas},
+            {"OUTRA-SANTA", "OUTRO-FORNECEDOR"},
+        )
+        self.assertEqual(len(ignoradas), 5)
+        self.assertEqual(len(ignoradas), len(motor.CONTAS_EXCLUIDAS_EXPLICITAMENTE))
         self.assertEqual(motor.CONTAS_EXCLUIDAS_EXPLICITAMENTE_QTD_ESPERADA, 5)
         self.assertEqual(motor.CONTAS_EXCLUIDAS_EXPLICITAMENTE_TOTAL_ESPERADO, Decimal("1711.66"))
         self.assertEqual(
             {conta["documento"] for conta in ignoradas},
-            {"27007-01/2-CA", "27008-02/2-CA", "27007-02/2-CA"},
+            {
+                "27928-02/3-BO",
+                "27928-03/3-BO",
+                "28038-01/3-BO",
+                "28038-02/3-BO",
+                "28038-03/3-BO",
+            },
         )
         self.assertTrue(all(
             conta["motivo_ignorada"] == "Exclusao explicita: Cafe Santa Clara removido da migracao"
             for conta in ignoradas
         ))
-        self.assertEqual(sum((conta["valres"] for conta in ignoradas), Decimal("0.00")), Decimal("1018.95"))
-
-        with self.assertRaisesMessage(ValueError, "5 contas / R$ 1.711,66"):
-            motor.validar_exclusoes_explicitamente_configuradas(ignoradas)
+        self.assertEqual(sum((conta["valres"] for conta in ignoradas), Decimal("0.00")), Decimal("1711.66"))
+        motor.validar_exclusoes_explicitamente_configuradas(ignoradas)
 
 
 def _motor_fake(area):
@@ -581,7 +593,7 @@ def _motor_fake(area):
 def _ignoradas_santa_clara_incompletas():
     motivo = "Exclusao explicita: Cafe Santa Clara removido da migracao"
     return [
-        {"documento": "27007-01/2-CA", "codi": "00098", "valres": Decimal("322.45"), "motivo_ignorada": motivo},
-        {"documento": "27008-02/2-CA", "codi": "00098", "valres": Decimal("374.06"), "motivo_ignorada": motivo},
-        {"documento": "27007-02/2-CA", "codi": "00098", "valres": Decimal("322.44"), "motivo_ignorada": motivo},
+        {"documento": "27928-02/3-BO", "codi": "00098", "valres": Decimal("292.00"), "motivo_ignorada": motivo},
+        {"documento": "27928-03/3-BO", "codi": "00098", "valres": Decimal("292.00"), "motivo_ignorada": motivo},
+        {"documento": "28038-01/3-BO", "codi": "00098", "valres": Decimal("375.89"), "motivo_ignorada": motivo},
     ]
