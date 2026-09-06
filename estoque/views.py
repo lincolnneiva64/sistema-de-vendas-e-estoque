@@ -96,23 +96,35 @@ def _tem_pix_em_atencao():
     ).exists()
 
 
-def _clientes_cobranca_acionaveis_vendas(hoje=None, limite=None):
-    hoje = hoje or timezone.localdate()
-    contas_vencidas = (
+def _contas_receber_vencidas_base(hoje):
+    return (
         ContaReceber.objects.filter(
             status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
             valor_em_aberto__gt=Decimal("0.00"),
             data_vencimento__lt=hoje,
         )
         .exclude(data_vencimento__isnull=True)
+    )
+
+
+def _clientes_com_gatilho_cobranca_vendas(contas_vencidas_qs, hoje):
+    contas_gatilho = contas_vencidas_qs.filter(venda__isnull=False)
+    contas_vencidas = (
+        contas_gatilho
         .values("cliente_id")
         .annotate(vencimento_mais_antigo=Min("data_vencimento"))
     )
-    clientes_por_vencimento = {
+    return {
         item["cliente_id"]: item["vencimento_mais_antigo"]
         for item in contas_vencidas
         if item["cliente_id"] and (hoje - item["vencimento_mais_antigo"]).days >= 2
     }
+
+
+def _clientes_cobranca_acionaveis_vendas(hoje=None, limite=None):
+    hoje = hoje or timezone.localdate()
+    contas_vencidas_base = _contas_receber_vencidas_base(hoje)
+    clientes_por_vencimento = _clientes_com_gatilho_cobranca_vendas(contas_vencidas_base, hoje)
     if not clientes_por_vencimento:
         return []
 
@@ -142,13 +154,9 @@ def _clientes_cobranca_acionaveis_vendas(hoje=None, limite=None):
 
     contas_por_cliente = {cliente_id: [] for cliente_id in cliente_ids_acionaveis}
     contas = (
-        ContaReceber.objects.filter(
+        contas_vencidas_base.filter(
             cliente_id__in=cliente_ids_acionaveis,
-            status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-            valor_em_aberto__gt=Decimal("0.00"),
-            data_vencimento__lt=hoje,
         )
-        .exclude(data_vencimento__isnull=True)
         .select_related("venda")
         .order_by("cliente_id", "data_vencimento", "id")
     )
@@ -11903,11 +11911,7 @@ def central_cobrancas(request):
         messages.warning(request, "Prioridade invalida. Mostrando todas as prioridades.")
 
     hoje = timezone.localdate()
-    contas_vencidas_base = ContaReceber.objects.filter(
-        status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-        valor_em_aberto__gt=Decimal("0.00"),
-        data_vencimento__lt=hoje,
-    ).exclude(data_vencimento__isnull=True)
+    contas_vencidas_base = _contas_receber_vencidas_base(hoje)
 
     rotas_opcoes = list(
         contas_vencidas_base.exclude(cliente__bairro__isnull=True)
@@ -11926,8 +11930,14 @@ def central_cobrancas(request):
     if rota_filtro:
         contas_vencidas_qs = contas_vencidas_qs.filter(cliente__bairro__iexact=rota_filtro)
 
+    clientes_por_vencimento_gatilho = _clientes_com_gatilho_cobranca_vendas(
+        contas_vencidas_qs,
+        hoje,
+    )
+
     clientes_agrupados = (
-        contas_vencidas_qs.values(
+        contas_vencidas_qs.filter(cliente_id__in=clientes_por_vencimento_gatilho)
+        .values(
             "cliente_id",
             "cliente__nome",
             "cliente__apelido_nome_conhecido",

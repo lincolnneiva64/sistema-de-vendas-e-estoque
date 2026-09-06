@@ -1553,6 +1553,25 @@ class FechamentoCompraFinanceiroTests(TestCase):
         dados.update(alteracoes)
         return dados
 
+    def _criar_conta_receber_venda(self, cliente, dias_atraso, valor="90.00"):
+        hoje = timezone.localdate()
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=hoje - timedelta(days=dias_atraso + 3),
+            data_vencimento=hoje - timedelta(days=dias_atraso),
+            tipo_pagamento="prazo",
+            total=Decimal(valor),
+        )
+        return ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=Decimal(valor),
+            valor_em_aberto=Decimal(valor),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
     def _criar_lista_fornecedor_conferida(self, quantidade=Decimal("1.000"), total=Decimal("100.00")):
         lista = ListaCompraFornecedor.objects.create(
             fornecedor=self.fornecedor,
@@ -1799,15 +1818,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         cliente = Cliente.objects.create(nome="Cliente Cobranca Vendas", ativo=True)
         cliente.whatsapp = "(91) 98888-7777"
         cliente.save(update_fields=["whatsapp"])
-        hoje = timezone.localdate()
-        ContaReceber.objects.create(
-            cliente=cliente,
-            data_emissao=hoje - timedelta(days=8),
-            data_vencimento=hoje - timedelta(days=5),
-            valor_original=Decimal("90.00"),
-            valor_em_aberto=Decimal("90.00"),
-            status=ContaReceber.STATUS_ABERTA,
-        )
+        self._criar_conta_receber_venda(cliente, dias_atraso=5)
 
         resposta = self.client.get(reverse("estoque:vendas"), secure=True)
 
@@ -1847,14 +1858,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         cliente.whatsapp = "(91) 98888-7777"
         cliente.save(update_fields=["whatsapp"])
         hoje = timezone.localdate()
-        conta = ContaReceber.objects.create(
-            cliente=cliente,
-            data_emissao=hoje - timedelta(days=8),
-            data_vencimento=hoje - timedelta(days=5),
-            valor_original=Decimal("90.00"),
-            valor_em_aberto=Decimal("90.00"),
-            status=ContaReceber.STATUS_ABERTA,
-        )
+        conta = self._criar_conta_receber_venda(cliente, dias_atraso=5)
 
         resposta = self.client.post(
             reverse("estoque:central_cobrancas"),
@@ -1887,14 +1891,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
     def test_vendas_central_cobranca_ignora_retorno_futuro(self):
         cliente = Cliente.objects.create(nome="Cliente Cobranca Futuro Vendas", ativo=True)
         hoje = timezone.localdate()
-        ContaReceber.objects.create(
-            cliente=cliente,
-            data_emissao=hoje - timedelta(days=20),
-            data_vencimento=hoje - timedelta(days=15),
-            valor_original=Decimal("120.00"),
-            valor_em_aberto=Decimal("120.00"),
-            status=ContaReceber.STATUS_ABERTA,
-        )
+        self._criar_conta_receber_venda(cliente, dias_atraso=15, valor="120.00")
         views.RegistroCobrancaCliente.objects.create(
             cliente=cliente,
             tipo=views.RegistroCobrancaCliente.TIPO_WHATSAPP,
@@ -21507,18 +21504,110 @@ class PixRecebidoTests(TestCase):
 
 
 class CentralCobrancasTests(TestCase):
-    def _criar_cliente_com_conta_vencida(self, nome, dias_atraso, valor="100.00"):
+    def _criar_cliente_com_conta_vencida(self, nome, dias_atraso, valor="100.00", legada=False):
         cliente = Cliente.objects.create(nome=nome, ativo=True)
+        self._criar_conta_receber(cliente, dias_atraso=dias_atraso, valor=valor, legada=legada)
+        return cliente
+
+    def _criar_conta_receber(self, cliente, dias_atraso, valor="100.00", legada=False):
         hoje = timezone.localdate()
-        ContaReceber.objects.create(
+        venda = None
+        if not legada:
+            venda = Venda.objects.create(
+                cliente=cliente,
+                data_venda=hoje - timedelta(days=dias_atraso + 3),
+                data_vencimento=hoje - timedelta(days=dias_atraso),
+                tipo_pagamento="prazo",
+                total=Decimal(valor),
+            )
+        return ContaReceber.objects.create(
+            venda=venda,
             cliente=cliente,
+            numero_legado=f"LEG-{cliente.id}-{dias_atraso}" if legada else None,
             data_emissao=hoje - timedelta(days=dias_atraso + 3),
             data_vencimento=hoje - timedelta(days=dias_atraso),
             valor_original=Decimal(valor),
             valor_em_aberto=Decimal(valor),
             status=ContaReceber.STATUS_ABERTA,
         )
-        return cliente
+
+    def test_cliente_somente_com_conta_legada_vencida_nao_entra_na_central(self):
+        cliente = self._criar_cliente_com_conta_vencida(
+            "Cliente So Legado",
+            20,
+            valor="300.00",
+            legada=True,
+        )
+        saldo_original = ContaReceber.objects.get(cliente=cliente).valor_em_aberto
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertNotContains(resposta, "Cliente So Legado")
+        self.assertEqual(resposta.context["resumo"]["acoes_hoje"], 0)
+        self.assertEqual(resposta.context["resumo"]["clientes"], 0)
+        self.assertEqual(ContaReceber.objects.get(cliente=cliente).valor_em_aberto, saldo_original)
+
+    def test_cliente_com_conta_nova_vencida_ha_dois_dias_entra_na_central(self):
+        cliente = self._criar_cliente_com_conta_vencida("Cliente Nova Elegivel", 2, valor="200.00")
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(resposta, "Cliente Nova Elegivel")
+        cliente_contexto = resposta.context["clientes_cobranca"][0]
+        self.assertEqual(cliente_contexto["cliente_id"], cliente.id)
+        self.assertTrue(cliente_contexto["conta_para_alerta_central"])
+        self.assertEqual(cliente_contexto["total_em_aberto"], Decimal("200.00"))
+
+    def test_cliente_misto_entra_por_conta_nova_e_cartao_inclui_legado_vencido(self):
+        cliente = Cliente.objects.create(nome="Cliente Misto Cobranca", ativo=True)
+        cliente.whatsapp = "(91) 98888-7777"
+        cliente.save(update_fields=["whatsapp"])
+        conta_legada = self._criar_conta_receber(cliente, 20, valor="300.00", legada=True)
+        conta_nova = self._criar_conta_receber(cliente, 2, valor="200.00")
+        saldos_antes = list(
+            ContaReceber.objects.filter(cliente=cliente).order_by("id").values_list("id", "valor_em_aberto", "status")
+        )
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        cliente_contexto = resposta.context["clientes_cobranca"][0]
+        self.assertEqual(cliente_contexto["cliente_id"], cliente.id)
+        self.assertEqual(cliente_contexto["qtd_contas"], 2)
+        self.assertEqual(cliente_contexto["total_em_aberto"], Decimal("500.00"))
+        self.assertEqual(cliente_contexto["vencimento_mais_antigo"], conta_legada.data_vencimento)
+        self.assertTrue(cliente_contexto["conta_para_alerta_central"])
+        mensagem = parse_qs(urlsplit(cliente_contexto["whatsapp_url"]).query)["text"][0]
+        self.assertIn(conta_legada.numero_legado, mensagem)
+        self.assertIn(str(conta_nova.venda_id), mensagem)
+        self.assertIn("R$ 300,00", mensagem)
+        self.assertIn("R$ 200,00", mensagem)
+        self.assertEqual(
+            list(ContaReceber.objects.filter(cliente=cliente).order_by("id").values_list("id", "valor_em_aberto", "status")),
+            saldos_antes,
+        )
+
+    def test_cliente_com_conta_nova_vencida_ha_um_dia_nao_entra_na_central(self):
+        self._criar_cliente_com_conta_vencida("Cliente Nova Recente", 1, valor="200.00")
+
+        resposta = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertNotContains(resposta, "Cliente Nova Recente")
+        self.assertEqual(resposta.context["resumo"]["clientes"], 0)
+        self.assertEqual(resposta.context["resumo"]["acoes_hoje"], 0)
+
+    def test_painel_lateral_e_central_usam_mesmo_gatilho_de_conta_nova(self):
+        self._criar_cliente_com_conta_vencida("Cliente Somente Legado Painel", 15, legada=True)
+        self._criar_cliente_com_conta_vencida("Cliente Nova Painel", 3, valor="140.00")
+
+        resposta_vendas = self.client.get(reverse("estoque:vendas"), secure=True)
+        resposta_central = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertEqual(resposta_vendas.context["cobrancas_acionaveis_hoje_qtd"], 1)
+        self.assertEqual(resposta_central.context["resumo"]["acoes_hoje"], 1)
+        self.assertContains(resposta_vendas, "Cliente Nova Painel")
+        self.assertContains(resposta_central, "Cliente Nova Painel")
+        self.assertNotContains(resposta_vendas, "Cliente Somente Legado Painel")
+        self.assertNotContains(resposta_central, "Cliente Somente Legado Painel")
 
     def test_proxima_data_futura_mantem_cliente_visivel_sem_acao_hoje(self):
         cliente = self._criar_cliente_com_conta_vencida("Cliente Retomar Futuro", 15)
