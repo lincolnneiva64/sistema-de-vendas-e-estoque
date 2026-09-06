@@ -21785,6 +21785,87 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(dados_primeiro["data_pagamento"], "2026-05-17T11:09")
 
 
+class SincronizacaoContasReceberFirebirdTests(TestCase):
+    def linha_firebird(self, numero, codigo, nome):
+        return f"{numero}|{codigo}|{nome}|2026-09-01|2026-09-10|100.00|0.00|100.00"
+
+    def extrair_com_linhas(self, linhas, cliente_ids):
+        import atualizar_contas_receber_firebird as sync_receber
+
+        resultado = types.SimpleNamespace(
+            returncode=0,
+            stdout="\n".join(linhas),
+            stderr="",
+        )
+        with patch("atualizar_contas_receber_firebird.subprocess.run", return_value=resultado):
+            return sync_receber.extrair_firebird(
+                "isql.exe",
+                "BDados.fdb",
+                "SYSDBA",
+                "masterkey",
+                cliente_ids,
+            )
+
+    def test_codigos_ignorados_nao_entram_na_extracao_firebird(self):
+        cliente_ids = {
+            "00060": 1,
+            "01444": 2,
+            "01411": 3,
+            "01419": 4,
+            "09999": 5,
+        }
+        linhas = [
+            self.linha_firebird("REC-60", "00060", "Lincoln Neiva"),
+            self.linha_firebird("REC-1444", "01444", "Roseli Da Costa Gama"),
+            self.linha_firebird("REC-1411", "01411", "Lorena Gama Neiva"),
+            self.linha_firebird("REC-1419", "01419", "Camila Gama Neiva"),
+            self.linha_firebird("REC-9999", "09999", "Cliente Sincronizado"),
+        ]
+
+        contas, fora = self.extrair_com_linhas(linhas, cliente_ids)
+
+        self.assertEqual([conta["codigo"] for conta in contas], ["09999"])
+        self.assertEqual(contas[0]["numero_legado"], "REC-9999")
+        self.assertEqual(fora, [])
+
+    def test_outro_cliente_continua_comparando_como_conta_nova(self):
+        import atualizar_contas_receber_firebird as sync_receber
+
+        cliente_ignorado = Cliente.objects.create(nome="Lincoln Neiva", codigo_legado="00060")
+        cliente_sincronizado = Cliente.objects.create(nome="Cliente Sincronizado", codigo_legado="09999")
+        ContaReceber.objects.create(
+            venda=None,
+            cliente=cliente_ignorado,
+            numero_legado="REC-60-ANTIGA",
+            data_emissao=date(2026, 8, 1),
+            data_vencimento=date(2026, 8, 10),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaReceber.STATUS_PAGA,
+        )
+        linhas = [
+            self.linha_firebird("REC-60", "00060", "Lincoln Neiva"),
+            self.linha_firebird("REC-9999", "09999", "Cliente Sincronizado"),
+        ]
+        contas, _fora = self.extrair_com_linhas(
+            linhas,
+            {
+                cliente_ignorado.codigo_legado: cliente_ignorado.id,
+                cliente_sincronizado.codigo_legado: cliente_sincronizado.id,
+            },
+        )
+
+        with patch("atualizar_contas_receber_firebird.confirmar_quitadas", return_value=[]):
+            novas, alteradas, sem_alteracao, quitadas, alertas = sync_receber.comparar(contas)
+
+        self.assertEqual([conta["codigo"] for conta in novas], ["09999"])
+        self.assertEqual(novas[0]["cliente_id"], cliente_sincronizado.id)
+        self.assertEqual(alteradas, [])
+        self.assertEqual(sem_alteracao, [])
+        self.assertEqual(quitadas, [])
+        self.assertEqual(alertas, [])
+
+
 class CentralCobrancasTests(TestCase):
     def _criar_cliente_com_conta_vencida(self, nome, dias_atraso, valor="100.00", legada=False):
         cliente = Cliente.objects.create(nome=nome, ativo=True)

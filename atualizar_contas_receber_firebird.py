@@ -25,6 +25,7 @@ from estoque.models import Cliente, ContaReceber
 BASE_DIR = Path(__file__).resolve().parent
 ISQL_PADRAO = r"C:\Program Files (x86)\Firebird\Firebird_2_5\bin\isql.exe"
 BANCO_PADRAO = r"C:\Ariramba\Dados\BDados.fdb"
+CODIGOS_CLIENTES_IGNORADOS_ULTIMA_SINCRONIZACAO = {"00060", "01444", "01411", "01419"}
 QUERY = """
 SET LIST OFF;
 SET HEADING OFF;
@@ -141,6 +142,8 @@ def extrair_firebird(isql_path, banco, usuario, senha, cliente_ids):
             continue
         try:
             conta = parse_linha(linha, numero, cliente_ids)
+            if conta["codigo"] in CODIGOS_CLIENTES_IGNORADOS_ULTIMA_SINCRONIZACAO:
+                continue
             (contas if conta["cliente_id"] is not None else fora).append(conta)
         except ValueError as exc:
             erros.append(str(exc))
