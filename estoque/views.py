@@ -11392,6 +11392,7 @@ def vendas(request):
                         "estoque_movimentado": str(item.estoque_movimentado) if item.estoque_movimentado is not None else "",
                         "estoque_depois": str(item.estoque_depois) if item.estoque_depois is not None else "",
                         "estoque_unidade_snapshot": item.estoque_unidade_snapshot or "",
+                        "estoque_conferido": bool(item.produto and item.produto.estoque_conferido),
                     }
                     for item in venda_para_editar.itens.all()
                 ],

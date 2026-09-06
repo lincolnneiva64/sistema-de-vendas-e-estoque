@@ -370,13 +370,17 @@ select {
     cursor: pointer;
 }
 
-.estoque-item-sugestao.estoque-conferido {
+.estoque-item-sugestao.estoque-conferido,
+.estoque-preview.estoque-conferido,
+.item-venda-estoque-badge.estoque-conferido {
     color: #166534;
     background: #dcfce7;
     border-color: #86efac;
 }
 
-.estoque-item-sugestao.estoque-nao-conferido {
+.estoque-item-sugestao.estoque-nao-conferido,
+.estoque-preview.estoque-nao-conferido,
+.item-venda-estoque-badge.estoque-nao-conferido {
     color: #8a5a00;
     background: #fff3cd;
     border-color: #f4c542;
@@ -4251,7 +4255,7 @@ function renderizarCelulaProdutoVenda(celula, item) {
     const textoEstoque = criarTextoEstoqueSnapshotVenda(item);
     if (textoEstoque) {
         const badgeEstoque = document.createElement("span");
-        badgeEstoque.className = "item-venda-estoque-badge";
+        badgeEstoque.className = `item-venda-estoque-badge ${classeBadgeItemVenda(item)}`;
         badgeEstoque.textContent = textoEstoque;
         celula.appendChild(badgeEstoque);
     }
@@ -4295,6 +4299,7 @@ function atualizarLinhaItemVenda(linha, item) {
             estoque_movimentado: linha.dataset.estoqueMovimentado || "",
             estoque_depois: linha.dataset.estoqueDepois || "",
             estoque_unidade_snapshot: linha.dataset.estoqueUnidadeSnapshot || "",
+            estoque_conferido: linha.dataset.estoqueConferido === "true",
         };
     }
 
@@ -4327,11 +4332,13 @@ function atualizarLinhaItemVenda(linha, item) {
         linha.dataset.estoqueMovimentado = String(item.estoque_movimentado || "");
         linha.dataset.estoqueDepois = String(item.estoque_depois || "");
         linha.dataset.estoqueUnidadeSnapshot = String(item.estoque_unidade_snapshot || "");
+        linha.dataset.estoqueConferido = item.estoque_conferido ? "true" : "false";
     } else if (!mesmoProduto) {
         delete linha.dataset.estoqueAntes;
         delete linha.dataset.estoqueMovimentado;
         delete linha.dataset.estoqueDepois;
         delete linha.dataset.estoqueUnidadeSnapshot;
+        delete linha.dataset.estoqueConferido;
     }
 
     renderizarCelulaProdutoVenda(linha.children[0], item);
@@ -4452,6 +4459,7 @@ if (fracionadoEdicao && unidade2Edicao) {
 } else {
     estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseEdicao, unidade1Edicao, fatorEdicao, unidade2Edicao, fracionadoEdicao)}`;
 }
+    aplicarEstadoConferenciaEstoquePreview(optionEdicao);
     estoquePreview.style.display = "inline-block";
 } else {
     estoquePreview.innerText = "";
@@ -4677,6 +4685,23 @@ function criarTextoEstoqueSnapshotVenda(item) {
     return `Est: ${formatarQuantidadeSnapshotVenda(item.estoque_antes)}${sufixoUnidade}`;
 }
 
+function classeBadgeItemVenda(item) {
+    return item?.estoque_conferido ? "estoque-conferido" : "estoque-nao-conferido";
+}
+
+function criarSnapshotVisualEstoqueItemVenda(produtoOption) {
+    if (!produtoOption) return {};
+
+    const estoqueAtual = formatarEstoqueConferencia(produtoOption.dataset.estoque || "0");
+    return {
+        estoque_antes: estoqueAtual,
+        estoque_movimentado: "",
+        estoque_depois: "",
+        estoque_unidade_snapshot: produtoOption.dataset.unidade1 || produtoOption.dataset.unidade || "",
+        estoque_conferido: produtoOption.dataset.estoqueConferido === "true",
+    };
+}
+
 function criarLinhaItemVenda(item) {
     const linha = document.createElement("tr");
 
@@ -4694,6 +4719,7 @@ function criarLinhaItemVenda(item) {
         linha.dataset.estoqueMovimentado = String(item.estoque_movimentado || "");
         linha.dataset.estoqueDepois = String(item.estoque_depois || "");
         linha.dataset.estoqueUnidadeSnapshot = String(item.estoque_unidade_snapshot || "");
+        linha.dataset.estoqueConferido = item.estoque_conferido ? "true" : "false";
     }
 
     const quantidadeItem = normalizarNumeroVenda(item.quantidade);
@@ -4853,6 +4879,17 @@ function classeBadgeConferenciaEstoque(opt) {
     return opt?.dataset?.estoqueConferido === "true" ? "estoque-conferido" : "estoque-nao-conferido";
 }
 
+function aplicarEstadoConferenciaEstoquePreview(opt) {
+    if (!estoquePreview) return;
+    estoquePreview.classList.remove("estoque-conferido", "estoque-nao-conferido");
+    estoquePreview.style.background = "";
+    estoquePreview.style.borderColor = "";
+    estoquePreview.style.color = "";
+    estoquePreview.style.fontWeight = "";
+    if (!opt) return;
+    estoquePreview.classList.add(classeBadgeConferenciaEstoque(opt));
+}
+
 function atualizarContadorConferenciaEstoque(conferencia) {
     if (!conferenciaEstoqueContador || !conferencia) return;
     conferenciaEstoqueContador.dataset.totalProdutos = String(conferencia.total_produtos ?? "");
@@ -4889,6 +4926,7 @@ function atualizarBadgesConferenciaEstoque(produtoDados) {
             opt.dataset.unidade2 || "",
             opt.dataset.fracionado === "true"
         )}`;
+        aplicarEstadoConferenciaEstoquePreview(opt);
         estoquePreview.style.display = "inline-block";
     }
 }
@@ -5531,6 +5569,7 @@ function adicionarItemVendaAtual() {
         unidade: unidadeTexto,
         preco_unitario: precoNumero.toFixed(2),
         valor_total: (qtdNumero * precoNumero).toFixed(2),
+        ...criarSnapshotVisualEstoqueItemVenda(produtoOption),
     };
 
     if (linhaSelecionada) {
@@ -6318,17 +6357,21 @@ if (bloquearProdutoDuplicadoVenda(produtoIdEnter, nomeProduto, linhaSelecionada)
     return;
 }
 
-        if (linhaSelecionada) {
-            // EDITAR LINHA EXISTENTE
-            const totalEdit = parseFloat(qtd) * parseFloat(valor);
-atualizarLinhaItemVenda(linhaSelecionada, {
+const itemEnter = {
     produto_id: produtoIdEnter,
     produto_nome: nomeProduto,
     quantidade: qtd,
     unidade: un,
     preco_unitario: valor,
-    valor_total: isNaN(totalEdit) ? "" : totalEdit.toFixed(2),
-});
+    valor_total: "",
+    ...criarSnapshotVisualEstoqueItemVenda(produtoOptionEnter),
+};
+
+        if (linhaSelecionada) {
+            // EDITAR LINHA EXISTENTE
+            const totalEdit = parseFloat(qtd) * parseFloat(valor);
+itemEnter.valor_total = isNaN(totalEdit) ? "" : totalEdit.toFixed(2);
+atualizarLinhaItemVenda(linhaSelecionada, itemEnter);
 atualizarTotalGeral();
 scrollLinhaDentroDaLista(linhaSelecionada);
 limparEstadoEdicaoItemVenda();
@@ -6347,18 +6390,9 @@ setTimeout(() => {
 return;
 } else {
     // CRIAR NOVA LINHA
-    const novaLinha = document.createElement("tr");
-    if (produtoIdEnter) {
-        novaLinha.dataset.produtoId = String(produtoIdEnter);
-    }
     const total = parseFloat(qtd) * parseFloat(valor);
-
-    novaLinha.innerHTML =
-        "<td>" + nomeProduto + "</td>" +
-        "<td>" + qtd + "</td>" +
-        "<td>" + un + "</td>" +
-        "<td>" + valor + "</td>" +
-        "<td>" + (isNaN(total) ? "" : total.toFixed(2)) + "</td>";
+    itemEnter.valor_total = isNaN(total) ? "" : total.toFixed(2);
+    const novaLinha = criarLinhaItemVenda(itemEnter);
 
     tabelaBody.appendChild(novaLinha);
     estoquePreview.innerText = "";
@@ -6539,6 +6573,7 @@ if (fracionadoSug && unidadeFracSug) {
 } else {
     estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSug, unidadeBaseSug, fatorSug, unidadeFracSug, fracionadoSug)}`;
 }
+        aplicarEstadoConferenciaEstoquePreview(opt);
         estoquePreview.style.display = "inline-block";
     });
 
@@ -6670,6 +6705,7 @@ if (fracionadoSelecionado && unidadeFracSelecionada) {
 } else {
     estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSelecionado, unidadeBaseSelecionada, fatorSelecionado, unidadeFracSelecionada, fracionadoSelecionado)}`;
 }
+aplicarEstadoConferenciaEstoquePreview(opt);
 estoquePreview.style.display = "inline-block";
 
 preco.value = opt.dataset.preco || "";
@@ -6704,6 +6740,7 @@ let precoFracionado = opt.dataset.preco2 || "";
 } else {
     estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
 }
+        aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoBase;
         validarEstoqueItemVendaAtual(true);
         return;
@@ -6711,6 +6748,7 @@ let precoFracionado = opt.dataset.preco2 || "";
 
     if (fracionado && unidade.value === unidade2) {
         estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
+        aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoFracionado;
         validarEstoqueItemVendaAtual(true);
     }

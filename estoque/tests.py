@@ -24694,6 +24694,56 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertNotContains(resposta, "Saida:")
         self.assertNotContains(resposta, "Saldo apos:")
 
+    def test_tela_vendas_edicao_item_conferido_envia_estado_visual_da_badge(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        produto.estoque_conferido = True
+        produto.save(update_fields=["estoque_conferido"])
+        item.estoque_antes = Decimal("26.000")
+        item.estoque_movimentado = Decimal("1.000")
+        item.estoque_depois = Decimal("25.000")
+        item.estoque_unidade_snapshot = "PCT"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item_contexto = resposta.context["venda_edicao"]["itens"][0]
+        self.assertEqual(item_contexto["estoque_antes"], "26.000")
+        self.assertIs(item_contexto["estoque_conferido"], True)
+
+    def test_tela_vendas_edicao_item_nao_conferido_envia_estado_visual_da_badge(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        produto.estoque_conferido = False
+        produto.save(update_fields=["estoque_conferido"])
+        item.estoque_antes = Decimal("26.000")
+        item.estoque_movimentado = Decimal("1.000")
+        item.estoque_depois = Decimal("25.000")
+        item.estoque_unidade_snapshot = "PCT"
+        item.save(update_fields=[
+            "estoque_antes",
+            "estoque_movimentado",
+            "estoque_depois",
+            "estoque_unidade_snapshot",
+        ])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item_contexto = resposta.context["venda_edicao"]["itens"][0]
+        self.assertEqual(item_contexto["estoque_antes"], "26.000")
+        self.assertIs(item_contexto["estoque_conferido"], False)
+
     def test_tela_vendas_payload_usa_nome_real_sem_badge_estoque(self):
         cliente, produto, venda, item = self.criar_venda_base()
         item.estoque_antes = Decimal("26.000")

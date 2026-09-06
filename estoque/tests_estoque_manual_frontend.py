@@ -54,6 +54,75 @@ class EstoqueManualVendasFrontendTests(TestCase):
         self.assertIn(".estoque-item-sugestao.estoque-nao-conferido", html)
         self.assertIn("function classeBadgeConferenciaEstoque(opt)", html)
 
+    def test_item_lancado_continua_renderizando_badge_visual_de_estoque(self):
+        html = self._html()
+
+        self.assertIn("function criarSnapshotVisualEstoqueItemVenda(produtoOption)", html)
+        self.assertIn("...criarSnapshotVisualEstoqueItemVenda(produtoOption)", html)
+        self.assertIn("...criarSnapshotVisualEstoqueItemVenda(produtoOptionEnter)", html)
+        self.assertIn("const novaLinha = criarLinhaItemVenda(itemEnter);", html)
+        self.assertIn("renderizarCelulaProdutoVenda(celula, item);", html)
+        self.assertIn("badgeEstoque.className = `item-venda-estoque-badge ${classeBadgeItemVenda(item)}`;", html)
+
+    def test_badge_da_linha_nao_conferida_fica_amarela(self):
+        html = self._html()
+
+        self.assertIn(".item-venda-estoque-badge.estoque-nao-conferido", html)
+        self.assertIn("return item?.estoque_conferido ? \"estoque-conferido\" : \"estoque-nao-conferido\";", html)
+        self.assertIn('estoque_conferido: produtoOption.dataset.estoqueConferido === "true"', html)
+
+    def test_badge_da_linha_conferida_fica_verde(self):
+        html = self._html()
+
+        self.assertIn(".item-venda-estoque-badge.estoque-conferido", html)
+        self.assertIn("function classeBadgeItemVenda(item)", html)
+        self.assertIn("linha.dataset.estoqueConferido = item.estoque_conferido ? \"true\" : \"false\";", html)
+
+    def test_badge_da_linha_nao_faz_parte_do_nome_real_do_produto(self):
+        html = self._html()
+
+        self.assertIn("nomeProduto.textContent = item.produto_nome || \"\";", html)
+        self.assertIn("linha.dataset.produtoNome = item.produto_nome || \"\";", html)
+        self.assertIn("produto_nome: obterNomeProdutoLinhaVenda(tr)", html)
+        self.assertIn("const nome = obterNomeProdutoLinhaVenda(linha);", html)
+        self.assertIn("const nomeProduto = obterNomeProdutoLinhaVenda(linhaSelecionada) || \"este item\";", html)
+        self.assertNotIn("produto_nome: tr.children[0].textContent.trim()", html)
+
+    def test_enter_no_preco_usa_mesma_renderizacao_da_linha_com_badge(self):
+        html = self._html()
+
+        inicio = html.index("} else if (ativo === preco)")
+        fim = html.index("function prepararProdutoParaProximoLancamento", inicio)
+        trecho_enter = html[inicio:fim]
+
+        self.assertIn("const itemEnter = {", trecho_enter)
+        self.assertIn("...criarSnapshotVisualEstoqueItemVenda(produtoOptionEnter)", trecho_enter)
+        self.assertIn("atualizarLinhaItemVenda(linhaSelecionada, itemEnter);", trecho_enter)
+        self.assertIn("const novaLinha = criarLinhaItemVenda(itemEnter);", trecho_enter)
+        self.assertNotIn("novaLinha.innerHTML", trecho_enter)
+        self.assertNotIn("\"<td>\" + nomeProduto + \"</td>\"", trecho_enter)
+
+    def test_snapshot_visual_da_linha_reaproveita_option_sem_alterar_autocomplete(self):
+        html = self._html()
+
+        self.assertIn('const estoqueAtual = formatarEstoqueConferencia(produtoOption.dataset.estoque || "0");', html)
+        self.assertIn("estoque_antes: estoqueAtual", html)
+        self.assertIn("estoque_unidade_snapshot: produtoOption.dataset.unidade1 || produtoOption.dataset.unidade || \"\"", html)
+        self.assertIn('estoque_conferido: produtoOption.dataset.estoqueConferido === "true"', html)
+        self.assertIn("const classeEstoque = classeBadgeConferenciaEstoque(opt);", html)
+        self.assertIn('class="estoque-item-sugestao ${classeEstoque}"', html)
+
+    def test_badge_preview_estoque_abaixo_do_input_acompanha_conferencia(self):
+        html = self._html()
+
+        self.assertIn(".estoque-preview.estoque-conferido", html)
+        self.assertIn(".estoque-preview.estoque-nao-conferido", html)
+        self.assertIn("function aplicarEstadoConferenciaEstoquePreview(opt)", html)
+        self.assertIn('estoquePreview.classList.remove("estoque-conferido", "estoque-nao-conferido");', html)
+        self.assertIn("estoquePreview.classList.add(classeBadgeConferenciaEstoque(opt));", html)
+        self.assertIn("aplicarEstadoConferenciaEstoquePreview(optionEdicao);", html)
+        self.assertGreaterEqual(html.count("aplicarEstadoConferenciaEstoquePreview(opt);"), 4)
+
     def test_modal_de_conferencia_existe_com_campos_e_acoes(self):
         html = self._html()
 
