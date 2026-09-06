@@ -443,6 +443,46 @@
 .vendas-pendencias-resolver-enviar:hover {
   filter: brightness(1.04);
 }
+.vendas-pendencias-sem-compra {
+  border-top: 1px solid rgba(148, 163, 184, .28);
+  padding-top: 6px;
+}
+.vendas-pendencias-sem-compra summary {
+  cursor: pointer;
+  color: #475569;
+  font-size: .74rem;
+  font-weight: 900;
+  list-style-position: inside;
+}
+.vendas-pendencias-sem-compra-form {
+  display: grid;
+  gap: 6px;
+  margin-top: 7px;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: rgba(248, 250, 252, .92);
+}
+.vendas-pendencias-sem-compra-texto {
+  margin: 0;
+  color: #334155;
+  font-size: .75rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.vendas-pendencias-sem-compra-enviar {
+  min-height: 32px;
+  border: 1px solid #64748b;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  color: #334155;
+  font-size: .75rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.vendas-pendencias-sem-compra-enviar:hover {
+  filter: brightness(1.03);
+}
 .vendas-pendencias-nova-data[hidden] {
   display: none;
 }
@@ -577,6 +617,19 @@
                 {% endif %}
               </p>
               <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">{% if aviso.estado == "lista_alterada_falta_reenviar" %}Reenviar ao vendedor{% elif aviso.estado == "lista_preparada_falta_enviar" %}Enviar ao vendedor{% else %}Preparar lista{% endif %}</a>
+              {% if aviso.acao.tipo == "preparar_lista" %}
+                <details class="vendas-pendencias-sem-compra">
+                  <summary>Sem compra</summary>
+                  <form method="post" action="{% url 'estoque:registrar_visita_fornecedor_sem_compra' %}" class="vendas-pendencias-sem-compra-form" data-form-sem-compra-visita>
+                    {% csrf_token %}
+                    <input type="hidden" name="fornecedor_id" value="{{ aviso.fornecedor_id }}">
+                    <input type="hidden" name="data_visita" value="{{ aviso.data_visita }}">
+                    <input type="hidden" name="operador" value="" data-operador-sem-compra-visita>
+                    <p class="vendas-pendencias-sem-compra-texto">Confirmar que nao havera compra da {{ aviso.fornecedor_nome }} neste ciclo de {{ aviso.data_visita_formatada|default:aviso.data_visita }}?</p>
+                    <button type="submit" class="vendas-pendencias-sem-compra-enviar">Confirmar sem compra</button>
+                  </form>
+                </details>
+              {% endif %}
             </div>
           </article>
         {% elif aviso.estado == "lista_preparada_falta_enviar" or aviso.estado == "lista_alterada_falta_reenviar" %}
@@ -609,6 +662,19 @@
             <div class="vendas-pendencias-item-rodape">
               <p class="vendas-pendencias-mensagem">Visita amanha.</p>
               <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+              {% if aviso.acao.tipo == "preparar_lista" %}
+                <details class="vendas-pendencias-sem-compra">
+                  <summary>Sem compra</summary>
+                  <form method="post" action="{% url 'estoque:registrar_visita_fornecedor_sem_compra' %}" class="vendas-pendencias-sem-compra-form" data-form-sem-compra-visita>
+                    {% csrf_token %}
+                    <input type="hidden" name="fornecedor_id" value="{{ aviso.fornecedor_id }}">
+                    <input type="hidden" name="data_visita" value="{{ aviso.data_visita }}">
+                    <input type="hidden" name="operador" value="" data-operador-sem-compra-visita>
+                    <p class="vendas-pendencias-sem-compra-texto">Confirmar que nao havera compra da {{ aviso.fornecedor_nome }} neste ciclo de {{ aviso.data_visita_formatada|default:aviso.data_visita }}?</p>
+                    <button type="submit" class="vendas-pendencias-sem-compra-enviar">Confirmar sem compra</button>
+                  </form>
+                </details>
+              {% endif %}
             </div>
           </article>
         {% else %}
@@ -629,6 +695,19 @@
                   {% endif %}
                 </p>
                 <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+                {% if aviso.acao.tipo == "preparar_lista" %}
+                  <details class="vendas-pendencias-sem-compra">
+                    <summary>Sem compra</summary>
+                    <form method="post" action="{% url 'estoque:registrar_visita_fornecedor_sem_compra' %}" class="vendas-pendencias-sem-compra-form" data-form-sem-compra-visita>
+                      {% csrf_token %}
+                      <input type="hidden" name="fornecedor_id" value="{{ aviso.fornecedor_id }}">
+                      <input type="hidden" name="data_visita" value="{{ aviso.data_visita }}">
+                      <input type="hidden" name="operador" value="" data-operador-sem-compra-visita>
+                      <p class="vendas-pendencias-sem-compra-texto">Confirmar que nao havera compra da {{ aviso.fornecedor_nome }} neste ciclo de {{ aviso.data_visita_formatada|default:aviso.data_visita }}?</p>
+                      <button type="submit" class="vendas-pendencias-sem-compra-enviar">Confirmar sem compra</button>
+                    </form>
+                  </details>
+                {% endif %}
               </div>
 
               {% if aviso.dias_para_visita < 0 %}
@@ -811,6 +890,33 @@
   painel.addEventListener("submit", function(event) {
     ignorarValidacaoOperadorVendaTemporariamente();
     event.stopPropagation();
+  });
+
+  function operadorVendaSelecionado() {
+    const campoOperador = document.getElementById("operadorVenda")
+      || document.querySelector('select[name="operador"]')
+      || document.querySelector('select[id*="operador"]');
+    return campoOperador ? String(campoOperador.value || "").trim() : "";
+  }
+
+  document.querySelectorAll("[data-form-sem-compra-visita]").forEach(function(formulario) {
+    formulario.addEventListener("submit", function(event) {
+      ignorarValidacaoOperadorVendaTemporariamente();
+      const operador = operadorVendaSelecionado();
+      const inputOperador = formulario.querySelector("[data-operador-sem-compra-visita]");
+      if (inputOperador) {
+        inputOperador.value = operador;
+      }
+      if (!operador) {
+        event.preventDefault();
+        if (typeof event.stopImmediatePropagation === "function") {
+          event.stopImmediatePropagation();
+        }
+        if (typeof window.mostrarModalOperadorObrigatorio === "function") {
+          window.mostrarModalOperadorObrigatorio("Operador obrigatorio. Selecione o operador para encerrar o ciclo sem compra.");
+        }
+      }
+    }, true);
   });
 
   document.querySelectorAll("[data-form-resolucao-visita]").forEach(function(formulario) {

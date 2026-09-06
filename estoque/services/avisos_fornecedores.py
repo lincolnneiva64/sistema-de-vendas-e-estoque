@@ -275,6 +275,7 @@ def _montar_aviso(
         "fornecedor_id": fornecedor.id,
         "fornecedor_nome": fornecedor.nome,
         "data_visita": data_visita.isoformat(),
+        "data_visita_formatada": data_visita.strftime("%d/%m/%Y"),
         "dias_para_visita": dias_para_visita,
         "estado": estado,
         "prioridade": _prioridade(dias_para_visita),

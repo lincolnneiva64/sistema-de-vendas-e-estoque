@@ -86,6 +86,11 @@ urlpatterns = [
         views.resolver_visita_fornecedor_atrasada,
         name="resolver_visita_fornecedor_atrasada",
     ),
+    path(
+        "vendas/visitas-fornecedores/sem-compra/",
+        views.registrar_visita_fornecedor_sem_compra,
+        name="registrar_visita_fornecedor_sem_compra",
+    ),
     path("vendas/consultar/", views.consultar_vendas, name="consultar_vendas"),
     path("vendas/consultar/canceladas/", views.consultar_vendas_canceladas, name="consultar_vendas_canceladas"),
     path("vendas/cliente-produto-historico/", views.vendas_cliente_produto_historico, name="vendas_cliente_produto_historico"),

@@ -11360,6 +11360,84 @@ def resolver_visita_fornecedor_atrasada(request):
     return redirect("estoque:vendas")
 
 
+OBSERVACAO_SEM_COMPRA_CICLO = "Sem necessidade de compra neste ciclo."
+
+
+@require_POST
+def registrar_visita_fornecedor_sem_compra(request):
+    fornecedor_id = str(request.POST.get("fornecedor_id") or "").strip()
+    data_visita = parse_date(
+        str(request.POST.get("data_visita") or "").strip()
+    )
+    operador_nome = str(request.POST.get("operador") or "").strip()
+    fornecedor = Fornecedor.objects.filter(
+        pk=fornecedor_id,
+        ativo=True,
+        frequencia_visita_ativa=True,
+    ).first()
+
+    if not fornecedor:
+        messages.error(request, "Fornecedor ativo nao encontrado.")
+        return redirect("estoque:vendas")
+
+    if not data_visita:
+        messages.error(request, "Data da visita invalida.")
+        return redirect("estoque:vendas")
+
+    operador = Funcionario.objects.filter(
+        nome=operador_nome,
+        ativo=True,
+        pode_operar_sistema=True,
+    ).first()
+    if not operador:
+        messages.error(request, "Selecione um operador autorizado para encerrar o ciclo sem compra.")
+        return redirect("estoque:vendas")
+
+    if not data_ciclo_visita_valida(fornecedor, data_visita):
+        messages.error(request, "A data informada nao corresponde a um ciclo ativo deste fornecedor.")
+        return redirect("estoque:vendas")
+
+    existente = ResolucaoVisitaFornecedor.objects.filter(
+        fornecedor=fornecedor,
+        data_visita_original=data_visita,
+    ).first()
+    if existente:
+        if (
+            existente.tipo_resolucao
+            == ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO
+            and not existente.nova_data_visita
+        ):
+            messages.info(
+                request,
+                "Este ciclo ja estava encerrado sem compra. Nenhum registro duplicado foi criado.",
+            )
+        else:
+            messages.error(
+                request,
+                "Este ciclo ja possui uma resolucao registrada e o historico nao pode ser substituido.",
+            )
+        return redirect("estoque:vendas")
+
+    try:
+        with transaction.atomic():
+            ResolucaoVisitaFornecedor.objects.create(
+                fornecedor=fornecedor,
+                data_visita_original=data_visita,
+                tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+                observacao=OBSERVACAO_SEM_COMPRA_CICLO,
+                responsavel=request.user if request.user.is_authenticated else None,
+            )
+    except IntegrityError:
+        messages.info(
+            request,
+            "Este ciclo ja estava encerrado sem compra. Nenhum registro duplicado foi criado.",
+        )
+        return redirect("estoque:vendas")
+
+    messages.success(request, f"Ciclo de {fornecedor.nome} encerrado sem compra.")
+    return redirect("estoque:vendas")
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()

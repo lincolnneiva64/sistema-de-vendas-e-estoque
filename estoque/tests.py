@@ -6,7 +6,7 @@ import re
 import tempfile
 import types
 from contextlib import redirect_stdout
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -1133,6 +1133,7 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
             "fornecedor_id",
             "fornecedor_nome",
             "data_visita",
+            "data_visita_formatada",
             "dias_para_visita",
             "estado",
             "prioridade",
@@ -1612,6 +1613,197 @@ class ResolucaoVisitaFornecedorViewTests(TestCase):
         )
 
 
+class SemCompraVisitaFornecedorPainelTests(TestCase):
+    def setUp(self):
+        self.data_visita = date(2026, 7, 15)
+        self.usuario = get_user_model().objects.create_user(
+            username="usuario_sem_compra_visita",
+            password="senha-teste",
+        )
+        self.operador = Funcionario.objects.create(
+            nome="Operador Sem Compra",
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+        self.fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Sem Compra",
+            ativo=True,
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=7,
+            frequencia_visita_dia_semana=self.data_visita.weekday(),
+            frequencia_visita_data_referencia=self.data_visita,
+        )
+        self.produto = Produto.objects.create(
+            nome="Produto Sem Compra Visita",
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            quantidade=Decimal("8.000"),
+        )
+        self.url = reverse("estoque:registrar_visita_fornecedor_sem_compra")
+
+    def agora_no_ciclo(self, data_visita=None, hora=9, minuto=0):
+        data_visita = data_visita or self.data_visita
+        return timezone.make_aware(datetime.combine(data_visita, time(hour=hora, minute=minuto)))
+
+    def postar(self, data_visita=None, fornecedor=None, autenticar=False, operador=None):
+        if autenticar:
+            self.client.force_login(self.usuario)
+        fornecedor = fornecedor or self.fornecedor
+        data_visita = data_visita or self.data_visita
+        if operador is None:
+            operador = self.operador.nome
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=self.agora_no_ciclo(data_visita),
+        ):
+            return self.client.post(
+                self.url,
+                {
+                    "fornecedor_id": str(fornecedor.id),
+                    "data_visita": data_visita.isoformat(),
+                    "operador": operador,
+                },
+                secure=True,
+            )
+
+    def test_card_de_ciclo_ativo_mostra_preparar_lista_e_sem_compra(self):
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=self.agora_no_ciclo(self.data_visita - timedelta(days=1), 0, 0),
+        ):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Preparar lista")
+        self.assertContains(resposta, "Sem compra")
+        self.assertContains(resposta, reverse("estoque:registrar_visita_fornecedor_sem_compra"))
+        self.assertContains(resposta, f'name="fornecedor_id" value="{self.fornecedor.id}"')
+        self.assertContains(resposta, f'name="data_visita" value="{self.data_visita.isoformat()}"')
+        self.assertContains(resposta, 'name="operador" value="" data-operador-sem-compra-visita')
+        self.assertContains(resposta, "operadorVendaSelecionado")
+        self.assertContains(
+            resposta,
+            f"Confirmar que nao havera compra da {self.fornecedor.nome} neste ciclo de 15/07/2026?",
+        )
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 0)
+
+    def test_post_valido_cria_resolucao_sem_compra_sem_efeitos_colaterais(self):
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.postar()
+
+        self.assertRedirects(resposta, reverse("estoque:vendas"), fetch_redirect_response=False)
+        resolucao = ResolucaoVisitaFornecedor.objects.get()
+        self.assertEqual(resolucao.fornecedor, self.fornecedor)
+        self.assertEqual(resolucao.data_visita_original, self.data_visita)
+        self.assertEqual(resolucao.tipo_resolucao, ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO)
+        self.assertEqual(resolucao.observacao, views.OBSERVACAO_SEM_COMPRA_CICLO)
+        self.assertIsNone(resolucao.responsavel)
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
+        self.assertEqual(Compra.objects.count(), 0)
+        self.assertEqual(EnvioListaCompraFornecedor.objects.count(), 0)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+
+    def test_depois_da_resolucao_aviso_desaparece(self):
+        self.postar()
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=self.agora_no_ciclo(),
+        ):
+            avisos = obter_avisos_visitas_fornecedores()
+
+        self.assertEqual(avisos, [])
+
+    def test_proximo_ciclo_continua_aparecendo_normalmente(self):
+        self.postar()
+        proximo_ciclo = self.data_visita + timedelta(days=7)
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=timezone.make_aware(datetime.combine(proximo_ciclo - timedelta(days=1), time.min)),
+        ):
+            avisos = obter_avisos_visitas_fornecedores()
+
+        self.assertEqual(len(avisos), 1)
+        self.assertEqual(avisos[0]["fornecedor_id"], self.fornecedor.id)
+        self.assertEqual(avisos[0]["data_visita"], proximo_ciclo.isoformat())
+
+    def test_sem_post_nao_altera_nada(self):
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=self.agora_no_ciclo(),
+        ):
+            resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 0)
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
+        self.assertEqual(Compra.objects.count(), 0)
+
+    def test_post_repetido_nao_duplica_resolucao(self):
+        primeira = self.postar()
+        segunda = self.postar()
+
+        self.assertRedirects(primeira, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertRedirects(segunda, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 1)
+
+    def test_fornecedor_e_data_manipulados_sao_rejeitados(self):
+        outro_fornecedor = Fornecedor.objects.create(
+            nome="Fornecedor Manipulado",
+            ativo=True,
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=7,
+            frequencia_visita_dia_semana=(self.data_visita + timedelta(days=1)).weekday(),
+            frequencia_visita_data_referencia=self.data_visita + timedelta(days=1),
+        )
+        resposta_fornecedor = self.postar(fornecedor=outro_fornecedor, data_visita=self.data_visita)
+        resposta_data = self.postar(data_visita=self.data_visita + timedelta(days=3))
+
+        self.assertRedirects(resposta_fornecedor, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertRedirects(resposta_data, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 0)
+
+    def test_ciclo_fora_da_janela_e_rejeitado_e_corte_das_18h_permanece(self):
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=self.agora_no_ciclo(hora=18, minuto=0),
+        ):
+            self.client.force_login(self.usuario)
+            resposta = self.client.post(
+                self.url,
+                {
+                    "fornecedor_id": str(self.fornecedor.id),
+                    "data_visita": self.data_visita.isoformat(),
+                    "operador": self.operador.nome,
+                },
+                secure=True,
+            )
+            avisos = obter_avisos_visitas_fornecedores()
+
+        self.assertRedirects(resposta, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 0)
+        self.assertEqual(avisos, [])
+
+    def test_sem_login_django_com_operador_valido_consegue_confirmar(self):
+        resposta = self.postar(autenticar=False)
+
+        self.assertRedirects(resposta, reverse("estoque:vendas"), fetch_redirect_response=False)
+        resolucao = ResolucaoVisitaFornecedor.objects.get()
+        self.assertIsNone(resolucao.responsavel)
+
+    def test_exige_operador_valido_da_tela(self):
+        resposta_sem_operador = self.postar(operador="")
+        resposta_operador_invalido = self.postar(operador="Operador Inexistente")
+
+        self.assertRedirects(resposta_sem_operador, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertRedirects(resposta_operador_invalido, reverse("estoque:vendas"), fetch_redirect_response=False)
+        self.assertEqual(ResolucaoVisitaFornecedor.objects.count(), 0)
+
+
 class FechamentoCompraFinanceiroTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Teste")
@@ -1759,6 +1951,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
                 "fornecedor_id": indice,
                 "fornecedor_nome": nome,
                 "data_visita": data_visita,
+                "data_visita_formatada": f"{data_visita[8:10]}/{data_visita[5:7]}/{data_visita[:4]}",
                 "dias_para_visita": dias,
                 "estado": estado,
                 "prioridade": 0 if dias < 0 else indice,
