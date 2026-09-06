@@ -617,6 +617,66 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         self.assertEqual(len(avisos), 1)
         return avisos[0]
 
+    def test_visita_quarta_terca_antes_do_inicio_da_janela_nao_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        avisos = obter_avisos_visitas_fornecedores(datetime(2026, 7, 13, 23, 59))
+
+        self.assertEqual(avisos, [])
+
+    def test_visita_quarta_terca_no_inicio_da_janela_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        aviso = self.unico_aviso(datetime(2026, 7, 14, 0, 0))
+
+        self.assertEqual(aviso["data_visita"], self.data_base.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 1)
+
+    def test_visita_quarta_de_manha_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        aviso = self.unico_aviso(datetime(2026, 7, 15, 9, 0))
+
+        self.assertEqual(aviso["data_visita"], self.data_base.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 0)
+
+    def test_visita_quarta_as_1759_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        aviso = self.unico_aviso(datetime(2026, 7, 15, 17, 59))
+
+        self.assertEqual(aviso["data_visita"], self.data_base.isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 0)
+
+    def test_visita_quarta_as_1800_nao_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        avisos = obter_avisos_visitas_fornecedores(datetime(2026, 7, 15, 18, 0))
+
+        self.assertEqual(avisos, [])
+
+    def test_visita_quarta_apos_1800_nao_aparece(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        avisos = obter_avisos_visitas_fornecedores(datetime(2026, 7, 15, 18, 1))
+
+        self.assertEqual(avisos, [])
+
+    def test_quinta_nao_mostra_visita_atrasada(self):
+        self.criar_fornecedor(referencia=self.data_base)
+
+        avisos = obter_avisos_visitas_fornecedores(datetime(2026, 7, 16, 9, 0))
+
+        self.assertEqual(avisos, [])
+
+    def test_proximo_ciclo_volta_a_aparecer_vinte_e_quatro_horas_antes(self):
+        self.criar_fornecedor(referencia=self.data_base, intervalo=7)
+
+        aviso = self.unico_aviso(datetime(2026, 7, 21, 0, 0))
+
+        self.assertEqual(aviso["data_visita"], date(2026, 7, 22).isoformat())
+        self.assertEqual(aviso["dias_para_visita"], 1)
+
     def test_fornecedor_inativo_nao_gera_aviso(self):
         self.criar_fornecedor(ativo=False)
 
@@ -636,12 +696,12 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
 
         self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
-    def test_visita_alem_de_sete_dias_nao_gera_aviso(self):
-        self.criar_fornecedor(referencia=self.data_base + timedelta(days=8))
+    def test_visita_alem_de_vinte_e_quatro_horas_nao_gera_aviso(self):
+        self.criar_fornecedor(referencia=self.data_base + timedelta(days=2))
 
         self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
-    def test_visita_em_sete_dias_gera_aviso(self):
+    def test_visita_em_vinte_e_quatro_horas_gera_aviso(self):
         self.criar_fornecedor(referencia=self.data_base + timedelta(days=DIAS_ANTECEDENCIA_AVISO_VISITA))
 
         aviso = self.unico_aviso()
@@ -662,13 +722,10 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
         self.assertEqual(aviso["dias_para_visita"], 0)
 
-    def test_visita_atrasada_pendente_continua_aparecendo(self):
+    def test_visita_atrasada_pendente_nao_continua_aparecendo(self):
         self.criar_fornecedor(referencia=self.data_base - timedelta(days=7), intervalo=14)
 
-        aviso = self.unico_aviso()
-        self.assertEqual(aviso["data_visita"], (self.data_base - timedelta(days=7)).isoformat())
-        self.assertEqual(aviso["dias_para_visita"], -7)
-        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
     def test_visita_nao_ocorreu_encerra_apenas_o_ciclo_original(self):
         data_original = self.data_base - timedelta(days=1)
@@ -704,9 +761,23 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
 
         self.assertEqual(avisos, [])
 
+    def test_resolucao_explicita_do_ciclo_na_janela_continua_encerrando_aviso(self):
+        data_original = self.data_base + timedelta(days=1)
+        fornecedor = self.criar_fornecedor(referencia=data_original)
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+            observacao="Ciclo resolvido manualmente.",
+        )
+
+        avisos = obter_avisos_visitas_fornecedores(self.data_base)
+
+        self.assertEqual(avisos, [])
+
     def test_visita_adiada_substitui_data_original_no_aviso(self):
         data_original = self.data_base - timedelta(days=1)
-        nova_data = self.data_base + timedelta(days=3)
+        nova_data = self.data_base + timedelta(days=1)
         fornecedor = self.criar_fornecedor(
             referencia=data_original,
             intervalo=14,
@@ -722,7 +793,7 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         aviso = self.unico_aviso()
 
         self.assertEqual(aviso["data_visita"], nova_data.isoformat())
-        self.assertEqual(aviso["dias_para_visita"], 3)
+        self.assertEqual(aviso["dias_para_visita"], 1)
         self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
         self.assertIn(
             f"data_visita={nova_data.isoformat()}",
@@ -749,8 +820,8 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
 
     def test_adiamentos_sucessivos_usam_a_ultima_data(self):
         data_original = self.data_base - timedelta(days=1)
-        primeira_nova_data = self.data_base + timedelta(days=2)
-        segunda_nova_data = self.data_base + timedelta(days=4)
+        primeira_nova_data = self.data_base
+        segunda_nova_data = self.data_base + timedelta(days=1)
         fornecedor = self.criar_fornecedor(
             referencia=data_original,
             intervalo=21,
@@ -774,7 +845,7 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
             aviso["data_visita"],
             segunda_nova_data.isoformat(),
         )
-        self.assertEqual(aviso["dias_para_visita"], 4)
+        self.assertEqual(aviso["dias_para_visita"], 1)
 
     def test_lista_do_ciclo_gera_falta_enviar(self):
         fornecedor = self.criar_fornecedor()
@@ -846,7 +917,7 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         lista = self.criar_lista(fornecedor)
         self.confirmar_envio(lista)
 
-        aviso = self.unico_aviso(self.data_base + timedelta(days=1))
+        aviso = self.unico_aviso(datetime(2026, 7, 21, 0, 0))
         self.assertEqual(aviso["data_visita"], (self.data_base + timedelta(days=7)).isoformat())
         self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
 
@@ -1087,24 +1158,18 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         self.assertEqual(parametros["fornecedor_ciclo"], [str(fornecedor.id)])
         self.assertEqual(parametros["data_visita"], [self.data_base.isoformat()])
 
-    def test_visita_de_ontem_sem_lista_gera_preparar_lista_atrasado(self):
+    def test_visita_de_ontem_sem_lista_nao_gera_aviso_atrasado(self):
         ontem = self.data_base - timedelta(days=1)
         self.criar_fornecedor(referencia=ontem)
 
-        aviso = self.unico_aviso()
-        self.assertEqual(aviso["data_visita"], ontem.isoformat())
-        self.assertEqual(aviso["dias_para_visita"], -1)
-        self.assertEqual(aviso["estado"], ESTADO_PREPARAR_LISTA)
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
-    def test_visita_de_ontem_com_lista_sem_confirmacao_gera_falta_enviar(self):
+    def test_visita_de_ontem_com_lista_sem_confirmacao_nao_gera_aviso_atrasado(self):
         ontem = self.data_base - timedelta(days=1)
         fornecedor = self.criar_fornecedor(referencia=ontem)
-        lista = self.criar_lista(fornecedor, data_visita=ontem)
+        self.criar_lista(fornecedor, data_visita=ontem)
 
-        aviso = self.unico_aviso()
-        self.assertEqual(aviso["data_visita"], ontem.isoformat())
-        self.assertEqual(aviso["lista_id"], lista.id)
-        self.assertEqual(aviso["estado"], ESTADO_LISTA_PREPARADA_FALTA_ENVIAR)
+        self.assertEqual(obter_avisos_visitas_fornecedores(self.data_base), [])
 
     def test_visita_de_ontem_confirmada_nao_reaparece(self):
         ontem = self.data_base - timedelta(days=1)
@@ -1146,7 +1211,6 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
         )
 
     def test_ordenacao_por_urgencia_e_deterministica(self):
-        atrasado = self.criar_fornecedor(nome="Fornecedor Atrasado", referencia=self.data_base - timedelta(days=7), intervalo=14)
         hoje = self.criar_fornecedor(nome="Fornecedor Hoje")
         amanha = self.criar_fornecedor(nome="Fornecedor Amanha", referencia=self.data_base + timedelta(days=1))
 
@@ -1154,7 +1218,7 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
 
         self.assertEqual(
             [aviso["fornecedor_id"] for aviso in avisos],
-            [atrasado.id, hoje.id, amanha.id],
+            [hoje.id, amanha.id],
         )
 
     def test_data_referencia_explicita_independe_do_dia_atual(self):
@@ -1182,8 +1246,9 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
     def test_data_local_padrao_nao_desloca_data_da_visita(self):
         referencia = date(2026, 7, 16)
         self.criar_fornecedor(referencia=referencia)
+        agora_local = timezone.make_aware(datetime(2026, 7, 16, 9, 0))
 
-        with patch("estoque.services.avisos_fornecedores.timezone.localdate", return_value=referencia):
+        with patch("estoque.services.avisos_fornecedores.timezone.localtime", return_value=agora_local):
             avisos = obter_avisos_visitas_fornecedores()
 
         self.assertEqual(len(avisos), 1)
@@ -1237,6 +1302,30 @@ class AvisosVisitasFornecedoresServiceTests(TestCase):
 
         self.assertEqual(avisos_painel, [aviso])
         self.assertEqual(views._prioridade_pendencias_vendas(avisos_painel), "alta")
+
+    def test_contador_painel_considera_apenas_ciclos_na_janela_operacional(self):
+        self.criar_fornecedor(nome="Fornecedor Ontem", referencia=self.data_base - timedelta(days=1))
+        self.criar_fornecedor(nome="Fornecedor Amanha", referencia=self.data_base + timedelta(days=1))
+        Produto.objects.create(
+            nome="Produto Incompleto Painel",
+            preco_compra=Decimal("1.00"),
+            preco_vista=Decimal("2.00"),
+            preco_prazo=Decimal("2.00"),
+            quantidade=Decimal("1.000"),
+            cadastro_incompleto=True,
+        )
+
+        avisos_painel = views._avisos_visitas_painel_vendas(
+            obter_avisos_visitas_fornecedores(self.data_base)
+        )
+        produtos_incompletos_qtd = Produto.objects.filter(
+            excluido=False,
+            cadastro_incompleto=True,
+        ).count()
+
+        self.assertEqual(len(avisos_painel), 1)
+        self.assertEqual(avisos_painel[0]["fornecedor_nome"], "Fornecedor Amanha")
+        self.assertEqual(len(avisos_painel) + (1 if produtos_incompletos_qtd else 0), 2)
 
 
 class ResolucaoVisitaFornecedorViewTests(TestCase):

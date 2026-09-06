@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
 from django.urls import reverse
@@ -8,7 +8,8 @@ from estoque.models import EnvioListaCompraFornecedor, Fornecedor, ListaCompraFo
 from estoque.services.fornecedor_visitas import calcular_proxima_visita
 
 
-DIAS_ANTECEDENCIA_AVISO_VISITA = 7
+DIAS_ANTECEDENCIA_AVISO_VISITA = 1
+HORA_LIMITE_AVISO_VISITA = time(18, 0)
 
 ESTADO_PREPARAR_LISTA = "preparar_lista"
 ESTADO_LISTA_PREPARADA_FALTA_ENVIAR = "lista_preparada_falta_enviar"
@@ -55,6 +56,39 @@ def _candidatos_de_visita(fornecedor, data_referencia):
     if proxima:
         candidatos.append(proxima)
     return list(dict.fromkeys(candidatos))
+
+
+def _data_hora_local_referencia(data_referencia=None):
+    if data_referencia is None:
+        return timezone.localtime()
+
+    if isinstance(data_referencia, datetime):
+        if timezone.is_naive(data_referencia):
+            return timezone.make_aware(data_referencia, timezone.get_current_timezone())
+        return timezone.localtime(data_referencia)
+
+    return timezone.make_aware(
+        datetime.combine(data_referencia, time.min),
+        timezone.get_current_timezone(),
+    )
+
+
+def _inicio_janela_aviso(data_visita):
+    return timezone.make_aware(
+        datetime.combine(data_visita - timedelta(days=1), time.min),
+        timezone.get_current_timezone(),
+    )
+
+
+def _fim_janela_aviso(data_visita):
+    return timezone.make_aware(
+        datetime.combine(data_visita, HORA_LIMITE_AVISO_VISITA),
+        timezone.get_current_timezone(),
+    )
+
+
+def _visita_dentro_da_janela_operacional(data_visita, data_hora_referencia):
+    return _inicio_janela_aviso(data_visita) <= data_hora_referencia < _fim_janela_aviso(data_visita)
 
 
 def _resolucoes_visitas_por_ciclo(fornecedor_ids):
@@ -113,17 +147,12 @@ def datas_validas_ciclo_visita_fornecedor(
     data_referencia=None,
     resolucoes_por_ciclo=None,
 ):
-    if data_referencia is None:
-        data_referencia = timezone.localdate()
+    data_hora_referencia = _data_hora_local_referencia(data_referencia)
+    data_referencia = data_hora_referencia.date()
     if not _configuracao_visita_valida(fornecedor):
         return []
 
-    candidatos = [
-        data
-        for data in _candidatos_de_visita(fornecedor, data_referencia)
-        if data <= data_referencia
-        or (data - data_referencia).days <= DIAS_ANTECEDENCIA_AVISO_VISITA
-    ]
+    candidatos = _candidatos_de_visita(fornecedor, data_referencia)
 
     if resolucoes_por_ciclo is None:
         resolucoes_por_ciclo = _resolucoes_visitas_por_ciclo([fornecedor.id])
@@ -138,11 +167,7 @@ def datas_validas_ciclo_visita_fornecedor(
         if not data_efetiva:
             continue
 
-        dentro_da_janela = (
-            data_efetiva <= data_referencia
-            or (data_efetiva - data_referencia).days
-            <= DIAS_ANTECEDENCIA_AVISO_VISITA
-        )
+        dentro_da_janela = _visita_dentro_da_janela_operacional(data_efetiva, data_hora_referencia)
         if dentro_da_janela and data_efetiva not in datas_efetivas:
             datas_efetivas.append(data_efetiva)
 
@@ -262,8 +287,8 @@ def _montar_aviso(
     }
 
 def obter_avisos_visitas_fornecedores(data_referencia=None):
-    if data_referencia is None:
-        data_referencia = timezone.localdate()
+    data_hora_referencia = _data_hora_local_referencia(data_referencia)
+    data_referencia = data_hora_referencia.date()
 
     fornecedores = list(
         Fornecedor.objects
@@ -292,7 +317,7 @@ def obter_avisos_visitas_fornecedores(data_referencia=None):
     for fornecedor in fornecedores:
         candidatos = datas_validas_ciclo_visita_fornecedor(
             fornecedor,
-            data_referencia=data_referencia,
+            data_referencia=data_hora_referencia,
             resolucoes_por_ciclo=resolucoes_por_ciclo,
         )
         if candidatos:
