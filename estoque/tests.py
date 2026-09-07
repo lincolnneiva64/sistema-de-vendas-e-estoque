@@ -12190,7 +12190,7 @@ class PixRecebidoTests(TestCase):
             follow=True,
         )
 
-    def _post_gravar_venda(self, produto, quantidade="1"):
+    def _post_gravar_venda(self, produto, quantidade="1", unidade="un"):
         return self.client.post(
             reverse("estoque:gravar_venda"),
             data=json.dumps({
@@ -12203,7 +12203,7 @@ class PixRecebidoTests(TestCase):
                     {
                         "produto_nome": produto.nome,
                         "quantidade": quantidade,
-                        "unidade": "un",
+                        "unidade": unidade,
                         "preco_unitario": "2.00",
                     }
                 ],
@@ -12699,6 +12699,29 @@ class PixRecebidoTests(TestCase):
             ).exists()
         )
 
+    def test_gravar_venda_produto_kg_aceita_quantidade_decimal_sem_venda_fracionada(self):
+        produto = self._produto_teste("Produto KG Decimal Venda", quantidade=Decimal("5.000"))
+        produto.unidade_compra = "KG"
+        produto.vende_fracionado = False
+        produto.save(update_fields=["unidade_compra", "vende_fracionado"])
+
+        for quantidade, estoque_esperado in [
+            ("0.300", Decimal("4.700")),
+            ("1.700", Decimal("3.000")),
+        ]:
+            with self.subTest(quantidade=quantidade):
+                resposta = self._post_gravar_venda(produto, quantidade=quantidade, unidade="KG")
+
+                self.assertEqual(resposta.status_code, 200)
+                self.assertTrue(resposta.json()["sucesso"])
+                produto.refresh_from_db()
+                self.assertEqual(produto.quantidade, estoque_esperado)
+                item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+                self.assertEqual(item.quantidade, Decimal(quantidade).quantize(Decimal("0.001")))
+                self.assertEqual(item.unidade, "KG")
+                self.assertEqual(item.estoque_movimentado, Decimal(quantidade).quantize(Decimal("0.001")))
+                self.assertEqual(item.estoque_unidade_snapshot, "KG")
+
     def test_gravar_venda_registra_snapshot_historico_de_estoque(self):
         produto = self._produto_teste("Produto Snapshot Estoque Venda", quantidade=10)
 
@@ -12729,6 +12752,38 @@ class PixRecebidoTests(TestCase):
         self.assertIn("Estoque insuficiente", resposta.json()["mensagem"])
         produto.refresh_from_db()
         self.assertEqual(produto.quantidade, 1)
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+
+    def test_gravar_venda_produto_kg_decimal_bloqueia_estoque_insuficiente(self):
+        produto = self._produto_teste("Produto KG Estoque Insuficiente", quantidade=Decimal("1.000"))
+        produto.unidade_compra = "KG"
+        produto.vende_fracionado = False
+        produto.save(update_fields=["unidade_compra", "vende_fracionado"])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1.700", unidade="KG")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIn("Estoque insuficiente", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("1.000"))
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+
+    def test_gravar_venda_unidade_inteira_continua_rejeitando_decimal(self):
+        produto = self._produto_teste("Produto UN Decimal Bloqueado", quantidade=Decimal("5.000"))
+        produto.unidade_compra = "UN"
+        produto.vende_fracionado = False
+        produto.save(update_fields=["unidade_compra", "vende_fracionado"])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1.300", unidade="UN")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIn("nao permite venda fracionada", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
         self.assertEqual(Venda.objects.count(), 0)
         self.assertEqual(ItemVenda.objects.count(), 0)
 

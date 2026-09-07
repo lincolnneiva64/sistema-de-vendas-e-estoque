@@ -15995,7 +15995,7 @@ def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
     if quantidade_decimal != quantidade_decimal.to_integral_value():
         unidade_texto = str(unidade or "").strip()
         unidade_normalizada = unidade_texto.upper()
-        unidades_que_podem_meio = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA"}
+        unidades_que_podem_meio = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA", "KG"}
         if unidade_normalizada not in unidades_que_podem_meio:
             unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
             raise ValueError(
