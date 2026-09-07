@@ -326,10 +326,11 @@
           </select>
         </div>
         <div class="despesa-field despesa-field-full">
-          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro</label>
+          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro *</label>
           <select id="contaSaidaDespesaDiaria" name="conta_saida" required>
+            <option value="">Selecione de onde saiu o dinheiro</option>
             {% for conta in contas_saida %}
-              <option value="{{ conta.id }}" {% if conta_padrao and conta.id == conta_padrao.id %}selected{% endif %}>{{ conta.nome }}</option>
+              <option value="{{ conta.id }}">{{ conta.nome }}</option>
             {% endfor %}
           </select>
           <div class="despesa-item-meta">Escolha Caixa, Banco/Pix ou Sangria. Esta escolha e quem manda no financeiro.</div>
@@ -544,14 +545,7 @@
     if (valorCampo) valorCampo.value = "";
     if (categoriaCampo) categoriaCampo.selectedIndex = 0;
     if (contaCampo) {
-      const padrao = Array.from(contaCampo.options).find(function (opcao) {
-        return (opcao.textContent || "").toLowerCase().includes("banco");
-      });
-      if (padrao) {
-        contaCampo.value = padrao.value;
-      } else {
-        contaCampo.selectedIndex = 0;
-      }
+      contaCampo.value = "";
     }
     if (observacaoCampo) observacaoCampo.value = "";
     if (operadorCampo) operadorCampo.selectedIndex = 0;

@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -24797,6 +24797,133 @@ class PedidoTests(TestCase):
         mensagem = f"Pix salvo como possivel duplicado. Confira a comparacao com o Pix #{pix_parecido.id}."
         self.assertContains(resposta, mensagem, count=1)
         self.assertContains(resposta, f"Pix parecido #{pix_parecido.id}")
+
+
+class DespesaDiariaFinanceiroTests(TestCase):
+    def setUp(self):
+        self.operador = Funcionario.objects.create(nome="Francisco", pode_operar_sistema=True)
+        views._garantir_contas_financeiras_padrao()
+        self.conta_caixa = views._conta_financeira_padrao("caixa")
+        self.conta_banco = views._conta_financeira_padrao("banco")
+        self.conta_reserva = views._conta_financeira_padrao("reserva")
+        self.conta_cartoes = views._conta_financeira_padrao("cartoes")
+        self.url = reverse("estoque:despesas_diarias")
+
+    def _post_despesa(self, conta, valor="50,00", categoria=None, observacao="Despesa teste", follow=True):
+        return self.client.post(
+            self.url,
+            {
+                "acao": "salvar_despesa",
+                "data_lancamento": "2026-09-07",
+                "valor": valor,
+                "categoria": categoria or DespesaDiaria.CATEGORIA_OUTROS,
+                "conta_saida": "" if conta is None else str(conta.id),
+                "operador": self.operador.nome,
+                "observacao": observacao,
+            },
+            secure=True,
+            follow=follow,
+        )
+
+    def _movimento_unico(self):
+        return MovimentoFinanceiro.objects.get(origem="despesa_diaria")
+
+    def test_despesa_com_caixa_debita_caixa(self):
+        self._post_despesa(self.conta_caixa)
+
+        movimento = self._movimento_unico()
+        self.assertEqual(movimento.conta, self.conta_caixa)
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_caixa), Decimal("-50.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+
+    def test_despesa_com_banco_pix_debita_banco_pix(self):
+        self._post_despesa(self.conta_banco)
+
+        movimento = self._movimento_unico()
+        self.assertEqual(movimento.conta, self.conta_banco)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("-50.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_caixa), Decimal("0.00"))
+
+    def test_despesa_com_sangria_reserva_debita_reserva(self):
+        self._post_despesa(self.conta_reserva)
+
+        movimento = self._movimento_unico()
+        self.assertEqual(movimento.conta, self.conta_reserva)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("-50.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+
+    def test_post_sem_conta_saida_e_rejeitado(self):
+        resposta = self._post_despesa(None)
+
+        self.assertContains(resposta, "Escolha a conta de saida da despesa.")
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 0)
+
+    def test_conta_inadequada_e_rejeitada(self):
+        resposta = self._post_despesa(self.conta_cartoes)
+
+        self.assertContains(resposta, "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.")
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 0)
+
+    def test_vale_de_funcionario_usa_conta_escolhida(self):
+        self._post_despesa(
+            self.conta_reserva,
+            categoria=DespesaDiaria.CATEGORIA_PESSOAL,
+            observacao="Vale Francisco",
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        movimento = self._movimento_unico()
+        self.assertEqual(despesa.operador, self.operador.nome)
+        self.assertEqual(movimento.operador, self.operador.nome)
+        self.assertEqual(movimento.conta, self.conta_reserva)
+        self.assertIn(f"#{despesa.id}", movimento.descricao)
+
+    def test_registrar_movimento_despesa_diaria_nao_duplica(self):
+        despesa = DespesaDiaria.objects.create(
+            data_hora=timezone.make_aware(datetime(2026, 9, 7, 10, 0)),
+            valor=Decimal("50.00"),
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            operador=self.operador.nome,
+            observacao="Duplicidade",
+        )
+
+        primeiro = views._registrar_movimento_despesa_diaria(despesa, self.conta_banco)
+        segundo = views._registrar_movimento_despesa_diaria(despesa, self.conta_banco)
+
+        self.assertEqual(primeiro, segundo)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 1)
+
+    def test_excluir_despesa_remove_movimento_original(self):
+        self._post_despesa(self.conta_reserva)
+        despesa = DespesaDiaria.objects.get()
+
+        resposta = self.client.post(
+            self.url,
+            {"acao": "excluir", "despesa_id": str(despesa.id)},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Despesa excluida junto com o movimento financeiro correspondente.")
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 0)
+        self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("0.00"))
+
+    def test_template_exige_escolha_explicita_e_nao_pre_seleciona_conta(self):
+        resposta = self.client.get(self.url, secure=True)
+        conteudo = resposta.content.decode()
+        trecho_select = conteudo.split('id="contaSaidaDespesaDiaria"')[1].split("</select>")[0]
+
+        self.assertIn('<option value="">Selecione de onde saiu o dinheiro</option>', trecho_select)
+        self.assertNotIn("selected", trecho_select)
+        self.assertIn(f'<option value="{self.conta_caixa.id}">{self.conta_caixa.nome}</option>', trecho_select)
+        self.assertIn(f'<option value="{self.conta_banco.id}">{self.conta_banco.nome}</option>', trecho_select)
+        self.assertIn(f'<option value="{self.conta_reserva.id}">{self.conta_reserva.nome}</option>', trecho_select)
+        self.assertNotIn(self.conta_cartoes.nome, trecho_select)
 
 
 class CartoesAReceberFinanceiroTests(TestCase):

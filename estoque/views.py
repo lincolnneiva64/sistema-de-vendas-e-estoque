@@ -1876,6 +1876,23 @@ def _conta_financeira_padrao(nome):
     return ContaFinanceira.objects.filter(ativo=True, nome__in=aliases).order_by("id").first()
 
 
+def _contas_saida_despesa_diaria():
+    return [
+        conta for conta in (
+            _conta_financeira_padrao("caixa"),
+            _conta_financeira_padrao("banco"),
+            _conta_financeira_padrao("reserva"),
+        )
+        if conta
+    ]
+
+
+def _conta_saida_despesa_diaria_valida(conta):
+    if not conta:
+        return False
+    return any(conta.id == conta_saida.id for conta_saida in _contas_saida_despesa_diaria())
+
+
 def _saldo_conta_financeira(conta):
     saldo_inicial = _financeiro_dinheiro(conta.saldo_inicial)
     entradas = _financeiro_dinheiro(
@@ -1975,8 +1992,9 @@ def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_receb
     )
 
 
-def _descricao_movimento_despesa_diaria(despesa):
-    descricao = f"Despesa diaria: {despesa.get_categoria_display()}"
+def _descricao_movimento_despesa_diaria(despesa, incluir_id=True):
+    sufixo_id = f" #{despesa.pk}" if incluir_id and getattr(despesa, "pk", None) else ""
+    descricao = f"Despesa diaria{sufixo_id}: {despesa.get_categoria_display()}"
     observacao = (despesa.observacao or "").strip()
     if observacao:
         descricao = f"{descricao} - {observacao[:80]}"
@@ -1988,9 +2006,12 @@ def _registrar_movimento_despesa_diaria(despesa, conta_financeira=None):
     if valor <= Decimal("0.00"):
         return None
     if not conta_financeira:
-        conta_financeira = _conta_financeira_por_forma_pagamento(despesa.forma_pagamento, cartao_para_receber=False)
-    if not conta_financeira:
-        return None
+        raise ValidationError("Informe a conta de saida da despesa diaria.")
+    if not _conta_saida_despesa_diaria_valida(conta_financeira):
+        raise ValidationError("Conta de saida invalida para despesa diaria.")
+    movimento_existente = _movimento_despesa_diaria_correspondente(despesa)
+    if movimento_existente:
+        return movimento_existente
     data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else timezone.localdate()
     return MovimentoFinanceiro.objects.create(
         conta=conta_financeira,
@@ -2009,6 +2030,10 @@ def _movimento_despesa_diaria_correspondente(despesa):
     data_despesa = timezone.localtime(despesa.data_hora).date() if despesa.data_hora else None
     if not data_despesa:
         return None
+    descricoes = [_descricao_movimento_despesa_diaria(despesa)]
+    descricao_legada = _descricao_movimento_despesa_diaria(despesa, incluir_id=False)
+    if descricao_legada not in descricoes:
+        descricoes.append(descricao_legada)
     return (
         MovimentoFinanceiro.objects
         .filter(
@@ -2016,7 +2041,7 @@ def _movimento_despesa_diaria_correspondente(despesa):
             tipo=MovimentoFinanceiro.TIPO_SAIDA,
             valor=despesa.valor,
             data=data_despesa,
-            descricao=_descricao_movimento_despesa_diaria(despesa),
+            descricao__in=descricoes,
         )
         .select_related("conta")
         .order_by("-id")
@@ -3880,8 +3905,7 @@ def despesas_diarias(request):
     hoje = timezone.localdate()
     inicio_mes = hoje.replace(day=1)
 
-    contas_saida = ContaFinanceira.objects.filter(ativo=True).order_by("tipo", "nome")
-    conta_padrao = contas_saida.filter(nome__icontains="Banco").first() or contas_saida.first()
+    contas_saida = _contas_saida_despesa_diaria()
     operadores_despesa_diaria = Funcionario.objects.filter(
         ativo=True,
         pode_operar_sistema=True,
@@ -3912,10 +3936,13 @@ def despesas_diarias(request):
         observacao = (request.POST.get("observacao") or "").strip()
         operador = (request.POST.get("operador") or "").strip()
         data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
-        conta_saida = ContaFinanceira.objects.filter(
-            pk=request.POST.get("conta_saida"),
-            ativo=True,
-        ).first()
+        conta_saida = None
+        conta_saida_id = request.POST.get("conta_saida")
+        if conta_saida_id and str(conta_saida_id).isdigit():
+            conta_saida = ContaFinanceira.objects.filter(
+                pk=conta_saida_id,
+                ativo=True,
+            ).first()
 
         categorias_validas = {opcao[0] for opcao in DespesaDiaria.CATEGORIA_CHOICES}
         forma_pagamento = DespesaDiaria.FORMA_PIX
@@ -3938,6 +3965,10 @@ def despesas_diarias(request):
             messages.error(request, "Escolha a conta de saida da despesa.")
             return redirect("estoque:despesas_diarias")
 
+        if not _conta_saida_despesa_diaria_valida(conta_saida):
+            messages.error(request, "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.")
+            return redirect("estoque:despesas_diarias")
+
         agora = timezone.localtime()
         data_hora = timezone.make_aware(
             timezone.datetime(
@@ -3957,6 +3988,7 @@ def despesas_diarias(request):
                 valor=valor,
                 categoria=categoria,
                 forma_pagamento=forma_pagamento,
+                operador=operador,
                 observacao=observacao,
             )
             _registrar_movimento_despesa_diaria(despesa, conta_saida)
@@ -4029,7 +4061,6 @@ def despesas_diarias(request):
             "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
             "forma_padrao": DespesaDiaria.FORMA_PIX,
             "contas_saida": contas_saida,
-            "conta_padrao": conta_padrao,
             "operadores_despesa_diaria": operadores_despesa_diaria,
         },
     )
