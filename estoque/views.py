@@ -19352,12 +19352,22 @@ def _formatar_quantidade(valor):
 
 
 def _fonte_nota_whatsapp(tamanho, negrito=False):
-    nomes = ["segoeuib.ttf", "arialbd.ttf"] if negrito else ["segoeui.ttf", "arial.ttf"]
-    for nome in nomes:
-        caminho = Path("C:/Windows/Fonts") / nome
-        if caminho.exists():
-            return ImageFont.truetype(str(caminho), tamanho)
-    return ImageFont.load_default()
+    candidatos = [
+        "C:/Windows/Fonts/segoeuib.ttf" if negrito else "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if negrito else "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        if negrito
+        else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/local/share/fonts/DejaVuSans-Bold.ttf" if negrito else "/usr/local/share/fonts/DejaVuSans.ttf",
+        "DejaVuSans-Bold.ttf" if negrito else "DejaVuSans.ttf",
+        "Arial Bold.ttf" if negrito else "Arial.ttf",
+    ]
+    for caminho in candidatos:
+        try:
+            return ImageFont.truetype(caminho, tamanho)
+        except OSError:
+            continue
+    return ImageFont.load_default(size=tamanho)
 
 
 def _fonte_recibo_card_regular(tamanho):

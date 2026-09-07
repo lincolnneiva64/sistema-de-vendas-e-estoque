@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.db import transaction
 from django.db.models import Sum
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -31,6 +31,51 @@ from .services.fornecedor_contatos import telefone_principal_contato, telefones_
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
+
+
+class FonteNotaWhatsappTests(SimpleTestCase):
+    def test_fonte_nota_whatsapp_carrega_com_tamanho_solicitado(self):
+        fonte = views._fonte_nota_whatsapp(44, negrito=True)
+        imagem = Image.new("RGB", (300, 120), "white")
+        draw = Image.Draw(imagem) if hasattr(Image, "Draw") else None
+        if draw is None:
+            from PIL import ImageDraw
+
+            draw = ImageDraw.Draw(imagem)
+
+        caixa = draw.textbbox((0, 0), "Teste", font=fonte)
+        altura_texto = caixa[3] - caixa[1]
+
+        self.assertGreaterEqual(getattr(fonte, "size", 44), 40)
+        self.assertGreaterEqual(altura_texto, 30)
+
+    def test_fonte_nota_whatsapp_tenta_dejavu_linux_quando_windows_nao_existe(self):
+        chamadas = []
+        fonte_linux = types.SimpleNamespace(size=48)
+
+        def truetype_fake(caminho, tamanho):
+            chamadas.append(caminho)
+            if caminho == "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf":
+                return fonte_linux
+            raise OSError("fonte indisponivel")
+
+        with patch("estoque.views.ImageFont.truetype", side_effect=truetype_fake):
+            fonte = views._fonte_nota_whatsapp(48, negrito=True)
+
+        self.assertIs(fonte, fonte_linux)
+        self.assertEqual(fonte.size, 48)
+        self.assertIn("C:/Windows/Fonts/segoeuib.ttf", chamadas)
+        self.assertIn("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", chamadas)
+
+    def test_fonte_nota_whatsapp_fallback_final_preserva_tamanho(self):
+        fonte_default = types.SimpleNamespace(size=52)
+
+        with patch("estoque.views.ImageFont.truetype", side_effect=OSError("sem fonte")):
+            with patch("estoque.views.ImageFont.load_default", return_value=fonte_default) as load_default:
+                fonte = views._fonte_nota_whatsapp(52)
+
+        self.assertIs(fonte, fonte_default)
+        load_default.assert_called_once_with(size=52)
 
 
 class FornecedorFormPrazosPagamentoTests(TestCase):
