@@ -16069,6 +16069,17 @@ def _mensagem_estoque_insuficiente(produto, quantidade, unidade, estoque_disponi
     )
 
 
+def _produtos_estoque_atualizados_payload(produto_ids):
+    ids = [produto_id for produto_id in dict.fromkeys(produto_ids or []) if produto_id]
+    if not ids:
+        return []
+
+    return [
+        _produto_conferencia_estoque_payload(produto)
+        for produto in Produto.objects.filter(pk__in=ids)
+    ]
+
+
 def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
@@ -16414,6 +16425,7 @@ def gravar_venda(request):
     # EDICAO UNIFICADA DE VENDA EXISTENTE
     # ============================================================
     if venda_em_edicao:
+        produtos_estoque_atualizados_ids = set()
         pagamento_antigo_imediato_pre = _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
         pagamento_novo_imediato_pre = _venda_pagamento_imediato(tipo_pagamento_venda)
         conversao_vista_para_prazo_pre = (
@@ -16533,6 +16545,7 @@ def gravar_venda(request):
 
                     if produto_ou_unidade_mudou:
                         if item_antigo.produto_id:
+                            produtos_estoque_atualizados_ids.add(item_antigo.produto_id)
                             _devolver_estoque_produto(
                                 item_antigo.produto_id,
                                 quantidade_antiga,
@@ -16540,6 +16553,7 @@ def gravar_venda(request):
                                 unidade_antiga,
                             )
 
+                        produtos_estoque_atualizados_ids.add(produto_novo.id)
                         snapshot_estoque = _baixar_estoque_produto(
                             produto_novo.id,
                             quantidade_nova,
@@ -16573,6 +16587,7 @@ def gravar_venda(request):
                         diferenca = (quantidade_nova - quantidade_antiga).quantize(Decimal("0.001"))
 
                         if diferenca > 0:
+                            produtos_estoque_atualizados_ids.add(produto_novo.id)
                             _baixar_estoque_produto(
                                 produto_novo.id,
                                 diferenca,
@@ -16580,6 +16595,7 @@ def gravar_venda(request):
                                 unidade_nova,
                             )
                         else:
+                            produtos_estoque_atualizados_ids.add(produto_novo.id)
                             _devolver_estoque_produto(
                                 produto_novo.id,
                                 abs(diferenca),
@@ -16676,6 +16692,8 @@ def gravar_venda(request):
                         observacao="Item removido pela edicao unificada da venda.",
                     )
 
+                    if item_antigo.produto_id:
+                        produtos_estoque_atualizados_ids.add(item_antigo.produto_id)
                     _devolver_estoque_item_removido(item_removido)
 
                     _registrar_evento_venda(
@@ -16712,6 +16730,7 @@ def gravar_venda(request):
                             f'O produto "{produto_novo.nome}" ja existe nesta venda.'
                         )
 
+                    produtos_estoque_atualizados_ids.add(produto_novo.id)
                     snapshot_estoque = _baixar_estoque_produto(
                         produto_novo.id,
                         item_novo["quantidade"],
@@ -16810,9 +16829,13 @@ def gravar_venda(request):
                 reverse("estoque:venda_detalhe", args=[venda.id])
                 + "?nota_atualizada=1"
             ),
+            "produtos_estoque_atualizados": _produtos_estoque_atualizados_payload(
+                produtos_estoque_atualizados_ids
+            ),
         })
 
     pedido_pendencias_estoque = []
+    produtos_estoque_atualizados_ids = set()
     try:
         with transaction.atomic():
             pedido_origem = None
@@ -16890,6 +16913,7 @@ def gravar_venda(request):
                             quantidade=produto_bloqueado.quantidade,
                             atualizado_em=timezone.now(),
                         )
+                        produtos_estoque_atualizados_ids.add(produto_bloqueado.pk)
 
                     if quantidade_pendente_base > 0:
                         if (
@@ -16926,6 +16950,7 @@ def gravar_venda(request):
                 )
                 for item, snapshot_estoque in zip(itens_para_venda, snapshots_estoque):
                     item.update(snapshot_estoque)
+                    produtos_estoque_atualizados_ids.add(item["produto"].pk)
 
             venda = Venda.objects.create(
                 cliente=cliente,
@@ -17008,6 +17033,9 @@ def gravar_venda(request):
         "mensagem": mensagem,
         "venda_id": venda.id,
         "visualizar_url": reverse("estoque:venda_detalhe", args=[venda.id]),
+        "produtos_estoque_atualizados": _produtos_estoque_atualizados_payload(
+            produtos_estoque_atualizados_ids
+        ),
     })
 
 

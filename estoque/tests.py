@@ -12689,6 +12689,10 @@ class PixRecebidoTests(TestCase):
         self.assertTrue(resposta.json()["sucesso"])
         produto.refresh_from_db()
         self.assertEqual(produto.quantidade, 3)
+        produtos_atualizados = resposta.json()["produtos_estoque_atualizados"]
+        self.assertEqual(len(produtos_atualizados), 1)
+        self.assertEqual(produtos_atualizados[0]["id"], produto.id)
+        self.assertEqual(produtos_atualizados[0]["estoque_atual"], "3.000")
         venda = Venda.objects.get(pk=resposta.json()["venda_id"])
         self.assertEqual(venda.itens.get().quantidade, Decimal("2.000"))
         self.assertTrue(
@@ -12716,6 +12720,10 @@ class PixRecebidoTests(TestCase):
                 self.assertTrue(resposta.json()["sucesso"])
                 produto.refresh_from_db()
                 self.assertEqual(produto.quantidade, estoque_esperado)
+                produtos_atualizados = resposta.json()["produtos_estoque_atualizados"]
+                self.assertEqual(len(produtos_atualizados), 1)
+                self.assertEqual(produtos_atualizados[0]["id"], produto.id)
+                self.assertEqual(produtos_atualizados[0]["estoque_atual"], f"{estoque_esperado:.3f}")
                 item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
                 self.assertEqual(item.quantidade, Decimal(quantidade).quantize(Decimal("0.001")))
                 self.assertEqual(item.unidade, "KG")
@@ -23294,6 +23302,10 @@ class PedidoTests(TestCase):
         self.assertIn("visualizar_url", dados)
         pedido.refresh_from_db()
         self.produto.refresh_from_db()
+        produtos_atualizados = dados["produtos_estoque_atualizados"]
+        self.assertEqual(len(produtos_atualizados), 1)
+        self.assertEqual(produtos_atualizados[0]["id"], self.produto.id)
+        self.assertEqual(produtos_atualizados[0]["estoque_atual"], "48.000")
         self.assertEqual(pedido.status, Pedido.STATUS_CONVERTIDO_EM_VENDA)
         self.assertEqual(Venda.objects.count(), 1)
         self.assertEqual(ItemVenda.objects.count(), 1)
@@ -23414,6 +23426,10 @@ class PedidoTests(TestCase):
         self.assertEqual(item.quantidade, Decimal("4.000"))
         self.assertEqual(item.valor_total, Decimal("400.00"))
         self.assertEqual(self.produto.quantidade, 0)
+        produtos_atualizados = dados["produtos_estoque_atualizados"]
+        self.assertEqual(len(produtos_atualizados), 1)
+        self.assertEqual(produtos_atualizados[0]["id"], self.produto.id)
+        self.assertEqual(produtos_atualizados[0]["estoque_atual"], "0.000")
         item_pedido = pedido.itens.get(produto=self.produto)
         self.assertEqual(item_pedido.quantidade, Decimal("1.000"))
         self.assertEqual(item_pedido.valor_total, Decimal("100.00"))
@@ -25151,6 +25167,8 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertContains(resposta, 'id="btnNovaVendaEdicao"')
         self.assertContains(resposta, "Salvar Alteracoes")
         self.assertContains(resposta, "venda_id: vendaEdicaoVenda?.id || null")
+        self.assertContains(resposta, "function atualizarEstoquesProdutosVenda(produtosDados)")
+        self.assertContains(resposta, "atualizarEstoquesProdutosVenda(retorno.produtos_estoque_atualizados);")
         self.assertNotContains(resposta, "Para iniciar outra venda")
         self.assertNotContains(resposta, "carregada para edicao")
         conteudo = resposta.content.decode()
@@ -25557,6 +25575,10 @@ class VendaEdicaoUnificadaTests(TestCase):
         conta = ContaReceber.objects.get(venda=venda)
 
         self.assertEqual(produto.quantidade, Decimal("9.000"))
+        produtos_atualizados = resposta.json()["produtos_estoque_atualizados"]
+        self.assertEqual(len(produtos_atualizados), 1)
+        self.assertEqual(produtos_atualizados[0]["id"], produto.id)
+        self.assertEqual(produtos_atualizados[0]["estoque_atual"], "9.000")
         self.assertEqual(item.quantidade, Decimal("3.000"))
         self.assertEqual(venda.total, Decimal("30.00"))
         self.assertEqual(conta.valor_original, Decimal("30.00"))

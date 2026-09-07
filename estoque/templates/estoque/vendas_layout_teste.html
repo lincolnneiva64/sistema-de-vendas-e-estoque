@@ -4931,6 +4931,13 @@ function atualizarBadgesConferenciaEstoque(produtoDados) {
     }
 }
 
+function atualizarEstoquesProdutosVenda(produtosDados) {
+    if (!Array.isArray(produtosDados)) return;
+    produtosDados.forEach((produtoDados) => {
+        atualizarBadgesConferenciaEstoque(produtoDados);
+    });
+}
+
 function mostrarFeedbackConferenciaEstoque(mensagem, erro = false) {
     if (!modalConferenciaEstoqueFeedback) return;
     modalConferenciaEstoqueFeedback.textContent = mensagem || "";
@@ -5678,6 +5685,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 
         vendaGravadaId = retorno.venda_id;
         vendaGravadaUrl = retorno.visualizar_url || "";
+        atualizarEstoquesProdutosVenda(retorno.produtos_estoque_atualizados);
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
         mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem);
         if (vendaEdicaoVenda?.id) {
