@@ -22,6 +22,7 @@ from django.db.models import Sum
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
@@ -2134,6 +2135,44 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "window.setTimeout(pausarPulso, pulsoAtivoMs)")
         self.assertContains(resposta, "window.setTimeout(ativarPulso, pulsoPausaMs)")
         self.assertNotContains(resposta, 'id="btnCentralCobrancaVenda"')
+
+    def test_imagem_cobranca_cliente_usa_layout_compacto_para_celular(self):
+        cliente = Cliente.objects.create(nome="Cliente Imagem Cobranca", ativo=True, whatsapp="(91) 98888-7777")
+        conta = self._criar_conta_receber_venda(cliente, dias_atraso=5, valor="90.00")
+
+        resposta = self.client.get(
+            reverse("estoque:cliente_cobranca_imagem", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/png")
+        imagem = Image.open(io.BytesIO(resposta.content))
+        self.assertEqual(imagem.width, 1080)
+        self.assertGreaterEqual(imagem.height, 820)
+        self.assertLess(imagem.height, 980)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("90.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_imagem_cobranca_cliente_com_quatro_contas_mantem_altura_proporcional(self):
+        cliente = Cliente.objects.create(nome="Cliente Imagem Quatro Contas", ativo=True, whatsapp="(91) 98888-7777")
+        valores = [Decimal("40.00"), Decimal("50.00"), Decimal("60.00"), Decimal("70.00")]
+        for indice, valor in enumerate(valores, start=1):
+            self._criar_conta_receber_venda(cliente, dias_atraso=indice, valor=str(valor))
+
+        resposta = self.client.get(
+            reverse("estoque:cliente_cobranca_imagem", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        imagem = Image.open(io.BytesIO(resposta.content))
+        self.assertEqual(imagem.width, 1080)
+        self.assertGreaterEqual(imagem.height, 1200)
+        self.assertLess(imagem.height, 1400)
+        total_aberto = ContaReceber.objects.filter(cliente=cliente).aggregate(total=Sum("valor_em_aberto"))["total"]
+        self.assertEqual(total_aberto, Decimal("220.00"))
 
     def test_vendas_confirmar_cobranca_whatsapp_registra_sem_baixar_divida_e_remove_alerta(self):
         cliente = Cliente.objects.create(nome="Cliente Confirma Cobranca Vendas", ativo=True)
@@ -13855,6 +13894,65 @@ class PixRecebidoTests(TestCase):
             self.client.get(reverse("estoque:venda_whatsapp_pdf", kwargs={"pk": venda.id}), secure=True).status_code,
             200,
         )
+
+    def test_imagem_whatsapp_nota_usa_layout_compacto_para_celular(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Whatsapp", ativo=True)
+        produto = self._produto_teste("Produto Nota Whatsapp")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=7),
+            tipo_pagamento="A prazo",
+            total=Decimal("85.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("85.00"),
+            valor_total=Decimal("85.00"),
+        )
+
+        resposta = self.client.get(reverse("estoque:venda_whatsapp_imagem", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/png")
+        imagem = Image.open(io.BytesIO(resposta.content))
+        self.assertEqual(imagem.width, 1080)
+        self.assertGreaterEqual(imagem.height, 900)
+        self.assertLess(imagem.height, 1600)
+        venda.refresh_from_db()
+        self.assertEqual(venda.total, Decimal("85.00"))
+
+    def test_imagem_whatsapp_nota_com_cinco_itens_nao_fica_folha_vazia(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Cinco Itens", ativo=True)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=7),
+            tipo_pagamento="A prazo",
+            total=Decimal("150.00"),
+        )
+        for indice in range(5):
+            produto = self._produto_teste(f"Produto Nota Item {indice}")
+            ItemVenda.objects.create(
+                venda=venda,
+                produto=produto,
+                quantidade=Decimal("1.000"),
+                unidade="UN",
+                preco_unitario=Decimal("30.00"),
+                valor_total=Decimal("30.00"),
+            )
+
+        resposta = self.client.get(reverse("estoque:venda_whatsapp_imagem", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        imagem = Image.open(io.BytesIO(resposta.content))
+        self.assertEqual(imagem.width, 1080)
+        self.assertGreaterEqual(imagem.height, 1000)
+        self.assertLess(imagem.height, 1600)
+        self.assertEqual(sum(venda.itens.values_list("valor_total", flat=True), Decimal("0.00")), Decimal("150.00"))
 
     def test_acesso_direto_adicionar_produto_em_venda_quitada_e_bloqueado(self):
         cliente = Cliente.objects.create(nome="Cliente Add Quitada", ativo=True)

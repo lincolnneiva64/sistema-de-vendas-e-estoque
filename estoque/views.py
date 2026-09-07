@@ -19422,23 +19422,22 @@ def _quebrar_texto(draw, texto, fonte, largura_maxima):
 
 def _gerar_paginas_nota_whatsapp(venda):
     largura, altura = 1080, 1600
-    margem = 42
-    fundo = "#f6f1e8"
-    texto = "#1f2933"
-    suave = "#64748b"
+    margem = 30
+    fundo = "#f4f6f8"
+    texto = "#101827"
+    suave = "#334155"
     verde = "#14532d"
-    borda = "#ead7b0"
-    card = "#fffdf8"
+    borda = "#cbd5e1"
+    card = "#ffffff"
 
-    fonte_empresa = _fonte_nota_whatsapp(28, True)
-    fonte_titulo = _fonte_nota_whatsapp(40, True)
-    fonte_subtitulo = _fonte_nota_whatsapp(26, True)
-    fonte_label = _fonte_nota_whatsapp(19, True)
-    fonte_intro = _fonte_nota_whatsapp(27)
-    fonte_texto_negrito = _fonte_nota_whatsapp(25, True)
-    fonte_tabela = _fonte_nota_whatsapp(23)
-    fonte_tabela_negrito = _fonte_nota_whatsapp(23, True)
-    fonte_total = _fonte_nota_whatsapp(38, True)
+    fonte_empresa = _fonte_nota_whatsapp(34, True)
+    fonte_titulo = _fonte_nota_whatsapp(50, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(32, True)
+    fonte_label = _fonte_nota_whatsapp(22, True)
+    fonte_texto_negrito = _fonte_nota_whatsapp(30, True)
+    fonte_tabela = _fonte_nota_whatsapp(29, True)
+    fonte_tabela_negrito = _fonte_nota_whatsapp(30, True)
+    fonte_total = _fonte_nota_whatsapp(56, True)
 
     paginas = []
     pagina_numero = 0
@@ -19457,7 +19456,7 @@ def _gerar_paginas_nota_whatsapp(venda):
         )
         y_atual = margem + 28
         draw.text((margem + 30, y_atual), "LA Neiva", fill=verde, font=fonte_empresa)
-        y_atual += 36
+        y_atual += 42
         titulo = "Nota de Venda"
         if continua:
             titulo += " (contin.)"
@@ -19466,7 +19465,7 @@ def _gerar_paginas_nota_whatsapp(venda):
         numero_largura = _texto_largura(draw, numero_venda, fonte_subtitulo)
         draw.text((largura - margem - 30 - numero_largura, margem + 40), numero_venda, fill=texto, font=fonte_subtitulo)
         draw.text((margem + 30, altura - margem - 42), f"Pagina {pagina_numero}", fill=suave, font=fonte_label)
-        y_atual += 58
+        y_atual += 64
         return imagem, draw, y_atual
 
     imagem, draw, y = nova_pagina()
@@ -19480,16 +19479,16 @@ def _gerar_paginas_nota_whatsapp(venda):
 
     def desenhar_campo(x, y_campo, largura_campo, label, valor):
         draw.rounded_rectangle(
-            (x, y_campo, x + largura_campo, y_campo + 78),
+            (x, y_campo, x + largura_campo, y_campo + 88),
             radius=15,
             fill="#f8fafc",
-            outline="#e2e8f0",
+            outline="#cbd5e1",
             width=2,
         )
         draw.text((x + 16, y_campo + 10), label.upper(), fill=suave, font=fonte_label)
         linhas = _quebrar_texto(draw, valor, fonte_texto_negrito, largura_campo - 40)
         for indice, linha in enumerate(linhas[:1]):
-            draw.text((x + 16, y_campo + 38 + indice * 28), linha, fill=texto, font=fonte_texto_negrito)
+            draw.text((x + 16, y_campo + 44 + indice * 30), linha, fill=texto, font=fonte_texto_negrito)
 
     cliente = venda.cliente.nome if venda.cliente else "Consumidor"
     data_venda = venda.data_venda.strftime("%d/%m/%Y")
@@ -19498,17 +19497,16 @@ def _gerar_paginas_nota_whatsapp(venda):
 
     x1 = margem + 30
     draw.rounded_rectangle(
-        (x1, y, largura - margem - 30, y + 146),
+        (x1, y, largura - margem - 30, y + 132),
         radius=18,
-        fill="#fff8e8",
-        outline="#ead19a",
-        width=2,
+        fill="#fff7ed",
+        outline="#fb923c",
+        width=3,
     )
-    draw.text((x1 + 22, y + 18), f"Nota de Venda #{venda.id}", fill=texto, font=fonte_subtitulo)
+    draw.text((x1 + 22, y + 16), f"Nota de Venda #{venda.id}", fill=texto, font=fonte_subtitulo)
     draw.text((x1 + 22, y + 56), f"Cliente: {cliente}", fill=texto, font=fonte_texto_negrito)
-    draw.text((x1 + 22, y + 90), f"Total: {_formatar_moeda(venda.total)}", fill=verde, font=fonte_texto_negrito)
-    draw.text((x1 + 22, y + 118), "Segue a nota referente à venda abaixo.", fill=suave, font=fonte_intro)
-    y += 164
+    draw.text((x1 + 22, y + 88), f"Total: {_formatar_moeda(venda.total)}", fill=verde, font=fonte_subtitulo)
+    y += 148
 
     contexto_pedido_parcial = _contexto_venda_pedido_parcial(venda)
 
@@ -19516,10 +19514,10 @@ def _gerar_paginas_nota_whatsapp(venda):
     x2 = x1 + largura_campo + 22
     desenhar_campo(x1, y, largura_campo, "Cliente", cliente)
     desenhar_campo(x2, y, largura_campo, "Data", data_venda)
-    y += 92
+    y += 100
     desenhar_campo(x1, y, largura_campo, "Pagamento", pagamento)
     desenhar_campo(x2, y, largura_campo, "Vencimento", vencimento)
-    y += 106
+    y += 112
 
     if contexto_pedido_parcial:
         largura_aviso = largura - margem * 2 - 60
@@ -19538,7 +19536,7 @@ def _gerar_paginas_nota_whatsapp(venda):
                 linhas_aviso.extend(
                     _quebrar_texto(draw, f"- {item_pendente}", fonte_tabela, largura_aviso - 64)
                 )
-        altura_aviso = 30 + len(linhas_aviso) * 29
+        altura_aviso = 32 + len(linhas_aviso) * 32
         adicionar_pagina_se_precisar(altura_aviso + 18)
         draw.rounded_rectangle(
             (x1, y, largura - margem - 30, y + altura_aviso),
@@ -19552,11 +19550,11 @@ def _gerar_paginas_nota_whatsapp(venda):
         for indice, linha in enumerate(linhas_aviso):
             fonte_linha = fonte_tabela_negrito if indice == 0 else fonte_tabela
             draw.text((x1 + 24, aviso_y), linha, fill="#1e3a8a", font=fonte_linha)
-            aviso_y += 29
+            aviso_y += 32
         y += altura_aviso + 18
 
     draw.text((x1, y), "Itens da venda", fill=texto, font=fonte_subtitulo)
-    y += 42
+    y += 40
 
     def desenhar_item(indice, item):
         nonlocal y
@@ -19568,45 +19566,48 @@ def _gerar_paginas_nota_whatsapp(venda):
         resumo = f"{quantidade} {unidade} × {preco}"
         subtotal_largura = _texto_largura(draw, subtotal, fonte_tabela_negrito)
         x_subtotal = largura - margem - 52 - subtotal_largura
-        largura_nome = 850
+        largura_nome = 790
         linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_tabela_negrito, largura_nome)
         linhas_nome = linhas_nome[:2]
-        altura_item = 74 if len(linhas_nome) == 1 else 98
+        altura_item = 88 if len(linhas_nome) == 1 else 118
         adicionar_pagina_se_precisar(altura_item)
         topo = y
         draw.rounded_rectangle(
             (x1, topo, largura - margem - 30, topo + altura_item - 8),
             radius=14,
             fill="#ffffff",
-            outline="#edf1f6",
+            outline="#cbd5e1",
             width=2,
         )
         texto_y = topo + 13
         for linha in linhas_nome:
             draw.text((x1 + 24, texto_y), linha, fill=texto, font=fonte_tabela_negrito)
-            texto_y += 28
+            texto_y += 32
 
-        resumo_y = topo + 41 + (len(linhas_nome) - 1) * 24
-        draw.text((x1 + 24, resumo_y), resumo, fill="#42526a", font=fonte_tabela)
+        resumo_y = topo + 50 + (len(linhas_nome) - 1) * 28
+        draw.text((x1 + 24, resumo_y), resumo, fill="#1f2937", font=fonte_tabela)
         draw.text((x_subtotal, resumo_y), subtotal, fill=texto, font=fonte_tabela_negrito)
-        y = topo + altura_item + 4
+        y = topo + altura_item + 2
 
     for indice, item in enumerate(venda.itens.all(), start=1):
         desenhar_item(indice, item)
 
-    adicionar_pagina_se_precisar(116)
+    adicionar_pagina_se_precisar(132)
     draw.rounded_rectangle(
-        (x1, y + 8, largura - margem - 30, y + 92),
+        (x1, y + 8, largura - margem - 30, y + 112),
         radius=20,
-        fill="#e8f5e9",
-        outline="#b7e4c7",
-        width=2,
+        fill="#dcfce7",
+        outline="#22c55e",
+        width=3,
     )
-    draw.text((x1 + 22, y + 35), "Total da venda", fill=verde, font=fonte_subtitulo)
+    draw.text((x1 + 22, y + 38), "Total da venda", fill=verde, font=fonte_subtitulo)
     total = _formatar_moeda(venda.total)
     total_largura = _texto_largura(draw, total, fonte_total)
-    draw.text((largura - margem - 54 - total_largura, y + 27), total, fill=verde, font=fonte_total)
+    draw.text((largura - margem - 54 - total_largura, y + 24), total, fill=verde, font=fonte_total)
+    y += 134
+    draw.text((x1, y), "LA Neiva", fill=verde, font=fonte_label)
 
+    imagem.info["conteudo_altura"] = min(altura, y + 68)
     paginas.append(imagem)
     return paginas
 
@@ -19623,11 +19624,15 @@ def _gerar_nota_whatsapp_imagem(venda):
     paginas = _gerar_paginas_nota_whatsapp(venda)
     if len(paginas) == 1:
         imagem_final = paginas[0]
+        altura_conteudo = int(imagem_final.info.get("conteudo_altura") or imagem_final.height)
+        altura_final = max(900, min(imagem_final.height, altura_conteudo))
+        if altura_final < imagem_final.height:
+            imagem_final = imagem_final.crop((0, 0, imagem_final.width, altura_final))
     else:
         largura = max(pagina.width for pagina in paginas)
         espaco = 24
         altura = sum(pagina.height for pagina in paginas) + espaco * (len(paginas) - 1)
-        imagem_final = Image.new("RGB", (largura, altura), "#f6f1e8")
+        imagem_final = Image.new("RGB", (largura, altura), "#f4f6f8")
         y = 0
         for pagina in paginas:
             imagem_final.paste(pagina, ((largura - pagina.width) // 2, y))
@@ -19641,25 +19646,26 @@ def _gerar_nota_whatsapp_imagem(venda):
 
 def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
     largura = 1080
-    margem = 42
+    margem = 30
     contas = cobranca.get("contas", [])
-    altura = max(980, 540 + max(len(contas), 1) * 146)
+    altura = max(820, 710 + max(len(contas), 1) * 162)
 
-    fundo = "#f6f1e8"
-    card = "#fffdf8"
-    texto = "#172033"
-    suave = "#64748b"
+    fundo = "#f4f6f8"
+    card = "#ffffff"
+    texto = "#101827"
+    suave = "#334155"
     azul = "#1e3a8a"
     vermelho = "#991b1b"
-    borda = "#dbe5f0"
+    borda = "#cbd5e1"
 
-    fonte_empresa = _fonte_nota_whatsapp(30, True)
-    fonte_titulo = _fonte_nota_whatsapp(44, True)
-    fonte_subtitulo = _fonte_nota_whatsapp(28, True)
-    fonte_label = _fonte_nota_whatsapp(20, True)
-    fonte_texto = _fonte_nota_whatsapp(25)
-    fonte_texto_negrito = _fonte_nota_whatsapp(25, True)
-    fonte_rodape = _fonte_nota_whatsapp(26, True)
+    fonte_empresa = _fonte_nota_whatsapp(34, True)
+    fonte_titulo = _fonte_nota_whatsapp(52, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(34, True)
+    fonte_label = _fonte_nota_whatsapp(22, True)
+    fonte_texto = _fonte_nota_whatsapp(29, True)
+    fonte_texto_negrito = _fonte_nota_whatsapp(31, True)
+    fonte_valor = _fonte_nota_whatsapp(38, True)
+    fonte_rodape = _fonte_nota_whatsapp(28, True)
 
     imagem = Image.new("RGB", (largura, altura), fundo)
     draw = ImageDraw.Draw(imagem)
@@ -19668,7 +19674,7 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
         (margem, margem, largura - margem, altura - margem),
         radius=28,
         fill=card,
-        outline="#ead7b0",
+        outline="#cbd5e1",
         width=3,
     )
 
@@ -19677,41 +19683,41 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
     y = margem + 28
 
     draw.text((x, y), "L A Neiva", fill=azul, font=fonte_empresa)
-    y += 42
+    y += 44
     draw.text((x, y), "Cobrança do cliente", fill=texto, font=fonte_titulo)
-    y += 66
+    y += 68
 
-    draw.rounded_rectangle((x, y, direita, y + 116), radius=18, fill="#eff6ff", outline="#bfdbfe", width=2)
-    draw.text((x + 22, y + 18), f"Cliente: {cliente.nome}", fill=texto, font=fonte_texto_negrito)
-    draw.text((x + 22, y + 58), f"WhatsApp: {cliente.whatsapp or '-'}", fill=suave, font=fonte_texto)
-    y += 138
+    draw.rounded_rectangle((x, y, direita, y + 106), radius=18, fill="#eff6ff", outline="#60a5fa", width=3)
+    draw.text((x + 22, y + 16), f"Cliente: {cliente.nome}", fill=texto, font=fonte_texto_negrito)
+    draw.text((x + 22, y + 58), f"WhatsApp: {cliente.whatsapp or '-'}", fill=texto, font=fonte_texto)
+    y += 124
 
     abertas_total = _formatar_moeda(Decimal(financeiro["contas_abertas_total"]))
     vencidas_total = _formatar_moeda(Decimal(financeiro["contas_vencidas_total"]))
 
     def desenhar_resumo(x_campo, y_campo, largura_campo, label, valor, alerta=False):
         draw.rounded_rectangle(
-            (x_campo, y_campo, x_campo + largura_campo, y_campo + 82),
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 92),
             radius=15,
             fill="#fef2f2" if alerta else "#f8fafc",
-            outline="#fecaca" if alerta else "#e2e8f0",
-            width=2,
+            outline="#ef4444" if alerta else "#cbd5e1",
+            width=3 if alerta else 2,
         )
         draw.text((x_campo + 15, y_campo + 11), label.upper(), fill=vermelho if alerta else suave, font=fonte_label)
-        draw.text((x_campo + 15, y_campo + 42), valor, fill=vermelho if alerta else texto, font=fonte_texto_negrito)
+        draw.text((x_campo + 15, y_campo + 43), valor, fill=vermelho if alerta else texto, font=fonte_valor)
 
     def desenhar_resumo_vencidas(x_campo, y_campo, largura_campo, quantidade, valor):
         draw.rounded_rectangle(
-            (x_campo, y_campo, x_campo + largura_campo, y_campo + 106),
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 126),
             radius=15,
             fill="#fef2f2",
-            outline="#fecaca",
-            width=2,
+            outline="#ef4444",
+            width=3,
         )
         quantidade_texto = f"{quantidade} conta" if quantidade == 1 else f"{quantidade} contas"
         draw.text((x_campo + 15, y_campo + 10), "CONTAS VENCIDAS", fill=vermelho, font=fonte_label)
-        draw.text((x_campo + 15, y_campo + 39), quantidade_texto, fill=vermelho, font=fonte_texto_negrito)
-        draw.text((x_campo + 15, y_campo + 65), valor, fill=vermelho, font=fonte_subtitulo)
+        draw.text((x_campo + 15, y_campo + 40), quantidade_texto, fill=vermelho, font=fonte_texto_negrito)
+        draw.text((x_campo + 15, y_campo + 72), valor, fill=vermelho, font=fonte_valor)
 
     largura_campo = (direita - x - 20) // 2
     x2 = x + largura_campo + 20
@@ -19723,23 +19729,23 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
         f"{financeiro['contas_abertas_qtd']} / {abertas_total}",
     )
     desenhar_resumo_vencidas(x2, y, largura_campo, financeiro["contas_vencidas_qtd"], vencidas_total)
-    y += 124
+    y += 144
     if cobranca.get("maior_atraso_dias"):
         desenhar_resumo(x, y, largura_campo, "Maior atraso", f"{cobranca['maior_atraso_dias']} dias", True)
-        y += 100
+        y += 108
 
     draw.text((x, y), "Contas em aberto", fill=texto, font=fonte_subtitulo)
-    y += 44
+    y += 42
 
     if not contas:
         draw.rounded_rectangle((x, y, direita, y + 82), radius=14, fill="#ffffff", outline=borda, width=2)
-        draw.text((x + 22, y + 25), "Nenhuma conta em aberto.", fill=suave, font=fonte_texto)
+        draw.text((x + 22, y + 24), "Nenhuma conta em aberto.", fill=texto, font=fonte_texto)
         y += 100
     else:
         for conta in contas:
             vencida = bool(conta.get("vencida"))
             fill = "#fef2f2" if vencida else "#eff6ff"
-            outline = "#fecaca" if vencida else "#bfdbfe"
+            outline = "#ef4444" if vencida else "#60a5fa"
             status_cor = vermelho if vencida else azul
             titulo = conta.get("titulo") or "Conta"
             status = conta.get("status") or "Em dia"
@@ -19749,17 +19755,17 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
                 f"Valor em aberto: {conta.get('valor') or 'R$ 0,00'}"
             )
             linhas_meta = _quebrar_texto(draw, meta, fonte_texto, direita - x - 44)[:2]
-            altura_card = 82 + len(linhas_meta) * 30
-            draw.rounded_rectangle((x, y, direita, y + altura_card), radius=14, fill=fill, outline=outline, width=2)
+            altura_card = 82 + len(linhas_meta) * 34
+            draw.rounded_rectangle((x, y, direita, y + altura_card), radius=14, fill=fill, outline=outline, width=3 if vencida else 2)
             draw.text((x + 20, y + 13), titulo, fill=texto, font=fonte_texto_negrito)
             status_largura = _texto_largura(draw, status, fonte_label)
-            draw.rounded_rectangle((direita - status_largura - 46, y + 12, direita - 20, y + 45), radius=16, fill="#fee2e2" if vencida else "#dbeafe")
-            draw.text((direita - status_largura - 33, y + 18), status, fill=status_cor, font=fonte_label)
-            y_linha = y + 55
+            draw.rounded_rectangle((direita - status_largura - 54, y + 12, direita - 20, y + 49), radius=18, fill="#fee2e2" if vencida else "#dbeafe")
+            draw.text((direita - status_largura - 37, y + 19), status, fill=status_cor, font=fonte_label)
+            y_linha = y + 57
             for linha in linhas_meta:
-                draw.text((x + 20, y_linha), linha, fill=suave, font=fonte_texto)
-                y_linha += 30
-            y += altura_card + 14
+                draw.text((x + 20, y_linha), linha, fill=texto, font=fonte_texto)
+                y_linha += 34
+            y += altura_card + 12
 
     draw.text((direita - _texto_largura(draw, "LA Neiva", fonte_rodape), altura - margem - 62), "LA Neiva", fill=azul, font=fonte_rodape)
 
