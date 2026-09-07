@@ -1975,21 +1975,39 @@ def _conta_financeira_por_forma_pagamento(forma_pagamento, cartao_para_receber=T
     return _conta_financeira_padrao("banco")
 
 
-def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_recebimento, forma_pagamento):
+def _descricao_movimento_recebimento_cliente(cliente_nome, operacao=None):
+    nome = (cliente_nome or "").strip() or "Cliente nao informado"
+    descricao = f"Recebimento de cliente: {nome}"
+    if operacao and getattr(operacao, "pk", None):
+        descricao = f"{descricao} - operacao #{operacao.pk}"
+    return descricao
+
+
+def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_recebimento, forma_pagamento, operacao=None):
     valor = _financeiro_dinheiro(valor_recebido).quantize(Decimal("0.01"))
     if valor <= Decimal("0.00"):
         return None
     conta_financeira = _conta_financeira_por_forma_pagamento(forma_pagamento)
     if not conta_financeira:
         return None
-    return MovimentoFinanceiro.objects.create(
+    movimento = MovimentoFinanceiro.objects.create(
         conta=conta_financeira,
         tipo=MovimentoFinanceiro.TIPO_ENTRADA,
         valor=valor,
         data=data_recebimento or timezone.localdate(),
-        descricao=f"Recebimento de cliente: {getattr(cliente, 'nome', '') or 'Cliente nao informado'}",
+        descricao=_descricao_movimento_recebimento_cliente(getattr(cliente, "nome", ""), operacao),
         origem="recebimento_cliente",
     )
+    if operacao and getattr(operacao, "pk", None):
+        dados = dict(operacao.comprovante_dados or {})
+        dados["movimento_financeiro_id"] = movimento.id
+        operacao.comprovante_dados = dados
+        operacao.save(update_fields=["comprovante_dados", "atualizado_em"])
+    return movimento
+
+
+def _operacao_recebimento_desfeita(operacao):
+    return bool((getattr(operacao, "comprovante_dados", None) or {}).get("desfeito"))
 
 
 def _descricao_movimento_despesa_diaria(despesa, incluir_id=True):
@@ -13832,6 +13850,7 @@ def receber_cliente(request, cliente_id):
                                     valor_recebido,
                                     data_recebimento,
                                     valores["forma_pagamento"],
+                                    operacao=operacao_recebimento,
                                 )
                                 if credito_gerado_total != operacao_recebimento.credito_gerado:
                                     operacao_recebimento.credito_gerado = credito_gerado_total
@@ -13887,7 +13906,11 @@ def receber_cliente(request, cliente_id):
                                 dados_confirmacao_whatsapp,
                             )
                             if operacao_recebimento:
+                                dados_operacao_existentes = dict(operacao_recebimento.comprovante_dados or {})
+                                movimento_financeiro_id = dados_operacao_existentes.get("movimento_financeiro_id")
                                 comprovante_dados["operacao_id"] = operacao_recebimento.id
+                                if movimento_financeiro_id:
+                                    comprovante_dados["movimento_financeiro_id"] = movimento_financeiro_id
                                 operacao_recebimento.comprovante_dados = comprovante_dados
                                 operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
                             comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
@@ -14026,7 +14049,7 @@ def recebimentos_recibos_pendentes(request):
         .filter(status_recibo=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
         .order_by("-criado_em", "-id")
     )
-    operacoes = list(operacoes_qs)
+    operacoes = [operacao for operacao in operacoes_qs if not _operacao_recebimento_desfeita(operacao)]
     pendencias = []
     total_recebido = sum((operacao.valor_recebido for operacao in operacoes), Decimal("0.00"))
 
@@ -14191,6 +14214,9 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
     operacoes_confirmadas_qtd = 0
     operacoes_inferidas_qtd = 0
     for item in operacoes:
+        if _operacao_recebimento_desfeita(item):
+            continue
+
         rota_snapshot = (item.rota_snapshot or "").strip()
         categoria_rota = ""
         selo_rota = ""
@@ -14218,6 +14244,7 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             usuarios_recebimentos.append(usuario_nome)
 
         historico.append({
+            "operacao_id": item.id,
             "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
             "criado_em": item.criado_em,
             "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
@@ -14235,6 +14262,10 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             "rota_inferida": categoria_rota == "inferida",
             "selo_rota": selo_rota,
             "atual": item.pk == operacao_atual_id,
+            "desfazer_url": reverse(
+                "estoque:receber_cliente_desfazer_recebimento",
+                kwargs={"operacao_id": item.id},
+            ),
         })
 
     return {
@@ -14288,6 +14319,257 @@ def _fechamento_rota_data(rota, data_referencia):
         .filter(rota=(rota or "").strip(), data_referencia=data_referencia)
         .first()
     )
+
+
+class DesfazerRecebimentoErro(ValueError):
+    pass
+
+
+def _movimento_recebimento_cliente_correspondente(operacao):
+    if not operacao:
+        return None
+
+    filtros_base = {
+        "origem": "recebimento_cliente",
+        "tipo": MovimentoFinanceiro.TIPO_ENTRADA,
+        "valor": operacao.valor_recebido,
+        "data": operacao.data_recebimento,
+    }
+    dados = operacao.comprovante_dados or {}
+    movimento_id = dados.get("movimento_financeiro_id")
+    if movimento_id:
+        try:
+            movimento_id = int(movimento_id)
+        except (TypeError, ValueError):
+            raise DesfazerRecebimentoErro(
+                "Vinculo financeiro do recebimento esta invalido. Desfazer foi bloqueado."
+            )
+        movimento = (
+            MovimentoFinanceiro.objects
+            .select_related("conta")
+            .filter(pk=movimento_id, **filtros_base)
+            .first()
+        )
+        if not movimento:
+            raise DesfazerRecebimentoErro(
+                "Movimento financeiro vinculado ao recebimento nao confere. Desfazer foi bloqueado."
+            )
+        return movimento
+
+    movimentos_com_id = list(
+        MovimentoFinanceiro.objects
+        .select_related("conta")
+        .filter(**filtros_base, descricao__icontains=f"operacao #{operacao.id}")
+        .order_by("id")
+    )
+    if len(movimentos_com_id) == 1:
+        return movimentos_com_id[0]
+    if len(movimentos_com_id) > 1:
+        raise DesfazerRecebimentoErro(
+            "Mais de um movimento financeiro explicito foi encontrado para este recebimento. Desfazer foi bloqueado."
+        )
+
+    descricao_legada = _descricao_movimento_recebimento_cliente(operacao.cliente_nome_snapshot)
+    movimentos_legados = list(
+        MovimentoFinanceiro.objects
+        .select_related("conta")
+        .filter(
+            origem=filtros_base["origem"],
+            tipo=filtros_base["tipo"],
+            data=filtros_base["data"],
+            descricao=descricao_legada,
+        )
+        .order_by("id")
+    )
+    if len(movimentos_legados) == 1 and movimentos_legados[0].valor == operacao.valor_recebido:
+        return movimentos_legados[0]
+    if len(movimentos_legados) == 1:
+        raise DesfazerRecebimentoErro(
+            "Movimento financeiro legado encontrado nao confere com o valor do recebimento. Desfazer foi bloqueado."
+        )
+    if len(movimentos_legados) > 1:
+        assinatura = {
+            (
+                movimento.conta_id,
+                movimento.tipo,
+                movimento.origem,
+                movimento.valor,
+                movimento.data,
+            )
+            for movimento in movimentos_legados
+        }
+        assinatura_operacao = (
+            movimentos_legados[0].conta_id,
+            filtros_base["tipo"],
+            filtros_base["origem"],
+            operacao.valor_recebido,
+            filtros_base["data"],
+        )
+        if len(assinatura) == 1 and assinatura_operacao in assinatura:
+            movimento = movimentos_legados[0]
+            movimento._recebimento_legado_ambiguo_ids = [item.id for item in movimentos_legados]
+            return movimento
+        raise DesfazerRecebimentoErro(
+            "Mais de um movimento financeiro plausivel foi encontrado, mas os candidatos nao sao financeiramente equivalentes. Desfazer foi bloqueado."
+        )
+
+    return None
+
+def _rota_bloqueada_para_desfazer_recebimento(operacao):
+    rota = (operacao.rota_snapshot or "").strip()
+    if not rota and operacao.cliente:
+        rota = (operacao.cliente.bairro or "").strip()
+    if not rota:
+        return None
+    aliases = _aliases_rota_cliente(rota) or [rota]
+    return (
+        FechamentoRotaRecebimento.objects
+        .filter(rota__in=aliases, data_referencia=operacao.data_recebimento)
+        .first()
+    )
+
+
+def _validar_creditos_para_desfazer_recebimento(operacao, creditos):
+    positivos = [credito for credito in creditos if credito.valor and credito.valor > Decimal("0.00")]
+    if not positivos or not operacao.cliente_id:
+        return
+
+    primeiro_credito = min(credito.criado_em for credito in positivos if credito.criado_em)
+    if not primeiro_credito:
+        return
+
+    uso_posterior = CreditoCliente.objects.filter(
+        cliente_id=operacao.cliente_id,
+        valor__lt=Decimal("0.00"),
+        criado_em__gt=primeiro_credito,
+    ).exists()
+    if uso_posterior:
+        raise DesfazerRecebimentoErro(
+            "Este recebimento gerou credito que pode ter sido usado depois. Desfazer foi bloqueado para preservar o historico."
+        )
+
+
+def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
+    with transaction.atomic():
+        operacao = (
+            OperacaoRecebimentoCliente.objects
+            .select_for_update()
+            .filter(pk=operacao_id)
+            .first()
+        )
+        if not operacao:
+            raise DesfazerRecebimentoErro("Recebimento nao encontrado.")
+        if _operacao_recebimento_desfeita(operacao):
+            raise DesfazerRecebimentoErro("Este recebimento ja foi desfeito.")
+
+        fechamento = _rota_bloqueada_para_desfazer_recebimento(operacao)
+        if fechamento:
+            raise DesfazerRecebimentoErro(
+                "Esta rota/data ja foi conferida. Reabra a conferencia antes de desfazer recebimentos."
+            )
+
+        recebimentos = list(
+            RecebimentoContaReceber.objects
+            .select_for_update()
+            .select_related("conta")
+            .filter(operacao=operacao)
+            .order_by("id")
+        )
+        if not recebimentos:
+            raise DesfazerRecebimentoErro("Este recebimento nao tem baixas vinculadas para desfazer com seguranca.")
+
+        creditos = list(
+            CreditoCliente.objects
+            .select_for_update()
+            .filter(origem_recebimento__in=recebimentos)
+            .order_by("id")
+        )
+        _validar_creditos_para_desfazer_recebimento(operacao, creditos)
+
+        movimento = _movimento_recebimento_cliente_correspondente(operacao)
+        if not movimento:
+            raise DesfazerRecebimentoErro("Movimento financeiro correspondente nao encontrado com seguranca.")
+
+        estorno_existente = MovimentoFinanceiro.objects.filter(
+            origem="recebimento_cliente_estorno",
+            descricao__icontains=f"operacao #{operacao.id}",
+        ).exists()
+        if estorno_existente:
+            raise DesfazerRecebimentoErro("Este recebimento ja possui estorno financeiro.")
+
+        movimentos_candidatos_ambiguos_ids = getattr(movimento, "_recebimento_legado_ambiguo_ids", [])
+        legado_ambiguo_equivalente = bool(movimentos_candidatos_ambiguos_ids)
+
+        contas_restauradas = []
+        for recebimento in recebimentos:
+            conta = recebimento.conta
+            if not conta:
+                raise DesfazerRecebimentoErro("Baixa sem conta a receber vinculada.")
+            if conta.status == ContaReceber.STATUS_CANCELADA:
+                raise DesfazerRecebimentoErro("Conta cancelada nao pode ser restaurada automaticamente.")
+
+            valor_recebimento = (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+            novo_aberto = ((conta.valor_em_aberto or Decimal("0.00")) + valor_recebimento).quantize(Decimal("0.01"))
+            valor_original = (conta.valor_original or Decimal("0.00")).quantize(Decimal("0.01"))
+            if valor_original > Decimal("0.00"):
+                novo_aberto = min(novo_aberto, valor_original).quantize(Decimal("0.01"))
+            conta.valor_em_aberto = novo_aberto
+            if novo_aberto <= Decimal("0.00"):
+                conta.status = ContaReceber.STATUS_PAGA
+            elif valor_original > Decimal("0.00") and novo_aberto >= valor_original:
+                conta.status = ContaReceber.STATUS_ABERTA
+            else:
+                conta.status = ContaReceber.STATUS_PARCIAL
+            conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+            contas_restauradas.append(conta.id)
+
+        for credito in creditos:
+            credito.delete()
+        for recebimento in recebimentos:
+            recebimento.delete()
+
+        MovimentoFinanceiro.objects.create(
+            conta=movimento.conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=(operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01")),
+            data=operacao.data_recebimento,
+            descricao=(
+                f"Estorno recebimento legado duplicado: operacao #{operacao.id} - {operacao.cliente_nome_snapshot}"
+                if legado_ambiguo_equivalente
+                else (
+                    f"Estorno recebimento cliente: operacao #{operacao.id} "
+                    f"movimento #{movimento.id} - {operacao.cliente_nome_snapshot}"
+                )
+            ),
+            operador=_nome_usuario_recebimento(usuario),
+            origem="recebimento_cliente_estorno",
+        )
+
+        dados = dict(operacao.comprovante_dados or {})
+        dados["desfeito"] = True
+        dados["desfeito_em"] = timezone.now().isoformat()
+        dados["desfeito_por"] = _nome_usuario_recebimento(usuario)
+        dados["movimento_financeiro_original_id"] = movimento.id
+        if legado_ambiguo_equivalente:
+            dados["correcao_legado"] = True
+            dados["movimento_financeiro_original_ambiguo"] = True
+            dados["movimentos_financeiros_candidatos_ids"] = movimentos_candidatos_ambiguos_ids
+        dados["contas_restauradas_ids"] = contas_restauradas
+        operacao.comprovante_dados = dados
+        operacao.status_recibo = OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO
+        operacao.recibo_dispensado_em = timezone.now()
+        operacao.recibo_dispensado_por = usuario if getattr(usuario, "is_authenticated", False) else None
+        operacao.motivo_dispensa = "Recebimento desfeito por lancamento incorreto."
+        operacao.save(update_fields=[
+            "comprovante_dados",
+            "status_recibo",
+            "recibo_dispensado_em",
+            "recibo_dispensado_por",
+            "motivo_dispensa",
+            "atualizado_em",
+        ])
+
+        return operacao
 
 
 def _resumo_fechamento_rota(fechamento):
@@ -14367,16 +14649,33 @@ def _historico_recente_recebimentos_rota(rota, data_atual, url_voltar="", limite
     if not aliases:
         return []
 
-    datas = list(
+    operacoes = (
         OperacaoRecebimentoCliente.objects
+        .select_related("cliente")
         .filter(Q(rota_snapshot__in=aliases) | Q(cliente__bairro__in=aliases))
-        .values("data_recebimento")
-        .annotate(
-            recebimentos=Count("id"),
-            total=Coalesce(Sum("valor_recebido"), Decimal("0.00"), output_field=DecimalField()),
-        )
-        .order_by("-data_recebimento")[:limite]
+        .order_by("-data_recebimento", "-id")
     )
+    datas_por_dia = {}
+    for operacao in operacoes:
+        if _operacao_recebimento_desfeita(operacao):
+            continue
+        data_operacao = operacao.data_recebimento
+        if not data_operacao:
+            continue
+        if data_operacao not in datas_por_dia:
+            datas_por_dia[data_operacao] = {
+                "data_recebimento": data_operacao,
+                "recebimentos": 0,
+                "total": Decimal("0.00"),
+            }
+        datas_por_dia[data_operacao]["recebimentos"] += 1
+        datas_por_dia[data_operacao]["total"] = (
+            datas_por_dia[data_operacao]["total"] + (operacao.valor_recebido or Decimal("0.00"))
+        ).quantize(Decimal("0.01"))
+        if len(datas_por_dia) >= limite and data_operacao < min(datas_por_dia):
+            break
+
+    datas = sorted(datas_por_dia.values(), key=lambda item: item["data_recebimento"], reverse=True)[:limite]
     fechamentos = {
         fechamento.data_referencia: fechamento
         for fechamento in FechamentoRotaRecebimento.objects.filter(
@@ -14544,6 +14843,30 @@ def receber_cliente_recebimentos_rota(request):
             "historico_recente_datas": _historico_recente_recebimentos_rota(rota_filtro, data_referencia, next_param),
         },
     )
+
+
+@require_POST
+def receber_cliente_desfazer_recebimento(request, operacao_id):
+    confirmacao = (request.POST.get("confirmacao_desfazer") or "").strip().upper()
+    retorno_url = _url_next_segura_request(request) or reverse("estoque:receber_cliente_escolher")
+    if confirmacao != "DESFAZER":
+        messages.warning(request, "Digite DESFAZER para confirmar o desfazimento do recebimento.")
+        return redirect(retorno_url)
+
+    try:
+        operacao = _desfazer_operacao_recebimento_cliente(
+            operacao_id,
+            request.user if getattr(request.user, "is_authenticated", False) else None,
+        )
+    except DesfazerRecebimentoErro as exc:
+        messages.warning(request, str(exc))
+    else:
+        messages.success(
+            request,
+            f"Recebimento #{operacao.id} de {_formatar_moeda(operacao.valor_recebido)} desfeito com sucesso.",
+        )
+
+    return redirect(retorno_url)
 
 
 @ensure_csrf_cookie

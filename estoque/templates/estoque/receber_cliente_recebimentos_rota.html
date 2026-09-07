@@ -356,6 +356,29 @@
       font-weight: 800;
     }
 
+    .rcr-undo-form {
+      margin-top: 10px;
+      padding-left: 84px;
+    }
+
+    .rcr-undo-btn {
+      min-height: 34px;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff7f7;
+      color: #991b1b;
+      padding: 7px 10px;
+      font: inherit;
+      font-size: .85rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .rcr-undo-btn:hover,
+    .rcr-undo-btn:focus {
+      background: #fee2e2;
+    }
+
     @media (max-width: 720px) {
       .rcr-page { padding: 10px; }
       .rcr-top {
@@ -392,6 +415,12 @@
       .rcr-row-detail,
       .rcr-row-credit {
         padding-left: 72px;
+      }
+      .rcr-undo-form {
+        padding-left: 72px;
+      }
+      .rcr-undo-btn {
+        width: 100%;
       }
     }
   </style>
@@ -547,6 +576,26 @@
                   <span class="rcr-value-line rcr-highlight credito">Crédito gerado: {{ item.credito_gerado_formatado }}</span>
                 </div>
               {% endif %}
+              <form
+                method="post"
+                action="{{ item.desfazer_url }}"
+                class="rcr-undo-form"
+                data-desfazer-recebimento-form
+                onsubmit="return confirm('Desfazer este recebimento de {{ item.valor_recebido_formatado }} do cliente {{ item.cliente_nome|escapejs }} às {{ item.hora|default:'--:--' }} em {{ item.forma_pagamento|escapejs }}? Esta ação reabrirá/restaurará a conta do cliente e retirará o valor do financeiro.');"
+              >
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="confirmacao_desfazer" value="DESFAZER">
+                <button
+                  type="submit"
+                  class="rcr-undo-btn"
+                  data-operacao-id="{{ item.operacao_id }}"
+                  data-cliente="{{ item.cliente_nome }}"
+                  data-valor="{{ item.valor_recebido_formatado }}"
+                  data-hora="{{ item.hora|default:'--:--' }}"
+                  data-forma="{{ item.forma_pagamento }}"
+                >Desfazer recebimento</button>
+              </form>
             </article>
           {% endfor %}
         </section>

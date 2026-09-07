@@ -19091,6 +19091,7 @@ class PixRecebidoTests(TestCase):
         next_url="",
         follow=False,
         confirmar_credito="",
+        forma_pagamento="PIX",
     ):
         url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
         parametros = {}
@@ -19105,7 +19106,7 @@ class PixRecebidoTests(TestCase):
             {
                 "data_recebimento": timezone.localdate().isoformat(),
                 "valor": valor,
-                "forma_pagamento": "PIX",
+                "forma_pagamento": forma_pagamento,
                 "destino_diferenca": destino_diferenca,
                 "confirmar_credito": confirmar_credito,
             },
@@ -19158,6 +19159,56 @@ class PixRecebidoTests(TestCase):
         if next_url:
             parametros["next"] = next_url
         return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros)}"
+
+    def _url_desfazer_recebimento(self, operacao):
+        return reverse(
+            "estoque:receber_cliente_desfazer_recebimento",
+            kwargs={"operacao_id": operacao.id},
+        )
+
+    def _post_desfazer_recebimento(self, operacao, next_url=None):
+        next_url = next_url or reverse("estoque:receber_cliente_escolher")
+        return self.client.post(
+            self._url_desfazer_recebimento(operacao),
+            {"confirmacao_desfazer": "DESFAZER", "next": next_url},
+            secure=True,
+            follow=True,
+        )
+
+    def _criar_recebimento_legado_para_desfazer(
+        self,
+        cliente,
+        valor="100.00",
+        rota="Jardim",
+        forma_pagamento="PIX",
+    ):
+        conta = self._criar_conta_receber_pix(cliente, valor)
+        operacao = self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota=rota,
+            valor=valor,
+            forma_pagamento=forma_pagamento,
+        )
+        conta.valor_em_aberto = Decimal("0.00")
+        conta.status = ContaReceber.STATUS_PAGA
+        conta.save(update_fields=["valor_em_aberto", "status"])
+        RecebimentoContaReceber.objects.create(
+            conta=conta,
+            operacao=operacao,
+            data_recebimento=operacao.data_recebimento,
+            valor=Decimal(valor),
+            forma_pagamento=forma_pagamento,
+            observacao="Recebimento legado.",
+        )
+        movimento = MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_por_forma_pagamento(forma_pagamento),
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal(valor),
+            data=operacao.data_recebimento,
+            descricao=f"Recebimento de cliente: {cliente.nome}",
+            origem="recebimento_cliente",
+        )
+        return operacao, conta, movimento
 
     def test_confirmar_recibo_valido_marca_enviado_com_usuario(self):
         usuario = get_user_model().objects.create_user(username="confirmador", password="senha")
@@ -20656,6 +20707,381 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Cliente Multi Um")
         self.assertContains(resposta, "Cliente Multi Dois")
         self.assertContains(resposta, '<span class="rcr-value money">R$ 40,00</span>', html=True)
+
+    def test_desfazer_recebimento_simples_em_dinheiro_restaura_conta_e_financeiro(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Dinheiro", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "100,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        conta_caixa = views._conta_financeira_padrao("caixa")
+        movimento_original_id = operacao.comprovante_dados["movimento_financeiro_id"]
+        movimento_original = MovimentoFinanceiro.objects.get(pk=movimento_original_id)
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, f"Recebimento #{operacao.id} de R$ 100,00 desfeito com sucesso.")
+        conta.refresh_from_db()
+        operacao.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertEqual(movimento_estorno.conta_id, movimento_original.conta_id)
+        self.assertIn(f"movimento #{movimento_original_id}", movimento_estorno.descricao)
+        self.assertEqual(views._saldo_conta_financeira(conta_caixa), Decimal("0.00"))
+        self.assertTrue(operacao.comprovante_dados["desfeito"])
+
+    def test_receber_cliente_cria_vinculo_inequivoco_com_movimento_financeiro(self):
+        cliente = Cliente.objects.create(nome="Cliente Vinculo Novo", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "80.00")
+
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim")
+
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        movimento = MovimentoFinanceiro.objects.get(origem="recebimento_cliente")
+        self.assertEqual(operacao.comprovante_dados["movimento_financeiro_id"], movimento.id)
+        self.assertIn(f"operacao #{operacao.id}", movimento.descricao)
+
+    def test_desfazer_recebimento_usa_vinculo_explicito_do_movimento(self):
+        cliente = Cliente.objects.create(nome="Cliente Usa Vinculo", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "90.00")
+        self._post_receber_cliente(cliente, "90,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        movimento_original_id = operacao.comprovante_dados["movimento_financeiro_id"]
+        MovimentoFinanceiro.objects.filter(pk=movimento_original_id).update(
+            descricao=f"Recebimento de cliente: {cliente.nome}"
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_por_forma_pagamento(operacao.forma_pagamento),
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=operacao.valor_recebido,
+            data=operacao.data_recebimento,
+            descricao=f"Recebimento de cliente: {cliente.nome}",
+            origem="recebimento_cliente",
+        )
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertIn(f"movimento #{movimento_original_id}", movimento_estorno.descricao)
+
+    def test_desfazer_recebimento_parcial_restaura_apenas_valor_recebido(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Parcial", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "40,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_desfazer_recebimento_que_quitou_conta_inteira_reabre_conta(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Quitado", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "75.00")
+        self._post_receber_cliente(cliente, "75,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("75.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_desfazer_recebimento_que_quitou_mais_de_uma_conta_restaura_todas(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Varias", bairro="Jardim", ativo=True)
+        conta_um = self._criar_conta_receber_pix(cliente, "80.00")
+        conta_dois = self._criar_conta_receber_pix(cliente, "70.00")
+        self._post_receber_cliente(cliente, "120,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        conta_um.refresh_from_db()
+        conta_dois.refresh_from_db()
+        self.assertEqual(conta_um.valor_em_aberto, Decimal("80.00"))
+        self.assertEqual(conta_um.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta_dois.valor_em_aberto, Decimal("70.00"))
+        self.assertEqual(conta_dois.status, ContaReceber.STATUS_ABERTA)
+
+    def test_desfazer_recebimento_com_sobra_reverte_credito_gerado_nao_consumido(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Credito", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "120,00", rota="Jardim", destino_diferenca="credito", confirmar_credito="1")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).aggregate(total=Sum("valor"))["total"], Decimal("20.00"))
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).count(), 0)
+
+    def test_desfazer_recebimento_inexistente_rejeita_sem_efeito_colateral(self):
+        cliente = Cliente.objects.create(nome="Cliente Sem Efeito", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "50.00")
+
+        resposta = self.client.post(
+            reverse("estoque:receber_cliente_desfazer_recebimento", kwargs={"operacao_id": 999999}),
+            {"confirmacao_desfazer": "DESFAZER", "next": self._url_recebimentos_rota("Jardim")},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Recebimento nao encontrado.")
+        self.assertEqual(ContaReceber.objects.get().valor_em_aberto, Decimal("50.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_desfazer_recebimento_duas_vezes_bloqueia_sem_duplicar_estorno(self):
+        cliente = Cliente.objects.create(nome="Cliente Desfaz Uma Vez", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "60.00")
+        self._post_receber_cliente(cliente, "60,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "Este recebimento ja foi desfeito.")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+
+    def test_desfazer_recebimento_nao_altera_outro_recebimento_igual_do_mesmo_cliente(self):
+        cliente = Cliente.objects.create(nome="Cliente Duplicado Seguro", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "100,00", rota="Jardim")
+        self._post_receber_cliente(cliente, "100,00", rota="Jardim")
+        operacoes = list(OperacaoRecebimentoCliente.objects.order_by("criado_em", "id"))
+
+        self._post_desfazer_recebimento(operacoes[1], self._url_recebimentos_rota("Jardim"))
+
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacoes[0]).count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacoes[1]).count(), 0)
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertIn(f"operacao #{operacoes[1].id}", movimento_estorno.descricao)
+        self.assertIn(f"movimento #{operacoes[1].comprovante_dados['movimento_financeiro_id']}", movimento_estorno.descricao)
+
+    def test_desfazer_recebimento_nao_altera_outro_recebimento_mesmo_valor_horario_proximo(self):
+        cliente = Cliente.objects.create(nome="Cliente Mesmo Valor Horario", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "90.00")
+        self._criar_conta_receber_pix(cliente, "90.00")
+        self._post_receber_cliente(cliente, "90,00", rota="Jardim")
+        self._post_receber_cliente(cliente, "90,00", rota="Jardim")
+        operacao_um, operacao_dois = OperacaoRecebimentoCliente.objects.order_by("criado_em", "id")
+        conta_dois = RecebimentoContaReceber.objects.get(operacao=operacao_dois).conta
+
+        self._post_desfazer_recebimento(operacao_um, self._url_recebimentos_rota("Jardim"))
+
+        conta_dois.refresh_from_db()
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertEqual(conta_dois.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacao_dois).count(), 1)
+        self.assertIn(f"movimento #{operacao_um.comprovante_dados['movimento_financeiro_id']}", movimento_estorno.descricao)
+
+    def test_desfazer_recebimento_legado_inequivoco_usa_movimento_unico(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Unico", bairro="Jardim", ativo=True)
+        operacao, conta, movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "desfeito com sucesso")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("70.00"))
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertIn(f"movimento #{movimento.id}", movimento_estorno.descricao)
+
+    def test_desfazer_recebimento_legado_ambiguo_equivalente_desfaz_operacao_correta(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Ambiguo", bairro="Jardim", ativo=True)
+        operacao_um, conta_um, movimento_um = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        operacao_dois, conta_dois, movimento_dois = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+
+        resposta = self._post_desfazer_recebimento(operacao_dois, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "desfeito com sucesso")
+        conta_um.refresh_from_db()
+        conta_dois.refresh_from_db()
+        operacao_dois.refresh_from_db()
+        self.assertEqual(conta_um.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta_dois.valor_em_aberto, Decimal("70.00"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacao_um).count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacao_dois).count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(pk__in=[movimento_um.id, movimento_dois.id]).count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertEqual(movimento_estorno.conta_id, movimento_um.conta_id)
+        self.assertIn(f"operacao #{operacao_dois.id}", movimento_estorno.descricao)
+        self.assertNotIn(f"movimento #{movimento_um.id}", movimento_estorno.descricao)
+        self.assertEqual(
+            operacao_dois.comprovante_dados["movimentos_financeiros_candidatos_ids"],
+            [movimento_um.id, movimento_dois.id],
+        )
+        self.assertTrue(operacao_dois.comprovante_dados["correcao_legado"])
+        self.assertTrue(operacao_dois.comprovante_dados["movimento_financeiro_original_ambiguo"])
+
+    def test_desfazer_recebimento_legado_ambiguo_equivalente_duas_vezes_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Duas Vezes", bairro="Jardim", ativo=True)
+        self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        operacao, _conta, _movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "Este recebimento ja foi desfeito.")
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+
+    def test_desfazer_recebimento_legado_ambiguo_equivalente_rota_conferida_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Rota Conferida", bairro="Jardim", ativo=True)
+        self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        operacao, conta, _movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=operacao.data_recebimento,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("140.00"),
+            total_conferido=Decimal("140.00"),
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "Esta rota/data ja foi conferida.")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_desfazer_recebimento_legado_ambiguo_equivalente_credito_consumido_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Credito Consumido", bairro="Jardim", ativo=True)
+        self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        operacao, conta, _movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        recebimento = RecebimentoContaReceber.objects.get(operacao=operacao)
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("10.00"),
+            origem_recebimento=recebimento,
+            observacao="Credito legado gerado.",
+        )
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("-5.00"),
+            origem_conta_receber=conta,
+            observacao="Credito usado depois.",
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "gerou credito que pode ter sido usado depois")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_desfazer_recebimento_legado_ambiguo_contas_financeiras_diferentes_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Conta Diferente", bairro="Jardim", ativo=True)
+        operacao, conta, movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        outra_conta = ContaFinanceira.objects.create(nome="Conta Financeira Diferente", tipo=ContaFinanceira.TIPO_BANCO)
+        MovimentoFinanceiro.objects.create(
+            conta=outra_conta,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=movimento.valor,
+            data=movimento.data,
+            descricao=movimento.descricao,
+            origem="recebimento_cliente",
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "candidatos nao sao financeiramente equivalentes")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacao).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_desfazer_recebimento_legado_ambiguo_valores_diferentes_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente Legado Valor Diferente", bairro="Jardim", ativo=True)
+        operacao, conta, movimento = self._criar_recebimento_legado_para_desfazer(cliente, "70.00")
+        MovimentoFinanceiro.objects.create(
+            conta=movimento.conta,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("71.00"),
+            data=movimento.data,
+            descricao=movimento.descricao,
+            origem="recebimento_cliente",
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "candidatos nao sao financeiramente equivalentes")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(RecebimentoContaReceber.objects.filter(operacao=operacao).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_desfazer_recebimento_rota_conferida_e_bloqueado(self):
+        cliente = Cliente.objects.create(nome="Cliente Rota Conferida", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "100,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=timezone.localdate(),
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("100.00"),
+            total_conferido=Decimal("100.00"),
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "Esta rota/data ja foi conferida.")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_desfazer_recebimento_com_recibo_enviado_e_permitido_com_auditoria(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Enviado Desfaz", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "100,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        operacao.status_recibo = OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO
+        operacao.recibo_confirmado_em = timezone.now()
+        operacao.save(update_fields=["status_recibo", "recibo_confirmado_em"])
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "desfeito com sucesso")
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO)
+        self.assertTrue(operacao.comprovante_dados["desfeito"])
+
+    def test_desfazer_recebimento_credito_gerado_consumido_e_bloqueado(self):
+        cliente = Cliente.objects.create(nome="Cliente Credito Consumido", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "120,00", rota="Jardim", destino_diferenca="credito", confirmar_credito="1")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        CreditoCliente.objects.create(
+            cliente=cliente,
+            valor=Decimal("-5.00"),
+            origem_conta_receber=conta,
+            observacao="Credito usado depois.",
+        )
+
+        resposta = self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        self.assertContains(resposta, "gerou credito que pode ter sido usado depois")
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_recebimentos_rota_mostra_botao_desfazer_com_id_da_operacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Botao Desfaz", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "55.00")
+        self._post_receber_cliente(cliente, "55,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertContains(resposta, "Desfazer recebimento")
+        self.assertContains(resposta, f'action="{self._url_desfazer_recebimento(operacao)}"')
+        self.assertContains(resposta, f'data-operacao-id="{operacao.id}"')
+        self.assertContains(resposta, 'name="confirmacao_desfazer" value="DESFAZER"')
 
     def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
         cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)
