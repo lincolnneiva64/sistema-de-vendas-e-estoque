@@ -73,6 +73,22 @@ urlpatterns = [
     path("compras/<int:pk>/corrigir-origem-pagamento/", views.compra_corrigir_origem_pagamento, name="compra_corrigir_origem_pagamento"),
     path("compras/<int:pk>/excluir/", views.compra_excluir, name="compra_excluir"),
     path("produtos/<int:produto_id>/ultimas-compras/", views.produto_ultimas_compras, name="produto_ultimas_compras"),
+    path("produtos/conferir-precos-antigo/", views.conferencia_precos_antigo, name="conferencia_precos_antigo"),
+    path(
+        "produtos/conferir-precos-antigo/salvar/",
+        views.conferencia_precos_antigo_salvar,
+        name="conferencia_precos_antigo_salvar",
+    ),
+    path(
+        "produtos/conferir-precos-antigo/conferido/",
+        views.conferencia_precos_antigo_marcar_conferido,
+        name="conferencia_precos_antigo_marcar_conferido",
+    ),
+    path(
+        "produtos/conferir-precos-antigo/confirmar-correspondencia/",
+        views.conferencia_precos_antigo_confirmar_correspondencia,
+        name="conferencia_precos_antigo_confirmar_correspondencia",
+    ),
     path("produtos/<int:produto_id>/conferencia-estoque/", views.conferencia_estoque_produto, name="conferencia_estoque_produto"),
     path("produtos/<int:produto_id>/conferencia-estoque/confirmar/", views.conferencia_estoque_confirmar, name="conferencia_estoque_confirmar"),
     path("produtos/<int:produto_id>/conferencia-estoque/corrigir/", views.conferencia_estoque_corrigir, name="conferencia_estoque_corrigir"),

@@ -328,7 +328,7 @@ select {
 }
 .produto-sugestao-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 10px;
     padding: 6px 12px;
@@ -342,6 +342,7 @@ select {
 }
 
 .estoque-item-sugestao,
+.preco-conferido-sugestao,
 .item-venda-estoque-badge {
     font-size: 11px;
     font-weight: 700;
@@ -372,7 +373,8 @@ select {
 
 .estoque-item-sugestao.estoque-conferido,
 .estoque-preview.estoque-conferido,
-.item-venda-estoque-badge.estoque-conferido {
+.item-venda-estoque-badge.estoque-conferido,
+.preco-conferido-sugestao {
     color: #166534;
     background: #dcfce7;
     border-color: #86efac;
@@ -387,7 +389,9 @@ select {
 }
 
 .produto-sugestao-item:hover .estoque-item-sugestao.estoque-conferido,
-.produto-sugestao-item.ativo .estoque-item-sugestao.estoque-conferido {
+.produto-sugestao-item.ativo .estoque-item-sugestao.estoque-conferido,
+.produto-sugestao-item:hover .preco-conferido-sugestao,
+.produto-sugestao-item.ativo .preco-conferido-sugestao {
     color: #14532d;
     background: #bbf7d0;
     border-color: #22c55e;
@@ -1393,6 +1397,43 @@ select:focus {
     border-color: #1d4ed8;
     background: #ffffff;
     box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.25);
+}
+
+.preco-venda-wrap {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+#preco.preco-conferido-campo,
+#preco.preco-conferido-campo:focus {
+    color: #14532d;
+    background: #dcfce7;
+    border-color: #22c55e;
+}
+
+#preco.preco-conferido-campo:focus {
+    box-shadow:
+        0 0 0 2px rgba(34, 197, 94, 0.24),
+        0 0 0 5px rgba(37, 99, 235, 0.18);
+}
+
+.preco-conferido-campo-badge {
+    display: none;
+    justify-self: start;
+    color: #166534;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.1;
+    white-space: nowrap;
+}
+
+.preco-conferido-campo-badge.visivel {
+    display: inline-flex;
 }
 
     table {
@@ -2666,6 +2707,7 @@ td:first-child {
     data-preco="{{ produto.preco_venda|default_if_none:'' }}"
     data-estoque="{{ produto.quantidade|default_if_none:0|unlocalize }}"
     data-estoque-conferido="{{ produto.estoque_conferido|yesno:'true,false' }}"
+    data-preco-conferido="{{ produto.preco_conferido|yesno:'true,false' }}"
     data-fracionado="{{ produto.vende_fracionado|yesno:'true,false' }}"
     data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
     data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
@@ -2680,7 +2722,10 @@ td:first-child {
 <select id="unidade">
     <option value="">Un</option>
 </select>
-<input type="text" id="preco" placeholder="Preço">
+<div class="preco-venda-wrap">
+    <input type="text" id="preco" placeholder="Preço">
+    <span id="precoConferidoBadge" class="preco-conferido-campo-badge" hidden>Preço conferido</span>
+</div>
         </div>
 
         <div class="barra-acoes-venda" aria-label="Acoes da venda">
@@ -3011,6 +3056,7 @@ const historicoProdutoCliente = document.getElementById("historicoProdutoCliente
 const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
 const preco = document.getElementById("preco");
+const precoConferidoBadge = document.getElementById("precoConferidoBadge");
 const tabelaBody = document.getElementById("tabelaProdutos");
 const btnGravarVenda = document.getElementById("btnGravarVenda");
 const btnVisualizarVenda = document.getElementById("btnVisualizarVenda");
@@ -4219,11 +4265,13 @@ clienteBusca.addEventListener("keydown", (e) => {
     const optionSelecionada = this.options[this.selectedIndex];
     if (!optionSelecionada) {
         ocultarHistoricoProdutoCliente();
+        aplicarEstadoConferenciaPreco(null);
         return;
     }
 
     unidade.value = optionSelecionada.dataset.unidade1 || optionSelecionada.dataset.unidade || "";
     preco.value = optionSelecionada.dataset.preco || "";
+    aplicarEstadoConferenciaPreco(optionSelecionada);
     atualizarHistoricoProdutoCliente();
 });
 let linhaSelecionada = null;
@@ -6484,6 +6532,7 @@ function limparLinhaLancamento() {
     produto.value = "";    quantidade.value = "";
     unidade.value = "";
     preco.value = "";
+    aplicarEstadoConferenciaPreco(null);
 
     setTimeout(() => {
     produtoBusca.focus();
@@ -6560,6 +6609,7 @@ function renderSugestoes() {
     const termo = produtoBusca.value.trim();
     const estoque = formatarEstoqueConferencia(opt.dataset.estoque || "0");
     const estoqueConferido = opt.dataset.estoqueConferido === "true";
+    const precoConferido = opt.dataset.precoConferido === "true";
     const classeEstoque = classeBadgeConferenciaEstoque(opt);
 
     const regex = termo ? new RegExp(`(${termo})`, "i") : null;
@@ -6567,6 +6617,7 @@ function renderSugestoes() {
 
     div.innerHTML = `
     <span class="nome-item-sugestao">${textoHighlight}</span>
+    ${precoConferido ? '<span class="preco-conferido-sugestao">Preço conferido</span>' : ''}
     <span
         class="estoque-item-sugestao ${classeEstoque}"
         data-produto-id="${opt.dataset.produtoId || ""}"
@@ -6684,6 +6735,15 @@ if (itemAtivo) {
     });
 }
 }
+function aplicarEstadoConferenciaPreco(opt) {
+    const precoConferido = Boolean(opt) && opt.dataset.precoConferido === "true";
+    preco.classList.toggle("preco-conferido-campo", precoConferido);
+    if (precoConferidoBadge) {
+        precoConferidoBadge.hidden = !precoConferido;
+        precoConferidoBadge.classList.toggle("visivel", precoConferido);
+    }
+}
+
 function selecionarProduto(opt) {
 if (bloquearProdutoDuplicadoNoCampoProdutoVenda(opt)) {
     return;
@@ -6697,6 +6757,7 @@ if (!isNaN(estoqueProdutoSelecionado) && estoqueProdutoSelecionado <= 0) {
     quantidade.value = "";
     unidade.innerHTML = "";
     preco.value = "";
+    aplicarEstadoConferenciaPreco(null);
 
     sugestoesBox.style.display = "none";
     autocompleteAberto = false;
@@ -6748,6 +6809,7 @@ aplicarEstadoConferenciaEstoquePreview(opt);
 estoquePreview.style.display = "inline-block";
 
 preco.value = opt.dataset.preco || "";
+aplicarEstadoConferenciaPreco(opt);
 
 // dispara o MESMO fluxo do select
 produto.dispatchEvent(new Event("change"));
@@ -6763,7 +6825,12 @@ unidade.addEventListener("change", () => {
     const nomeProduto = produto.value.trim();
     const opt = Array.from(produto.options).find(option => option.value.trim() === nomeProduto);
 
-    if (!opt) return;
+    if (!opt) {
+        aplicarEstadoConferenciaPreco(null);
+        return;
+    }
+
+    aplicarEstadoConferenciaPreco(opt);
 
     const unidade1 = opt.dataset.unidade1 || opt.dataset.unidade || "";
     const unidade2 = opt.dataset.unidade2 || "";

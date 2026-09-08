@@ -1,0 +1,744 @@
+{% extends "estoque/base.html" %}
+
+{% block title %}Conferir precos com sistema antigo | {{ block.super }}{% endblock %}
+
+{% block content %}
+<style>
+    .precos-antigo { color: #111827; }
+    .precos-antigo .resumo-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+    }
+    .precos-antigo .resumo-item {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: #ffffff;
+    }
+    .precos-antigo .resumo-valor {
+        display: block;
+        font-size: 1.35rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .precos-antigo .resumo-label {
+        color: #6b7280;
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .precos-antigo .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .precos-antigo .tabela-precos { min-width: 1180px; }
+    .precos-antigo .tabela-precos th {
+        white-space: nowrap;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        color: #374151;
+    }
+    .precos-antigo .tabela-precos td { vertical-align: top; }
+    .precos-antigo .preco-diff { color: #6b7280; font-size: 0.78rem; }
+    .precos-antigo .preco-editor {
+        display: grid;
+        grid-template-columns: minmax(92px, 112px) minmax(120px, 1fr);
+        gap: 8px;
+        align-items: start;
+    }
+    .precos-antigo .preco-editor input {
+        font-weight: 800;
+        min-height: 34px;
+    }
+    .precos-antigo .preco-ref {
+        color: #4b5563;
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+    .precos-antigo .linha-duvidosa { background: #fff7ed; }
+    .precos-antigo .linha-nao-encontrado { background: #f9fafb; }
+    .precos-antigo .linha-provavel { background: #eff6ff; }
+    .precos-antigo .linha-conferida { background: #dcfce7; }
+    .precos-antigo tr.linha-ativa {
+        outline: 3px solid #2563eb;
+        outline-offset: -3px;
+        background: #eef6ff;
+    }
+    .precos-antigo tr.linha-salva {
+        box-shadow: inset 4px 0 0 #16a34a;
+    }
+    .precos-antigo tr.linha-erro {
+        box-shadow: inset 4px 0 0 #dc2626;
+    }
+    .precos-antigo .badge-leitura {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 0.75rem;
+        font-weight: 800;
+        background: #e5e7eb;
+        color: #374151;
+    }
+    .precos-antigo .badge-seguro { background: #dcfce7; color: #166534; }
+    .precos-antigo .badge-duvidoso { background: #ffedd5; color: #9a3412; }
+    .precos-antigo .badge-nao { background: #e5e7eb; color: #374151; }
+    .precos-antigo .badge-conferido { background: #16a34a; color: #ffffff; }
+    .precos-antigo .ajuda-linha { max-width: 320px; color: #4b5563; }
+    .precos-antigo .sugestoes-correspondencia {
+        margin-top: 10px;
+        display: grid;
+        gap: 8px;
+        max-width: 420px;
+    }
+    .precos-antigo .sugestao-correspondencia {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 8px;
+    }
+    .precos-antigo .sugestao-precos {
+        color: #4b5563;
+        font-size: 0.78rem;
+        line-height: 1.4;
+    }
+    .precos-antigo .sugestao-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+    }
+</style>
+
+<div class="container-fluid mt-4 precos-antigo">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
+        <div>
+            <h1 class="h3 mb-1">Conferir precos com sistema antigo</h1>
+            <div class="text-muted">
+                Snapshot: <strong>{{ snapshot.metadata.gerado_em|default:"indisponivel" }}</strong>
+                <span class="mx-2">|</span>
+                Fonte: <strong>{{ snapshot.metadata.fonte_logica|default:"JSON local" }}</strong>
+            </div>
+        </div>
+        <a href="{% url 'estoque:home' %}" class="btn btn-outline-secondary">Voltar</a>
+    </div>
+
+    {% if not snapshot.disponivel %}
+        <div class="alert alert-warning">
+            {{ snapshot.erro }}
+        </div>
+    {% endif %}
+
+    <div class="resumo-grid mb-3">
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.total }}</span>
+            <span class="resumo-label">Total</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.pendentes }}</span>
+            <span class="resumo-label">Pendentes</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.conferidos }}</span>
+            <span class="resumo-label">Conferidos</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.exatos }}</span>
+            <span class="resumo-label">Match exato</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.provaveis }}</span>
+            <span class="resumo-label">Match provavel</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.duvidosos }}</span>
+            <span class="resumo-label">Duvidosos</span>
+        </div>
+        <div class="resumo-item">
+            <span class="resumo-valor">{{ resumo.nao_encontrados }}</span>
+            <span class="resumo-label">Nao encontrados</span>
+        </div>
+    </div>
+
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-3" data-search-form>
+        <div class="btn-group" role="group" aria-label="Filtros de status de conferencia">
+            <input type="radio" class="btn-check" name="status_preco" id="status_preco_todos" value="todos"
+                   {% if status_preco_atual == "todos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-success" for="status_preco_todos">Todos</label>
+
+            <input type="radio" class="btn-check" name="status_preco" id="status_preco_pendentes" value="pendentes"
+                   {% if status_preco_atual == "pendentes" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-success" for="status_preco_pendentes">Pendentes</label>
+
+            <input type="radio" class="btn-check" name="status_preco" id="status_preco_conferidos" value="conferidos"
+                   {% if status_preco_atual == "conferidos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-success" for="status_preco_conferidos">Conferidos</label>
+        </div>
+
+        <div class="btn-group" role="group" aria-label="Filtros de matching de precos">
+            <input type="radio" class="btn-check" name="filtro" id="filtro_todos" value="todos"
+                   {% if filtro_atual == "todos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_todos">Match todos</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_exatos" value="exatos"
+                   {% if filtro_atual == "exatos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_exatos">Exatos</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_provaveis" value="provaveis"
+                   {% if filtro_atual == "provaveis" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_provaveis">Provaveis</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_nao_encontrados" value="nao-encontrados"
+                   {% if filtro_atual == "nao-encontrados" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_nao_encontrados">Nao encontrados</label>
+
+            <input type="radio" class="btn-check" name="filtro" id="filtro_duvidosos" value="duvidosos"
+                   {% if filtro_atual == "duvidosos" %}checked{% endif %} onchange="this.form.submit()">
+            <label class="btn btn-outline-primary" for="filtro_duvidosos">Duvidosos</label>
+        </div>
+
+        <select name="ordenar" class="form-select" style="max-width: 220px;" onchange="this.form.submit()">
+            <option value="nome" {% if ordenar_atual == "nome" %}selected{% endif %}>Ordenar por nome</option>
+            <option value="desvio" {% if ordenar_atual == "desvio" %}selected{% endif %}>Maiores desvios</option>
+        </select>
+
+        <input type="search" class="form-control" name="busca" value="{{ busca_atual }}"
+               placeholder="Buscar produto ou codigo" style="max-width: 320px;">
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if busca_atual %}
+            <a href="?status_preco={{ status_preco_atual }}&filtro={{ filtro_atual }}&ordenar={{ ordenar_atual }}" class="btn btn-outline-secondary">Limpar</a>
+        {% endif %}
+    </form>
+
+    <div class="table-responsive border rounded">
+        <table class="table table-sm table-hover tabela-precos mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Produto novo</th>
+                    <th>Unidades</th>
+                    <th>Produto antigo</th>
+                    <th>Status</th>
+                    <th>Compra</th>
+                    <th>Vista</th>
+                    <th>Prazo</th>
+                    <th>Desvio total</th>
+                    <th>Acao</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for linha in linhas %}
+                    <tr class="{% if linha.produto.preco_conferido %}linha-conferida{% elif linha.match_tipo == 'nao_encontrado' %}linha-nao-encontrado{% elif linha.situacao == 'duvidoso' or linha.match_tipo == 'ambiguo' %}linha-duvidosa{% elif linha.match_tipo == 'provavel' %}linha-provavel{% endif %}"
+                        data-price-row data-row-index="{{ forloop.counter0 }}" data-produto-id="{{ linha.produto.id }}">
+                        <td>
+                            <form id="preco-form-{{ linha.produto.id }}" method="post"
+                                  action="{% url 'estoque:conferencia_precos_antigo_salvar' %}"
+                                  data-price-form>
+                                {% csrf_token %}
+                                <input type="hidden" name="produto_id" value="{{ linha.produto.id }}">
+                            </form>
+                            <strong>{{ linha.produto.nome }}</strong>
+                            <div class="small text-muted mono">
+                                codigo: {{ linha.produto.codigo|default:"-" }} |
+                                legado: {{ linha.produto.codigo_legado|default:"-" }}
+                            </div>
+                            <div class="small mt-1" data-conference-status>
+                                {% if linha.produto.preco_conferido %}
+                                    <span class="badge-leitura badge-conferido">conferido</span>
+                                    <span class="text-muted">
+                                        {{ linha.produto.preco_conferido_em|date:"d/m/Y H:i" }}
+                                        {% if linha.produto.preco_conferido_por %}
+                                            | {{ linha.produto.preco_conferido_por.get_username }}
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="small mt-2" data-row-message aria-live="polite"></div>
+                        </td>
+                        <td class="small">
+                            <div>Compra: <strong>{{ linha.produto.unidade_compra|default:"-" }}</strong></div>
+                            <div>Venda 1: <strong>{{ linha.produto.unidade_venda_1|default:"-" }}</strong></div>
+                            <div>Venda 2: <strong>{{ linha.produto.unidade_venda_2|default:"-" }}</strong></div>
+                            <div>Fator: <strong>{{ linha.produto.fator_conversao|default:"-" }}</strong></div>
+                        </td>
+                        <td>
+                            {% if linha.registro_antigo %}
+                                <strong>{{ linha.registro_antigo.nome }}</strong>
+                                <div class="small text-muted mono">codigo: {{ linha.registro_antigo.codigo }}</div>
+                                <div class="small text-muted">
+                                    UNV {{ linha.registro_antigo.unv|default:"-" }} |
+                                    UNF {{ linha.registro_antigo.unf|default:"-" }} |
+                                    CONVF {{ linha.registro_antigo.convf|default:"-" }}
+                                </div>
+                            {% elif linha.candidatos %}
+                                <strong>{{ linha.candidatos|length }} candidatos por nome</strong>
+                            {% else %}
+                                <span class="text-muted">Nao encontrado no snapshot</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if linha.situacao == "seguro" %}
+                                <span class="badge-leitura badge-seguro">{{ linha.match_tipo }}</span>
+                                <div class="small ajuda-linha mt-1">{{ linha.avaliacao_unidade.motivo }}</div>
+                                {% if linha.comparacao_fracionada %}
+                                    <div class="small text-muted mt-1">
+                                        Ref. fracionada tambem disponivel.
+                                    </div>
+                                {% endif %}
+                            {% elif linha.match_tipo == "nao_encontrado" %}
+                                <span class="badge-leitura badge-nao">nao encontrado</span>
+                            {% else %}
+                                <span class="badge-leitura badge-duvidoso">duvidoso</span>
+                                {% if linha.avaliacao_unidade %}
+                                    <div class="small ajuda-linha mt-1">{{ linha.avaliacao_unidade.motivo }}</div>
+                                    <div class="small text-muted mt-1">
+                                        Principal antigo:
+                                        {{ linha.registro_antigo.principal.compra|default:"-" }} /
+                                        {{ linha.registro_antigo.principal.vista|default:"-" }} /
+                                        {{ linha.registro_antigo.principal.prazo|default:"-" }}
+                                    </div>
+                                    <div class="small text-muted">
+                                        Fracionado antigo:
+                                        {{ linha.registro_antigo.fracionado.compra|default:"-" }} /
+                                        {{ linha.registro_antigo.fracionado.vista|default:"-" }} /
+                                        {{ linha.registro_antigo.fracionado.prazo|default:"-" }}
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                            {% if linha.sugestoes_correspondencia %}
+                                <div class="sugestoes-correspondencia" data-suggestions>
+                                    {% for sugestao in linha.sugestoes_correspondencia %}
+                                        <div class="sugestao-correspondencia" data-suggestion>
+                                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                                <strong>{{ sugestao.nome }}</strong>
+                                                <span class="badge-leitura {% if sugestao.nivel == 'forte' %}badge-seguro{% else %}badge-duvidoso{% endif %}">
+                                                    {{ sugestao.nivel }}
+                                                </span>
+                                            </div>
+                                            <div class="small text-muted mono">codigo: {{ sugestao.codigo }}</div>
+                                            <div class="small text-muted">
+                                                UNV {{ sugestao.unv|default:"-" }} |
+                                                UNF {{ sugestao.unf|default:"-" }} |
+                                                CONVF {{ sugestao.convf|default:"-" }}
+                                            </div>
+                                            <div class="sugestao-precos mt-1">
+                                                <div>
+                                                    Principal:
+                                                    compra {{ sugestao.principal.compra.fmt }} |
+                                                    vista {{ sugestao.principal.vista.fmt }} |
+                                                    prazo {{ sugestao.principal.prazo.fmt }} |
+                                                    terceiro {{ sugestao.principal.terceiro.fmt }}
+                                                </div>
+                                                <div>
+                                                    Fracionado:
+                                                    compra {{ sugestao.fracionado.compra.fmt }} |
+                                                    vista {{ sugestao.fracionado.vista.fmt }} |
+                                                    prazo {{ sugestao.fracionado.prazo.fmt }} |
+                                                    terceiro {{ sugestao.fracionado.terceiro.fmt }}
+                                                </div>
+                                            </div>
+                                            <div class="small mt-1">{{ sugestao.motivo }}</div>
+                                            <div class="sugestao-actions">
+                                                <button type="button" class="btn btn-outline-success btn-sm"
+                                                        data-confirm-candidate
+                                                        data-produto-id="{{ linha.produto.id }}"
+                                                        data-codigo-antigo="{{ sugestao.codigo }}">
+                                                    Confirmar correspondencia
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                        data-reject-candidate>
+                                                    Nao e este
+                                                </button>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="preco-editor">
+                                <input type="text" inputmode="decimal" class="form-control form-control-sm"
+                                       name="preco_compra" value="{{ linha.produto.preco_compra|default_if_none:'0.00' }}"
+                                       form="preco-form-{{ linha.produto.id }}"
+                                       data-price-input data-price-field="preco_compra"
+                                       data-original-value="{{ linha.produto.preco_compra|default_if_none:'0.00' }}"
+                                       data-old-value="{% if linha.comparacao %}{{ linha.comparacao.compra.antigo|default_if_none:'' }}{% endif %}">
+                                <div class="preco-ref">
+                                    <div>Antigo: <strong data-old-display>{% if linha.comparacao %}{{ linha.comparacao.compra.antigo_fmt }}{% else %}-{% endif %}</strong></div>
+                                    <div>Dif.: <strong data-diff-display>{% if linha.comparacao %}{{ linha.comparacao.compra.diferenca_fmt }} ({{ linha.comparacao.compra.percentual_fmt }}){% else %}-{% endif %}</strong></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="preco-editor">
+                                <input type="text" inputmode="decimal" class="form-control form-control-sm"
+                                       name="preco_vista" value="{{ linha.produto.preco_vista|default_if_none:'0.00' }}"
+                                       form="preco-form-{{ linha.produto.id }}"
+                                       data-price-input data-price-field="preco_vista"
+                                       data-original-value="{{ linha.produto.preco_vista|default_if_none:'0.00' }}"
+                                       data-old-value="{% if linha.comparacao %}{{ linha.comparacao.vista.antigo|default_if_none:'' }}{% endif %}">
+                                <div class="preco-ref">
+                                    <div>Antigo: <strong data-old-display>{% if linha.comparacao %}{{ linha.comparacao.vista.antigo_fmt }}{% else %}-{% endif %}</strong></div>
+                                    <div>Dif.: <strong data-diff-display>{% if linha.comparacao %}{{ linha.comparacao.vista.diferenca_fmt }} ({{ linha.comparacao.vista.percentual_fmt }}){% else %}-{% endif %}</strong></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="preco-editor">
+                                <input type="text" inputmode="decimal" class="form-control form-control-sm"
+                                       name="preco_prazo" value="{{ linha.produto.preco_prazo|default_if_none:'0.00' }}"
+                                       form="preco-form-{{ linha.produto.id }}"
+                                       data-price-input data-price-field="preco_prazo"
+                                       data-original-value="{{ linha.produto.preco_prazo|default_if_none:'0.00' }}"
+                                       data-old-value="{% if linha.comparacao %}{{ linha.comparacao.prazo.antigo|default_if_none:'' }}{% endif %}">
+                                <div class="preco-ref">
+                                    <div>Antigo: <strong data-old-display>{% if linha.comparacao %}{{ linha.comparacao.prazo.antigo_fmt }}{% else %}-{% endif %}</strong></div>
+                                    <div>Dif.: <strong data-diff-display>{% if linha.comparacao %}{{ linha.comparacao.prazo.diferenca_fmt }} ({{ linha.comparacao.prazo.percentual_fmt }}){% else %}-{% endif %}</strong></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="mono">
+                            {{ linha.desvio_total_fmt }}
+                        </td>
+                        <td>
+                            <button type="submit" class="btn btn-primary btn-sm"
+                                    form="preco-form-{{ linha.produto.id }}"
+                                    data-price-save>Salvar</button>
+                            <button type="button" class="btn btn-outline-success btn-sm mt-1"
+                                    data-mark-reviewed
+                                    data-produto-id="{{ linha.produto.id }}">Conferido</button>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">Nenhum produto encontrado.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function () {
+    const rows = Array.from(document.querySelectorAll("[data-price-row]"));
+    const searchForm = document.querySelector("[data-search-form]");
+    const confirmarCorrespondenciaUrl = "{% url 'estoque:conferencia_precos_antigo_confirmar_correspondencia' %}";
+    const marcarConferidoUrl = "{% url 'estoque:conferencia_precos_antigo_marcar_conferido' %}";
+
+    function parseMoney(value) {
+        const text = String(value || "").replace("R$", "").replace(/\s/g, "");
+        if (!text) return null;
+        const normalized = text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text;
+        const parsed = Number(normalized);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function formatMoney(value, signed) {
+        if (value === null || value === undefined || !Number.isFinite(value)) return "-";
+        const absolute = Math.abs(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        if (!signed || value === 0) return absolute;
+        return `${value > 0 ? "+" : "-"}${absolute}`;
+    }
+
+    function formatPercent(value) {
+        if (value === null || value === undefined || !Number.isFinite(value)) return "-";
+        const sign = value > 0 ? "+" : "";
+        return `${sign}${value.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+    }
+
+    function setActiveRow(row) {
+        rows.forEach((item) => item.classList.toggle("linha-ativa", item === row));
+    }
+
+    function inputsFor(row) {
+        return Array.from(row.querySelectorAll("[data-price-input]"));
+    }
+
+    function controlsFor(row) {
+        const save = row.querySelector("[data-price-save]");
+        const reviewed = row.querySelector("[data-mark-reviewed]");
+        return [...inputsFor(row), save, reviewed].filter(Boolean);
+    }
+
+    function messageFor(row, text, type) {
+        const target = row.querySelector("[data-row-message]");
+        if (!target) return;
+        target.textContent = text || "";
+        target.className = "small mt-2";
+        if (type === "error") target.classList.add("text-danger", "fw-bold");
+        if (type === "success") target.classList.add("text-success", "fw-bold");
+    }
+
+    function focusInput(input) {
+        if (!input) return;
+        input.focus();
+        window.setTimeout(() => input.select(), 0);
+    }
+
+    function updateReference(input) {
+        const editor = input.closest(".preco-editor");
+        const novo = parseMoney(input.value);
+        const antigo = parseMoney(input.dataset.oldValue);
+        const diffDisplay = editor && editor.querySelector("[data-diff-display]");
+
+        if (!diffDisplay) return;
+        if (novo === null || antigo === null) {
+            diffDisplay.textContent = "-";
+            return;
+        }
+        const diff = novo - antigo;
+        const percent = antigo === 0 ? null : (diff / antigo) * 100;
+        diffDisplay.textContent = `${formatMoney(diff, true)} (${formatPercent(percent)})`;
+    }
+
+    function restoreRow(row) {
+        inputsFor(row).forEach((input) => {
+            input.value = input.dataset.originalValue || "";
+            updateReference(input);
+        });
+        row.classList.remove("linha-erro", "linha-salva");
+        messageFor(row, "", "");
+        const first = inputsFor(row)[0];
+        focusInput(first);
+    }
+
+    function focusNextSafeRow(row) {
+        const currentIndex = rows.indexOf(row);
+        const next = rows.slice(currentIndex + 1).find((item) => item.querySelector("[data-price-input]"));
+        if (next) {
+            const first = inputsFor(next)[0];
+            setActiveRow(next);
+            focusInput(first);
+        }
+    }
+
+    function focusRowByProductId(productId) {
+        const row = rows.find((item) => item.dataset.produtoId === productId);
+        if (!row) return false;
+        setActiveRow(row);
+        row.scrollIntoView({ block: "center" });
+        const firstInput = inputsFor(row)[0];
+        if (firstInput) focusInput(firstInput);
+        return true;
+    }
+
+    function updateConferenceStatus(row, data) {
+        const target = row.querySelector("[data-conference-status]");
+        if (!target) return;
+        if (data.preco_conferido) {
+            const operador = data.preco_conferido_por ? ` | ${data.preco_conferido_por}` : "";
+            target.innerHTML = `<span class="badge-leitura badge-conferido">conferido</span> <span class="text-muted">${data.preco_conferido_em || ""}${operador}</span>`;
+            row.classList.add("linha-conferida");
+            row.classList.remove("linha-nao-encontrado", "linha-duvidosa", "linha-provavel");
+        } else {
+            target.innerHTML = "";
+            row.classList.remove("linha-conferida");
+        }
+    }
+
+    async function submitRow(row, options) {
+        options = options || {};
+        const form = row.querySelector("[data-price-form]");
+        if (!form) return;
+        row.classList.remove("linha-erro", "linha-salva");
+        messageFor(row, "Salvando...", "");
+
+        const response = await fetch(form.action, {
+            method: "POST",
+            body: new FormData(form),
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.ok) {
+            row.classList.add("linha-erro");
+            messageFor(row, data.erro || "Nao foi possivel salvar.", "error");
+            const field = data.campo ? row.querySelector(`[data-price-field="${data.campo}"]`) : inputsFor(row)[0];
+            focusInput(field);
+            return;
+        }
+
+        inputsFor(row).forEach((input) => {
+            if (data.precos[input.dataset.priceField] !== undefined) {
+                input.value = data.precos[input.dataset.priceField];
+                input.dataset.originalValue = data.precos[input.dataset.priceField];
+                updateReference(input);
+            }
+        });
+        updateConferenceStatus(row, data);
+        row.classList.add("linha-salva");
+        messageFor(row, "Precos salvos.", "success");
+        if (options.focusReviewed) {
+            const reviewed = row.querySelector("[data-mark-reviewed]");
+            if (reviewed) {
+                reviewed.focus();
+                return;
+            }
+        }
+        focusNextSafeRow(row);
+    }
+
+    async function markReviewed(row, button) {
+        row.classList.remove("linha-erro", "linha-salva");
+        messageFor(row, "Marcando conferido...", "");
+        const payload = new FormData();
+        const csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+        if (csrf) payload.append("csrfmiddlewaretoken", csrf.value);
+        payload.append("produto_id", button.dataset.produtoId);
+        payload.append("confirmacao", "CONFERIDO");
+
+        const response = await fetch(marcarConferidoUrl, {
+            method: "POST",
+            body: payload,
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+            row.classList.add("linha-erro");
+            messageFor(row, data.erro || "Nao foi possivel marcar conferido.", "error");
+            button.focus();
+            return;
+        }
+
+        updateConferenceStatus(row, data);
+        row.classList.add("linha-salva");
+        messageFor(row, "Produto conferido.", "success");
+        focusNextSafeRow(row);
+    }
+
+    rows.forEach((row) => {
+        row.addEventListener("focusin", () => setActiveRow(row));
+        row.addEventListener("click", () => setActiveRow(row));
+
+        controlsFor(row).forEach((control) => {
+            control.addEventListener("keydown", (event) => {
+                if (event.key === "Escape") {
+                    event.preventDefault();
+                    restoreRow(row);
+                    return;
+                }
+                if (event.key !== "Enter") return;
+                event.preventDefault();
+
+                if (event.currentTarget.matches("[data-price-save]")) {
+                    submitRow(row, { focusReviewed: true });
+                    return;
+                }
+                if (event.currentTarget.matches("[data-mark-reviewed]")) {
+                    markReviewed(row, event.currentTarget);
+                    return;
+                }
+
+                const controls = controlsFor(row);
+                const index = controls.indexOf(event.currentTarget);
+                if (event.shiftKey && index > 0) {
+                    const previous = controls[index - 1];
+                    if (previous.matches("[data-price-input]")) {
+                        focusInput(previous);
+                    } else {
+                        previous.focus();
+                    }
+                    return;
+                }
+                if (index < controls.length - 1) {
+                    const next = controls[index + 1];
+                    if (next.matches("[data-price-input]")) {
+                        focusInput(next);
+                    } else {
+                        next.focus();
+                    }
+                    return;
+                }
+                submitRow(row);
+            });
+        });
+
+        inputsFor(row).forEach((input) => {
+            input.addEventListener("input", () => updateReference(input));
+            input.addEventListener("focus", () => window.setTimeout(() => input.select(), 0));
+        });
+
+        const form = row.querySelector("[data-price-form]");
+        if (form) {
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                submitRow(row, { focusReviewed: true });
+            });
+        }
+
+        row.querySelectorAll("[data-mark-reviewed]").forEach((button) => {
+            button.addEventListener("click", () => markReviewed(row, button));
+        });
+
+        row.querySelectorAll("[data-confirm-candidate]").forEach((button) => {
+            button.addEventListener("click", async () => {
+                row.classList.remove("linha-erro", "linha-salva");
+                messageFor(row, "Confirmando correspondencia...", "");
+                const payload = new FormData();
+                const csrf = document.querySelector("[name=csrfmiddlewaretoken]");
+                if (csrf) payload.append("csrfmiddlewaretoken", csrf.value);
+                payload.append("produto_id", button.dataset.produtoId);
+                payload.append("codigo_antigo", button.dataset.codigoAntigo);
+                payload.append("confirmacao", "CONFIRMAR_CORRESPONDENCIA");
+
+                const response = await fetch(confirmarCorrespondenciaUrl, {
+                    method: "POST",
+                    body: payload,
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) {
+                    row.classList.add("linha-erro");
+                    messageFor(row, data.erro || "Nao foi possivel confirmar.", "error");
+                    button.focus();
+                    return;
+                }
+
+                const url = new URL(window.location.href);
+                url.searchParams.set("produto_foco", button.dataset.produtoId);
+                window.location.href = url.toString();
+            });
+        });
+
+        row.querySelectorAll("[data-reject-candidate]").forEach((button) => {
+            button.addEventListener("click", () => {
+                const suggestion = button.closest("[data-suggestion]");
+                if (suggestion) suggestion.remove();
+                const remaining = row.querySelector("[data-suggestion]");
+                if (remaining) {
+                    const nextButton = remaining.querySelector("[data-confirm-candidate], [data-reject-candidate]");
+                    if (nextButton) nextButton.focus();
+                } else {
+                    messageFor(row, "Candidato ocultado nesta pagina.", "");
+                    const first = inputsFor(row)[0];
+                    if (first) focusInput(first);
+                }
+            });
+        });
+    });
+
+    if (searchForm) {
+        searchForm.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && event.target.matches('input[type="search"]')) {
+                event.preventDefault();
+                searchForm.submit();
+            }
+        });
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+        const produtoFoco = new URLSearchParams(window.location.search).get("produto_foco");
+        if (produtoFoco && focusRowByProductId(produtoFoco)) {
+            return;
+        }
+        const firstRow = rows.find((row) => row.querySelector("[data-price-input]"));
+        if (firstRow) {
+            setActiveRow(firstRow);
+            if (new URLSearchParams(window.location.search).has("busca")) {
+                const firstInput = inputsFor(firstRow)[0];
+                focusInput(firstInput);
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

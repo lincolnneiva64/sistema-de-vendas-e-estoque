@@ -54,6 +54,12 @@ from .services.sincronizacao_firebird import (
     registrar_token_previa as sincronizacao_registrar_token_previa,
 )
 from .services.estoque_manual import conferir_ou_ajustar_estoque
+from .services.precos_antigo_snapshot import (
+    buscar_registro_antigo_por_codigo,
+    carregar_snapshot_precos,
+    gerar_contexto_conferencia_precos,
+    produto_tem_match_seguro,
+)
 from locacoes.services import painel_operacional_rapido_locacoes
 from django.contrib import messages
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -11145,6 +11151,242 @@ def _serializar_dados_comprovante_recebimento(cliente, dados):
 def produto_detalhe(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     return render(request, "estoque/produto_detalhe.html", {"produto": produto})
+
+
+@require_GET
+def conferencia_precos_antigo(request):
+    contexto = gerar_contexto_conferencia_precos(request.GET)
+    return render(request, "estoque/conferencia_precos_antigo.html", contexto)
+
+
+def _decimal_preco_conferencia(valor, campo):
+    texto = (valor or "").strip()
+    if not texto:
+        raise ValueError(f"Informe {campo}.")
+    texto = texto.replace("R$", "").replace(" ", "")
+    if "," in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    try:
+        valor_decimal = Decimal(texto)
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{campo} invalido.")
+    if valor_decimal < 0:
+        raise ValueError(f"{campo} nao pode ser negativo.")
+    return valor_decimal.quantize(Decimal("0.01"))
+
+
+@require_POST
+def conferencia_precos_antigo_salvar(request):
+    campos_aceitos = {"csrfmiddlewaretoken", "produto_id", "preco_compra", "preco_vista", "preco_prazo"}
+    campos_recebidos = set(request.POST.keys())
+    extras = sorted(campos_recebidos - campos_aceitos)
+    if extras:
+        return JsonResponse(
+            {"ok": False, "erro": f"Campo nao permitido: {extras[0]}", "campo": extras[0]},
+            status=400,
+        )
+
+    produto_id = request.POST.get("produto_id")
+    if not produto_id:
+        return JsonResponse({"ok": False, "erro": "Produto nao informado.", "campo": "produto_id"}, status=400)
+    try:
+        produto_id = int(produto_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "erro": "Produto invalido.", "campo": "produto_id"}, status=400)
+
+    try:
+        novos_precos = {
+            "preco_compra": _decimal_preco_conferencia(request.POST.get("preco_compra"), "preco de compra"),
+            "preco_vista": _decimal_preco_conferencia(request.POST.get("preco_vista"), "preco a vista"),
+            "preco_prazo": _decimal_preco_conferencia(request.POST.get("preco_prazo"), "preco a prazo"),
+        }
+    except ValueError as exc:
+        mensagem = str(exc)
+        campo = "preco_compra"
+        if "vista" in mensagem:
+            campo = "preco_vista"
+        elif "prazo" in mensagem:
+            campo = "preco_prazo"
+        return JsonResponse({"ok": False, "erro": mensagem, "campo": campo}, status=400)
+
+    try:
+        with transaction.atomic():
+            produto = Produto.objects.select_for_update().get(pk=produto_id, excluido=False, ativo=True)
+            precos_anteriores = {
+                "preco_compra": produto.preco_compra,
+                "preco_vista": produto.preco_vista,
+                "preco_prazo": produto.preco_prazo,
+            }
+            for campo, valor in novos_precos.items():
+                setattr(produto, campo, valor)
+            precos_alterados = any(precos_anteriores[campo] != novos_precos[campo] for campo in novos_precos)
+            update_fields = ["preco_compra", "preco_vista", "preco_prazo", "preco_venda", "atualizado_em"]
+            if precos_alterados and produto.preco_conferido:
+                produto.preco_conferido = False
+                produto.preco_conferido_em = None
+                produto.preco_conferido_por = None
+                update_fields.extend(["preco_conferido", "preco_conferido_em", "preco_conferido_por"])
+            produto.save(update_fields=update_fields)
+    except Produto.DoesNotExist:
+        return JsonResponse({"ok": False, "erro": "Produto nao encontrado.", "campo": "produto_id"}, status=404)
+    except ValidationError as exc:
+        mensagens = exc.messages if hasattr(exc, "messages") else [str(exc)]
+        mensagem = " ".join(mensagens)
+        campo = "preco_compra"
+        if "vista" in mensagem.lower():
+            campo = "preco_vista"
+        elif "prazo" in mensagem.lower():
+            campo = "preco_prazo"
+        return JsonResponse({"ok": False, "erro": mensagem, "campo": campo}, status=400)
+
+    operador_preco_conferido = ""
+    if produto.preco_conferido_por:
+        operador_preco_conferido = produto.preco_conferido_por.get_username()
+    return JsonResponse(
+        {
+            "ok": True,
+            "produto_id": produto.pk,
+            "precos": {
+                "preco_compra": f"{produto.preco_compra:.2f}",
+                "preco_vista": f"{produto.preco_vista:.2f}",
+                "preco_prazo": f"{produto.preco_prazo:.2f}",
+            },
+            "preco_conferido": produto.preco_conferido,
+            "preco_conferido_em": (
+                timezone.localtime(produto.preco_conferido_em).strftime("%d/%m/%Y %H:%M")
+                if produto.preco_conferido_em
+                else ""
+            ),
+            "preco_conferido_por": operador_preco_conferido,
+        }
+    )
+
+
+@require_POST
+def conferencia_precos_antigo_marcar_conferido(request):
+    campos_aceitos = {"csrfmiddlewaretoken", "produto_id", "confirmacao"}
+    campos_recebidos = set(request.POST.keys())
+    extras = sorted(campos_recebidos - campos_aceitos)
+    if extras:
+        return JsonResponse(
+            {"ok": False, "erro": f"Campo nao permitido: {extras[0]}", "campo": extras[0]},
+            status=400,
+        )
+
+    if request.POST.get("confirmacao") != "CONFERIDO":
+        return JsonResponse(
+            {"ok": False, "erro": "Confirmacao explicita obrigatoria.", "campo": "confirmacao"},
+            status=400,
+        )
+
+    try:
+        produto_id = int(request.POST.get("produto_id") or "")
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "erro": "Produto invalido.", "campo": "produto_id"}, status=400)
+
+    try:
+        with transaction.atomic():
+            produto = Produto.objects.select_for_update().get(pk=produto_id, excluido=False, ativo=True)
+            usuario = request.user if getattr(request, "user", None) and request.user.is_authenticated else None
+            produto.preco_conferido = True
+            produto.preco_conferido_em = timezone.now()
+            produto.preco_conferido_por = usuario
+            produto.save(update_fields=["preco_conferido", "preco_conferido_em", "preco_conferido_por", "atualizado_em"])
+    except Produto.DoesNotExist:
+        return JsonResponse({"ok": False, "erro": "Produto nao encontrado.", "campo": "produto_id"}, status=404)
+
+    operador = ""
+    if produto.preco_conferido_por:
+        operador = produto.preco_conferido_por.get_username()
+    return JsonResponse(
+        {
+            "ok": True,
+            "produto_id": produto.pk,
+            "preco_conferido": True,
+            "preco_conferido_em": timezone.localtime(produto.preco_conferido_em).strftime("%d/%m/%Y %H:%M"),
+            "preco_conferido_por": operador,
+        }
+    )
+
+
+@require_POST
+def conferencia_precos_antigo_confirmar_correspondencia(request):
+    campos_aceitos = {"csrfmiddlewaretoken", "produto_id", "codigo_antigo", "confirmacao"}
+    campos_recebidos = set(request.POST.keys())
+    extras = sorted(campos_recebidos - campos_aceitos)
+    if extras:
+        return JsonResponse(
+            {"ok": False, "erro": f"Campo nao permitido: {extras[0]}", "campo": extras[0]},
+            status=400,
+        )
+
+    if request.POST.get("confirmacao") != "CONFIRMAR_CORRESPONDENCIA":
+        return JsonResponse(
+            {"ok": False, "erro": "Confirmacao explicita obrigatoria.", "campo": "confirmacao"},
+            status=400,
+        )
+
+    try:
+        produto_id = int(request.POST.get("produto_id") or "")
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "erro": "Produto invalido.", "campo": "produto_id"}, status=400)
+
+    codigo_antigo = (request.POST.get("codigo_antigo") or "").strip()
+    snapshot = carregar_snapshot_precos()
+    registro_antigo = buscar_registro_antigo_por_codigo(snapshot, codigo_antigo)
+    if not registro_antigo:
+        return JsonResponse(
+            {"ok": False, "erro": "Candidato antigo nao encontrado no snapshot.", "campo": "codigo_antigo"},
+            status=404,
+        )
+
+    try:
+        with transaction.atomic():
+            produto = Produto.objects.select_for_update().get(pk=produto_id, excluido=False, ativo=True)
+            produto_com_codigo = (
+                Produto.objects.select_for_update()
+                .filter(codigo_legado=codigo_antigo)
+                .exclude(pk=produto.pk)
+                .only("id", "nome")
+                .first()
+            )
+            if produto_com_codigo:
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "erro": (
+                            f"Codigo antigo {codigo_antigo} ja esta usado por "
+                            f"{produto_com_codigo.nome} (#{produto_com_codigo.pk})."
+                        ),
+                        "campo": "codigo_antigo",
+                    },
+                    status=400,
+                )
+
+            if produto.codigo_legado and produto_tem_match_seguro(produto, snapshot):
+                return JsonResponse(
+                    {"ok": False, "erro": "Produto ja possui match seguro.", "campo": "produto_id"},
+                    status=400,
+                )
+
+            produto.codigo_legado = codigo_antigo
+            produto.save(update_fields=["codigo_legado", "atualizado_em"])
+    except Produto.DoesNotExist:
+        return JsonResponse({"ok": False, "erro": "Produto nao encontrado.", "campo": "produto_id"}, status=404)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "produto_id": produto.pk,
+            "codigo_legado": produto.codigo_legado,
+            "registro_antigo": {
+                "codigo": registro_antigo.get("codigo"),
+                "nome": registro_antigo.get("nome"),
+            },
+        }
+    )
+
+
 def produto_editar(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     retorno_url = request.GET.get("next") or request.POST.get("next") or ""

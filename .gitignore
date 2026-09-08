@@ -38,6 +38,8 @@ secrets/
 # Segredos locais - nao enviar ao GitHub
 secrets/
 *.json
+!estoque/data/
+!estoque/data/precos_firebird_snapshot.json
 
 
 pix/

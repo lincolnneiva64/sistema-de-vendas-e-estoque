@@ -65,6 +65,15 @@ class Produto(models.Model):
         blank=True,
         related_name="produtos_conferidos_estoque",
     )
+    preco_conferido = models.BooleanField(default=False, db_index=True)
+    preco_conferido_em = models.DateTimeField(null=True, blank=True)
+    preco_conferido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="produtos_conferidos_preco",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
