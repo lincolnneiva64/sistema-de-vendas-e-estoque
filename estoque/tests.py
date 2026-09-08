@@ -26006,6 +26006,28 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertContains(resposta, "produto_nome: obterNomeProdutoLinhaVenda(tr)")
         self.assertNotContains(resposta, "produto_nome: tr.children[0].textContent.trim()")
 
+    def test_tela_vendas_payload_preserva_quantidade_real_da_linha_decimal(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertContains(resposta, "linha.dataset.quantidade = quantidadeItem;")
+        self.assertContains(resposta, "linha.dataset.precoUnitario = precoItem;")
+        self.assertContains(resposta, "linha.dataset.valorTotal = valorTotal;")
+        self.assertContains(
+            resposta,
+            "quantidade: normalizarNumeroVenda(tr.dataset.quantidade || tr.children[1].textContent)",
+        )
+        self.assertContains(
+            resposta,
+            "preco_unitario: normalizarNumeroVenda(tr.dataset.precoUnitario || tr.children[3].textContent)",
+        )
+        self.assertContains(
+            resposta,
+            "subtotal: normalizarNumeroVenda(tr.dataset.valorTotal || tr.children[4].textContent)",
+        )
+        self.assertContains(resposta, "quantidade: normalizarNumeroVenda(qtdTexto)")
+        self.assertNotIn("quantidade: qtdNumero.toFixed(2)", conteudo)
+
     def test_tela_vendas_clique_edicao_usa_nome_real_sem_badge_estoque(self):
         cliente, produto, venda, item = self.criar_venda_base()
         item.estoque_antes = Decimal("26.000")
@@ -26029,6 +26051,8 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertContains(resposta, "const nome = obterNomeProdutoLinhaVenda(linha);")
         self.assertContains(resposta, "produtoBusca.value = nome;")
         self.assertNotContains(resposta, "const nome = linha.children[0].textContent.trim()")
+        self.assertContains(resposta, "const qtd = (linha.dataset.quantidade || linha.children[1].textContent).trim();")
+        self.assertContains(resposta, "const valor = (linha.dataset.precoUnitario || linha.children[3].textContent).trim();")
 
     def test_tela_vendas_edicao_nao_envia_snapshot_para_item_antigo_sem_snapshot(self):
         cliente, produto, venda, item = self.criar_venda_base()
@@ -26204,6 +26228,144 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(item.quantidade, Decimal("0.500"))
         self.assertEqual(item.unidade, "KG")
         self.assertEqual(produto.quantidade, Decimal("4.500"))
+
+    def test_gravar_venda_a_vista_kg_decimal_bate_total_por_quantidade_real(self):
+        cliente = Cliente.objects.create(nome="Venda A Vista Decimal", ativo=True)
+        alho = self.criar_produto("Alho Decimal Financeiro", estoque="5.000")
+        batata = self.criar_produto("Batata Decimal Financeiro", estoque="5.000")
+        cebola = self.criar_produto("Cebola Decimal Financeiro", estoque="5.000")
+        maionese = self.criar_produto("Maionese Decimal Financeiro", estoque="5.000")
+        for produto in [alho, batata, cebola]:
+            produto.unidade_venda_1 = "KG"
+            produto.unidade_compra = "KG"
+            produto.save(update_fields=["unidade_venda_1", "unidade_compra"])
+
+        payload = {
+            "cliente_id": cliente.id,
+            "data_venda": timezone.localdate().isoformat(),
+            "data_vencimento": "",
+            "tipo_pagamento": "A vista",
+            "operador": "Teste",
+            "total": "15.72",
+            "origem_recebimento": {
+                "caixa": "15,72",
+                "banco": "0,00",
+            },
+            "itens": [
+                {
+                    "produto_id": alho.id,
+                    "produto_nome": alho.nome,
+                    "quantidade": "0.060",
+                    "unidade": "KG",
+                    "preco_unitario": "29.00",
+                },
+                {
+                    "produto_id": batata.id,
+                    "produto_nome": batata.nome,
+                    "quantidade": "0.945",
+                    "unidade": "KG",
+                    "preco_unitario": "6.80",
+                },
+                {
+                    "produto_id": cebola.id,
+                    "produto_nome": cebola.nome,
+                    "quantidade": "0.400",
+                    "unidade": "KG",
+                    "preco_unitario": "9.00",
+                },
+                {
+                    "produto_id": maionese.id,
+                    "produto_nome": maionese.nome,
+                    "quantidade": "1.000",
+                    "unidade": "UN",
+                    "preco_unitario": "3.95",
+                },
+            ],
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        venda = Venda.objects.get(pk=resposta.json()["venda_id"])
+        item_batata = venda.itens.get(produto=batata)
+        movimento = MovimentoFinanceiro.objects.get(origem="venda")
+
+        self.assertEqual(venda.total, Decimal("15.72"))
+        self.assertEqual(item_batata.quantidade, Decimal("0.945"))
+        self.assertEqual(item_batata.valor_total, Decimal("6.43"))
+        self.assertEqual(movimento.valor, Decimal("15.72"))
+
+    def test_gravar_venda_a_vista_kg_decimal_bloqueia_origem_com_total_truncado(self):
+        cliente = Cliente.objects.create(nome="Venda A Vista Decimal Truncada", ativo=True)
+        alho = self.criar_produto("Alho Decimal Truncado", estoque="5.000")
+        batata = self.criar_produto("Batata Decimal Truncada", estoque="5.000")
+        cebola = self.criar_produto("Cebola Decimal Truncada", estoque="5.000")
+        maionese = self.criar_produto("Maionese Decimal Truncada", estoque="5.000")
+        for produto in [alho, batata, cebola]:
+            produto.unidade_venda_1 = "KG"
+            produto.unidade_compra = "KG"
+            produto.save(update_fields=["unidade_venda_1", "unidade_compra"])
+        vendas_antes = Venda.objects.count()
+
+        payload = {
+            "cliente_id": cliente.id,
+            "data_venda": timezone.localdate().isoformat(),
+            "data_vencimento": "",
+            "tipo_pagamento": "A vista",
+            "operador": "Teste",
+            "total": "15.72",
+            "origem_recebimento": {
+                "caixa": "15,68",
+                "banco": "0,00",
+            },
+            "itens": [
+                {
+                    "produto_id": alho.id,
+                    "produto_nome": alho.nome,
+                    "quantidade": "0.060",
+                    "unidade": "KG",
+                    "preco_unitario": "29.00",
+                },
+                {
+                    "produto_id": batata.id,
+                    "produto_nome": batata.nome,
+                    "quantidade": "0.945",
+                    "unidade": "KG",
+                    "preco_unitario": "6.80",
+                },
+                {
+                    "produto_id": cebola.id,
+                    "produto_nome": cebola.nome,
+                    "quantidade": "0.400",
+                    "unidade": "KG",
+                    "preco_unitario": "9.00",
+                },
+                {
+                    "produto_id": maionese.id,
+                    "produto_nome": maionese.nome,
+                    "quantidade": "1.000",
+                    "unidade": "UN",
+                    "preco_unitario": "3.95",
+                },
+            ],
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("Soma: R$ 15,68. Total: R$ 15,72.", resposta.json()["mensagem"])
+        self.assertEqual(Venda.objects.count(), vendas_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda").count(), 0)
 
     def test_edicao_unificada_inclui_produto_cx_un_em_un_usando_unidade_escolhida(self):
         cliente, produto_base, venda, item_base = self.criar_venda_base(quantidade="1.000", estoque="9.000")

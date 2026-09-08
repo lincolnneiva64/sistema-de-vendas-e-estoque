@@ -3272,10 +3272,10 @@ function consolidarReferenciaPersistidaItensVenda() {
         linha.dataset.produtoIdOriginal = String(linha.dataset.produtoId || "");
         linha.dataset.produtoNomeOriginal = String(linha.dataset.produtoNome || "");
         linha.dataset.quantidadeOriginal = normalizarNumeroVenda(
-            linha.children[1]?.textContent || "0"
+            linha.dataset.quantidade || linha.children[1]?.textContent || "0"
         );
         linha.dataset.unidadeOriginal = String(
-            linha.children[2]?.textContent || ""
+            linha.dataset.unidade || linha.children[2]?.textContent || ""
         ).trim();
     });
 }
@@ -4341,11 +4341,20 @@ function atualizarLinhaItemVenda(linha, item) {
         delete linha.dataset.estoqueConferido;
     }
 
+    const quantidadeItem = normalizarNumeroVenda(item.quantidade);
+    const precoItem = normalizarNumeroVenda(item.preco_unitario);
+    const totalInformado = normalizarNumeroVenda(item.valor_total);
+
+    linha.dataset.quantidade = quantidadeItem;
+    linha.dataset.unidade = item.unidade || "";
+    linha.dataset.precoUnitario = precoItem;
+    linha.dataset.valorTotal = totalInformado;
+
     renderizarCelulaProdutoVenda(linha.children[0], item);
-    linha.children[1].textContent = normalizarNumeroVenda(item.quantidade);
-    linha.children[2].textContent = item.unidade || "";
-    linha.children[3].textContent = normalizarNumeroVenda(item.preco_unitario);
-    linha.children[4].textContent = normalizarNumeroVenda(item.valor_total);
+    linha.children[1].textContent = quantidadeItem;
+    linha.children[2].textContent = linha.dataset.unidade;
+    linha.children[3].textContent = precoItem;
+    linha.children[4].textContent = totalInformado;
 }
 
 function obterProdutoOptionVenda(valorProduto) {
@@ -4437,9 +4446,9 @@ mostrarMsgEdicao();
 atualizarBotaoEdicaoItemVenda();
 // pega dados
 const nome = obterNomeProdutoLinhaVenda(linha);
-const qtd = linha.children[1].textContent.trim();
-const un = linha.children[2].textContent.trim();
-const valor = linha.children[3].textContent.trim();
+const qtd = (linha.dataset.quantidade || linha.children[1].textContent).trim();
+const un = (linha.dataset.unidade || linha.children[2].textContent).trim();
+const valor = (linha.dataset.precoUnitario || linha.children[3].textContent).trim();
 
 // joga nos inputs
 produto.value = nome;
@@ -4731,12 +4740,17 @@ function criarLinhaItemVenda(item) {
     const totalCalculado = !isNaN(totalNumero)
         ? totalNumero
         : quantidadeNumero * precoNumero;
+    const valorTotal = isNaN(totalCalculado) ? "" : totalCalculado.toFixed(2);
+    linha.dataset.quantidade = quantidadeItem;
+    linha.dataset.unidade = item.unidade || "";
+    linha.dataset.precoUnitario = precoItem;
+    linha.dataset.valorTotal = valorTotal;
     const valores = [
         item.produto_nome || "",
         quantidadeItem,
         item.unidade || "",
         precoItem,
-        isNaN(totalCalculado) ? "" : totalCalculado.toFixed(2),
+        valorTotal,
     ];
 
     valores.forEach((valor, indice) => {
@@ -5316,10 +5330,10 @@ function coletarItensVenda() {
         item_id: tr.dataset.itemId || "",
         produto_id: tr.dataset.produtoId || "",
         produto_nome: obterNomeProdutoLinhaVenda(tr),
-        quantidade: normalizarNumeroVenda(tr.children[1].textContent),
-        unidade: tr.children[2].textContent.trim(),
-        preco_unitario: normalizarNumeroVenda(tr.children[3].textContent),
-        subtotal: normalizarNumeroVenda(tr.children[4].textContent),
+        quantidade: normalizarNumeroVenda(tr.dataset.quantidade || tr.children[1].textContent),
+        unidade: (tr.dataset.unidade || tr.children[2].textContent).trim(),
+        preco_unitario: normalizarNumeroVenda(tr.dataset.precoUnitario || tr.children[3].textContent),
+        subtotal: normalizarNumeroVenda(tr.dataset.valorTotal || tr.children[4].textContent),
     }));
 }
 
@@ -5579,7 +5593,7 @@ function adicionarItemVendaAtual() {
     const item = {
         produto_id: produtoId,
         produto_nome: produtoNome,
-        quantidade: qtdNumero.toFixed(2),
+        quantidade: normalizarNumeroVenda(qtdTexto),
         unidade: unidadeTexto,
         preco_unitario: precoNumero.toFixed(2),
         valor_total: (qtdNumero * precoNumero).toFixed(2),
