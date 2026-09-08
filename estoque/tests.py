@@ -20040,6 +20040,8 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(reverse("estoque:receber_cliente_escolher"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Recebimentos do dia")
+        self.assertContains(resposta, reverse("estoque:receber_cliente_recebimentos_dia"))
         self.assertNotContains(resposta, "Ver recebimentos da rota")
         self.assertNotContains(resposta, "Recebimentos de hoje -")
 
@@ -20055,6 +20057,109 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "rota=Jardim")
         self.assertNotContains(resposta, "Recebimentos de hoje - Jardim")
         self.assertNotContains(resposta, "R$ 44,00")
+
+    def test_recebimentos_dia_lista_clientes_rotas_e_exclui_outros_dias_e_desfeitos(self):
+        usuario = get_user_model().objects.create_user(username="operador-dia", password="senha")
+        self.client.force_login(usuario)
+        hoje = timezone.localdate()
+        cliente_um = Cliente.objects.create(nome="Cliente Dia Um", bairro="Centro", ativo=True)
+        cliente_dois = Cliente.objects.create(nome="Cliente Dia Dois", bairro="Jardim", ativo=True)
+        cliente_tres = Cliente.objects.create(nome="Cliente Dia Tres", bairro="Praia", ativo=True)
+        cliente_outro_dia = Cliente.objects.create(nome="Cliente Outro Dia", bairro="Centro", ativo=True)
+        cliente_desfeito = Cliente.objects.create(nome="Cliente Desfeito Dia", bairro="Centro", ativo=True)
+        operacao_um = self._criar_operacao_recebimento_cliente(
+            cliente_um,
+            rota="Centro",
+            valor="10.00",
+            forma_pagamento="Dinheiro",
+        )
+        operacao_dois = self._criar_operacao_recebimento_cliente(
+            cliente_dois,
+            rota="Jardim",
+            valor="20.00",
+            forma_pagamento="PIX",
+        )
+        operacao_tres = self._criar_operacao_recebimento_cliente(
+            cliente_tres,
+            rota="Praia",
+            valor="30.00",
+            forma_pagamento="Cartao de credito",
+        )
+        operacao_tres.credito_gerado = Decimal("5.00")
+        operacao_tres.save(update_fields=["credito_gerado"])
+        for operacao in (operacao_um, operacao_dois, operacao_tres):
+            operacao.criado_por = usuario
+            operacao.save(update_fields=["criado_por"])
+        self._criar_operacao_recebimento_cliente(
+            cliente_outro_dia,
+            rota="Centro",
+            valor="99.00",
+            forma_pagamento="Dinheiro",
+            data_recebimento=hoje - timedelta(days=1),
+        )
+        operacao_desfeita = self._criar_operacao_recebimento_cliente(
+            cliente_desfeito,
+            rota="Centro",
+            valor="50.00",
+            forma_pagamento="PIX",
+        )
+        operacao_desfeita.comprovante_dados = {"desfeito": True}
+        operacao_desfeita.save(update_fields=["comprovante_dados"])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:receber_cliente_recebimentos_dia')}?{urlencode({'data': hoje.isoformat()})}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "estoque/receber_cliente_recebimentos_dia.html")
+        self.assertContains(resposta, "Recebimentos do dia")
+        self.assertContains(resposta, "Data consultada")
+        self.assertContains(resposta, "Cliente Dia Um")
+        self.assertContains(resposta, "Cliente Dia Dois")
+        self.assertContains(resposta, "Cliente Dia Tres")
+        self.assertContains(resposta, "Rota: Centro")
+        self.assertContains(resposta, "Rota: Jardim")
+        self.assertContains(resposta, "Rota: Praia")
+        self.assertContains(resposta, "Operador-Dia")
+        self.assertContains(resposta, "Credito gerado: R$ 5,00")
+        self.assertNotContains(resposta, "Cliente Outro Dia")
+        self.assertNotContains(resposta, "Cliente Desfeito Dia")
+        self.assertNotContains(resposta, "Desfazer recebimento")
+        self.assertEqual(resposta.context["clientes_recebidos_qtd"], 3)
+        self.assertEqual(resposta.context["operacoes_recebidas_qtd"], 3)
+        self.assertEqual(resposta.context["total_recebimentos_dia_formatado"], "R$ 60,00")
+        self.assertEqual(resposta.context["total_dinheiro_formatado"], "R$ 10,00")
+        self.assertEqual(resposta.context["total_pix_formatado"], "R$ 20,00")
+        self.assertEqual(resposta.context["total_cartao_formatado"], "R$ 30,00")
+
+    def test_recebimentos_dia_filtro_hoje_ontem_e_data_manual(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        cliente_hoje = Cliente.objects.create(nome="Cliente Filtro Hoje", bairro="Centro", ativo=True)
+        cliente_ontem = Cliente.objects.create(nome="Cliente Filtro Ontem", bairro="Centro", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, rota="Centro", valor="11.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_ontem, rota="Centro", valor="22.00", data_recebimento=ontem)
+        url = reverse("estoque:receber_cliente_recebimentos_dia")
+
+        resposta_hoje = self.client.get(url, secure=True)
+        resposta_ontem = self.client.get(f"{url}?{urlencode({'data': ontem.isoformat()})}", secure=True)
+        resposta_manual_vazia = self.client.get(
+            f"{url}?{urlencode({'data': (hoje - timedelta(days=7)).isoformat()})}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta_hoje.status_code, 200)
+        self.assertContains(resposta_hoje, "Cliente Filtro Hoje")
+        self.assertNotContains(resposta_hoje, "Cliente Filtro Ontem")
+        self.assertContains(resposta_hoje, f'href="{url}?data={hoje.isoformat()}"')
+        self.assertContains(resposta_hoje, f'href="{url}?data={ontem.isoformat()}"')
+        self.assertEqual(resposta_ontem.status_code, 200)
+        self.assertContains(resposta_ontem, "Cliente Filtro Ontem")
+        self.assertNotContains(resposta_ontem, "Cliente Filtro Hoje")
+        self.assertEqual(resposta_manual_vazia.status_code, 200)
+        self.assertContains(resposta_manual_vazia, "Nenhum recebimento valido encontrado para esta data.")
+        self.assertEqual(resposta_manual_vazia.context["operacoes_recebidas_qtd"], 0)
 
     def test_recebimentos_rota_separa_confirmadas_inferidas_e_exclui_outras_rotas(self):
         cliente_um = Cliente.objects.create(nome="Rubem Arruda", bairro="Furo da Marinha", ativo=True)

@@ -1101,9 +1101,14 @@
           </div>
         </div>
 
-        {% if recebimentos_rota_url %}
+        {% if recebimentos_dia_url or recebimentos_rota_url %}
           <div class="rc-rota-acoes">
-            <a class="rc-rota-historico-btn" href="{{ recebimentos_rota_url }}">Ver recebimentos da rota</a>
+            {% if recebimentos_dia_url %}
+              <a class="rc-rota-historico-btn" href="{{ recebimentos_dia_url }}">Recebimentos do dia</a>
+            {% endif %}
+            {% if recebimentos_rota_url %}
+              <a class="rc-rota-historico-btn" href="{{ recebimentos_rota_url }}">Ver recebimentos da rota</a>
+            {% endif %}
           </div>
         {% endif %}
 

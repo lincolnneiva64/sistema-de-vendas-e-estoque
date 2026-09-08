@@ -128,6 +128,11 @@ urlpatterns = [
     path("emprestimos-dividas/<int:pk>/baixar/", views.emprestimo_divida_baixar, name="emprestimo_divida_baixar"),
     path("receber-cliente/", views.receber_cliente_escolher, name="receber_cliente_escolher"),
     path(
+        "receber-cliente/recebimentos-dia/",
+        views.receber_cliente_recebimentos_dia,
+        name="receber_cliente_recebimentos_dia",
+    ),
+    path(
         "receber-cliente/recebimentos-rota/",
         views.receber_cliente_recebimentos_rota,
         name="receber_cliente_recebimentos_rota",

@@ -13677,6 +13677,7 @@ def receber_cliente_escolher(request):
         "destino_diferenca": "troco",
     }
     recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
+    recebimentos_dia_url = _url_recebimentos_dia()
 
     return render(
         request,
@@ -13710,6 +13711,7 @@ def receber_cliente_escolher(request):
             "pix_trocar_cliente_url": "",
             "pix_remover_cliente_url": "",
             "recebimentos_rota_url": recebimentos_rota_url,
+            "recebimentos_dia_url": recebimentos_dia_url,
         },
     )
 
@@ -14212,6 +14214,7 @@ def receber_cliente(request, cliente_id):
     ]
     tem_pix_em_atencao = False if carregamento_parcial else _tem_pix_em_atencao()
     recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
+    recebimentos_dia_url = _url_recebimentos_dia()
 
     contexto = {
         "cliente": cliente,
@@ -14250,6 +14253,7 @@ def receber_cliente(request, cliente_id):
         "pix_trocar_cliente_url": pix_trocar_cliente_url,
         "pix_remover_cliente_url": pix_remover_cliente_url,
         "recebimentos_rota_url": recebimentos_rota_url,
+        "recebimentos_dia_url": recebimentos_dia_url,
     }
     response = render(request, "estoque/receber_cliente.html", contexto)
     return response
@@ -14485,30 +14489,13 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
             usuarios_recebimentos_chaves.add(usuario_chave)
             usuarios_recebimentos.append(usuario_nome)
 
-        historico.append({
-            "operacao_id": item.id,
-            "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
-            "criado_em": item.criado_em,
-            "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
-            "valor_recebido": item.valor_recebido or Decimal("0.00"),
-            "valor_recebido_formatado": _formatar_moeda(item.valor_recebido),
-            "valor_aplicado": item.valor_aplicado or Decimal("0.00"),
-            "valor_aplicado_formatado": _formatar_moeda(item.valor_aplicado),
-            "credito_gerado": item.credito_gerado or Decimal("0.00"),
-            "credito_gerado_formatado": _formatar_moeda(item.credito_gerado),
-            "forma_pagamento": item.forma_pagamento or "-",
-            "status_recibo": item.get_status_recibo_display(),
-            "usuario": usuario_nome,
-            "rota_snapshot": item.rota_snapshot,
+        item_historico = _item_historico_recebimento_operacao(item, operacao_atual_id=operacao_atual_id)
+        item_historico.update({
             "categoria_rota": categoria_rota,
             "rota_inferida": categoria_rota == "inferida",
             "selo_rota": selo_rota,
-            "atual": item.pk == operacao_atual_id,
-            "desfazer_url": reverse(
-                "estoque:receber_cliente_desfazer_recebimento",
-                kwargs={"operacao_id": item.id},
-            ),
         })
+        historico.append(item_historico)
 
     return {
         "itens": historico,
@@ -14524,6 +14511,46 @@ def _montar_historico_recebimentos_rota(rota, data_referencia=None, operacao_atu
     }
 
 
+def _montar_historico_recebimentos_dia(data_referencia=None):
+    data_referencia = data_referencia or timezone.localdate()
+    operacoes = (
+        OperacaoRecebimentoCliente.objects
+        .select_related("cliente", "criado_por")
+        .filter(data_recebimento=data_referencia)
+        .order_by("criado_em", "id")
+    )
+
+    historico = []
+    total_recebido = Decimal("0.00")
+    clientes_ids = set()
+    usuarios_recebimentos = []
+    usuarios_recebimentos_chaves = set()
+
+    for item in operacoes:
+        if _operacao_recebimento_desfeita(item):
+            continue
+
+        total_recebido += item.valor_recebido or Decimal("0.00")
+        if item.cliente_id:
+            clientes_ids.add(item.cliente_id)
+        usuario_nome = _nome_usuario_recebimento(item.criado_por)
+        usuario_chave = usuario_nome.casefold()
+        if usuario_nome and usuario_chave not in usuarios_recebimentos_chaves:
+            usuarios_recebimentos_chaves.add(usuario_chave)
+            usuarios_recebimentos.append(usuario_nome)
+
+        historico.append(_item_historico_recebimento_operacao(item))
+
+    return {
+        "itens": historico,
+        "total_recebido": total_recebido,
+        "clientes_qtd": len(clientes_ids),
+        "usuarios_recebimentos": usuarios_recebimentos,
+        "usuarios_recebimentos_texto": ", ".join(usuarios_recebimentos),
+        "operacoes_qtd": len(historico),
+    }
+
+
 def _url_recebimentos_rota(rota, url_voltar="", data_referencia=None):
     rota = (rota or "").strip()
     if not rota:
@@ -14533,6 +14560,11 @@ def _url_recebimentos_rota(rota, url_voltar="", data_referencia=None):
     if url_voltar:
         parametros_url["next"] = url_voltar
     return f"{reverse('estoque:receber_cliente_recebimentos_rota')}?{urlencode(parametros_url)}"
+
+
+def _url_recebimentos_dia(data_referencia=None):
+    data_referencia = data_referencia or timezone.localdate()
+    return f"{reverse('estoque:receber_cliente_recebimentos_dia')}?{urlencode({'data': data_referencia.isoformat()})}"
 
 
 def _url_conferencia_recebimentos_rota(rota, data_referencia, url_voltar=""):
@@ -14843,6 +14875,34 @@ def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
     return resumo["itens"], resumo["total_recebido"]
 
 
+def _item_historico_recebimento_operacao(item, operacao_atual_id=None):
+    usuario_nome = _nome_usuario_recebimento(item.criado_por)
+    return {
+        "operacao_id": item.id,
+        "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
+        "criado_em": item.criado_em,
+        "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
+        "valor_recebido": item.valor_recebido or Decimal("0.00"),
+        "valor_recebido_formatado": _formatar_moeda(item.valor_recebido),
+        "valor_aplicado": item.valor_aplicado or Decimal("0.00"),
+        "valor_aplicado_formatado": _formatar_moeda(item.valor_aplicado),
+        "credito_gerado": item.credito_gerado or Decimal("0.00"),
+        "credito_gerado_formatado": _formatar_moeda(item.credito_gerado),
+        "forma_pagamento": item.forma_pagamento or "-",
+        "status_recibo": item.get_status_recibo_display(),
+        "usuario": usuario_nome,
+        "rota_snapshot": item.rota_snapshot,
+        "categoria_rota": "",
+        "rota_inferida": False,
+        "selo_rota": "",
+        "atual": item.pk == operacao_atual_id,
+        "desfazer_url": reverse(
+            "estoque:receber_cliente_desfazer_recebimento",
+            kwargs={"operacao_id": item.id},
+        ),
+    }
+
+
 def _grupo_forma_pagamento_conferencia(forma_pagamento):
     forma = _texto_sem_acentos(forma_pagamento).lower().strip()
     forma_compacta = re.sub(r"\s+", "", forma)
@@ -14873,6 +14933,35 @@ def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
 
     return {
         "rota": rota,
+        "itens": historico["itens"],
+        "operacoes_qtd": historico["operacoes_qtd"],
+        "clientes_qtd": historico["clientes_qtd"],
+        "usuarios_recebimentos_texto": historico["usuarios_recebimentos_texto"],
+        "total_dinheiro": totais_forma["dinheiro"],
+        "total_pix": totais_forma["pix"],
+        "total_cartao": totais_forma["cartao"],
+        "credito_gerado": credito_gerado,
+        "total_recebido": historico["total_recebido"],
+    }
+
+
+def _resumo_recebimentos_dia(data_referencia):
+    historico = _montar_historico_recebimentos_dia(data_referencia=data_referencia)
+    totais_forma = {
+        "dinheiro": Decimal("0.00"),
+        "pix": Decimal("0.00"),
+        "cartao": Decimal("0.00"),
+        "outro": Decimal("0.00"),
+    }
+    credito_gerado = Decimal("0.00")
+
+    for item in historico["itens"]:
+        grupo = _grupo_forma_pagamento_conferencia(item["forma_pagamento"])
+        valor = item["valor_recebido"] or Decimal("0.00")
+        totais_forma[grupo] = (totais_forma[grupo] + valor).quantize(Decimal("0.01"))
+        credito_gerado = (credito_gerado + (item["credito_gerado"] or Decimal("0.00"))).quantize(Decimal("0.01"))
+
+    return {
         "itens": historico["itens"],
         "operacoes_qtd": historico["operacoes_qtd"],
         "clientes_qtd": historico["clientes_qtd"],
@@ -15083,6 +15172,46 @@ def receber_cliente_recebimentos_rota(request):
             "fechamento_resumo": fechamento_resumo,
             "conferir_recebimentos_url": _url_conferencia_recebimentos_rota(rota_filtro, data_referencia, request.get_full_path()),
             "historico_recente_datas": _historico_recente_recebimentos_rota(rota_filtro, data_referencia, next_param),
+        },
+    )
+
+
+@ensure_csrf_cookie
+def receber_cliente_recebimentos_dia(request):
+    hoje = timezone.localdate()
+    ontem = hoje - timedelta(days=1)
+    data_referencia, data_invalida = _data_rota_recebimentos_request(request)
+    resumo = _resumo_recebimentos_dia(data_referencia)
+    url_base = reverse("estoque:receber_cliente_recebimentos_dia")
+    usuario_consulta_nome = (
+        _nome_usuario_recebimento(request.user)
+        if getattr(request.user, "is_authenticated", False)
+        else ""
+    )
+
+    return render(
+        request,
+        "estoque/receber_cliente_recebimentos_dia.html",
+        {
+            "data_referencia": data_referencia,
+            "data_referencia_iso": data_referencia.isoformat(),
+            "data_referencia_formatada": data_referencia.strftime("%d/%m/%Y"),
+            "hoje_url": f"{url_base}?{urlencode({'data': hoje.isoformat()})}",
+            "ontem_url": f"{url_base}?{urlencode({'data': ontem.isoformat()})}",
+            "filtro_data_url": f"{url_base}?{urlencode({'data': data_referencia.isoformat()})}",
+            "data_invalida": data_invalida,
+            "historico_recebimentos_dia": resumo["itens"],
+            "clientes_recebidos_qtd": resumo["clientes_qtd"],
+            "operacoes_recebidas_qtd": resumo["operacoes_qtd"],
+            "usuario_consulta_nome": usuario_consulta_nome,
+            "usuarios_recebimentos_texto": resumo["usuarios_recebimentos_texto"],
+            "total_recebimentos_dia_formatado": _formatar_moeda(resumo["total_recebido"]),
+            "total_dinheiro_formatado": _formatar_moeda(resumo["total_dinheiro"]),
+            "total_pix_formatado": _formatar_moeda(resumo["total_pix"]),
+            "total_cartao_formatado": _formatar_moeda(resumo["total_cartao"]),
+            "credito_gerado_formatado": _formatar_moeda(resumo["credito_gerado"]),
+            "voltar_receber_url": reverse("estoque:receber_cliente_escolher"),
+            "tem_recebimentos": bool(resumo["itens"]),
         },
     )
 

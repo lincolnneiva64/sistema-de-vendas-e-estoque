@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recebimentos do dia</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --rc-bg: #f6f8fb;
+      --rc-text: #172033;
+      --rc-muted: #637083;
+      --rc-border: #d7dee8;
+      --rc-primary: #0f766e;
+      --rc-primary-dark: #115e59;
+      --rc-surface: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--rc-bg);
+      color: var(--rc-text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .rcd-page { min-height: 100vh; padding: 14px; }
+    .rcd-shell { width: min(980px, 100%); margin: 0 auto; }
+    .rcd-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .rcd-title {
+      margin: 0;
+      font-size: 1.45rem;
+      line-height: 1.15;
+    }
+    .rcd-subtitle {
+      margin: 5px 0 0;
+      color: var(--rc-muted);
+      font-weight: 700;
+    }
+    .rcd-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--rc-primary);
+      color: #fff;
+      font: inherit;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .rcd-btn:hover,
+    .rcd-btn:focus { background: var(--rc-primary-dark); }
+    .rcd-btn.secondary {
+      border: 1px solid var(--rc-border);
+      background: #fff;
+      color: var(--rc-primary-dark);
+    }
+    .rcd-btn.secondary:hover,
+    .rcd-btn.secondary:focus { background: #ecfdf5; }
+    .rcd-alert {
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff7f7;
+      color: #991b1b;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-weight: 800;
+    }
+    .rcd-filter,
+    .rcd-card,
+    .rcd-empty,
+    .rcd-row {
+      border: 1px solid var(--rc-border);
+      border-radius: 8px;
+      background: var(--rc-surface);
+    }
+    .rcd-filter {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .rcd-filter-fields,
+    .rcd-filter-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: end;
+    }
+    .rcd-field { display: grid; gap: 5px; }
+    .rcd-field label {
+      color: #334155;
+      font-size: .86rem;
+      font-weight: 900;
+    }
+    .rcd-field input {
+      min-height: 40px;
+      border: 1px solid #b8c2d1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font: inherit;
+      font-weight: 800;
+    }
+    .rcd-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .rcd-card { padding: 13px; }
+    .rcd-label {
+      display: block;
+      color: var(--rc-muted);
+      font-size: .78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .rcd-value {
+      display: block;
+      margin-top: 5px;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+    .rcd-value.money { color: var(--rc-primary-dark); }
+    .rcd-list { display: grid; gap: 10px; }
+    .rcd-row {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr) 142px;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+    }
+    .rcd-time {
+      color: var(--rc-muted);
+      font-size: .9rem;
+      font-weight: 900;
+    }
+    .rcd-client {
+      display: block;
+      font-size: 1.02rem;
+      font-weight: 900;
+    }
+    .rcd-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      margin-top: 5px;
+      color: var(--rc-muted);
+      font-size: .88rem;
+      font-weight: 700;
+    }
+    .rcd-amount {
+      text-align: right;
+      color: var(--rc-primary-dark);
+      font-size: 1.08rem;
+      font-weight: 900;
+    }
+    .rcd-credit {
+      display: block;
+      margin-top: 4px;
+      color: #475569;
+      font-size: .82rem;
+      font-weight: 800;
+    }
+    .rcd-empty {
+      padding: 18px;
+      color: var(--rc-muted);
+      font-weight: 800;
+      text-align: center;
+    }
+    @media (max-width: 760px) {
+      .rcd-page { padding: 10px; }
+      .rcd-top,
+      .rcd-filter { grid-template-columns: 1fr; }
+      .rcd-top { display: grid; }
+      .rcd-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .rcd-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .rcd-amount { text-align: left; }
+      .rcd-btn { width: 100%; }
+    }
+    @media (max-width: 460px) {
+      .rcd-summary { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="rcd-page">
+    <div class="rcd-shell">
+      <header class="rcd-top">
+        <div>
+          <h1 class="rcd-title">Recebimentos do dia</h1>
+          <p class="rcd-subtitle">Data consultada: {{ data_referencia_formatada }}</p>
+        </div>
+        <a class="rcd-btn secondary" href="{{ voltar_receber_url }}">Voltar</a>
+      </header>
+
+      {% if data_invalida %}
+        <div class="rcd-alert">Data invalida. Mostrando os recebimentos de hoje.</div>
+      {% endif %}
+
+      <form class="rcd-filter" method="get" action="{% url 'estoque:receber_cliente_recebimentos_dia' %}">
+        <div class="rcd-filter-fields">
+          <div class="rcd-field">
+            <label for="dataRecebimentosDia">Data</label>
+            <input id="dataRecebimentosDia" type="date" name="data" value="{{ data_referencia_iso }}">
+          </div>
+          <a class="rcd-btn secondary" href="{{ hoje_url }}">Hoje</a>
+          <a class="rcd-btn secondary" href="{{ ontem_url }}">Ontem</a>
+        </div>
+        <div class="rcd-filter-actions">
+          <button class="rcd-btn" type="submit">Buscar</button>
+        </div>
+      </form>
+
+      <section class="rcd-summary" aria-label="Resumo de recebimentos">
+        <div class="rcd-card">
+          <span class="rcd-label">Total geral recebido</span>
+          <span class="rcd-value money">{{ total_recebimentos_dia_formatado }}</span>
+        </div>
+        <div class="rcd-card">
+          <span class="rcd-label">Dinheiro</span>
+          <span class="rcd-value money">{{ total_dinheiro_formatado }}</span>
+        </div>
+        <div class="rcd-card">
+          <span class="rcd-label">Pix</span>
+          <span class="rcd-value money">{{ total_pix_formatado }}</span>
+        </div>
+        <div class="rcd-card">
+          <span class="rcd-label">Cartao</span>
+          <span class="rcd-value money">{{ total_cartao_formatado }}</span>
+        </div>
+        <div class="rcd-card">
+          <span class="rcd-label">Clientes distintos</span>
+          <span class="rcd-value">{{ clientes_recebidos_qtd }}</span>
+        </div>
+        <div class="rcd-card">
+          <span class="rcd-label">Recebimentos</span>
+          <span class="rcd-value">{{ operacoes_recebidas_qtd }}</span>
+        </div>
+      </section>
+
+      <section class="rcd-list" aria-label="Lista de recebimentos">
+        {% for item in historico_recebimentos_dia %}
+          <article class="rcd-row">
+            <div class="rcd-time">{{ item.hora|default:"--:--" }}</div>
+            <div>
+              <span class="rcd-client">{{ item.cliente_nome }}</span>
+              <div class="rcd-meta">
+                <span>{{ item.forma_pagamento }}</span>
+                <span>{{ item.status_recibo }}</span>
+                <span>{{ item.usuario|default:"Usuario nao informado" }}</span>
+                {% if item.rota_snapshot %}<span>Rota: {{ item.rota_snapshot }}</span>{% endif %}
+              </div>
+            </div>
+            <div class="rcd-amount">
+              {{ item.valor_recebido_formatado }}
+              {% if item.credito_gerado > 0 %}
+                <span class="rcd-credit">Credito gerado: {{ item.credito_gerado_formatado }}</span>
+              {% endif %}
+            </div>
+          </article>
+        {% empty %}
+          <div class="rcd-empty">Nenhum recebimento valido encontrado para esta data.</div>
+        {% endfor %}
+      </section>
+    </div>
+  </main>
+</body>
+</html>
