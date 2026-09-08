@@ -25680,6 +25680,24 @@ class VendaEdicaoUnificadaTests(TestCase):
             excluido=False,
         )
 
+    def criar_produto_cx_un(self, nome="Produto CX UN", estoque="1.667"):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal(str(estoque)),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            preco_vista_fracionado=Decimal("1.00"),
+            preco_prazo_fracionado=Decimal("1.00"),
+            unidade_venda_1="CX",
+            unidade_venda_2="UN",
+            fator_conversao=Decimal("12.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+
     def criar_venda_base(self, quantidade="2.000", preco="10.00", estoque="10.000"):
         cliente = Cliente.objects.create(
             nome="Cliente Edicao Unificada",
@@ -26038,6 +26056,179 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertNotContains(resposta, f"Editando venda #{venda.id}")
         self.assertNotContains(resposta, 'id="btnNovaVendaEdicao"')
         self.assertContains(resposta, "<button type=\"button\" id=\"btnGravarVenda\" class=\"acao-venda-btn primaria\">Gravar Venda</button>", html=True)
+
+    def test_tela_vendas_enter_quantidade_em_produto_cx_un_foca_unidade_sem_validar_estoque(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        inicio = conteudo.index("} else if (ativo === quantidade) {")
+        fim = conteudo.index("} else if (ativo === unidade) {", inicio)
+        bloco = conteudo[inicio:fim]
+
+        self.assertIn("const fracionado = optionSelecionada.dataset.fracionado === \"true\";", bloco)
+        self.assertIn("if (fracionado) {", bloco)
+        self.assertIn("unidade.focus();", bloco)
+        self.assertLess(bloco.index("unidade.focus();"), bloco.index("validarEstoqueItemVendaAtual(true)"))
+
+    def test_tela_vendas_tab_quantidade_em_produto_cx_un_nao_valida_antes_da_unidade(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+
+        self.assertContains(
+            resposta,
+            "if (!produtoAtualPermiteEscolhaUnidadeVenda() && !validarEstoqueItemVendaAtual(true))",
+        )
+
+    def test_tela_vendas_troca_unidade_nao_dispara_bloqueio_de_estoque(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        inicio = conteudo.index('unidade.addEventListener("change", () => {')
+        fim = conteudo.index("});", inicio)
+        bloco = conteudo[inicio:fim]
+
+        self.assertNotIn("validarEstoqueItemVendaAtual(true)", bloco)
+
+    def test_tela_vendas_enter_unidade_cx_bloqueia_estoque_antes_do_preco(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        inicio = conteudo.index("} else if (ativo === unidade) {")
+        fim = conteudo.index("} else if (ativo === preco) {", inicio)
+        bloco = conteudo[inicio:fim]
+
+        self.assertIn("validarEstoqueItemVendaAtual(true)", bloco)
+        self.assertIn("return;", bloco)
+        self.assertIn("preco.focus();", bloco)
+        self.assertLess(bloco.index("validarEstoqueItemVendaAtual(true)"), bloco.index("preco.focus();"))
+
+    def test_tela_vendas_enter_unidade_un_com_estoque_avanca_para_preco(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        inicio = conteudo.index("} else if (ativo === unidade) {")
+        fim = conteudo.index("} else if (ativo === preco) {", inicio)
+        bloco = conteudo[inicio:fim]
+
+        self.assertIn("if (!validarEstoqueItemVendaAtual(true))", bloco)
+        self.assertIn("preco.focus();", bloco)
+        self.assertIn("preco.select();", bloco)
+
+    def test_tela_vendas_erro_estoque_foca_quantidade_e_preserva_unidade(self):
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertIn("mostrarAviso(", conteudo)
+        self.assertIn("quantidade,", conteudo)
+        self.assertIn("function fecharAviso()", conteudo)
+        self.assertIn("campo.focus();", conteudo)
+        self.assertIn("if (!validarEstoqueItemVendaAtual(true)) {\n        return false;\n    }", conteudo)
+
+    def test_gravar_venda_produto_cx_un_quantidade_2_cx_com_estoque_1667_cx_bloqueia(self):
+        cliente = Cliente.objects.create(nome="Cliente CX Bloqueia", ativo=True)
+        produto = self.criar_produto_cx_un("Vinagre Teste CX", estoque="1.667")
+        payload = self.payload_venda_nova(cliente, produto, quantidade="2.000")
+        payload["itens"][0]["unidade"] = "CX"
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("Estoque insuficiente", resposta.json()["mensagem"])
+        self.assertIn("Solicitado: 2 CX", resposta.json()["mensagem"])
+        self.assertIn("Disponivel: 1.667 CX", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("1.667"))
+        self.assertEqual(Venda.objects.count(), 0)
+
+    def test_gravar_venda_produto_cx_un_quantidade_2_un_com_estoque_equivalente_permite(self):
+        cliente = Cliente.objects.create(nome="Cliente UN Permite", ativo=True)
+        produto = self.criar_produto_cx_un("Vinagre Teste UN", estoque="1.667")
+        payload = self.payload_venda_nova(cliente, produto, quantidade="2.000")
+        payload["itens"][0]["unidade"] = "UN"
+        payload["itens"][0]["preco_unitario"] = "1.00"
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        produto.refresh_from_db()
+        item = ItemVenda.objects.get(produto=produto)
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(item.unidade, "UN")
+        self.assertEqual(produto.quantidade, Decimal("1.500"))
+
+    def test_gravar_venda_produto_somente_un_continua_permitindo_unidade_un(self):
+        cliente = Cliente.objects.create(nome="Cliente Somente UN", ativo=True)
+        produto = self.criar_produto("Produto Somente UN", estoque="5.000")
+        payload = self.payload_venda_nova(cliente, produto, quantidade="2.000")
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("3.000"))
+
+    def test_gravar_venda_produto_kg_decimal_continua_permitido(self):
+        cliente = Cliente.objects.create(nome="Cliente KG Decimal", ativo=True)
+        produto = self.criar_produto("Produto KG Decimal", estoque="5.000")
+        produto.unidade_venda_1 = "KG"
+        produto.unidade_compra = "KG"
+        produto.save(update_fields=["unidade_venda_1", "unidade_compra"])
+        payload = self.payload_venda_nova(cliente, produto, quantidade="0.500")
+        payload["itens"][0]["unidade"] = "KG"
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        item = ItemVenda.objects.get(produto=produto)
+        self.assertEqual(item.quantidade, Decimal("0.500"))
+        self.assertEqual(item.unidade, "KG")
+        self.assertEqual(produto.quantidade, Decimal("4.500"))
+
+    def test_edicao_unificada_inclui_produto_cx_un_em_un_usando_unidade_escolhida(self):
+        cliente, produto_base, venda, item_base = self.criar_venda_base(quantidade="1.000", estoque="9.000")
+        produto_fracionado = self.criar_produto_cx_un("Vinagre Edicao UN", estoque="1.667")
+        payload = self.payload_edicao(venda, item_base, quantidade="1.000", preco="10.00")
+        payload["itens"].append({
+            "produto_id": produto_fracionado.id,
+            "produto_nome": produto_fracionado.nome,
+            "quantidade": "2.000",
+            "unidade": "UN",
+            "preco_unitario": "1.00",
+            "valor_total": "2.00",
+        })
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_fracionado.refresh_from_db()
+        self.assertTrue(venda.itens.filter(produto=produto_fracionado, unidade="UN", quantidade=Decimal("2.000")).exists())
+        self.assertEqual(produto_fracionado.quantidade, Decimal("1.500"))
 
     def test_resumo_financeiro_vendas_mostra_pendencias_gerais_apos_venda_atual_a_vista(self):
         cliente, produto, venda, item, conta_venda = self.preparar_venda_a_vista_com_movimentos(

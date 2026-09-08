@@ -5304,6 +5304,13 @@ function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
     return false;
 }
 
+function produtoAtualPermiteEscolhaUnidadeVenda() {
+    const produtoNome = (produto.value || produtoBusca.value || "").trim();
+    const produtoOption = obterProdutoOptionVenda(produtoNome);
+    if (!produtoOption) return false;
+    return produtoOption.dataset.fracionado === "true" && Boolean((produtoOption.dataset.unidade2 || "").trim());
+}
+
 function coletarItensVenda() {
     return Array.from(tabelaBody.querySelectorAll("tr")).map((tr) => ({
         item_id: tr.dataset.itemId || "",
@@ -6051,6 +6058,14 @@ quantidade.addEventListener("keydown", (e) => {
         return;
     }
 
+    if (!produtoAtualPermiteEscolhaUnidadeVenda() && !validarEstoqueItemVendaAtual(true)) {
+        e.preventDefault();
+    }
+});
+
+unidade.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+
     if (!validarEstoqueItemVendaAtual(true)) {
         e.preventDefault();
     }
@@ -6306,10 +6321,6 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
         return;
     }
 
-    if (!validarEstoqueItemVendaAtual(true)) {
-        return;
-    }
-
     const optionSelecionada = produto.options[produto.selectedIndex];
 
     if (!optionSelecionada) return;
@@ -6320,11 +6331,17 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
         unidade.focus();
         unidade.select();
     } else {
+        if (!validarEstoqueItemVendaAtual(true)) {
+            return;
+        }
         preco.focus();
         preco.select();
     }
 } else if (ativo === unidade) {
     e.preventDefault();
+    if (!validarEstoqueItemVendaAtual(true)) {
+        return;
+    }
     preco.focus();
     preco.select();
 
@@ -6750,7 +6767,6 @@ let precoFracionado = opt.dataset.preco2 || "";
 }
         aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoBase;
-        validarEstoqueItemVendaAtual(true);
         return;
     }
 
@@ -6758,7 +6774,6 @@ let precoFracionado = opt.dataset.preco2 || "";
         estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
         aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoFracionado;
-        validarEstoqueItemVendaAtual(true);
     }
 });
 
