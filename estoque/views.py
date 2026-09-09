@@ -17789,6 +17789,7 @@ def venda_detalhe(request, pk):
     if resumo_financeiro_nota_whatsapp:
         resumo_financeiro_nota_whatsapp = {
             **resumo_financeiro_nota_whatsapp,
+            "total_desta_compra_formatado": _formatar_moeda(resumo_financeiro_nota_whatsapp["total_desta_compra"]),
             "saldo_anterior_formatado": _formatar_moeda(resumo_financeiro_nota_whatsapp["saldo_anterior"]),
             "total_em_aberto_formatado": _formatar_moeda(resumo_financeiro_nota_whatsapp["total_em_aberto"]),
         }

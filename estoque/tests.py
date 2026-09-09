@@ -14156,7 +14156,12 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Saldo anterior: R$ 409,59 | Total em aberto: R$ 415,99")
+        self.assertContains(resposta, "Total desta compra")
+        self.assertContains(resposta, "R$ 6,40")
+        self.assertContains(resposta, "Saldo anterior")
+        self.assertContains(resposta, "R$ 409,59")
+        self.assertContains(resposta, "Total em aberto")
+        self.assertContains(resposta, "R$ 415,99")
         resumo = resposta.context["resumo_financeiro_nota_whatsapp"]
         self.assertEqual(resumo["saldo_anterior"], Decimal("409.59"))
         self.assertEqual(resumo["total_em_aberto"], Decimal("415.99"))
@@ -14175,7 +14180,10 @@ class PixRecebidoTests(TestCase):
         resumo_tela = resposta.context["resumo_financeiro_nota_whatsapp"]
         self.assertEqual(resumo_tela["saldo_anterior"], resumo_imagem["saldo_anterior"])
         self.assertEqual(resumo_tela["total_em_aberto"], resumo_imagem["total_em_aberto"])
-        self.assertContains(resposta, "Saldo anterior: R$ 65,50 | Total em aberto: R$ 150,50")
+        self.assertContains(resposta, "Saldo anterior")
+        self.assertContains(resposta, "R$ 65,50")
+        self.assertContains(resposta, "Total em aberto")
+        self.assertContains(resposta, "R$ 150,50")
 
     def test_nota_venda_resumo_financeiro_nao_duplica_conta_atual(self):
         cliente = Cliente.objects.create(nome="Cliente Nota Sem Duplicar", ativo=True)
@@ -14188,7 +14196,10 @@ class PixRecebidoTests(TestCase):
         resumo = resposta.context["resumo_financeiro_nota_whatsapp"]
         self.assertEqual(resumo["saldo_anterior"], Decimal("0.00"))
         self.assertEqual(resumo["total_em_aberto"], Decimal("85.00"))
-        self.assertContains(resposta, "Saldo anterior: R$ 0,00 | Total em aberto: R$ 85,00")
+        self.assertContains(resposta, "Saldo anterior")
+        self.assertContains(resposta, "R$ 0,00")
+        self.assertContains(resposta, "Total em aberto")
+        self.assertContains(resposta, "R$ 85,00")
 
     def test_nota_venda_a_vista_nao_exibe_resumo_financeiro_whatsapp(self):
         cliente = Cliente.objects.create(nome="Cliente Nota A Vista", ativo=True)
@@ -14199,8 +14210,8 @@ class PixRecebidoTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertIsNone(resposta.context["resumo_financeiro_nota_whatsapp"])
-        self.assertNotContains(resposta, "Saldo anterior:")
-        self.assertNotContains(resposta, "Total em aberto:")
+        self.assertNotContains(resposta, "Saldo anterior")
+        self.assertNotContains(resposta, "Total em aberto")
 
     def test_acesso_direto_adicionar_produto_em_venda_quitada_e_bloqueado(self):
         cliente = Cliente.objects.create(nome="Cliente Add Quitada", ativo=True)
