@@ -2046,6 +2046,11 @@
                                 </div>
                             {% endif %}
                         {% endif %}
+                        {% if venda_a_prazo and resumo_financeiro_nota_whatsapp %}
+                            <div class="conta-receber-info">
+                                Saldo anterior: {{ resumo_financeiro_nota_whatsapp.saldo_anterior_formatado }} | Total em aberto: {{ resumo_financeiro_nota_whatsapp.total_em_aberto_formatado }}
+                            </div>
+                        {% endif %}
                     {% endif %}
 
                     <table class="tabela-itens-principais">

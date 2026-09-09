@@ -17785,6 +17785,13 @@ def venda_detalhe(request, pk):
     )
     whatsapp_atualizacao = None if venda.cancelada else _montar_whatsapp_atualizacao_nota(request, venda)
     conta_receber = _conta_receber_da_venda(venda)
+    resumo_financeiro_nota_whatsapp = _resumo_financeiro_nota_whatsapp(venda)
+    if resumo_financeiro_nota_whatsapp:
+        resumo_financeiro_nota_whatsapp = {
+            **resumo_financeiro_nota_whatsapp,
+            "saldo_anterior_formatado": _formatar_moeda(resumo_financeiro_nota_whatsapp["saldo_anterior"]),
+            "total_em_aberto_formatado": _formatar_moeda(resumo_financeiro_nota_whatsapp["total_em_aberto"]),
+        }
     alteracoes_pendentes_whatsapp = _resumo_alteracoes_pendentes_whatsapp(
         venda,
         itens_nota,
@@ -17915,6 +17922,7 @@ def venda_detalhe(request, pk):
             "whatsapp_atualizacao": whatsapp_atualizacao,
             "alteracoes_pendentes_whatsapp": alteracoes_pendentes_whatsapp,
             "conta_receber": conta_receber,
+            "resumo_financeiro_nota_whatsapp": resumo_financeiro_nota_whatsapp,
             "contexto_venda_quitada": contexto_venda_quitada,
             "ajustes_itens_quitados_pendentes": ajustes_itens_quitados_pendentes,
             "venda_a_prazo": _venda_a_prazo(venda),

@@ -14147,6 +14147,61 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(resposta["Content-Type"], "image/png")
 
+    def test_nota_venda_exibe_resumo_financeiro_whatsapp_com_saldo_anterior(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Saldo Anterior", ativo=True)
+        venda = self._criar_venda_para_resumo_whatsapp(cliente, "6.40")
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "6.40", venda=venda)
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "409.59")
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Saldo anterior: R$ 409,59 | Total em aberto: R$ 415,99")
+        resumo = resposta.context["resumo_financeiro_nota_whatsapp"]
+        self.assertEqual(resumo["saldo_anterior"], Decimal("409.59"))
+        self.assertEqual(resumo["total_em_aberto"], Decimal("415.99"))
+
+    def test_nota_venda_resumo_financeiro_usa_mesmos_valores_da_imagem(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Mesmo Resumo", ativo=True)
+        venda = self._criar_venda_para_resumo_whatsapp(cliente, "85.00")
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "85.00", venda=venda)
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "40.00")
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "25.50", status=ContaReceber.STATUS_PARCIAL)
+        resumo_imagem = views._resumo_financeiro_nota_whatsapp(venda)
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        resumo_tela = resposta.context["resumo_financeiro_nota_whatsapp"]
+        self.assertEqual(resumo_tela["saldo_anterior"], resumo_imagem["saldo_anterior"])
+        self.assertEqual(resumo_tela["total_em_aberto"], resumo_imagem["total_em_aberto"])
+        self.assertContains(resposta, "Saldo anterior: R$ 65,50 | Total em aberto: R$ 150,50")
+
+    def test_nota_venda_resumo_financeiro_nao_duplica_conta_atual(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota Sem Duplicar", ativo=True)
+        venda = self._criar_venda_para_resumo_whatsapp(cliente, "85.00")
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "85.00", venda=venda)
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        resumo = resposta.context["resumo_financeiro_nota_whatsapp"]
+        self.assertEqual(resumo["saldo_anterior"], Decimal("0.00"))
+        self.assertEqual(resumo["total_em_aberto"], Decimal("85.00"))
+        self.assertContains(resposta, "Saldo anterior: R$ 0,00 | Total em aberto: R$ 85,00")
+
+    def test_nota_venda_a_vista_nao_exibe_resumo_financeiro_whatsapp(self):
+        cliente = Cliente.objects.create(nome="Cliente Nota A Vista", ativo=True)
+        venda = self._criar_venda_para_resumo_whatsapp(cliente, "85.00", tipo_pagamento="A vista")
+        self._criar_conta_receber_para_resumo_whatsapp(cliente, "40.00")
+
+        resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIsNone(resposta.context["resumo_financeiro_nota_whatsapp"])
+        self.assertNotContains(resposta, "Saldo anterior:")
+        self.assertNotContains(resposta, "Total em aberto:")
+
     def test_acesso_direto_adicionar_produto_em_venda_quitada_e_bloqueado(self):
         cliente = Cliente.objects.create(nome="Cliente Add Quitada", ativo=True)
         produto = self._produto_teste("Produto Add Quitada")
