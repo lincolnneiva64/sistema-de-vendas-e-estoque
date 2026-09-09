@@ -2810,6 +2810,15 @@
                 window.setTimeout(rolarParaItem, 150);
                 window.setTimeout(rolarParaItem, 300);
             });
+
+            if (opcoes.retornarLancamento === false) return;
+            window.setTimeout(() => {
+                manterTelaNasSugestoes = false;
+                manterLancamentoVisivel();
+                window.setTimeout(() => {
+                    produtoBusca.focus({ preventScroll: true });
+                }, 250);
+            }, 4000);
         }
 
         function adicionarSugestaoAoPedido(produtoId, origem) {
@@ -2869,7 +2878,7 @@
             atualizarTabela();
             removerSugestaoClientePorProdutoId(produtoIdReal);
             mostrarMensagem("sucesso", "Sugestao adicionada ao pedido.");
-            mostrarItemPedidoAdicionado(indexAdicionado);
+            mostrarItemPedidoAdicionado(indexAdicionado, { retornarLancamento: false });
 
             window.setTimeout(() => {
                 if (sugestoesClienteCard) {

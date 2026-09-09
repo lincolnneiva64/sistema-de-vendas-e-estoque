@@ -23360,6 +23360,29 @@ class PedidoTests(TestCase):
         self.assertNotIn('id="sugestao-qtd-', conteudo)
         self.assertNotIn('id="btn-sugestao-', conteudo)
 
+    def test_pedido_criar_mobile_retorna_para_lancamento_apos_mostrar_item_adicionado(self):
+        resposta = self.client.get(reverse("estoque:pedido_criar"), secure=True)
+        conteudo = resposta.content.decode("utf-8")
+
+        inicio_funcao = conteudo.index("function mostrarItemPedidoAdicionado")
+        fim_funcao = conteudo.index("function adicionarSugestaoAoPedido", inicio_funcao)
+        bloco_funcao = conteudo[inicio_funcao:fim_funcao]
+        inicio_manual = conteudo.index("function adicionarItem")
+        fim_manual = conteudo.index("function removerItem", inicio_manual)
+        bloco_manual = conteudo[inicio_manual:fim_manual]
+        inicio_sugestao = conteudo.index("function adicionarSugestaoAoPedido")
+        fim_sugestao = conteudo.index("function mostrarMensagem", inicio_sugestao)
+        bloco_sugestao = conteudo[inicio_sugestao:fim_sugestao]
+
+        self.assertIn("}, 4000);", bloco_funcao)
+        self.assertIn("manterLancamentoVisivel();", bloco_funcao)
+        self.assertIn("produtoBusca.focus({ preventScroll: true });", bloco_funcao)
+        self.assertIn("mostrarItemPedidoAdicionado(indexAdicionado);", bloco_manual)
+        self.assertIn(
+            "mostrarItemPedidoAdicionado(indexAdicionado, { retornarLancamento: false });",
+            bloco_sugestao,
+        )
+
     def test_pedido_criar_abre_com_cliente_preselecionado_por_id_e_preserva_next(self):
         next_url = "/contas-a-receber/cliente/99/operacao/88/recebimento-confirmado/?rota=Centro&data=2026-07-24"
         resposta = self.client.get(
