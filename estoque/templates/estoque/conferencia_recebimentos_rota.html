@@ -668,11 +668,11 @@
             <strong id="totalContadoCedulas">R$ 0,00</strong>
           </div>
 
-          <div id="resumoComparacaoConferencia" class="conf-compare {% if total_recebido_centavos > 0 %}falta{% else %}correta{% endif %}" data-valor-esperado-centavos="{{ total_recebido_centavos }}" aria-live="polite">
+          <div id="resumoComparacaoConferencia" class="conf-compare {% if total_dinheiro_centavos > 0 %}falta{% else %}correta{% endif %}" data-valor-esperado-centavos="{{ total_dinheiro_centavos }}" aria-live="polite">
             <div class="conf-compare-grid">
               <div class="conf-compare-item">
                 <span class="conf-label">Valor esperado</span>
-                <strong id="valorEsperadoConferencia" class="conf-compare-value">{{ total_recebido_formatado }}</strong>
+                <strong id="valorEsperadoConferencia" class="conf-compare-value">{{ total_dinheiro_formatado }}</strong>
               </div>
               <div class="conf-compare-item">
                 <span class="conf-label">Valor contado</span>
@@ -680,10 +680,10 @@
               </div>
               <div class="conf-compare-item">
                 <span class="conf-label">DIFERENÇA</span>
-                <strong id="diferencaConferencia" class="conf-compare-value">{% if total_recebido_centavos > 0 %}{{ total_recebido_formatado }}{% else %}R$ 0,00{% endif %}</strong>
+                <strong id="diferencaConferencia" class="conf-compare-value">{% if total_dinheiro_centavos > 0 %}{{ total_dinheiro_formatado }}{% else %}R$ 0,00{% endif %}</strong>
               </div>
             </div>
-            <p id="statusConferencia" class="conf-compare-status">{% if total_recebido_centavos > 0 %}Falta de {{ total_recebido_formatado }}.{% else %}Conferência correta.{% endif %}</p>
+            <p id="statusConferencia" class="conf-compare-status">{% if total_dinheiro_centavos > 0 %}Falta de {{ total_dinheiro_formatado }}.{% else %}Conferência correta.{% endif %}</p>
           </div>
 
           <div id="campoObservacaoDiferenca" class="conf-observation" hidden>

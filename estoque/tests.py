@@ -20852,6 +20852,62 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Sobra de ")
         self.assertContains(resposta, "campoObservacaoDiferenca")
 
+    def test_conferencia_recebimentos_rota_espera_apenas_dinheiro_e_mantem_pix_no_resumo(self):
+        data_rota = date(2026, 9, 9)
+        cliente_dinheiro = Cliente.objects.create(nome="Cliente Genipauba Dinheiro", bairro="Genipauba", ativo=True)
+        cliente_pix = Cliente.objects.create(nome="Cliente Genipauba Pix", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(
+            cliente_dinheiro,
+            rota="Genipauba",
+            valor="798.65",
+            forma_pagamento="Dinheiro",
+            data_recebimento=data_rota,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente_pix,
+            rota="Genipauba",
+            valor="500.00",
+            forma_pagamento="PIX",
+            data_recebimento=data_rota,
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'data-valor-esperado-centavos="79865"')
+        self.assertContains(resposta, '<strong id="valorEsperadoConferencia" class="conf-compare-value">R$ 798,65</strong>', html=True)
+        self.assertContains(resposta, "Falta de R$ 798,65.")
+        self.assertContains(resposta, '<span class="conf-label">Pix</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 500,00</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-label">Total geral recebido</span>', html=True)
+        self.assertContains(resposta, '<span class="conf-value money">R$ 1.298,65</span>', html=True)
+        self.assertNotContains(resposta, 'data-valor-esperado-centavos="129865"')
+
+        resposta_post = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "cedulas",
+                "qtd_cedula_200": "3",
+                "qtd_cedula_100": "1",
+                "qtd_cedula_50": "1",
+                "qtd_cedula_20": "2",
+                "qtd_cedula_5": "1",
+                "qtd_cedula_2": "1",
+                "qtd_moeda_100": "1",
+                "qtd_moeda_50": "1",
+                "qtd_moeda_10": "1",
+                "qtd_moeda_5": "1",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta_post.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.total_sistema, Decimal("798.65"))
+        self.assertEqual(fechamento.total_conferido, Decimal("798.65"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+
     def test_conferencia_recebimentos_rota_finaliza_contagem_direta_sem_diferenca(self):
         usuario = get_user_model().objects.create_user(username="conferente-direto", password="senha")
         self.client.force_login(usuario)
