@@ -173,6 +173,24 @@
       font-size: .82rem;
       font-weight: 800;
     }
+    .rcd-undo-form {
+      margin-top: 8px;
+    }
+    .rcd-undo-btn {
+      min-height: 32px;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff7f7;
+      color: #991b1b;
+      padding: 6px 10px;
+      font: inherit;
+      font-size: .82rem;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .rcd-undo-btn:hover,
+    .rcd-undo-btn:focus { background: #fee2e2; }
     .rcd-empty {
       padding: 18px;
       color: var(--rc-muted);
@@ -191,6 +209,7 @@
       }
       .rcd-amount { text-align: left; }
       .rcd-btn { width: 100%; }
+      .rcd-undo-btn { width: 100%; }
     }
     @media (max-width: 460px) {
       .rcd-summary { grid-template-columns: 1fr; }
@@ -265,6 +284,26 @@
                 <span>{{ item.usuario|default:"Usuario nao informado" }}</span>
                 {% if item.rota_snapshot %}<span>Rota: {{ item.rota_snapshot }}</span>{% endif %}
               </div>
+              <form
+                method="post"
+                action="{{ item.desfazer_url }}"
+                class="rcd-undo-form"
+                data-desfazer-recebimento-form
+                onsubmit="return confirm('Desfazer este recebimento de {{ item.valor_recebido_formatado }} do cliente {{ item.cliente_nome|escapejs }} as {{ item.hora|default:'--:--' }} em {{ item.forma_pagamento|escapejs }}? Esta acao reabrira/restaurara a conta do cliente e retirara o valor do financeiro.');"
+              >
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="confirmacao_desfazer" value="DESFAZER">
+                <button
+                  type="submit"
+                  class="rcd-undo-btn"
+                  data-operacao-id="{{ item.operacao_id }}"
+                  data-cliente="{{ item.cliente_nome }}"
+                  data-valor="{{ item.valor_recebido_formatado }}"
+                  data-hora="{{ item.hora|default:'--:--' }}"
+                  data-forma="{{ item.forma_pagamento }}"
+                >Desfazer recebimento</button>
+              </form>
             </div>
             <div class="rcd-amount">
               {{ item.valor_recebido_formatado }}
