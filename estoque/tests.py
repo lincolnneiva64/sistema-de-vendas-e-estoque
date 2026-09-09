@@ -14162,6 +14162,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 409,59")
         self.assertContains(resposta, "Total em aberto")
         self.assertContains(resposta, "R$ 415,99")
+        self.assertNotContains(resposta, "Total original preservado")
         resumo = resposta.context["resumo_financeiro_nota_whatsapp"]
         self.assertEqual(resumo["saldo_anterior"], Decimal("409.59"))
         self.assertEqual(resumo["total_em_aberto"], Decimal("415.99"))
@@ -14200,6 +14201,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "R$ 0,00")
         self.assertContains(resposta, "Total em aberto")
         self.assertContains(resposta, "R$ 85,00")
+        self.assertNotContains(resposta, "Total original preservado")
 
     def test_nota_venda_a_vista_nao_exibe_resumo_financeiro_whatsapp(self):
         cliente = Cliente.objects.create(nome="Cliente Nota A Vista", ativo=True)
@@ -14212,6 +14214,7 @@ class PixRecebidoTests(TestCase):
         self.assertIsNone(resposta.context["resumo_financeiro_nota_whatsapp"])
         self.assertNotContains(resposta, "Saldo anterior")
         self.assertNotContains(resposta, "Total em aberto")
+        self.assertContains(resposta, "Total original preservado")
 
     def test_acesso_direto_adicionar_produto_em_venda_quitada_e_bloqueado(self):
         cliente = Cliente.objects.create(nome="Cliente Add Quitada", ativo=True)
