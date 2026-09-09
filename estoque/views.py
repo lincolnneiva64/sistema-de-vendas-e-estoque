@@ -20155,6 +20155,39 @@ def _quebrar_texto(draw, texto, fonte, largura_maxima):
     return linhas
 
 
+def _resumo_financeiro_nota_whatsapp(venda):
+    total_desta_compra = (venda.total or Decimal("0.00")).quantize(Decimal("0.01"))
+    if not _venda_a_prazo(venda):
+        return None
+
+    conta_venda = _conta_receber_da_venda(venda)
+    conta_venda_id = conta_venda.pk if conta_venda else None
+    valor_aberto_venda_atual = Decimal("0.00")
+    if (
+        conta_venda
+        and conta_venda.status in {ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL}
+        and (conta_venda.valor_em_aberto or Decimal("0.00")) > Decimal("0.00")
+    ):
+        valor_aberto_venda_atual = (conta_venda.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+
+    saldo_anterior = Decimal("0.00")
+    if venda.cliente_id:
+        contas_abertas = _contas_receber_abertas_cliente_qs(venda.cliente_id, timezone.localdate())
+        if conta_venda_id:
+            contas_abertas = contas_abertas.exclude(pk=conta_venda_id)
+        saldo_anterior = sum(
+            (conta.valor_em_aberto or Decimal("0.00") for conta in contas_abertas),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+    return {
+        "total_desta_compra": total_desta_compra,
+        "saldo_anterior": saldo_anterior,
+        "valor_aberto_venda_atual": valor_aberto_venda_atual,
+        "total_em_aberto": (saldo_anterior + valor_aberto_venda_atual).quantize(Decimal("0.01")),
+    }
+
+
 def _gerar_paginas_nota_whatsapp(venda):
     largura, altura = 1080, 1600
     margem = 30
@@ -20229,6 +20262,7 @@ def _gerar_paginas_nota_whatsapp(venda):
     data_venda = venda.data_venda.strftime("%d/%m/%Y")
     vencimento = venda.data_vencimento.strftime("%d/%m/%Y") if venda.data_vencimento else "-"
     pagamento = venda.tipo_pagamento or "-"
+    resumo_financeiro = _resumo_financeiro_nota_whatsapp(venda)
 
     x1 = margem + 30
     draw.rounded_rectangle(
@@ -20327,19 +20361,44 @@ def _gerar_paginas_nota_whatsapp(venda):
     for indice, item in enumerate(venda.itens.all(), start=1):
         desenhar_item(indice, item)
 
-    adicionar_pagina_se_precisar(132)
-    draw.rounded_rectangle(
-        (x1, y + 8, largura - margem - 30, y + 112),
-        radius=20,
-        fill="#dcfce7",
-        outline="#22c55e",
-        width=3,
-    )
-    draw.text((x1 + 22, y + 38), "Total da venda", fill=verde, font=fonte_subtitulo)
-    total = _formatar_moeda(venda.total)
-    total_largura = _texto_largura(draw, total, fonte_total)
-    draw.text((largura - margem - 54 - total_largura, y + 24), total, fill=verde, font=fonte_total)
-    y += 134
+    if resumo_financeiro:
+        altura_resumo = 178
+        adicionar_pagina_se_precisar(altura_resumo + 28)
+        draw.rounded_rectangle(
+            (x1, y + 8, largura - margem - 30, y + altura_resumo),
+            radius=20,
+            fill="#dcfce7",
+            outline="#22c55e",
+            width=3,
+        )
+        linhas_resumo = [
+            ("Total desta compra", resumo_financeiro["total_desta_compra"]),
+            ("Saldo anterior", resumo_financeiro["saldo_anterior"]),
+            ("Total em aberto", resumo_financeiro["total_em_aberto"]),
+        ]
+        linha_y = y + 26
+        for indice, (label, valor) in enumerate(linhas_resumo):
+            fonte_valor = fonte_total if indice == 2 else fonte_subtitulo
+            valor_texto = _formatar_moeda(valor)
+            valor_largura = _texto_largura(draw, valor_texto, fonte_valor)
+            draw.text((x1 + 22, linha_y + 10), label, fill=verde, font=fonte_subtitulo)
+            draw.text((largura - margem - 54 - valor_largura, linha_y), valor_texto, fill=verde, font=fonte_valor)
+            linha_y += 48
+        y += altura_resumo + 28
+    else:
+        adicionar_pagina_se_precisar(132)
+        draw.rounded_rectangle(
+            (x1, y + 8, largura - margem - 30, y + 112),
+            radius=20,
+            fill="#dcfce7",
+            outline="#22c55e",
+            width=3,
+        )
+        draw.text((x1 + 22, y + 38), "Total da venda", fill=verde, font=fonte_subtitulo)
+        total = _formatar_moeda(venda.total)
+        total_largura = _texto_largura(draw, total, fonte_total)
+        draw.text((largura - margem - 54 - total_largura, y + 24), total, fill=verde, font=fonte_total)
+        y += 134
     draw.text((x1, y), "LA Neiva", fill=verde, font=fonte_label)
 
     imagem.info["conteudo_altura"] = min(altura, y + 68)
