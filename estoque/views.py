@@ -20207,14 +20207,14 @@ def _gerar_paginas_nota_whatsapp(venda):
     borda = "#cbd5e1"
     card = "#ffffff"
 
-    fonte_empresa = _fonte_nota_whatsapp(34, True)
-    fonte_titulo = _fonte_nota_whatsapp(50, True)
-    fonte_subtitulo = _fonte_nota_whatsapp(32, True)
-    fonte_label = _fonte_nota_whatsapp(22, True)
-    fonte_texto_negrito = _fonte_nota_whatsapp(30, True)
-    fonte_tabela = _fonte_nota_whatsapp(29, True)
-    fonte_tabela_negrito = _fonte_nota_whatsapp(30, True)
-    fonte_total = _fonte_nota_whatsapp(56, True)
+    fonte_empresa = _fonte_nota_whatsapp(30, True)
+    fonte_titulo = _fonte_nota_whatsapp(44, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(28, True)
+    fonte_label = _fonte_nota_whatsapp(19, True)
+    fonte_texto_negrito = _fonte_nota_whatsapp(26)
+    fonte_tabela = _fonte_nota_whatsapp(25)
+    fonte_tabela_negrito = _fonte_nota_whatsapp(26, True)
+    fonte_total = _fonte_nota_whatsapp(45, True)
 
     paginas = []
     pagina_numero = 0
@@ -20461,14 +20461,14 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
     vermelho = "#991b1b"
     borda = "#cbd5e1"
 
-    fonte_empresa = _fonte_nota_whatsapp(34, True)
-    fonte_titulo = _fonte_nota_whatsapp(52, True)
-    fonte_subtitulo = _fonte_nota_whatsapp(34, True)
-    fonte_label = _fonte_nota_whatsapp(22, True)
-    fonte_texto = _fonte_nota_whatsapp(29, True)
-    fonte_texto_negrito = _fonte_nota_whatsapp(31, True)
-    fonte_valor = _fonte_nota_whatsapp(38, True)
-    fonte_rodape = _fonte_nota_whatsapp(28, True)
+    fonte_empresa = _fonte_nota_whatsapp(30, True)
+    fonte_titulo = _fonte_nota_whatsapp(46, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(30, True)
+    fonte_label = _fonte_nota_whatsapp(19, True)
+    fonte_texto = _fonte_nota_whatsapp(25)
+    fonte_texto_negrito = _fonte_nota_whatsapp(27, True)
+    fonte_valor = _fonte_nota_whatsapp(33, True)
+    fonte_rodape = _fonte_nota_whatsapp(24, True)
 
     imagem = Image.new("RGB", (largura, altura), fundo)
     draw = ImageDraw.Draw(imagem)
