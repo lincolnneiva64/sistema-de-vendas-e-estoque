@@ -668,11 +668,19 @@
             <strong id="totalContadoCedulas">R$ 0,00</strong>
           </div>
 
-          <div id="resumoComparacaoConferencia" class="conf-compare {% if total_dinheiro_centavos > 0 %}falta{% else %}correta{% endif %}" data-valor-esperado-centavos="{{ total_dinheiro_centavos }}" aria-live="polite">
+          <div id="resumoComparacaoConferencia" class="conf-compare {% if dinheiro_fisico_esperado_centavos > 0 %}falta{% else %}correta{% endif %}" data-valor-esperado-centavos="{{ dinheiro_fisico_esperado_centavos }}" data-dinheiro-recebido-centavos="{{ total_dinheiro_centavos }}" aria-live="polite">
             <div class="conf-compare-grid">
               <div class="conf-compare-item">
+                <span class="conf-label">Dinheiro recebido</span>
+                <strong class="conf-compare-value">{{ total_dinheiro_formatado }}</strong>
+              </div>
+              <div class="conf-compare-item">
+                <span class="conf-label">(-) Despesas confirmadas</span>
+                <strong id="despesasConfirmadasConferencia" class="conf-compare-value">{{ despesas_rota_total_confirmado_formatado }}</strong>
+              </div>
+              <div class="conf-compare-item">
                 <span class="conf-label">Valor esperado</span>
-                <strong id="valorEsperadoConferencia" class="conf-compare-value">{{ total_dinheiro_formatado }}</strong>
+                <strong id="valorEsperadoConferencia" class="conf-compare-value">{{ dinheiro_fisico_esperado_formatado }}</strong>
               </div>
               <div class="conf-compare-item">
                 <span class="conf-label">Valor contado</span>
@@ -680,10 +688,10 @@
               </div>
               <div class="conf-compare-item">
                 <span class="conf-label">DIFERENÇA</span>
-                <strong id="diferencaConferencia" class="conf-compare-value">{% if total_dinheiro_centavos > 0 %}{{ total_dinheiro_formatado }}{% else %}R$ 0,00{% endif %}</strong>
+                <strong id="diferencaConferencia" class="conf-compare-value">{% if dinheiro_fisico_esperado_centavos > 0 %}{{ dinheiro_fisico_esperado_formatado }}{% else %}R$ 0,00{% endif %}</strong>
               </div>
             </div>
-            <p id="statusConferencia" class="conf-compare-status">{% if total_dinheiro_centavos > 0 %}Falta de {{ total_dinheiro_formatado }}.{% else %}Conferência correta.{% endif %}</p>
+            <p id="statusConferencia" class="conf-compare-status">{% if dinheiro_fisico_esperado_centavos > 0 %}Falta de {{ dinheiro_fisico_esperado_formatado }}.{% else %}Conferência correta.{% endif %}</p>
           </div>
 
           <div id="campoObservacaoDiferenca" class="conf-observation" hidden>
@@ -738,6 +746,8 @@
     const valorDiretoEl = document.getElementById("valorConferenciaDireta");
     const totalEl = document.getElementById("totalContadoCedulas");
     const resumoComparacaoEl = document.getElementById("resumoComparacaoConferencia");
+    const despesasConfirmadasEl = document.getElementById("despesasConfirmadasConferencia");
+    const valorEsperadoEl = document.getElementById("valorEsperadoConferencia");
     const valorContadoComparacaoEl = document.getElementById("valorContadoComparacao");
     const diferencaEl = document.getElementById("diferencaConferencia");
     const statusEl = document.getElementById("statusConferencia");
@@ -751,10 +761,15 @@
     const visorCalculadoraEl = document.getElementById("visorCalculadoraConferencia");
     const usarResultadoCalculadoraEl = document.getElementById("usarResultadoCalculadoraConferencia");
     const teclasCalculadora = Array.from(document.querySelectorAll("[data-calc-value], [data-calc-action]"));
+    const despesasRotaInputs = Array.from(document.querySelectorAll(".conf-route-expense"));
     if (!inputs.length || !totalEl) return;
-    const valorEsperadoCentavos = resumoComparacaoEl
+    const dinheiroRecebidoCentavos = resumoComparacaoEl
+      ? Number.parseInt(resumoComparacaoEl.dataset.dinheiroRecebidoCentavos || resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
+      : 0;
+    let valorEsperadoCentavos = resumoComparacaoEl
       ? Number.parseInt(resumoComparacaoEl.dataset.valorEsperadoCentavos || "0", 10)
       : 0;
+    let despesasExcedemDinheiro = false;
     let expressaoCalculadora = "0";
 
     function formatarMoeda(centavos) {
@@ -801,6 +816,30 @@
       }, 0);
     }
 
+
+    function totalDespesasSelecionadasCentavos() {
+      return despesasRotaInputs.reduce((soma, input) => {
+        if (!input.checked) return soma;
+        const valorCentavos = Number.parseInt(input.dataset.valorCentavos || "0", 10);
+        return soma + (Number.isFinite(valorCentavos) ? valorCentavos : 0);
+      }, 0);
+    }
+
+    function atualizarValorEsperado() {
+      const despesasCentavos = totalDespesasSelecionadasCentavos();
+      despesasExcedemDinheiro = despesasCentavos > dinheiroRecebidoCentavos;
+      valorEsperadoCentavos = Math.max(dinheiroRecebidoCentavos - despesasCentavos, 0);
+      if (resumoComparacaoEl) {
+        resumoComparacaoEl.dataset.valorEsperadoCentavos = String(valorEsperadoCentavos);
+      }
+      if (despesasConfirmadasEl) {
+        despesasConfirmadasEl.textContent = formatarMoeda(despesasCentavos);
+      }
+      if (valorEsperadoEl) {
+        valorEsperadoEl.textContent = formatarMoeda(valorEsperadoCentavos);
+      }
+    }
+
     function atualizarPaineis() {
       const direta = metodoSelecionado() === "direta";
       if (painelCedulas) painelCedulas.hidden = direta;
@@ -810,10 +849,15 @@
 
     function atualizarTotal() {
       atualizarPaineis();
+      atualizarValorEsperado();
       const total = metodoSelecionado() === "direta" ? valorDiretoCentavos() : totalCedulasCentavos();
       totalEl.textContent = formatarMoeda(total);
       atualizarComparacao(total);
     }
+
+    despesasRotaInputs.forEach((input) => {
+      input.addEventListener("change", atualizarTotal);
+    });
 
     function atualizarComparacao(totalContadoCentavos) {
       if (!resumoComparacaoEl || !valorContadoComparacaoEl || !diferencaEl || !statusEl) return;
@@ -822,6 +866,17 @@
       valorContadoComparacaoEl.textContent = formatarMoeda(totalContadoCentavos);
       diferencaEl.textContent = formatarMoeda(diferencaAbsoluta);
       resumoComparacaoEl.classList.remove("correta", "falta", "sobra");
+
+      if (despesasExcedemDinheiro) {
+        resumoComparacaoEl.classList.add("falta");
+        if (observacaoWrapperEl) observacaoWrapperEl.hidden = true;
+        if (observacaoEl) observacaoEl.required = false;
+        if (botaoFinalizarEl) botaoFinalizarEl.disabled = true;
+        statusEl.textContent = "Despesas selecionadas excedem o dinheiro recebido pela rota.";
+        return;
+      }
+
+      if (botaoFinalizarEl) botaoFinalizarEl.disabled = false;
 
       if (diferenca === 0) {
         resumoComparacaoEl.classList.add("correta");

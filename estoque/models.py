@@ -2429,6 +2429,9 @@ class DespesaDiaria(models.Model):
     forma_pagamento = models.CharField(max_length=40, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_PIX)
     operador = models.CharField(max_length=120, blank=True)
     observacao = models.TextField(blank=True)
+    paga_com_dinheiro_rota = models.BooleanField(default=False)
+    rota_recebimento = models.CharField(max_length=160, blank=True)
+    data_rota_recebimento = models.DateField(null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -2437,6 +2440,40 @@ class DespesaDiaria(models.Model):
 
     def __str__(self):
         return f"{self.get_categoria_display()} - R$ {self.valor}"
+
+
+class DespesaRotaConferencia(models.Model):
+    fechamento = models.ForeignKey(
+        FechamentoRotaRecebimento,
+        on_delete=models.CASCADE,
+        related_name="despesas_rota_confirmadas",
+    )
+    despesa = models.ForeignKey(
+        DespesaDiaria,
+        on_delete=models.PROTECT,
+        related_name="confirmacoes_rota",
+    )
+    valor_justificado = models.DecimalField(max_digits=12, decimal_places=2)
+    confirmado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="despesas_rota_conferencia_confirmadas",
+    )
+    confirmado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["fechamento_id", "despesa_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["fechamento", "despesa"],
+                name="uniq_despesa_rota_conferencia_fechamento",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Despesa #{self.despesa_id} - fechamento #{self.fechamento_id}"
 
 
 class EntregaRota(models.Model):

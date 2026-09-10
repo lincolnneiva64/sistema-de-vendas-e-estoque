@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -1899,6 +1899,16 @@ def _conta_saida_despesa_diaria_valida(conta):
     return any(conta.id == conta_saida.id for conta_saida in _contas_saida_despesa_diaria())
 
 
+def _rota_recebimento_valida(valor):
+    rota_normalizada = _normalizar_rota_recebimento(valor)
+    if not rota_normalizada:
+        return False
+    return any(
+        _normalizar_rota_recebimento(rota) == rota_normalizada
+        for rota in _rotas_clientes_opcoes()
+    )
+
+
 def _saldo_conta_financeira(conta):
     saldo_inicial = _financeiro_dinheiro(conta.saldo_inicial)
     entradas = _financeiro_dinheiro(
@@ -3531,6 +3541,9 @@ def emprestimos_rapidos(request):
                     previsao_devolucao=previsao_devolucao,
                     conta_saida=conta_saida,
                     observacao=observacao,
+                paga_com_dinheiro_rota=paga_com_dinheiro_rota,
+                rota_recebimento=rota_recebimento,
+                data_rota_recebimento=data_rota_recebimento,
                     operador=operador,
                 )
                 MovimentoFinanceiro.objects.create(
@@ -3941,9 +3954,16 @@ def despesas_diarias(request):
             despesa = get_object_or_404(DespesaDiaria, pk=request.POST.get("despesa_id"))
             with transaction.atomic():
                 movimento = _movimento_despesa_diaria_correspondente(despesa)
+                try:
+                    despesa.delete()
+                except ProtectedError:
+                    messages.warning(
+                        request,
+                        "Esta despesa nao pode ser excluida porque ja foi utilizada na conferencia de uma rota.",
+                    )
+                    return redirect("estoque:despesas_diarias")
                 if movimento:
                     movimento.delete()
-                despesa.delete()
             messages.success(request, "Despesa excluida junto com o movimento financeiro correspondente.")
             return redirect("estoque:despesas_diarias")
 
@@ -3960,6 +3980,9 @@ def despesas_diarias(request):
         observacao = (request.POST.get("observacao") or "").strip()
         operador = (request.POST.get("operador") or "").strip()
         data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
+        paga_com_dinheiro_rota = request.POST.get("paga_com_dinheiro_rota") == "1"
+        rota_recebimento = (request.POST.get("rota_recebimento") or "").strip()
+        data_rota_recebimento = parse_date(request.POST.get("data_rota_recebimento") or "")
         conta_saida = None
         conta_saida_id = request.POST.get("conta_saida")
         if conta_saida_id and str(conta_saida_id).isdigit():
@@ -3992,6 +4015,20 @@ def despesas_diarias(request):
         if not _conta_saida_despesa_diaria_valida(conta_saida):
             messages.error(request, "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.")
             return redirect("estoque:despesas_diarias")
+
+        if paga_com_dinheiro_rota:
+            if not rota_recebimento:
+                messages.error(request, "Informe a rota do dinheiro em posse da rota.")
+                return redirect("estoque:despesas_diarias")
+            if not _rota_recebimento_valida(rota_recebimento):
+                messages.error(request, "Escolha uma rota valida para o dinheiro em posse da rota.")
+                return redirect("estoque:despesas_diarias")
+            if not data_rota_recebimento:
+                messages.error(request, "Informe a data da rota do dinheiro em posse da rota.")
+                return redirect("estoque:despesas_diarias")
+        else:
+            rota_recebimento = ""
+            data_rota_recebimento = None
 
         agora = timezone.localtime()
         data_hora = timezone.make_aware(
@@ -4085,6 +4122,7 @@ def despesas_diarias(request):
             "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
             "forma_padrao": DespesaDiaria.FORMA_PIX,
             "contas_saida": contas_saida,
+            "rotas_recebimento_opcoes": _rotas_clientes_opcoes(),
             "operadores_despesa_diaria": operadores_despesa_diaria,
         },
     )
@@ -14945,6 +14983,75 @@ def _resumo_conferencia_recebimentos_rota(rota, data_referencia):
     }
 
 
+def _rotas_equivalentes_normalizadas(rota):
+    return {
+        _normalizar_rota_recebimento(alias)
+        for alias in _aliases_rota_cliente(rota)
+        if _normalizar_rota_recebimento(alias)
+    }
+
+
+def _despesa_pertence_rota_data(despesa, rota, data_referencia):
+    if not getattr(despesa, "paga_com_dinheiro_rota", False):
+        return False
+    if despesa.data_rota_recebimento != data_referencia:
+        return False
+    return _normalizar_rota_recebimento(despesa.rota_recebimento) in _rotas_equivalentes_normalizadas(rota)
+
+
+def _despesas_dinheiro_rota_elegiveis(rota, data_referencia):
+    despesas = (
+        DespesaDiaria.objects
+        .filter(
+            paga_com_dinheiro_rota=True,
+            data_rota_recebimento=data_referencia,
+        )
+        .order_by("data_hora", "id")
+    )
+    elegiveis = []
+    for despesa in despesas:
+        if not _despesa_pertence_rota_data(despesa, rota, data_referencia):
+            continue
+        despesa.valor_formatado = _formatar_moeda(despesa.valor)
+        despesa.valor_centavos = int(((despesa.valor or Decimal("0.00")) * 100).quantize(Decimal("1")))
+        despesa.rotulo_conferencia = (despesa.observacao or despesa.get_categoria_display() or f"Despesa #{despesa.id}").strip()
+        elegiveis.append(despesa)
+    return elegiveis
+
+
+def _ids_despesas_rota_post(post_data):
+    ids = []
+    for valor in post_data.getlist("despesas_rota_confirmadas"):
+        try:
+            despesa_id = int(valor)
+        except (TypeError, ValueError):
+            raise ValueError("Despesa selecionada invalida para esta conferencia.")
+        if despesa_id not in ids:
+            ids.append(despesa_id)
+    return ids
+
+
+def _despesas_rota_confirmadas_post(post_data, rota, data_referencia, fechamento_atual=None):
+    ids = _ids_despesas_rota_post(post_data)
+    if not ids:
+        return [], Decimal("0.00")
+    despesas = list(DespesaDiaria.objects.filter(pk__in=ids).order_by("id"))
+    despesas_por_id = {despesa.id: despesa for despesa in despesas}
+    despesas_confirmadas = []
+    for despesa_id in ids:
+        despesa = despesas_por_id.get(despesa_id)
+        if not despesa or not _despesa_pertence_rota_data(despesa, rota, data_referencia):
+            raise ValueError("Despesa selecionada nao pertence a esta rota/data. Revise as despesas da conferencia.")
+        confirmacoes = DespesaRotaConferencia.objects.filter(despesa=despesa)
+        if fechamento_atual:
+            confirmacoes = confirmacoes.exclude(fechamento=fechamento_atual)
+        if confirmacoes.exists():
+            raise ValueError("Esta despesa ja foi utilizada na conferencia de uma rota e nao pode ser reutilizada.")
+        despesas_confirmadas.append(despesa)
+    total = sum((despesa.valor or Decimal("0.00") for despesa in despesas_confirmadas), Decimal("0.00"))
+    return despesas_confirmadas, total.quantize(Decimal("0.01"))
+
+
 def _resumo_recebimentos_dia(data_referencia):
     historico = _montar_historico_recebimentos_dia(data_referencia=data_referencia)
     totais_forma = {
@@ -15253,6 +15360,20 @@ def conferencia_recebimentos_rota(request):
     resumo = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
     fechamento_existente = _fechamento_rota_data(rota_filtro, data_referencia)
     fechamento_resumo = _resumo_fechamento_rota(fechamento_existente)
+    despesas_rota = _despesas_dinheiro_rota_elegiveis(rota_filtro, data_referencia)
+    despesas_rota_confirmadas_ids = set()
+    despesas_rota_total_confirmado = Decimal("0.00")
+    if fechamento_existente:
+        confirmacoes = list(
+            fechamento_existente.despesas_rota_confirmadas
+            .select_related("despesa")
+            .order_by("despesa_id")
+        )
+        despesas_rota_confirmadas_ids = {confirmacao.despesa_id for confirmacao in confirmacoes}
+        despesas_rota_total_confirmado = sum(
+            (confirmacao.valor_justificado or Decimal("0.00") for confirmacao in confirmacoes),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
     metodo_selecionado = FechamentoRotaRecebimento.METODO_CEDULAS
     valor_direto_inicial = ""
     observacao_inicial = ""
@@ -15269,13 +15390,26 @@ def conferencia_recebimentos_rota(request):
         observacao_inicial = request.POST.get("observacao_conferencia", "").strip()
         try:
             total_conferido = _total_conferido_post(request.POST, metodo_selecionado)
+            despesas_confirmadas, despesas_rota_total_confirmado = _despesas_rota_confirmadas_post(
+                request.POST,
+                rota_filtro,
+                data_referencia,
+            )
         except ValueError as exc:
             messages.warning(request, str(exc))
         else:
-            total_sistema = (resumo["total_dinheiro"] or Decimal("0.00")).quantize(Decimal("0.01"))
+            total_dinheiro = (resumo["total_dinheiro"] or Decimal("0.00")).quantize(Decimal("0.01"))
+            despesas_rota_confirmadas_ids = {despesa.id for despesa in despesas_confirmadas}
+            if despesas_rota_total_confirmado > total_dinheiro:
+                messages.warning(
+                    request,
+                    "As despesas selecionadas excedem o dinheiro recebido pela rota. Revise as despesas antes de finalizar.",
+                )
+                return redirect(request.get_full_path())
+            total_sistema = (total_dinheiro - despesas_rota_total_confirmado).quantize(Decimal("0.01"))
             diferenca = (total_conferido - total_sistema).quantize(Decimal("0.01"))
             if diferenca != Decimal("0.00") and not observacao_inicial:
-                messages.warning(request, "Informe uma observação para finalizar com falta ou sobra.")
+                messages.warning(request, "Informe uma observa??o para finalizar com falta ou sobra.")
             else:
                 usuario = request.user if getattr(request.user, "is_authenticated", False) else None
                 composicao_cedulas = (
@@ -15289,9 +15423,9 @@ def conferencia_recebimentos_rota(request):
                             rota=rota_filtro,
                             data_referencia=data_referencia,
                         ).exists():
-                            messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+                            messages.warning(request, "Esta confer?ncia j? foi finalizada e n?o pode ser alterada.")
                             return redirect(request.get_full_path())
-                        FechamentoRotaRecebimento.objects.create(
+                        fechamento = FechamentoRotaRecebimento.objects.create(
                             rota=rota_filtro,
                             data_referencia=data_referencia,
                             usuario=usuario,
@@ -15304,11 +15438,23 @@ def conferencia_recebimentos_rota(request):
                             observacao=observacao_inicial,
                             composicao_cedulas=composicao_cedulas,
                         )
+                        for despesa in despesas_confirmadas:
+                            DespesaRotaConferencia.objects.create(
+                                fechamento=fechamento,
+                                despesa=despesa,
+                                valor_justificado=(despesa.valor or Decimal("0.00")).quantize(Decimal("0.01")),
+                                confirmado_por=usuario,
+                            )
                 except IntegrityError:
-                    messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+                    messages.warning(request, "Esta confer?ncia j? foi finalizada e n?o pode ser alterada.")
                     return redirect(request.get_full_path())
-                messages.success(request, "Conferência finalizada com sucesso.")
+                messages.success(request, "Confer?ncia finalizada com sucesso.")
                 return redirect(request.get_full_path())
+
+    dinheiro_fisico_esperado = (
+        (resumo["total_dinheiro"] or Decimal("0.00")).quantize(Decimal("0.01"))
+        - despesas_rota_total_confirmado
+    ).quantize(Decimal("0.01"))
 
     return render(
         request,
@@ -15324,6 +15470,13 @@ def conferencia_recebimentos_rota(request):
             "total_recebido_formatado": _formatar_moeda(resumo["total_recebido"]),
             "total_dinheiro_centavos": int((resumo["total_dinheiro"] * 100).quantize(Decimal("1"))),
             "total_recebido_centavos": int((resumo["total_recebido"] * 100).quantize(Decimal("1"))),
+            "despesas_rota": despesas_rota,
+            "despesas_rota_confirmadas_ids": despesas_rota_confirmadas_ids,
+            "despesas_rota_total_confirmado": despesas_rota_total_confirmado,
+            "despesas_rota_total_confirmado_formatado": _formatar_moeda(despesas_rota_total_confirmado),
+            "dinheiro_fisico_esperado": dinheiro_fisico_esperado,
+            "dinheiro_fisico_esperado_formatado": _formatar_moeda(dinheiro_fisico_esperado),
+            "dinheiro_fisico_esperado_centavos": int((dinheiro_fisico_esperado * 100).quantize(Decimal("1"))),
             "metodo_selecionado": metodo_selecionado,
             "valor_direto_inicial": valor_direto_inicial,
             "observacao_inicial": observacao_inicial,

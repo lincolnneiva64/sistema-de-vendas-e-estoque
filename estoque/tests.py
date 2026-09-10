@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -19354,6 +19354,25 @@ class PixRecebidoTests(TestCase):
             status_recibo=status,
         )
 
+    def _criar_despesa_dinheiro_rota(
+        self,
+        rota="Genipauba",
+        data_rota=None,
+        valor="154.00",
+        observacao="Pagamento Souza Cruz",
+    ):
+        return DespesaDiaria.objects.create(
+            data_hora=timezone.make_aware(datetime(2026, 9, 9, 10, 0)),
+            valor=Decimal(valor),
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            forma_pagamento=DespesaDiaria.FORMA_DINHEIRO,
+            operador="Conferente",
+            observacao=observacao,
+            paga_com_dinheiro_rota=True,
+            rota_recebimento=rota,
+            data_rota_recebimento=data_rota or date(2026, 9, 9),
+        )
+
     def _url_confirmar_recibo(self, cliente, operacao):
         return reverse(
             "estoque:receber_cliente_confirmar_recibo",
@@ -20907,6 +20926,258 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(fechamento.total_sistema, Decimal("798.65"))
         self.assertEqual(fechamento.total_conferido, Decimal("798.65"))
         self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+
+    def test_conferencia_recebimentos_rota_abate_despesa_confirmada_sem_nova_movimentacao(self):
+        data_rota = date(2026, 9, 9)
+        cliente_dinheiro = Cliente.objects.create(nome="Cliente Genipauba Dinheiro", bairro="Genipauba", ativo=True)
+        cliente_pix = Cliente.objects.create(nome="Cliente Genipauba Pix", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_dinheiro, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        self._criar_operacao_recebimento_cliente(cliente_pix, rota="Genipauba", valor="500.00", forma_pagamento="PIX", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota()
+        conta_caixa = views._conta_financeira_padrao("caixa")
+        views._registrar_movimento_despesa_diaria(despesa, conta_caixa)
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta_get = self.client.get(url, secure=True)
+        self.assertContains(resposta_get, 'data-valor-esperado-centavos="79865"')
+        self.assertContains(resposta_get, 'value="%s"' % despesa.id)
+        self.assertContains(resposta_get, "R$ 500,00")
+        self.assertContains(resposta_get, "R$ 1.298,65")
+
+        resposta_post = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "cedulas",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+                "qtd_cedula_200": "3",
+                "qtd_cedula_20": "2",
+                "qtd_moeda_100": "4",
+                "qtd_moeda_50": "1",
+                "qtd_moeda_10": "1",
+                "qtd_moeda_5": "1",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta_post.status_code, 302)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 1)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.total_sistema, Decimal("644.65"))
+        self.assertEqual(fechamento.total_conferido, Decimal("644.65"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+        confirmacao = DespesaRotaConferencia.objects.get(fechamento=fechamento, despesa=despesa)
+        self.assertEqual(confirmacao.valor_justificado, Decimal("154.00"))
+
+    def test_conferencia_recebimentos_rota_bloqueia_despesa_de_outra_rota_data_ou_id_adulterado(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Bloqueio", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa_outra_rota = self._criar_despesa_dinheiro_rota(rota="Centro")
+        despesa_outra_data = self._criar_despesa_dinheiro_rota(data_rota=date(2026, 9, 8))
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        for despesa_id in (despesa_outra_rota.id, despesa_outra_data.id, 999999):
+            resposta = self.client.post(
+                url,
+                {
+                    "metodo_conferencia_visual": "direta",
+                    "valor_conferencia_direta": "798,65",
+                    "despesas_rota_confirmadas": [str(despesa_id)],
+                },
+                secure=True,
+            )
+            self.assertEqual(resposta.status_code, 200)
+            self.assertContains(resposta, "Despesa selecionada nao pertence a esta rota/data.")
+            self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_bloqueia_despesa_maior_que_dinheiro(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Excesso", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="100.00", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "0,00",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "As despesas selecionadas excedem o dinheiro recebido pela rota.")
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+        self.assertEqual(DespesaRotaConferencia.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_abate_despesa_na_contagem_direta(self):
+        data_rota = date(2026, 9, 9)
+        cliente_dinheiro = Cliente.objects.create(nome="Cliente Genipauba Direta Dinheiro", bairro="Genipauba", ativo=True)
+        cliente_pix = Cliente.objects.create(nome="Cliente Genipauba Direta Pix", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_dinheiro, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        self._criar_operacao_recebimento_cliente(cliente_pix, rota="Genipauba", valor="500.00", forma_pagamento="PIX", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota()
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta_get = self.client.get(url, secure=True)
+        self.assertContains(resposta_get, "R$ 500,00")
+        self.assertContains(resposta_get, "R$ 1.298,65")
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "644,65",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.total_sistema, Decimal("644.65"))
+        self.assertEqual(fechamento.total_conferido, Decimal("644.65"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+
+    def test_conferencia_recebimentos_rota_bloqueia_despesa_nao_marcada_como_dinheiro_rota(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Nao Marcada", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa = DespesaDiaria.objects.create(
+            data_hora=timezone.make_aware(datetime(2026, 9, 9, 10, 0)),
+            valor=Decimal("154.00"),
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            forma_pagamento=DespesaDiaria.FORMA_DINHEIRO,
+            operador="Conferente",
+            observacao="Despesa manipulada",
+            paga_com_dinheiro_rota=False,
+            rota_recebimento="Genipauba",
+            data_rota_recebimento=data_rota,
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "644,65",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Despesa selecionada nao pertence a esta rota/data.")
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+        self.assertEqual(DespesaRotaConferencia.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_preserva_snapshot_apos_alterar_despesa(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Snapshot", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "644,65",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+            },
+            secure=True,
+        )
+
+        confirmacao = DespesaRotaConferencia.objects.get(despesa=despesa)
+        self.assertEqual(confirmacao.valor_justificado, Decimal("154.00"))
+        despesa.valor = Decimal("200.00")
+        despesa.save(update_fields=["valor", "atualizado_em"])
+        confirmacao.refresh_from_db()
+        self.assertEqual(confirmacao.valor_justificado, Decimal("154.00"))
+
+    def test_conferencia_recebimentos_rota_ids_repetidos_nao_duplicam_abatimento(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Repetido", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "644,65",
+                "despesas_rota_confirmadas": [str(despesa.id), str(despesa.id)],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.total_sistema, Decimal("644.65"))
+        self.assertEqual(DespesaRotaConferencia.objects.filter(fechamento=fechamento, despesa=despesa).count(), 1)
+
+    def test_conferencia_recebimentos_rota_somente_pix_espera_zero_em_especie(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Pix Apenas", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="500.00", forma_pagamento="PIX", data_recebimento=data_rota)
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta_get = self.client.get(url, secure=True)
+        self.assertContains(resposta_get, 'data-valor-esperado-centavos="0"')
+        self.assertContains(resposta_get, "R$ 500,00")
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "0,00",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.total_sistema, Decimal("0.00"))
+        self.assertEqual(fechamento.total_conferido, Decimal("0.00"))
+        self.assertEqual(fechamento.diferenca, Decimal("0.00"))
+
+    def test_conferencia_recebimentos_rota_bloqueia_reutilizacao_da_mesma_despesa(self):
+        data_rota = date(2026, 9, 9)
+        cliente = Cliente.objects.create(nome="Cliente Genipauba Reuso", bairro="Genipauba", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente, rota="Genipauba", valor="798.65", forma_pagamento="Dinheiro", data_recebimento=data_rota)
+        despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
+        fechamento_antigo = FechamentoRotaRecebimento.objects.create(
+            rota="Outra rota",
+            data_referencia=data_rota,
+            total_sistema=Decimal("154.00"),
+            total_conferido=Decimal("154.00"),
+            diferenca=Decimal("0.00"),
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+        )
+        DespesaRotaConferencia.objects.create(
+            fechamento=fechamento_antigo,
+            despesa=despesa,
+            valor_justificado=Decimal("154.00"),
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "644,65",
+                "despesas_rota_confirmadas": [str(despesa.id)],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Esta despesa ja foi utilizada na conferencia de uma rota")
+        self.assertEqual(FechamentoRotaRecebimento.objects.filter(rota="Genipauba", data_referencia=data_rota).count(), 0)
+        self.assertEqual(DespesaRotaConferencia.objects.count(), 1)
 
     def test_conferencia_recebimentos_rota_finaliza_contagem_direta_sem_diferenca(self):
         usuario = get_user_model().objects.create_user(username="conferente-direto", password="senha")
@@ -25720,18 +25991,33 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.conta_cartoes = views._conta_financeira_padrao("cartoes")
         self.url = reverse("estoque:despesas_diarias")
 
-    def _post_despesa(self, conta, valor="50,00", categoria=None, observacao="Despesa teste", follow=True):
+    def _post_despesa(
+        self,
+        conta,
+        valor="50,00",
+        categoria=None,
+        observacao="Despesa teste",
+        follow=True,
+        paga_com_dinheiro_rota=False,
+        rota_recebimento="",
+        data_rota_recebimento="",
+    ):
+        dados = {
+            "acao": "salvar_despesa",
+            "data_lancamento": "2026-09-07",
+            "valor": valor,
+            "categoria": categoria or DespesaDiaria.CATEGORIA_OUTROS,
+            "conta_saida": "" if conta is None else str(conta.id),
+            "operador": self.operador.nome,
+            "observacao": observacao,
+            "rota_recebimento": rota_recebimento,
+            "data_rota_recebimento": data_rota_recebimento,
+        }
+        if paga_com_dinheiro_rota:
+            dados["paga_com_dinheiro_rota"] = "1"
         return self.client.post(
             self.url,
-            {
-                "acao": "salvar_despesa",
-                "data_lancamento": "2026-09-07",
-                "valor": valor,
-                "categoria": categoria or DespesaDiaria.CATEGORIA_OUTROS,
-                "conta_saida": "" if conta is None else str(conta.id),
-                "operador": self.operador.nome,
-                "observacao": observacao,
-            },
+            dados,
             secure=True,
             follow=follow,
         )
@@ -25755,6 +26041,96 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertEqual(movimento.conta, self.conta_banco)
         self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("-50.00"))
         self.assertEqual(views._saldo_conta_financeira(self.conta_caixa), Decimal("0.00"))
+
+    def test_despesa_normal_sem_rota_continua_funcionando(self):
+        self._post_despesa(self.conta_caixa)
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertFalse(despesa.paga_com_dinheiro_rota)
+        self.assertEqual(despesa.rota_recebimento, "")
+        self.assertIsNone(despesa.data_rota_recebimento)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 1)
+
+    def test_despesa_com_dinheiro_rota_exige_rota_e_data(self):
+        Cliente.objects.create(nome="Cliente Genipauba", bairro="Genipauba", ativo=True)
+
+        resposta_sem_rota = self._post_despesa(
+            self.conta_caixa,
+            paga_com_dinheiro_rota=True,
+            data_rota_recebimento="2026-09-09",
+        )
+        self.assertContains(resposta_sem_rota, "Informe a rota do dinheiro em posse da rota.")
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+
+        resposta_sem_data = self._post_despesa(
+            self.conta_caixa,
+            paga_com_dinheiro_rota=True,
+            rota_recebimento="Genipauba",
+        )
+        self.assertContains(resposta_sem_data, "Informe a data da rota do dinheiro em posse da rota.")
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+
+    def test_despesa_com_dinheiro_rota_gera_uma_unica_saida_financeira(self):
+        Cliente.objects.create(nome="Cliente Genipauba", bairro="Genipauba", ativo=True)
+
+        self._post_despesa(
+            self.conta_caixa,
+            valor="154,00",
+            observacao="Pagamento Souza Cruz",
+            paga_com_dinheiro_rota=True,
+            rota_recebimento="Genipauba",
+            data_rota_recebimento="2026-09-09",
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertTrue(despesa.paga_com_dinheiro_rota)
+        self.assertEqual(despesa.rota_recebimento, "Genipauba")
+        self.assertEqual(despesa.data_rota_recebimento, date(2026, 9, 9))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 1)
+        movimento = self._movimento_unico()
+        self.assertEqual(movimento.valor, Decimal("154.00"))
+        self.assertEqual(movimento.conta, self.conta_caixa)
+
+    def test_excluir_despesa_usada_em_conferencia_mostra_mensagem_e_preserva_registros(self):
+        Cliente.objects.create(nome="Cliente Genipauba", bairro="Genipauba", ativo=True)
+        self._post_despesa(
+            self.conta_caixa,
+            valor="154,00",
+            paga_com_dinheiro_rota=True,
+            rota_recebimento="Genipauba",
+            data_rota_recebimento="2026-09-09",
+        )
+        despesa = DespesaDiaria.objects.get()
+        movimento_id = self._movimento_unico().id
+        fechamento = FechamentoRotaRecebimento.objects.create(
+            rota="Genipauba",
+            data_referencia=date(2026, 9, 9),
+            total_sistema=Decimal("154.00"),
+            total_conferido=Decimal("154.00"),
+            diferenca=Decimal("0.00"),
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+        )
+        DespesaRotaConferencia.objects.create(
+            fechamento=fechamento,
+            despesa=despesa,
+            valor_justificado=Decimal("154.00"),
+        )
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "excluir",
+                "despesa_id": str(despesa.id),
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(resposta, "Esta despesa nao pode ser excluida porque ja foi utilizada na conferencia de uma rota.")
+        self.assertTrue(DespesaDiaria.objects.filter(pk=despesa.id).exists())
+        self.assertTrue(DespesaRotaConferencia.objects.filter(fechamento=fechamento, despesa=despesa).exists())
+        self.assertTrue(FechamentoRotaRecebimento.objects.filter(pk=fechamento.id).exists())
+        self.assertTrue(MovimentoFinanceiro.objects.filter(pk=movimento_id).exists())
 
     def test_despesa_com_sangria_reserva_debita_reserva(self):
         self._post_despesa(self.conta_reserva)

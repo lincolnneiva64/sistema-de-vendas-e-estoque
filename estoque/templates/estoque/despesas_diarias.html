@@ -336,6 +336,30 @@
           <div class="despesa-item-meta">Escolha Caixa, Banco/Pix ou Sangria. Esta escolha e quem manda no financeiro.</div>
         </div>
         <div class="despesa-field despesa-field-full">
+          <label>
+            <input id="pagaComDinheiroRota" name="paga_com_dinheiro_rota" type="checkbox" value="1">
+            Pago com dinheiro em posse da rota
+          </label>
+          <div class="despesa-item-meta">Esta marcacao nao cria outra saida financeira. Ela apenas informa que a despesa foi paga com dinheiro que estava em posse da rota.</div>
+        </div>
+        <div id="camposDinheiroRota" class="despesa-field despesa-field-full" hidden>
+          <div class="despesa-grid">
+            <div class="despesa-field">
+              <label for="rotaRecebimentoDespesa">Rota</label>
+              <select id="rotaRecebimentoDespesa" name="rota_recebimento">
+                <option value="">Selecione a rota</option>
+                {% for rota in rotas_recebimento_opcoes %}
+                  <option value="{{ rota }}">{{ rota }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="despesa-field">
+              <label for="dataRotaRecebimentoDespesa">Data da rota</label>
+              <input id="dataRotaRecebimentoDespesa" name="data_rota_recebimento" type="date" value="{{ hoje|date:'Y-m-d' }}">
+            </div>
+          </div>
+        </div>
+        <div class="despesa-field despesa-field-full">
           <label for="operadorDespesaDiaria">Operador</label>
           <select id="operadorDespesaDiaria" name="operador" required>
             <option value="">Selecione o operador</option>
@@ -426,6 +450,9 @@
           <div class="despesa-item-meta">
             {{ despesa.data_hora|date:"d/m/Y H:i" }} · Saiu de: {{ despesa.conta_saida_nome }} · Operador: {{ despesa.operador|default:"-" }}
           </div>
+          {% if despesa.paga_com_dinheiro_rota %}
+            <div class="despesa-item-meta">Dinheiro em posse da rota: {{ despesa.rota_recebimento }} - {{ despesa.data_rota_recebimento|date:"d/m/Y" }}</div>
+          {% endif %}
           {% if despesa.observacao %}
             <div class="despesa-item-meta">{{ despesa.observacao }}</div>
           {% endif %}
@@ -516,6 +543,9 @@
     document.getElementById("valorDespesaDiaria"),
     document.getElementById("categoriaDespesaDiaria"),
     document.getElementById("contaSaidaDespesaDiaria"),
+    document.getElementById("pagaComDinheiroRota"),
+    document.getElementById("rotaRecebimentoDespesa"),
+    document.getElementById("dataRotaRecebimentoDespesa"),
     document.getElementById("operadorDespesaDiaria"),
     document.getElementById("observacaoDespesaDiaria"),
     btnSalvar
@@ -529,6 +559,10 @@
   const valorCampo = document.getElementById("valorDespesaDiaria");
   const categoriaCampo = document.getElementById("categoriaDespesaDiaria");
   const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
+  const dinheiroRotaCampo = document.getElementById("pagaComDinheiroRota");
+  const camposDinheiroRota = document.getElementById("camposDinheiroRota");
+  const rotaRecebimentoCampo = document.getElementById("rotaRecebimentoDespesa");
+  const dataRotaRecebimentoCampo = document.getElementById("dataRotaRecebimentoDespesa");
   const operadorCampo = document.getElementById("operadorDespesaDiaria");
   const observacaoCampo = document.getElementById("observacaoDespesaDiaria");
 
@@ -547,9 +581,26 @@
     if (contaCampo) {
       contaCampo.value = "";
     }
+    if (dinheiroRotaCampo) dinheiroRotaCampo.checked = false;
+    if (rotaRecebimentoCampo) rotaRecebimentoCampo.value = "";
+    if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.value = dataCampo ? dataCampo.value : dataHojeISO();
+    atualizarCamposDinheiroRota();
     if (observacaoCampo) observacaoCampo.value = "";
     if (operadorCampo) operadorCampo.selectedIndex = 0;
     marcarFoco(valorCampo || dataCampo);
+  }
+
+  function atualizarCamposDinheiroRota() {
+    const ativo = Boolean(dinheiroRotaCampo && dinheiroRotaCampo.checked);
+    if (camposDinheiroRota) camposDinheiroRota.hidden = !ativo;
+    if (rotaRecebimentoCampo) rotaRecebimentoCampo.required = ativo;
+    if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.required = ativo;
+    if (!ativo) {
+      if (rotaRecebimentoCampo) rotaRecebimentoCampo.value = "";
+      if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.value = "";
+    } else if (dataRotaRecebimentoCampo && !dataRotaRecebimentoCampo.value && dataCampo) {
+      dataRotaRecebimentoCampo.value = dataCampo.value;
+    }
   }
 
   function marcarFoco(campo) {
@@ -652,6 +703,11 @@
     btnLimpar.addEventListener("click", function () {
       limparCamposDespesa();
     });
+  }
+
+  if (dinheiroRotaCampo) {
+    dinheiroRotaCampo.addEventListener("change", atualizarCamposDinheiroRota);
+    atualizarCamposDinheiroRota();
   }
 })();
 </script>
