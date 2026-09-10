@@ -230,7 +230,7 @@ h3 {
 
     .linha {
     display: grid;
-    grid-template-columns: minmax(0, 2.2fr) 1.2fr 1fr 1.4fr;
+    grid-template-columns: minmax(0, 1.9fr) 0.9fr 0.8fr 1fr 1.2fr;
     gap: 5px;
     margin-bottom: 6px;
     align-items: start;
@@ -1400,9 +1400,45 @@ select:focus {
 }
 
 .preco-venda-wrap {
-    display: grid;
-    gap: 4px;
+    position: relative;
+    display: block;
     min-width: 0;
+}
+
+.custo-venda-wrap {
+    position: relative;
+    display: block;
+    min-width: 0;
+}
+
+.custo-venda-wrap::before {
+    content: "Custo";
+    position: absolute;
+    left: 2px;
+    bottom: calc(100% + 2px);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+#custoVenda {
+    width: 100%;
+    background: #f8fafc;
+    color: #475569;
+    border-color: #64748b;
+}
+
+.preco-margem-custo {
+    position: absolute;
+    left: 2px;
+    bottom: calc(100% + 2px);
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 #preco.preco-conferido-campo,
@@ -1851,6 +1887,7 @@ td:first-child {
 
     #quantidade,
     #unidade,
+    #custoVenda,
     #preco {
         width: 100%;
         min-width: 0;
@@ -2712,6 +2749,8 @@ td:first-child {
     data-unidade2="{{ produto.unidade_venda_2|default_if_none:'' }}"
     data-fator="{{ produto.fator_conversao|default_if_none:'' }}"
     data-preco2="{{ produto.preco_vista_fracionado|default_if_none:'' }}"
+    data-custo="{{ produto.preco_compra|default_if_none:'' }}"
+    data-custo2="{{ produto.preco_compra_fracionado|default_if_none:'' }}"
 >
     {{ produto.nome }}
 </option>
@@ -2722,7 +2761,11 @@ td:first-child {
 <select id="unidade">
     <option value="">Un</option>
 </select>
+<div class="custo-venda-wrap">
+    <input type="text" id="custoVenda" placeholder="Custo" readonly aria-label="Custo do produto">
+</div>
 <div class="preco-venda-wrap">
+    <span id="precoMargemCusto" class="preco-margem-custo" aria-live="polite"></span>
     <input type="text" id="preco" placeholder="Preço">
     <span id="precoConferidoBadge" class="preco-conferido-campo-badge" hidden>Preço conferido</span>
 </div>
@@ -3056,6 +3099,8 @@ const historicoProdutoCliente = document.getElementById("historicoProdutoCliente
 const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
 const preco = document.getElementById("preco");
+const custoVenda = document.getElementById("custoVenda");
+const precoMargemCusto = document.getElementById("precoMargemCusto");
 const precoConferidoBadge = document.getElementById("precoConferidoBadge");
 const tabelaBody = document.getElementById("tabelaProdutos");
 const btnGravarVenda = document.getElementById("btnGravarVenda");
@@ -3224,6 +3269,8 @@ function limparProdutoVendaNormalZerado() {
     if (quantidade) quantidade.value = "";
     if (unidade) unidade.value = "";
     if (preco) preco.value = "";
+    if (custoVenda) custoVenda.value = "";
+    if (precoMargemCusto) precoMargemCusto.textContent = "";
     if (historicoProdutoCliente) historicoProdutoCliente.textContent = "";
 }
 
@@ -4273,6 +4320,7 @@ clienteBusca.addEventListener("keydown", (e) => {
     unidade.value = optionSelecionada.dataset.unidade1 || optionSelecionada.dataset.unidade || "";
     preco.value = optionSelecionada.dataset.preco || "";
     aplicarEstadoConferenciaPreco(optionSelecionada);
+    atualizarCustoMargemVenda();
     atualizarHistoricoProdutoCliente();
 });
 let linhaSelecionada = null;
@@ -4675,6 +4723,8 @@ function limparCamposProdutoVenda() {
     produto.value = "";
     quantidade.value = "";
     unidade.value = "";
+    if (custoVenda) custoVenda.value = "";
+    if (precoMargemCusto) precoMargemCusto.textContent = "";
     preco.value = "";
     resetarAutocompleteProduto();
 }
@@ -5244,6 +5294,75 @@ function normalizarNumeroVenda(valor) {
     return texto.replace(",", ".");
 }
 
+function numeroMoedaVenda(valor) {
+    const numero = Number(normalizarNumeroVenda(valor));
+    return Number.isFinite(numero) ? numero : 0;
+}
+
+function formatarMoedaVenda(valor) {
+    const numero = Number(valor || 0);
+    if (!Number.isFinite(numero)) return "";
+    return numero.toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+    });
+}
+
+function custoProdutoVendaParaUnidade(produtoOption, unidadeTexto) {
+    if (!produtoOption) return 0;
+
+    const custoBase = numeroMoedaVenda(produtoOption.dataset.custo || "0");
+    const custoFracionado = numeroMoedaVenda(produtoOption.dataset.custo2 || "0");
+    const unidadeSelecionada = normalizarUnidadeEstoqueVenda(unidadeTexto);
+    const unidadeFracionada = normalizarUnidadeEstoqueVenda(produtoOption.dataset.unidade2 || "");
+    const fracionado = produtoOption.dataset.fracionado === "true";
+    const fator = numeroMoedaVenda(produtoOption.dataset.fator || "0");
+
+    if (fracionado && unidadeSelecionada && unidadeFracionada && unidadeSelecionada === unidadeFracionada) {
+        if (custoFracionado > 0) return custoFracionado;
+        if (custoBase > 0 && fator > 0) return custoBase / fator;
+        return 0;
+    }
+
+    return custoBase > 0 ? custoBase : 0;
+}
+
+function atualizarCustoMargemVenda() {
+    const produtoOption = obterProdutoOptionVenda((produto.value || produtoBusca.value || "").trim());
+    const custo = custoProdutoVendaParaUnidade(produtoOption, unidade.value);
+    const precoNumero = numeroMoedaVenda(preco.value || "0");
+
+    if (custoVenda) {
+        custoVenda.value = custo > 0 ? formatarMoedaVenda(custo) : "";
+    }
+
+    if (!precoMargemCusto) return;
+
+    if (custo <= 0 || precoNumero <= 0) {
+        precoMargemCusto.textContent = "";
+        return;
+    }
+
+    const percentual = ((precoNumero - custo) / custo) * 100;
+    if (!Number.isFinite(percentual)) {
+        precoMargemCusto.textContent = "";
+        return;
+    }
+
+    const sinal = percentual > 0 ? "+" : "";
+    precoMargemCusto.textContent = `${sinal}${percentual.toFixed(0)}% sobre custo`;
+}
+
+function validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto) {
+    const custo = custoProdutoVendaParaUnidade(produtoOption, unidadeTexto);
+    if (custo > 0 && precoNumero < custo) {
+        mostrarToastVenda(`Preço de venda abaixo do custo. Custo: ${formatarMoedaVenda(custo)}.`);
+        focarProximoCampo(preco);
+        return false;
+    }
+    return true;
+}
+
 function formatarNumeroEstoqueVenda(valor) {
     const numero = Number(valor || 0);
     if (!Number.isFinite(numero)) return "0";
@@ -5629,6 +5748,10 @@ function adicionarItemVendaAtual() {
         return false;
     }
 
+    if (!validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto)) {
+        return false;
+    }
+
     if (!validarEstoqueItemVendaAtual(true)) {
         return false;
     }
@@ -5680,6 +5803,8 @@ function adicionarItemVendaAtual() {
         quantidade.value = "";
         unidade.value = "";
         preco.value = "";
+        if (custoVenda) custoVenda.value = "";
+        if (precoMargemCusto) precoMargemCusto.textContent = "";
 
         estoquePreview.style.display = "none";
         historicoProdutoCliente.textContent = "";
@@ -5710,6 +5835,8 @@ preco.addEventListener("keydown", (e) => {
         }
     }
 });
+
+preco.addEventListener("input", atualizarCustoMargemVenda);
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual(dadosVendaConfirmados) {
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
@@ -6530,6 +6657,8 @@ function limparLinhaLancamento() {
     produtoBusca.value = "";
     produto.value = "";    quantidade.value = "";
     unidade.value = "";
+    if (custoVenda) custoVenda.value = "";
+    if (precoMargemCusto) precoMargemCusto.textContent = "";
     preco.value = "";
     aplicarEstadoConferenciaPreco(null);
 
@@ -6756,6 +6885,7 @@ if (!isNaN(estoqueProdutoSelecionado) && estoqueProdutoSelecionado <= 0) {
     quantidade.value = "";
     unidade.innerHTML = "";
     preco.value = "";
+    atualizarCustoMargemVenda();
     aplicarEstadoConferenciaPreco(null);
 
     sugestoesBox.style.display = "none";
@@ -6808,6 +6938,7 @@ aplicarEstadoConferenciaEstoquePreview(opt);
 estoquePreview.style.display = "inline-block";
 
 preco.value = opt.dataset.preco || "";
+atualizarCustoMargemVenda();
 aplicarEstadoConferenciaPreco(opt);
 
 // dispara o MESMO fluxo do select
@@ -6847,6 +6978,7 @@ let precoFracionado = opt.dataset.preco2 || "";
 }
         aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoBase;
+        atualizarCustoMargemVenda();
         return;
     }
 
@@ -6854,6 +6986,7 @@ let precoFracionado = opt.dataset.preco2 || "";
         estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
         aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoFracionado;
+        atualizarCustoMargemVenda();
     }
 });
 

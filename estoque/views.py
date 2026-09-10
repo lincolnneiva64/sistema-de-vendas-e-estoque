@@ -16938,6 +16938,28 @@ def _estoque_disponivel_na_unidade(produto, unidade=None):
     return estoque_base.quantize(Decimal("0.001"))
 
 
+def _custo_produto_para_unidade_venda(produto, unidade=None):
+    custo_base = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
+    unidade_recebida = _normalizar_unidade_estoque(unidade)
+    unidade_fracionada_norm = _normalizar_unidade_estoque(produto.unidade_venda_2)
+    fator = Decimal(produto.fator_conversao or 0)
+
+    if (
+        unidade_recebida
+        and produto.vende_fracionado
+        and unidade_fracionada_norm
+        and unidade_recebida == unidade_fracionada_norm
+    ):
+        custo_fracionado = Decimal(produto.preco_compra_fracionado or 0).quantize(Decimal("0.01"))
+        if custo_fracionado > 0:
+            return custo_fracionado
+        if custo_base > 0 and fator > 0:
+            return (custo_base / fator).quantize(Decimal("0.01"))
+        return Decimal("0.00")
+
+    return custo_base
+
+
 def _mensagem_estoque_insuficiente(produto, quantidade, unidade, estoque_disponivel):
     unidade_texto = str(unidade or produto.unidade_venda_1 or produto.unidade_compra or "").strip()
     unidade_sufixo = f" {unidade_texto}" if unidade_texto else ""
@@ -17264,6 +17286,11 @@ def gravar_venda(request):
 
         if not produto:
             return erro_gravar_venda(f'Produto "{produto_nome}" nao foi encontrado no estoque.')
+        custo_venda = _custo_produto_para_unidade_venda(produto, unidade)
+        if custo_venda > 0 and preco_unitario < custo_venda:
+            return erro_gravar_venda(
+                f"Preco de venda abaixo do custo. Custo: {_formatar_moeda(custo_venda)}."
+            )
         print(
             "[venda item recebido]",
             f"produto_nome={produto_nome}",

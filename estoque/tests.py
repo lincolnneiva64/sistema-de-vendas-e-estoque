@@ -12274,7 +12274,7 @@ class PixRecebidoTests(TestCase):
             follow=True,
         )
 
-    def _post_gravar_venda(self, produto, quantidade="1", unidade="un"):
+    def _post_gravar_venda(self, produto, quantidade="1", unidade="un", preco="2.00"):
         return self.client.post(
             reverse("estoque:gravar_venda"),
             data=json.dumps({
@@ -12288,7 +12288,7 @@ class PixRecebidoTests(TestCase):
                         "produto_nome": produto.nome,
                         "quantidade": quantidade,
                         "unidade": unidade,
-                        "preco_unitario": "2.00",
+                        "preco_unitario": preco,
                     }
                 ],
             }),
@@ -12786,6 +12786,165 @@ class PixRecebidoTests(TestCase):
                 descricao__icontains="Estoque baixado",
             ).exists()
         )
+
+    def test_gravar_venda_preco_igual_ao_custo_principal_permite(self):
+        produto = self._produto_teste("Produto Custo Principal Igual", quantidade=5)
+        produto.unidade_compra = "CX"
+        produto.unidade_venda_1 = "CX"
+        produto.preco_compra = Decimal("10.00")
+        produto.preco_vista = Decimal("12.00")
+        produto.preco_prazo = Decimal("13.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "preco_compra",
+            "preco_vista",
+            "preco_prazo",
+            "atualizado_em",
+        ])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="CX", preco="10.00")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+        self.assertEqual(item.preco_unitario, Decimal("10.00"))
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("4.000"))
+
+    def test_gravar_venda_preco_acima_do_custo_principal_permite(self):
+        produto = self._produto_teste("Produto Custo Principal Acima", quantidade=5)
+        produto.preco_compra = Decimal("10.00")
+        produto.preco_vista = Decimal("12.00")
+        produto.preco_prazo = Decimal("13.00")
+        produto.save(update_fields=["preco_compra", "preco_vista", "preco_prazo", "atualizado_em"])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="un", preco="12.00")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+    def test_gravar_venda_preco_abaixo_do_custo_principal_rejeita(self):
+        produto = self._produto_teste("Produto Custo Principal Abaixo", quantidade=5)
+        produto.preco_compra = Decimal("10.00")
+        produto.preco_vista = Decimal("12.00")
+        produto.preco_prazo = Decimal("13.00")
+        produto.save(update_fields=["preco_compra", "preco_vista", "preco_prazo", "atualizado_em"])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="un", preco="9.99")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIn("Preco de venda abaixo do custo. Custo: R$ 10,00.", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(Venda.objects.count(), 0)
+        self.assertEqual(ItemVenda.objects.count(), 0)
+
+    def test_gravar_venda_unidade_fracionada_usa_preco_compra_fracionado(self):
+        produto = self._produto_teste("Produto Custo Fracionado", quantidade=Decimal("2.000"))
+        produto.unidade_compra = "CX"
+        produto.unidade_venda_1 = "CX"
+        produto.unidade_venda_2 = "UN"
+        produto.vende_fracionado = True
+        produto.fator_conversao = Decimal("12.00")
+        produto.preco_compra = Decimal("120.00")
+        produto.preco_compra_fracionado = Decimal("10.00")
+        produto.preco_vista = Decimal("150.00")
+        produto.preco_prazo = Decimal("160.00")
+        produto.preco_vista_fracionado = Decimal("12.00")
+        produto.preco_prazo_fracionado = Decimal("13.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "unidade_venda_2",
+            "vende_fracionado",
+            "fator_conversao",
+            "preco_compra",
+            "preco_compra_fracionado",
+            "preco_vista",
+            "preco_prazo",
+            "preco_vista_fracionado",
+            "preco_prazo_fracionado",
+            "atualizado_em",
+        ])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="UN", preco="9.99")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("Custo: R$ 10,00.", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("2.000"))
+
+    def test_gravar_venda_fracionado_sem_custo_fracionado_usa_fallback_preco_compra_por_fator(self):
+        produto = self._produto_teste("Produto Custo Fracionado Fallback", quantidade=Decimal("2.000"))
+        produto.unidade_compra = "CX"
+        produto.unidade_venda_1 = "CX"
+        produto.unidade_venda_2 = "UN"
+        produto.vende_fracionado = True
+        produto.fator_conversao = Decimal("12.00")
+        produto.preco_compra = Decimal("120.00")
+        produto.preco_compra_fracionado = Decimal("0.00")
+        produto.preco_vista = Decimal("150.00")
+        produto.preco_prazo = Decimal("160.00")
+        produto.preco_vista_fracionado = Decimal("12.00")
+        produto.preco_prazo_fracionado = Decimal("13.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "unidade_venda_2",
+            "vende_fracionado",
+            "fator_conversao",
+            "preco_compra",
+            "preco_compra_fracionado",
+            "preco_vista",
+            "preco_prazo",
+            "preco_vista_fracionado",
+            "preco_prazo_fracionado",
+            "atualizado_em",
+        ])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="UN", preco="9.99")
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("Custo: R$ 10,00.", resposta.json()["mensagem"])
+
+    def test_gravar_venda_custo_zero_nao_bloqueia(self):
+        produto = self._produto_teste("Produto Custo Zero Venda", quantidade=5)
+        produto.preco_compra = Decimal("0.00")
+        produto.preco_vista = Decimal("2.00")
+        produto.preco_prazo = Decimal("3.00")
+        produto.save(update_fields=["preco_compra", "preco_vista", "preco_prazo", "atualizado_em"])
+
+        resposta = self._post_gravar_venda(produto, quantidade="1", unidade="un", preco="0.01")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+    def test_gravar_venda_produto_sem_fracionamento_continua_usando_regra_atual_de_estoque(self):
+        produto = self._produto_teste("Produto Sem Fracionamento Custo", quantidade=Decimal("5.000"))
+        produto.unidade_compra = "KG"
+        produto.unidade_venda_1 = "KG"
+        produto.vende_fracionado = False
+        produto.preco_compra = Decimal("10.00")
+        produto.preco_vista = Decimal("12.00")
+        produto.preco_prazo = Decimal("13.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "vende_fracionado",
+            "preco_compra",
+            "preco_vista",
+            "preco_prazo",
+            "atualizado_em",
+        ])
+
+        resposta = self._post_gravar_venda(produto, quantidade="0.500", unidade="KG", preco="10.00")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("4.500"))
 
     def test_gravar_venda_produto_kg_aceita_quantidade_decimal_sem_venda_fracionada(self):
         produto = self._produto_teste("Produto KG Decimal Venda", quantidade=Decimal("5.000"))
@@ -26888,6 +27047,35 @@ class VendaEdicaoUnificadaTests(TestCase):
         )
         self.assertContains(resposta, "quantidade: normalizarNumeroVenda(qtdTexto)")
         self.assertNotIn("quantidade: qtdNumero.toFixed(2)", conteudo)
+
+    def test_tela_vendas_exibe_custo_margem_e_preserva_preco_por_unidade(self):
+        produto = self.criar_produto_cx_un("Produto Custo Tela", estoque="3.000")
+        produto.preco_compra = Decimal("120.00")
+        produto.preco_compra_fracionado = Decimal("10.00")
+        produto.preco_vista = Decimal("150.00")
+        produto.preco_prazo = Decimal("160.00")
+        produto.preco_vista_fracionado = Decimal("12.00")
+        produto.save(update_fields=[
+            "preco_compra",
+            "preco_compra_fracionado",
+            "preco_vista",
+            "preco_prazo",
+            "preco_vista_fracionado",
+            "atualizado_em",
+        ])
+
+        resposta = self.client.get(reverse("estoque:vendas"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertContains(resposta, 'id="custoVenda"')
+        self.assertContains(resposta, 'id="precoMargemCusto"')
+        self.assertContains(resposta, 'data-custo="120.00"')
+        self.assertContains(resposta, 'data-custo2="10.00"')
+        self.assertContains(resposta, 'data-preco2="12.00"')
+        self.assertIn("function custoProdutoVendaParaUnidade(produtoOption, unidadeTexto)", conteudo)
+        self.assertIn("preco.value = precoFracionado;", conteudo)
+        self.assertIn("atualizarCustoMargemVenda();", conteudo)
+        self.assertIn("preco.addEventListener(\"input\", atualizarCustoMargemVenda);", conteudo)
 
     def test_tela_vendas_clique_edicao_usa_nome_real_sem_badge_estoque(self):
         cliente, produto, venda, item = self.criar_venda_base()
