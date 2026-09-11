@@ -853,9 +853,10 @@ input[placeholder*="fornecedor" i]:focus {
     }
     if (event.key === "Enter") {
       const ativo = sugestoes.querySelector(".pf-sugestao.ativa[data-fornecedor-id]");
-      if (ativo) {
+      const selecionado = ativo || itens[0];
+      if (selecionado) {
         event.preventDefault();
-        selecionarFornecedor(ativo.dataset.fornecedorId);
+        selecionarFornecedor(selecionado.dataset.fornecedorId);
       }
     }
   });
