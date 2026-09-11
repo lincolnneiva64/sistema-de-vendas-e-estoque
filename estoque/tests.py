@@ -1880,6 +1880,51 @@ class FechamentoCompraFinanceiroTests(TestCase):
         dados.update(alteracoes)
         return dados
 
+    def test_compra_nova_aprazo_finalizar_cria_conta_pagar_e_entrada_estoque(self):
+        estoque_antes = self.produto.quantidade
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.post(
+            self.url,
+            self.dados(
+                acao_compra="finalizar",
+                tipo_pagamento="aprazo",
+                data_vencimento="2026-09-20",
+                **{
+                    "preco_unitario[]": ["100,00"],
+                    "origem_caixa": "0,00",
+                    "origem_reserva": "0,00",
+                    "origem_banco": "0,00",
+                },
+            ),
+            secure=True,
+        )
+
+        compra = Compra.objects.latest("id")
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+
+        self.assertRedirects(
+            resposta,
+            reverse("estoque:compras_lista"),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertTrue(compra.estoque_entrada_realizada)
+        self.assertEqual(
+            self.produto.quantidade,
+            estoque_antes + Decimal("1.000"),
+        )
+
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 1)
+        conta = ContaPagar.objects.get(compra=compra)
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-09-20")
+        self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
+
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
     def _criar_conta_receber_venda(self, cliente, dias_atraso, valor="90.00"):
         hoje = timezone.localdate()
         venda = Venda.objects.create(

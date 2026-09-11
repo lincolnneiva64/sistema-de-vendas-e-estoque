@@ -8842,6 +8842,8 @@ def compras_nova(request):
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
+                    if dados["compra_conta_futura"]:
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
                 if acao == "confirmar_financeiro":
                     _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
         except Exception:
@@ -8856,6 +8858,9 @@ def compras_nova(request):
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
+            return redirect("estoque:compras_lista")
+        if acao == "finalizar" and dados["compra_conta_futura"]:
+            messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             return redirect("estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
