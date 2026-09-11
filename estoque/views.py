@@ -5335,7 +5335,6 @@ def pagar_fornecedor(request):
                 contas = list(
                     ContaPagar.objects
                     .select_for_update()
-                    .select_related("fornecedor", "compra")
                     .filter(fornecedor=fornecedor, valor_em_aberto__gt=0)
                     .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
                     .order_by("data_vencimento", "id")

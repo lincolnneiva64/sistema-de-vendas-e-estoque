@@ -29007,3 +29007,74 @@ class ContaPagarLegadaTests(TestCase):
         pagamento_payload = views._pagamento_conta_pagar_payload(pagamento)
         self.assertEqual(pagamento_payload["compra_id"], None)
         self.assertEqual(pagamento_payload["documento_legado"], "FB-2026-0001")
+
+
+class PagarFornecedorTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Renascer")
+        self.conta_banco = ContaFinanceira.objects.create(
+            nome="Banco/Pix",
+            tipo=ContaFinanceira.TIPO_BANCO,
+            saldo_inicial=Decimal("1000.00"),
+            ativo=True,
+        )
+        self.conta = ContaPagar.objects.create(
+            compra=None,
+            fornecedor=self.fornecedor,
+            data_emissao=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            valor_original=Decimal("260.00"),
+            valor_em_aberto=Decimal("260.00"),
+            status=ContaPagar.STATUS_ABERTA,
+        )
+
+    def _post_pagamento(self):
+        return self.client.post(
+            reverse("estoque:pagar_fornecedor"),
+            {
+                "fornecedor_id": str(self.fornecedor.id),
+                "valor_pago": "260,00",
+                "data_pagamento": timezone.localdate().isoformat(),
+                "forma_pagamento": "Pix",
+                "valor_saida_caixa": "0,00",
+                "valor_saida_reserva": "0,00",
+                "valor_saida_banco": "260,00",
+                "observacao": "",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def test_pagamento_geral_quita_conta_e_registra_movimento(self):
+        resposta = self._post_pagamento()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(PagamentoContaPagar.objects.count(), 1)
+        pagamento = PagamentoContaPagar.objects.get()
+        self.assertEqual(pagamento.conta, self.conta)
+        self.assertEqual(pagamento.valor, Decimal("260.00"))
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_PAGA)
+
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 1)
+        movimento = MovimentoFinanceiro.objects.get()
+        self.assertEqual(movimento.origem, "pagar_fornecedor")
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(movimento.valor, Decimal("260.00"))
+        self.assertEqual(movimento.conta, self.conta_banco)
+
+    def test_pagamento_geral_rollback_quando_movimento_falha(self):
+        with self.assertRaises(RuntimeError):
+            with patch(
+                "estoque.views._registrar_movimento_pagar_fornecedor_origem",
+                side_effect=RuntimeError("falha simulada"),
+            ):
+                self._post_pagamento()
+
+        self.conta.refresh_from_db()
+        self.assertEqual(PagamentoContaPagar.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("260.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_ABERTA)
