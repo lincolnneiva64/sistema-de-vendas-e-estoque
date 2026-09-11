@@ -12435,6 +12435,58 @@ class PixRecebidoTests(TestCase):
             ).exists()
         )
 
+    def test_cancelamento_manual_cancela_item_rota_e_remove_do_checklist_ativo(self):
+        cliente = Cliente.objects.create(nome="Cliente Entrega Cancelada", ativo=True)
+        produto = self._produto_teste("Produto Entrega Cancelada")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("36.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("18.00"),
+            valor_total=Decimal("36.00"),
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PENDENTE,
+        )
+
+        resposta_checklist_antes = self.client.get(
+            reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id}),
+            secure=True,
+        )
+        self.assertEqual(resposta_checklist_antes.status_code, 200)
+        self.assertTrue(EntregaChecklistItem.objects.filter(rota_item=item_rota, item_venda=item).exists())
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        item_rota.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_CANCELADA)
+        self.assertTrue(EntregaRotaItem.objects.filter(pk=item_rota.pk, venda=venda, rota=rota).exists())
+        self.assertTrue(EntregaChecklistItem.objects.filter(rota_item=item_rota, item_venda=item).exists())
+        self.assertEqual(views.checklists_validos_rota_item(item_rota), [])
+
+        resposta_checklist_depois = self.client.get(
+            reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id}),
+            secure=True,
+        )
+        self.assertEqual(resposta_checklist_depois.status_code, 200)
+        itens_ativos = list(resposta_checklist_depois.context["itens_entrega"])
+        self.assertNotIn(item_rota.id, [item_ativo.id for item_ativo in itens_ativos])
+        self.assertNotContains(resposta_checklist_depois, "Cliente Entrega Cancelada")
+
     def test_cancelamento_manual_exige_confirmacao_cancelar(self):
         cliente = Cliente.objects.create(nome="Cliente Confirmacao Errada", ativo=True)
         produto = self._produto_teste("Produto Confirmacao Errada")

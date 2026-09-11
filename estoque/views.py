@@ -1305,6 +1305,9 @@ def item_venda_ids_pendencia_origem(item_rota):
 
 
 def checklists_validos_rota_item(item_rota):
+    if item_rota.status == EntregaRotaItem.STATUS_CANCELADA or item_rota.venda.cancelada:
+        return []
+
     checklists = list(item_rota.checklist_itens.all())
     item_venda_ids_validos = item_venda_ids_pendencia_origem(item_rota)
     if item_venda_ids_validos is None:
@@ -1315,6 +1318,10 @@ def checklists_validos_rota_item(item_rota):
         for checklist in checklists
         if checklist.item_venda_id in item_venda_ids_validos
     ]
+
+
+def entrega_rota_item_ativo(item_rota):
+    return item_rota.status != EntregaRotaItem.STATUS_CANCELADA and not item_rota.venda.cancelada
 
 
 def calcular_total_itens_venda(venda, excluir_item_id=None):
@@ -16566,7 +16573,7 @@ def entrega_rota_checklist(request, pk):
         ),
         pk=pk,
     )
-    itens_entrega = list(rota.itens.all())
+    itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
 
     with transaction.atomic():
         for item_rota in itens_entrega:
@@ -16591,7 +16598,7 @@ def entrega_rota_checklist(request, pk):
         ),
         pk=pk,
     )
-    itens_entrega = list(rota.itens.all())
+    itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
 
     if request.method == "POST":
         bloco_salvo = request.POST.get("salvar_bloco") or request.POST.get("salvar_bloco_alvo", "")
@@ -16650,7 +16657,7 @@ def entrega_rota_checklist(request, pk):
         ),
         pk=pk,
     )
-    itens_entrega = list(rota.itens.all())
+    itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
     salvo_item_id = request.GET.get("salvo_item", "")
     salvo_fase = request.GET.get("salvo_fase", "")
     eventos_checklist_enviado = set(
@@ -16766,19 +16773,20 @@ def entrega_rota_checklist_cliente(request, rota_id, venda_id=None, rota_item_id
         if not item_rota:
             raise Http404("Checklist do cliente nao encontrado.")
 
-    with transaction.atomic():
-        itens_venda = list(item_rota.venda.itens.all())
-        existentes = {
-            checklist.item_venda_id: checklist
-            for checklist in item_rota.checklist_itens.all()
-        }
-        novos = [
-            EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
-            for item_venda in itens_venda
-            if item_venda.id not in existentes and not item_rota.is_pendencia
-        ]
-        if novos:
-            EntregaChecklistItem.objects.bulk_create(novos)
+    itens_venda = list(item_rota.venda.itens.all())
+    if entrega_rota_item_ativo(item_rota):
+        with transaction.atomic():
+            existentes = {
+                checklist.item_venda_id: checklist
+                for checklist in item_rota.checklist_itens.all()
+            }
+            novos = [
+                EntregaChecklistItem(rota_item=item_rota, item_venda=item_venda)
+                for item_venda in itens_venda
+                if item_venda.id not in existentes and not item_rota.is_pendencia
+            ]
+            if novos:
+                EntregaChecklistItem.objects.bulk_create(novos)
 
     checklists_validos = checklists_validos_rota_item(item_rota)
     checklists = {
@@ -19950,6 +19958,9 @@ def venda_cancelar(request, pk):
                 venda.cancelada_em = timezone.now()
                 venda.motivo_cancelamento = motivo
                 venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+                EntregaRotaItem.objects.filter(venda=venda).exclude(
+                    status=EntregaRotaItem.STATUS_CANCELADA
+                ).update(status=EntregaRotaItem.STATUS_CANCELADA)
                 _registrar_evento_venda(
                     venda,
                     "venda_cancelada",
