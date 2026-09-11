@@ -1925,6 +1925,63 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
 
+    def test_finalizacao_compra_aplica_revisao_preco_venda_uma_vez_sem_duplicar_efeitos(self):
+        compra = self._criar_compra_rascunho_com_item(tipo_pagamento="aprazo", total=Decimal("100.00"))
+        estoque_antes = self.produto.quantidade
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="aprazo",
+            **{
+                "atualizar_preco_venda_produto_ids[]": [str(self.produto.id)],
+                "atualizar_preco_venda_nomes[]": ["preco_vista"],
+                "atualizar_preco_venda_valores[]": ["140,00"],
+                "atualizar_preco_venda_campos[]": [f"{self.produto.id}:preco_vista"],
+                f"novo_preco_venda_produto_{self.produto.id}_preco_vista": "140,00",
+            },
+        )
+
+        primeira_resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            dados,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        estoque_apos_primeira = self.produto.quantidade
+
+        self.assertRedirects(primeira_resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(self.produto.preco_vista, Decimal("140.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("140.00"))
+        self.assertEqual(estoque_apos_primeira, estoque_antes + Decimal("1.000"))
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
+        dados[f"novo_preco_venda_produto_{self.produto.id}_preco_vista"] = "180,00"
+        dados["atualizar_preco_venda_valores[]"] = ["180,00"]
+
+        segunda_resposta = self.client.post(
+            reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            dados,
+            secure=True,
+        )
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertRedirects(
+            segunda_resposta,
+            reverse("estoque:compras_detalhe", kwargs={"pk": compra.pk}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(self.produto.preco_vista, Decimal("140.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("140.00"))
+        self.assertEqual(self.produto.quantidade, estoque_apos_primeira)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
     def _criar_conta_receber_venda(self, cliente, dias_atraso, valor="90.00"):
         hoje = timezone.localdate()
         venda = Venda.objects.create(

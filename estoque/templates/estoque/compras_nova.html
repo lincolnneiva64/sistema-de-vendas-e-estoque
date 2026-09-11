@@ -623,9 +623,9 @@
   }
   .compras-precos-modal.visivel { display:flex; }
   .compras-precos-caixa {
-    width:min(1120px, 96vw);
-    height:92vh;
-    height:min(92dvh, 880px);
+    width:min(1180px, 94vw);
+    height:min(88vh, 760px);
+    height:min(88dvh, 760px);
     max-height:calc(100vh - 32px);
     max-height:calc(100dvh - 32px);
     min-height:0;
@@ -639,24 +639,21 @@
   }
   .compras-precos-topo {
     flex:0 0 auto;
-    padding:16px 18px;
+    padding:16px 20px 13px;
     color:#172033;
     background:linear-gradient(135deg, #fff7d6 0%, #eff6ff 100%);
     border-bottom:1px solid #f3dc9f;
   }
   .compras-precos-topo h2 { margin:0; font-size:1.22rem; font-weight:950; }
-  .compras-precos-topo p { margin:4px 0 0; color:#475569; font-weight:750; line-height:1.35; }
+  .compras-precos-topo p { margin:3px 0 0; color:#475569; font-weight:750; line-height:1.3; }
   .compras-precos-lista {
     flex:1 1 0;
-    min-height:120px;
-    max-height:calc(92vh - 150px);
-    max-height:calc(92dvh - 150px);
+    min-height:0;
     display:block;
-    padding:10px 12px 18px;
-    overflow-y:auto;
+    padding:14px 16px;
+    overflow-y:hidden;
     overflow-x:hidden;
     overscroll-behavior:contain;
-    scrollbar-gutter:stable;
     -webkit-overflow-scrolling:touch;
   }
   .compras-precos-lista > .compras-preco-card + .compras-preco-card {
@@ -664,11 +661,21 @@
   }
   .compras-preco-card {
     border:1px solid #e6edf6;
-    border-left:5px solid #2563eb;
-    border-radius:10px;
+    border-left:6px solid #2563eb;
+    border-radius:12px;
     background:#fff;
-    box-shadow:0 8px 18px rgba(15,23,42,.06);
+    box-shadow:0 12px 28px rgba(15,23,42,.08);
     overflow:hidden;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  .compras-preco-progresso {
+    display:block;
+    margin-top:3px;
+    color:#64748b;
+    font-size:.82rem;
+    font-weight:850;
   }
   .compras-preco-card.subiu { border-left-color:#dc2626; }
   .compras-preco-card.caiu { border-left-color:#16a34a; }
@@ -676,10 +683,10 @@
     display:flex;
     justify-content:space-between;
     gap:12px;
-    padding:12px 14px 8px;
+    padding:14px 18px 12px;
     border-bottom:1px solid #edf2f7;
   }
-  .compras-preco-produto { margin:0; font-size:1rem; font-weight:950; color:#172033; }
+  .compras-preco-produto { margin:0; font-size:1.12rem; font-weight:950; color:#172033; }
   .compras-preco-status {
     align-self:flex-start;
     white-space:nowrap;
@@ -694,8 +701,123 @@
   .compras-preco-card.caiu .compras-preco-status { background:#f0fdf4; color:#166534; }
   .compras-preco-blocos {
     display:grid;
+    gap:10px;
+    padding:12px 16px 14px;
+    flex:1 1 auto;
+    align-content:start;
+  }
+  .compras-preco-custos {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
     gap:8px;
-    padding:9px 12px 10px;
+  }
+  .compras-preco-custo-box {
+    display:grid;
+    grid-template-columns:auto minmax(0, 1fr) auto minmax(0, 1fr);
+    gap:8px;
+    align-items:center;
+    padding:9px 10px;
+    border:1px solid #e2e8f0;
+    border-radius:9px;
+    background:#fbfdff;
+  }
+  .compras-preco-custo-box strong {
+    color:#334155;
+    font-size:.76rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+  .compras-preco-custo-box span {
+    color:#172033;
+    font-weight:950;
+  }
+  .compras-preco-seta,
+  .compras-preco-custo-box .compras-preco-seta {
+    color:#64748b;
+    font-weight:950;
+  }
+  .compras-preco-tabela-wrap {
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    overflow:hidden;
+    background:#fff;
+  }
+  .compras-preco-tabela-titulo {
+    margin:0;
+    padding:8px 10px;
+    background:#f8fafc;
+    color:#334155;
+    font-size:.8rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+  .compras-preco-tabela {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+  }
+  .compras-preco-tabela th,
+  .compras-preco-tabela td {
+    padding:7px 8px;
+    border-top:1px solid #edf2f7;
+    vertical-align:middle;
+  }
+  .compras-preco-tabela th {
+    color:#64748b;
+    background:#fbfdff;
+    font-size:.7rem;
+    font-weight:950;
+    text-transform:uppercase;
+    text-align:left;
+  }
+  .compras-preco-tabela td {
+    color:#172033;
+    font-size:.86rem;
+    font-weight:850;
+  }
+  .compras-preco-tabela .col-tipo { width:22%; }
+  .compras-preco-tabela .col-valor { width:17%; }
+  .compras-preco-tabela .col-acao { width:10%; text-align:center; }
+  .compras-preco-margem-atual {
+    min-height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px 9px;
+    border:1px solid #e2e8f0;
+    border-radius:8px;
+    background:#f8fafc;
+    color:#334155;
+    font-variant-numeric:tabular-nums;
+    text-align:center;
+  }
+  .compras-preco-tabela input[type="text"] {
+    width:100%;
+    min-height:34px;
+    border:1.5px solid #2563eb;
+    border-radius:8px;
+    padding:6px 8px;
+    background:#eff6ff;
+    color:#172554;
+    font-size:.9rem;
+    font-weight:950;
+    outline:none;
+  }
+  .compras-preco-tabela input[type="text"]:focus {
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(37,99,235,.16);
+  }
+  .compras-preco-tabela input[type="checkbox"] {
+    width:18px;
+    height:18px;
+    accent-color:#2563eb;
+  }
+  .compras-preco-subtitulo {
+    margin:0 0 6px;
+    color:#334155;
+    font-size:.78rem;
+    font-weight:950;
+    text-transform:uppercase;
   }
   .compras-preco-bloco {
     border:1px solid #e2e8f0;
@@ -743,6 +865,7 @@
   }
   .compras-preco-grid.sem-padding { padding:0; }
   .compras-preco-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:7px; padding:9px 10px; }
+  .compras-preco-simulador .compras-preco-grid.sem-padding { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .compras-preco-metrica { min-height:58px; padding:7px 9px; border:1px solid #e2e8f0; border-radius:9px; background:#f8fafc; }
   .compras-preco-metrica.destaque { background:#eff6ff; border-color:#bfdbfe; }
   .compras-preco-metrica.alerta { background:#fff1f2; border-color:#fecdd3; }
@@ -756,16 +879,17 @@
     align-items:center;
     justify-content:space-between;
     gap:12px;
-    padding:9px 10px 10px;
+    padding:10px 12px;
     background:#fffaf0;
-    border-top:1px solid rgba(148,163,184,.25);
+    border:1px solid #fde68a;
+    border-radius:10px;
     color:#334155;
     font-weight:850;
   }
   .compras-preco-escolha label { display:inline-flex; align-items:center; gap:9px; cursor:pointer; }
   .compras-preco-escolha input { width:18px; height:18px; accent-color:#2563eb; }
   .compras-preco-simulador {
-    padding:10px;
+    padding:0;
   }
   .compras-preco-simulador-lista {
     display:grid;
@@ -773,9 +897,9 @@
     padding:9px 10px;
   }
   .compras-preco-simulador {
-    border:1px solid #f1d38d;
-    border-radius:9px;
-    background:#fffdf4;
+    border:0;
+    border-radius:0;
+    background:transparent;
   }
   .compras-preco-simulador-topo {
     display:flex;
@@ -883,8 +1007,8 @@
     display:flex;
     align-items:flex-start;
     gap:9px;
-    margin-top:10px;
-    padding:9px 10px;
+    margin-top:12px;
+    padding:10px 12px;
     border:1px solid #e2e8f0;
     border-radius:9px;
     background:#fff;
@@ -906,13 +1030,16 @@
     font-size:.76rem;
     font-weight:800;
   }
+  .compras-preco-resultados-ocultos {
+    display:none;
+  }
   .compras-precos-rodape {
     flex:0 0 auto;
     display:flex;
     justify-content:flex-end;
     gap:8px;
     flex-wrap:wrap;
-    padding:10px 12px;
+    padding:12px 16px;
     border-top:1px solid #eadfbf;
     background:#fffaf0;
     box-shadow:0 -8px 18px rgba(15,23,42,.08);
@@ -1942,12 +2069,27 @@
       min-height:0;
       max-height:calc(100vh - 145px);
       max-height:calc(100dvh - 145px);
+      overflow-y:auto;
       padding:9px 9px 16px;
     }
     .compras-preco-card-topo,
     .compras-preco-escolha { flex-direction:column; align-items:flex-start; }
     .compras-preco-status { white-space:normal; }
     .compras-preco-blocos { padding:10px; }
+    .compras-preco-custos {
+      grid-template-columns:1fr;
+      gap:8px;
+    }
+    .compras-preco-custo-box {
+      grid-template-columns:auto minmax(0, 1fr) 18px minmax(0, 1fr);
+    }
+    .compras-preco-tabela-wrap {
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+    .compras-preco-tabela {
+      min-width:720px;
+    }
     .compras-preco-grid { grid-template-columns:1fr 1fr; padding:10px; }
     .compras-preco-grid.sem-padding { padding:0; }
     .compras-preco-grupo-lista,
@@ -2174,7 +2316,8 @@
         </div>
         <div class="compras-precos-lista" id="listaConferenciaPrecosCompra"></div>
         <div class="compras-precos-rodape">
-          <button type="button" class="compras-btn compras-btn-primary" id="btnAtualizarPrecosContinuarCompra">Atualizar selecionados e continuar</button>
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarProdutoPrecoCompra">Voltar</button>
+          <button type="button" class="compras-btn compras-btn-primary" id="btnAtualizarPrecosContinuarCompra">Salvar e proximo</button>
           <button type="button" class="compras-btn compras-btn-secondary" id="btnContinuarSemAtualizarPrecosCompra">Continuar sem atualizar</button>
           <button type="button" class="compras-btn compras-btn-secondary" id="btnCancelarConferenciaPrecosCompra">Cancelar</button>
         </div>
@@ -2550,6 +2693,7 @@
   const listaConferenciaPrecosCompra = document.getElementById("listaConferenciaPrecosCompra");
   const camposAtualizarCustoCompra = document.getElementById("camposAtualizarCustoCompra");
   const btnAtualizarPrecosContinuarCompra = document.getElementById("btnAtualizarPrecosContinuarCompra");
+  const btnVoltarProdutoPrecoCompra = document.getElementById("btnVoltarProdutoPrecoCompra");
   const btnContinuarSemAtualizarPrecosCompra = document.getElementById("btnContinuarSemAtualizarPrecosCompra");
   const btnCancelarConferenciaPrecosCompra = document.getElementById("btnCancelarConferenciaPrecosCompra");
   const modalRemoverItemCompra = document.getElementById("modalRemoverItemCompra");
@@ -2563,6 +2707,9 @@
   let envioModalEmAndamento = false;
   let botaoEnvioAtual = null;
   let scrollBodyConferenciaPrecos = 0;
+  let revisaoPrecosItens = [];
+  let revisaoPrecosIndice = 0;
+  let revisaoPrecosDecisoes = {};
   let linhaPendenteRemocaoCompra = null;
   let rascunhoBloqueado = {% if rascunho_salvo %}true{% else %}false{% endif %};
   const mensagemRascunhoEdicao = [
@@ -4159,6 +4306,7 @@
       const precos = dadosPrecos.precos.map(enriquecerPreco);
 
       itens.push({
+        chave: chave,
         produtoId: produtoId,
         nome: opt.textContent.trim(),
         custoAtual: custoAtual,
@@ -4175,147 +4323,162 @@
     return itens;
   }
 
-  function metricaPreco(label, valor, classe) {
+  function decisaoPadraoPreco(preco) {
+    return {
+      atualizar: true,
+      novoPreco: precoCampo(preco.precoSugerido),
+      novaMargem: percentualCampo(preco.margemSimulada.percentual)
+    };
+  }
+
+  function decisaoProdutoPadrao(item) {
+    const precos = {};
+    item.precos.forEach(function(preco) {
+      precos[preco.campo] = decisaoPadraoPreco(preco);
+    });
+    return {
+      atualizarCusto: true,
+      precos: precos
+    };
+  }
+
+  function decisaoProduto(item) {
+    const chave = item.chave || item.produtoId;
+    if (!revisaoPrecosDecisoes[chave]) {
+      revisaoPrecosDecisoes[chave] = decisaoProdutoPadrao(item);
+    }
+    return revisaoPrecosDecisoes[chave];
+  }
+
+  function boxComparacaoCusto(label, antigo, novo) {
     return (
-      '<div class="compras-preco-metrica ' + (classe || "") + '">' +
-        '<span class="compras-preco-label">' + escapeHtml(label) + '</span>' +
-        '<span class="compras-preco-valor">' + escapeHtml(valor) + '</span>' +
+      '<div class="compras-preco-custo-box">' +
+        '<strong>' + escapeHtml(label) + '</strong>' +
+        '<span>' + escapeHtml(antigo) + '</span>' +
+        '<span class="compras-preco-seta">-&gt;</span>' +
+        '<span>' + escapeHtml(novo) + '</span>' +
       '</div>'
     );
   }
 
-  function blocoConferenciaPreco(titulo, classe, conteudo) {
+  function renderizarCustosProdutoCompacto(item) {
     return (
-      '<section class="compras-preco-bloco ' + escapeHtml(classe || "") + '">' +
-        '<h4 class="compras-preco-bloco-titulo">' + escapeHtml(titulo) + '</h4>' +
-        conteudo +
-      '</section>'
-    );
-  }
-
-  function grupoPreco(titulo, tipo, conteudo) {
-    return (
-      '<section class="compras-preco-grupo ' + escapeHtml(tipo || "") + '">' +
-        '<h5 class="compras-preco-grupo-titulo">' + escapeHtml(titulo) + '</h5>' +
-        '<div class="compras-preco-grid">' + conteudo + '</div>' +
-      '</section>'
-    );
-  }
-
-  function renderizarCadastroAnterior(item) {
-    const grupos = item.precos.map(function(preco) {
-      return grupoPreco(preco.titulo, preco.tipo,
-        metricaPreco("Preco antigo", moeda(preco.precoAtual), "destaque") +
-        metricaPreco("Ganho antigo", moeda(preco.margemAntiga.real), preco.margemAntiga.real < 0 ? "alerta" : "ok") +
-        metricaPreco("Margem antiga", percentual(preco.margemAntiga.percentual), preco.margemAntiga.percentual < 0 ? "alerta" : "ok")
-      );
-    }).join("");
-
-    return (
-      '<div class="compras-preco-grid">' +
-        metricaPreco("Custo antigo", moeda(item.custoAtual), "destaque") +
-        (item.temFracionado ? metricaPreco("Custo antigo fracionado", moeda(item.custoFracionadoAtual), "destaque") : "") +
-      '</div>' +
-      '<div class="compras-preco-grupo-lista">' + grupos + '</div>'
-    );
-  }
-
-  function renderizarMudancaCompra(item, subiu, diferencaTexto, tituloDiferenca) {
-    const diferencaClasse = subiu ? "alerta" : "ok";
-    const diferencaFracionada = item.custoFracionadoCompra - item.custoFracionadoAtual;
-    const diferencaFracionadaTexto = (diferencaFracionada > 0 ? "+" : "-") + moeda(Math.abs(diferencaFracionada));
-    const tituloDiferencaFracionada = diferencaFracionada > 0 ? "Aumento do custo fracionado" : "Reducao do custo fracionado";
-
-    return (
-      '<div class="compras-preco-grid">' +
-        metricaPreco("Custo novo desta compra", moeda(item.custoCompra), subiu ? "alerta" : "ok") +
-        metricaPreco(tituloDiferenca, diferencaTexto, diferencaClasse) +
-        (item.temFracionado ? metricaPreco("Custo novo fracionado", moeda(item.custoFracionadoCompra), diferencaFracionada > 0 ? "alerta" : "ok") : "") +
-        (item.temFracionado ? metricaPreco(tituloDiferencaFracionada, diferencaFracionadaTexto, diferencaFracionada > 0 ? "alerta" : "ok") : "") +
-      '</div>' +
-      '<div class="compras-preco-escolha">' +
-        '<label><input type="checkbox" class="marcarAtualizarCustoCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" checked> Atualizar custo no cadastro</label>' +
-        '<span>O custo novo so sera gravado se esta opcao estiver marcada.</span>' +
+      '<div class="compras-preco-custos">' +
+        boxComparacaoCusto("Custo", moeda(item.custoAtual), moeda(item.custoCompra)) +
+        (item.temFracionado ? boxComparacaoCusto("Custo fracionado", moeda(item.custoFracionadoAtual), moeda(item.custoFracionadoCompra)) : "") +
       '</div>'
     );
   }
 
-  function renderizarImpactoSemAlterar(item) {
-    return '<div class="compras-preco-grupo-lista">' + item.precos.map(function(preco) {
-      const margemClasse = classeMargem(preco.margemAntiga, preco.margemNova);
-      return grupoPreco(preco.titulo, preco.tipo,
-        metricaPreco("Preco que continua", moeda(preco.precoAtual), "destaque") +
-        metricaPreco("Ganho novo", moeda(preco.margemNova.real), margemClasse) +
-        metricaPreco("Margem nova", percentual(preco.margemNova.percentual), margemClasse)
-      );
-    }).join("") + '</div>';
+  function renderizarLinhaPrecoCompacta(item, preco, decisao) {
+    const dadosPreco = decisao.precos[preco.campo] || decisaoPadraoPreco(preco);
+    const novoPreco = numero(dadosPreco.novoPreco);
+    const margemNova = margem(novoPreco, preco.custoNovo);
+    const classe = classeMargemSimulada(preco.margemAntiga.percentual, margemNova);
+
+    return (
+      '<tr class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '">' +
+        '<td>' + escapeHtml(preco.titulo) + '</td>' +
+        '<td>' + escapeHtml(moeda(preco.precoAtual)) + '</td>' +
+        '<td><input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(novoPreco)) + '"></td>' +
+        '<td><span class="compras-preco-margem-atual">' + escapeHtml(percentual(preco.margemAntiga.percentual)) + '</span></td>' +
+        '<td><input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(margemNova.percentual)) + '"></td>' +
+        '<td class="col-acao">' +
+          '<input type="checkbox" class="marcarAtualizarVendaCompra" tabindex="-1" title="Atualizar este preco no cadastro" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" ' + (dadosPreco.atualizar ? "checked" : "") + '>' +
+          '<div class="compras-preco-resultados-ocultos" aria-hidden="true">' +
+          '<div class="resultadoMargemRealCompra ' + escapeHtml(classe) + '">' + escapeHtml(moeda(margemNova.real)) + '</div>' +
+          '<div class="resultadoMargemPercentualCompra ' + escapeHtml(classe) + '">' + escapeHtml(percentual(margemNova.percentual)) + '</div>' +
+          '</div>' +
+        '</td>' +
+      '</tr>'
+    );
   }
 
-  function renderizarSimuladorPreco(item) {
-    return '<div class="compras-preco-simulador-lista">' + item.precos.map(function(preco) {
-      const classe = classeMargemSimulada(preco.margemAntiga.percentual, preco.margemSimulada);
-      return (
-        '<div class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '">' +
-          '<div class="compras-preco-simulador-topo">' +
-            '<div>' +
-              '<strong class="compras-preco-simulador-titulo">' + escapeHtml(preco.titulo) + '</strong>' +
-              '<p class="compras-preco-simulador-ajuda">Ajuste a margem ou digite um preco. Este preco so sera alterado se a opcao dele estiver marcada.</p>' +
-            '</div>' +
-            '<span class="compras-preco-sugerido">Preco sugerido arredondado: ' + escapeHtml(moeda(preco.precoSugerido)) + '</span>' +
-          '</div>' +
-          '<div class="compras-preco-simulador-grid">' +
-            '<div class="compras-preco-campo">' +
-              '<label>Margem desejada %</label>' +
-              '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(preco.margemAntiga.percentual)) + '">' +
-            '</div>' +
-            '<div class="compras-preco-campo venda">' +
-              '<label>NOVO PRECO QUE SERA GRAVADO</label>' +
-              '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(preco.precoSugerido)) + '">' +
-            '</div>' +
-            '<div>' +
-              '<span class="compras-preco-label">Ganho com novo preco</span>' +
-              '<div class="compras-preco-resultado resultadoMargemRealCompra ' + escapeHtml(classe) + '">' + escapeHtml(moeda(preco.margemSimulada.real)) + '</div>' +
-            '</div>' +
-            '<div>' +
-              '<span class="compras-preco-label">Margem com novo preco</span>' +
-              '<div class="compras-preco-resultado resultadoMargemPercentualCompra ' + escapeHtml(classe) + '">' + escapeHtml(percentual(preco.margemSimulada.percentual)) + '</div>' +
-            '</div>' +
-          '</div>' +
-          '<label class="compras-preco-venda-opcao">' +
-            '<input type="checkbox" class="marcarAtualizarVendaCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" checked>' +
-            '<span>Atualizar ' + escapeHtml(preco.titulo.toLowerCase()) + ' no cadastro<small>Somente este preco sera alterado se esta opcao estiver marcada.</small></span>' +
-          '</label>' +
-        '</div>'
-      );
-    }).join("") + '</div>';
+  function renderizarTabelaPrecosCompacta(item, decisao) {
+    return (
+      '<section class="compras-preco-tabela-wrap">' +
+        '<h4 class="compras-preco-tabela-titulo">Precos de venda</h4>' +
+        '<table class="compras-preco-tabela">' +
+          '<thead><tr>' +
+            '<th class="col-tipo">Tipo</th>' +
+            '<th class="col-valor">Atual</th>' +
+            '<th class="col-valor">Novo</th>' +
+            '<th class="col-valor">Margem atual</th>' +
+            '<th class="col-valor">Margem desejada</th>' +
+            '<th class="col-acao">Atualizar</th>' +
+          '</tr></thead>' +
+          '<tbody>' + item.precos.map(function(preco) {
+            return renderizarLinhaPrecoCompacta(item, preco, decisao);
+          }).join("") + '</tbody>' +
+        '</table>' +
+      '</section>'
+    );
   }
 
-  function renderizarConferenciaPrecos(itens) {
+  function salvarDecisaoProdutoAtual() {
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    if (!item || !listaConferenciaPrecosCompra) return;
+
+    const decisao = decisaoProduto(item);
+    const campoCusto = listaConferenciaPrecosCompra.querySelector(".marcarAtualizarCustoCompra");
+    decisao.atualizarCusto = campoCusto ? campoCusto.checked : false;
+
+    listaConferenciaPrecosCompra.querySelectorAll(".compras-preco-simulador").forEach(function(simulador) {
+      const campoPrecoCadastro = simulador.dataset.campoPreco;
+      if (!campoPrecoCadastro) return;
+      const campoPreco = simulador.querySelector(".campoNovoPrecoVendaCompra");
+      const campoMargem = simulador.querySelector(".campoMargemDesejadaCompra");
+      const campoAtualizar = simulador.querySelector(".marcarAtualizarVendaCompra");
+      decisao.precos[campoPrecoCadastro] = {
+        atualizar: campoAtualizar ? campoAtualizar.checked : false,
+        novoPreco: precoCampo(numero(campoPreco ? campoPreco.value : "0")),
+        novaMargem: percentualCampo(numero(campoMargem ? campoMargem.value : "0"))
+      };
+    });
+  }
+
+  function renderizarConferenciaPrecos() {
     if (!listaConferenciaPrecosCompra) return;
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    if (!item) {
+      listaConferenciaPrecosCompra.innerHTML = "";
+      return;
+    }
 
-    listaConferenciaPrecosCompra.innerHTML = itens.map(function(item, indice) {
-      const subiu = item.diferenca > 0;
-      const status = subiu
-        ? "Custo subiu " + moeda(item.diferenca)
-        : "Custo caiu " + moeda(Math.abs(item.diferenca));
-      const diferencaTexto = (item.diferenca > 0 ? "+" : "-") + moeda(Math.abs(item.diferenca));
-      const tituloDiferenca = subiu ? "Aumento do custo" : "Reducao do custo";
+    const decisao = decisaoProduto(item);
+    const subiu = item.diferenca > 0;
+    const status = subiu
+      ? "Custo subiu " + moeda(item.diferenca)
+      : "Custo caiu " + moeda(Math.abs(item.diferenca));
 
-      return (
-        '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
-          '<div class="compras-preco-card-topo">' +
+    listaConferenciaPrecosCompra.innerHTML = (
+      '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
+        '<div class="compras-preco-card-topo">' +
+          '<div>' +
             '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' +
-            '<span class="compras-preco-status">' + escapeHtml(status) + '</span>' +
+            '<span class="compras-preco-progresso">Produto ' + escapeHtml(String(revisaoPrecosIndice + 1)) + ' de ' + escapeHtml(String(revisaoPrecosItens.length)) + '</span>' +
           '</div>' +
-          '<div class="compras-preco-blocos">' +
-            blocoConferenciaPreco("1. Como estava no cadastro", "compra", renderizarCadastroAnterior(item)) +
-            blocoConferenciaPreco("2. O que mudou nesta compra", "impacto", renderizarMudancaCompra(item, subiu, diferencaTexto, tituloDiferenca)) +
-            blocoConferenciaPreco("3. Se nao alterar os precos", "impacto", renderizarImpactoSemAlterar(item)) +
-            blocoConferenciaPreco("4. Ajustar / simular novos precos", "simulacao", renderizarSimuladorPreco(item)) +
+          '<span class="compras-preco-status">' + escapeHtml(status) + '</span>' +
+        '</div>' +
+        '<div class="compras-preco-blocos">' +
+          '<div class="compras-preco-escolha">' +
+            '<label><input type="checkbox" class="marcarAtualizarCustoCompra" data-produto-id="' + escapeHtml(item.produtoId) + '" ' + (decisao.atualizarCusto ? "checked" : "") + '> Atualizar custo no cadastro</label>' +
+            '<span>O custo novo entra no cadastro se esta opcao estiver marcada.</span>' +
           '</div>' +
-        '</article>'
-      );
-    }).join("");
+          renderizarCustosProdutoCompacto(item) +
+          renderizarTabelaPrecosCompacta(item, decisao) +
+        '</div>' +
+      '</article>'
+    );
+
+    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.scrollTop = 0;
+    if (btnVoltarProdutoPrecoCompra) btnVoltarProdutoPrecoCompra.disabled = revisaoPrecosIndice === 0;
+    if (btnAtualizarPrecosContinuarCompra) {
+      btnAtualizarPrecosContinuarCompra.textContent = revisaoPrecosIndice >= revisaoPrecosItens.length - 1
+        ? "Salvar e finalizar compra"
+        : "Salvar e proximo";
+    }
+    focarPrimeiroCampoRevisaoPreco();
   }
 
   function atualizarResultadoSimuladorPreco(simulador) {
@@ -4323,6 +4486,7 @@
     const custoNovo = numero(simulador.dataset.custoNovo || "0");
     const margemAtualPercentual = numero(simulador.dataset.margemAtual || "0");
     const campoPreco = simulador.querySelector(".campoNovoPrecoVendaCompra");
+    const campoMargem = simulador.querySelector(".campoMargemDesejadaCompra");
     const resultadoReal = simulador.querySelector(".resultadoMargemRealCompra");
     const resultadoPercentual = simulador.querySelector(".resultadoMargemPercentualCompra");
     if (!campoPreco || !resultadoReal || !resultadoPercentual) return;
@@ -4333,6 +4497,9 @@
 
     resultadoReal.textContent = moeda(margemNova.real);
     resultadoPercentual.textContent = percentual(margemNova.percentual);
+    if (campoMargem && document.activeElement !== campoMargem) {
+      campoMargem.value = percentualCampo(margemNova.percentual);
+    }
     [resultadoReal, resultadoPercentual].forEach(function(el) {
       el.classList.remove("ok", "baixa", "alerta");
       el.classList.add(classe);
@@ -4380,14 +4547,16 @@
 
   function abrirConferenciaPrecosCompra(itens) {
     if (!modalConferenciaPrecosCompra) return false;
-    renderizarConferenciaPrecos(itens);
-    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.scrollTop = 0;
+    revisaoPrecosItens = itens || [];
+    revisaoPrecosIndice = 0;
+    revisaoPrecosDecisoes = {};
+    revisaoPrecosItens.forEach(function(item) {
+      decisaoProduto(item);
+    });
+    renderizarConferenciaPrecos();
     modalConferenciaPrecosCompra.classList.add("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "false");
     travarScrollBodyConferenciaPrecos(true);
-    setTimeout(function() {
-      if (btnAtualizarPrecosContinuarCompra) btnAtualizarPrecosContinuarCompra.focus();
-    }, 80);
     return true;
   }
 
@@ -4415,8 +4584,9 @@
     if (!atualizarSelecionados) return;
 
     const ids = new Set();
-    document.querySelectorAll(".marcarAtualizarCustoCompra:checked").forEach(function(campo) {
-      if (campo.dataset.produtoId) ids.add(campo.dataset.produtoId);
+    revisaoPrecosItens.forEach(function(item) {
+      const decisao = revisaoPrecosDecisoes[item.chave || item.produtoId];
+      if (decisao && decisao.atualizarCusto) ids.add(item.produtoId);
     });
 
     ids.forEach(function(produtoId) {
@@ -4427,47 +4597,53 @@
       camposAtualizarCustoCompra.appendChild(input);
     });
 
-    document.querySelectorAll(".marcarAtualizarVendaCompra:checked").forEach(function(campo) {
-      const simulador = campo.closest(".compras-preco-simulador");
-      const produtoId = campo.dataset.produtoId;
-      const campoPrecoCadastro = campo.dataset.campoPreco;
-      const precoCampoSimulado = simulador ? simulador.querySelector(".campoNovoPrecoVendaCompra") : null;
-      if (!produtoId || !campoPrecoCadastro || !precoCampoSimulado) return;
+    revisaoPrecosItens.forEach(function(item) {
+      const decisao = revisaoPrecosDecisoes[item.chave || item.produtoId];
+      if (!decisao || !decisao.precos) return;
 
-      const idInput = document.createElement("input");
-      idInput.type = "hidden";
-      idInput.name = "atualizar_preco_venda_campos[]";
-      idInput.value = produtoId + ":" + campoPrecoCadastro;
-      camposAtualizarCustoCompra.appendChild(idInput);
+      Object.keys(decisao.precos).forEach(function(campoPrecoCadastro) {
+        const dadosPreco = decisao.precos[campoPrecoCadastro];
+        if (!dadosPreco || !dadosPreco.atualizar) return;
 
-      const precoInput = document.createElement("input");
-      precoInput.type = "hidden";
-      precoInput.name = "novo_preco_venda_produto_" + produtoId + "_" + campoPrecoCadastro;
-      precoInput.value = precoCampo(numero(precoCampoSimulado.value));
-      camposAtualizarCustoCompra.appendChild(precoInput);
+        const produtoId = item.produtoId;
+        const valorNovoPreco = precoCampo(numero(dadosPreco.novoPreco));
 
-      const produtoListaInput = document.createElement("input");
-      produtoListaInput.type = "hidden";
-      produtoListaInput.name = "atualizar_preco_venda_produto_ids[]";
-      produtoListaInput.value = produtoId;
-      camposAtualizarCustoCompra.appendChild(produtoListaInput);
+        const idInput = document.createElement("input");
+        idInput.type = "hidden";
+        idInput.name = "atualizar_preco_venda_campos[]";
+        idInput.value = produtoId + ":" + campoPrecoCadastro;
+        camposAtualizarCustoCompra.appendChild(idInput);
 
-      const campoListaInput = document.createElement("input");
-      campoListaInput.type = "hidden";
-      campoListaInput.name = "atualizar_preco_venda_nomes[]";
-      campoListaInput.value = campoPrecoCadastro;
-      camposAtualizarCustoCompra.appendChild(campoListaInput);
+        const precoInput = document.createElement("input");
+        precoInput.type = "hidden";
+        precoInput.name = "novo_preco_venda_produto_" + produtoId + "_" + campoPrecoCadastro;
+        precoInput.value = valorNovoPreco;
+        camposAtualizarCustoCompra.appendChild(precoInput);
 
-      const valorListaInput = document.createElement("input");
-      valorListaInput.type = "hidden";
-      valorListaInput.name = "atualizar_preco_venda_valores[]";
-      valorListaInput.value = precoCampo(numero(precoCampoSimulado.value));
-      camposAtualizarCustoCompra.appendChild(valorListaInput);
+        const produtoListaInput = document.createElement("input");
+        produtoListaInput.type = "hidden";
+        produtoListaInput.name = "atualizar_preco_venda_produto_ids[]";
+        produtoListaInput.value = produtoId;
+        camposAtualizarCustoCompra.appendChild(produtoListaInput);
+
+        const campoListaInput = document.createElement("input");
+        campoListaInput.type = "hidden";
+        campoListaInput.name = "atualizar_preco_venda_nomes[]";
+        campoListaInput.value = campoPrecoCadastro;
+        camposAtualizarCustoCompra.appendChild(campoListaInput);
+
+        const valorListaInput = document.createElement("input");
+        valorListaInput.type = "hidden";
+        valorListaInput.name = "atualizar_preco_venda_valores[]";
+        valorListaInput.value = valorNovoPreco;
+        camposAtualizarCustoCompra.appendChild(valorListaInput);
+      });
     });
   }
 
   function continuarAposConferenciaPrecos(atualizarSelecionados) {
     sincronizarTodosPrecosUnitarios();
+    salvarDecisaoProdutoAtual();
     definirCustosSelecionadosParaEnvio(atualizarSelecionados);
     conferenciaPrecosConfirmada = true;
     modalConferenciaPrecosCompra.classList.remove("visivel");
@@ -4476,6 +4652,64 @@
     delete formCompra.dataset.enviando;
     envioAcionadoPeloBotao = true;
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
+  }
+
+  function salvarProdutoAtualEAvancarConferenciaPrecos() {
+    salvarDecisaoProdutoAtual();
+    if (revisaoPrecosIndice < revisaoPrecosItens.length - 1) {
+      revisaoPrecosIndice += 1;
+      renderizarConferenciaPrecos();
+      return;
+    }
+    continuarAposConferenciaPrecos(true);
+  }
+
+  function voltarProdutoConferenciaPrecos() {
+    salvarDecisaoProdutoAtual();
+    if (revisaoPrecosIndice <= 0) return;
+    revisaoPrecosIndice -= 1;
+    renderizarConferenciaPrecos();
+  }
+
+  function camposEditaveisRevisaoPrecoAtual() {
+    if (!listaConferenciaPrecosCompra) return [];
+    return Array.from(listaConferenciaPrecosCompra.querySelectorAll(
+      ".campoNovoPrecoVendaCompra, .campoMargemDesejadaCompra"
+    )).filter(function(campo) {
+      return !campo.disabled && campo.offsetParent !== null;
+    });
+  }
+
+  function focarSelecionandoCampoRevisaoPreco(campo) {
+    if (!campo) return;
+    focarSelecionando(campo);
+  }
+
+  function focarPrimeiroCampoRevisaoPreco() {
+    const agendar = window.requestAnimationFrame || function(callback) {
+      return setTimeout(callback, 0);
+    };
+    agendar(function() {
+      setTimeout(function() {
+        const campos = camposEditaveisRevisaoPrecoAtual();
+        if (campos.length) {
+          focarSelecionandoCampoRevisaoPreco(campos[0]);
+        }
+      }, 0);
+    });
+  }
+
+  function avancarFocoRevisaoPreco(campoAtual) {
+    const campos = camposEditaveisRevisaoPrecoAtual();
+    const indiceAtual = campos.indexOf(campoAtual);
+    const proximo = indiceAtual >= 0 ? campos[indiceAtual + 1] : null;
+    if (proximo) {
+      focarSelecionandoCampoRevisaoPreco(proximo);
+      return;
+    }
+    if (btnAtualizarPrecosContinuarCompra) {
+      btnAtualizarPrecosContinuarCompra.focus();
+    }
   }
 
   function enviarCompraComAcao(acao, botao) {
@@ -4675,8 +4909,12 @@
 
   if (btnAtualizarPrecosContinuarCompra) {
     btnAtualizarPrecosContinuarCompra.addEventListener("click", function() {
-      continuarAposConferenciaPrecos(true);
+      salvarProdutoAtualEAvancarConferenciaPrecos();
     });
+  }
+
+  if (btnVoltarProdutoPrecoCompra) {
+    btnVoltarProdutoPrecoCompra.addEventListener("click", voltarProdutoConferenciaPrecos);
   }
 
   if (btnContinuarSemAtualizarPrecosCompra) {
@@ -4695,6 +4933,25 @@
   }
 
   if (modalConferenciaPrecosCompra) {
+    modalConferenciaPrecosCompra.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      const campo = event.target.closest
+        ? event.target.closest(".campoNovoPrecoVendaCompra, .campoMargemDesejadaCompra")
+        : null;
+      if (!campo) return;
+
+      event.preventDefault();
+      if (typeof event.stopPropagation === "function") event.stopPropagation();
+      if (campo.classList.contains("campoMargemDesejadaCompra")) {
+        campo.value = percentualCampo(numero(campo.value));
+        atualizarPrecoPelaMargem(campo.closest(".compras-preco-simulador"));
+      } else if (campo.classList.contains("campoNovoPrecoVendaCompra")) {
+        campo.value = precoCampo(numero(campo.value));
+        atualizarResultadoSimuladorPreco(campo.closest(".compras-preco-simulador"));
+      }
+      avancarFocoRevisaoPreco(campo);
+    });
+
     modalConferenciaPrecosCompra.addEventListener("wheel", function(event) {
       if (!modalConferenciaPrecosCompra.classList.contains("visivel")) return;
       if (!listaConferenciaPrecosCompra) return;
@@ -4725,6 +4982,21 @@
       if (event.target.classList.contains("campoNovoPrecoVendaCompra")) {
         atualizarResultadoSimuladorPreco(simulador);
       }
+    });
+
+    modalConferenciaPrecosCompra.addEventListener("focusin", function(event) {
+      const campo = event.target.closest
+        ? event.target.closest(".campoNovoPrecoVendaCompra, .campoMargemDesejadaCompra")
+        : null;
+      if (!campo) return;
+      setTimeout(function() {
+        if (document.activeElement !== campo) return;
+        if (typeof campo.setSelectionRange === "function") {
+          campo.setSelectionRange(0, campo.value.length);
+        } else if (typeof campo.select === "function") {
+          campo.select();
+        }
+      }, 0);
     });
 
     modalConferenciaPrecosCompra.addEventListener("blur", function(event) {
