@@ -12487,6 +12487,49 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn(item_rota.id, [item_ativo.id for item_ativo in itens_ativos])
         self.assertNotContains(resposta_checklist_depois, "Cliente Entrega Cancelada")
 
+    def test_cancelamento_manual_remove_venda_cancelada_do_detalhe_da_rota(self):
+        cliente = Cliente.objects.create(nome="Cliente Detalhe Rota Cancelada", ativo=True)
+        produto = self._produto_teste("Produto Detalhe Rota Cancelada")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("24.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("24.00"),
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PENDENTE,
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        item_rota.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_CANCELADA)
+        self.assertTrue(EntregaRotaItem.objects.filter(pk=item_rota.pk, venda=venda, rota=rota).exists())
+
+        resposta_detalhe = self.client.get(
+            reverse("estoque:entrega_rota_detalhe", kwargs={"pk": rota.id}),
+            secure=True,
+        )
+        self.assertEqual(resposta_detalhe.status_code, 200)
+        itens_detalhe = list(resposta_detalhe.context["itens_entrega"])
+        self.assertNotIn(item_rota.id, [item_ativo.id for item_ativo in itens_detalhe])
+        self.assertNotContains(resposta_detalhe, "Cliente Detalhe Rota Cancelada")
+
     def test_cancelamento_manual_exige_confirmacao_cancelar(self):
         cliente = Cliente.objects.create(nome="Cliente Confirmacao Errada", ativo=True)
         produto = self._produto_teste("Produto Confirmacao Errada")

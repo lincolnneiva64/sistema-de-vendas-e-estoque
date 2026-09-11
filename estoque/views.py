@@ -16544,7 +16544,7 @@ def entrega_rota_detalhe(request, pk):
         ),
         pk=pk,
     )
-    itens_entrega = list(rota.itens.all())
+    itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
     for item_rota in itens_entrega:
         item_rota.checklists_ordenados = checklists_validos_rota_item(item_rota)
         item_rota.resumo_pendencia = resumo_pendencia_rota_item(item_rota)
