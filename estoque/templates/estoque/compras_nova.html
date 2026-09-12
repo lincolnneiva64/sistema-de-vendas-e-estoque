@@ -1047,6 +1047,73 @@
   .compras-table { width:100%; border-collapse:collapse; }
   .compras-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:9px; border-bottom:1px solid #edf1f6; }
   .compras-table td { padding:8px; border-bottom:1px solid #f0f3f8; vertical-align:top; }
+  .compras-card-head.compras-card-head-acoes {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .compras-conferencia-nota {
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    padding:10px 16px;
+    border-bottom:1px solid #dbeafe;
+    background:#eff6ff;
+    color:#1e3a8a;
+    font-weight:850;
+  }
+  .compras-conferencia-nota.visivel { display:flex; }
+  .compras-conferencia-nota-status {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .compras-conferencia-nota-status strong { color:#172554; }
+  .compras-conferencia-nota-status span { color:#1d4ed8; }
+  .compras-conferencia-nota-filtros {
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .compras-conferencia-nota-filtros .ativo {
+    background:#2563eb;
+    border-color:#1d4ed8;
+    color:#fff;
+  }
+  .linha-item.item-conferencia-oculto {
+    display:none;
+  }
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido {
+    border-left:4px solid #16a34a;
+    background:#f0fdf4;
+    box-shadow:inset 4px 0 0 #16a34a;
+  }
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido td {
+    background:#f0fdf4;
+  }
+  .btn-conferir-item-nota {
+    display:none;
+    width:100%;
+    margin-bottom:6px;
+    border-color:#16a34a;
+    color:#166534;
+    background:#f0fdf4;
+  }
+  .conferencia-nota-ativa .btn-conferir-item-nota.visivel {
+    display:inline-flex;
+  }
+  .btn-conferir-item-nota.conferido {
+    background:#16a34a;
+    color:#fff;
+    border-color:#15803d;
+    font-weight:950;
+  }
   .linha-item td { vertical-align:top; }
   .linha-item td:first-child {
     padding-top: 8px;
@@ -1783,6 +1850,15 @@
       background:#ffffff;
       box-shadow:0 8px 18px rgba(15,23,42,.07);
     }
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .linha-item.item-conferencia-conferido {
+      border:2px solid #16a34a;
+      border-left-width:6px;
+      background:#ecfdf5;
+      box-shadow:0 12px 26px rgba(22,163,74,.18);
+    }
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .linha-item.item-conferencia-conferido td {
+      background:#ecfdf5;
+    }
     #tabelaItensCompra .linha-item.item-mobile-destacado {
       margin:8px 0;
       border:2px solid #2563eb;
@@ -2451,7 +2527,23 @@
     {% endif %}
 
     <section class="compras-card" id="secaoItensCompra">
-      <div class="compras-card-head"><span class="compras-label-desktop">Itens da compra</span><span class="compras-label-mobile">Itens lan&ccedil;ados</span></div>
+      <div class="compras-card-head compras-card-head-acoes">
+        <span><span class="compras-label-desktop">Itens da compra</span><span class="compras-label-mobile">Itens lan&ccedil;ados</span></span>
+        <button type="button" class="compras-btn compras-btn-secondary" id="btnConferirNotaCompra">Conferir Nota</button>
+      </div>
+      <div class="compras-conferencia-nota" id="resumoConferenciaNotaCompra" aria-live="polite">
+        <div class="compras-conferencia-nota-status">
+          <strong>Conferindo nota</strong>
+          <span>Itens lan&ccedil;ados: <span id="itensLancadosConferenciaNotaCompra">0</span></span>
+          <span>Conferidos: <span id="itensConferidosConferenciaNotaCompra">0</span></span>
+          <span>Pendentes: <span id="itensPendentesConferenciaNotaCompra">0</span></span>
+        </div>
+        <div class="compras-conferencia-nota-filtros">
+          <button type="button" class="compras-btn compras-btn-secondary ativo" id="btnFiltroConferenciaNotaTodos" aria-pressed="true">Todos</button>
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnFiltroConferenciaNotaPendentes" aria-pressed="false">Somente pendentes</button>
+        </div>
+        <button type="button" class="compras-btn compras-btn-secondary" id="btnSairConferenciaNotaCompra">Sair</button>
+      </div>
       <div class="compras-table-wrap">
         <table class="compras-table" id="tabelaItensCompra">
           <thead>
@@ -2490,6 +2582,7 @@
               <td data-label="Total do item" class="valor-total-item">R$ 0,00</td>
               <td data-label="Acao">
                 <div class="item-mobile-acoes item-mobile-acoes-principais">
+                  <button type="button" class="compras-btn compras-btn-secondary btn-conferir-item-nota" aria-pressed="false">Conferir</button>
                   <button type="button" class="compras-btn compras-btn-secondary compras-mobile-inline-only btn-editar-item-mobile">Editar</button>
                   <button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button>
                 </div>
@@ -2671,6 +2764,14 @@
   const btnAdicionar = document.getElementById("btnAdicionarItem");
   const btnVoltarLancamentoProdutoMobile = document.getElementById("btnVoltarLancamentoProdutoMobile");
   const secaoItensCompra = document.getElementById("secaoItensCompra");
+  const btnConferirNotaCompra = document.getElementById("btnConferirNotaCompra");
+  const btnSairConferenciaNotaCompra = document.getElementById("btnSairConferenciaNotaCompra");
+  const resumoConferenciaNotaCompra = document.getElementById("resumoConferenciaNotaCompra");
+  const itensLancadosConferenciaNotaCompra = document.getElementById("itensLancadosConferenciaNotaCompra");
+  const itensConferidosConferenciaNotaCompra = document.getElementById("itensConferidosConferenciaNotaCompra");
+  const itensPendentesConferenciaNotaCompra = document.getElementById("itensPendentesConferenciaNotaCompra");
+  const btnFiltroConferenciaNotaTodos = document.getElementById("btnFiltroConferenciaNotaTodos");
+  const btnFiltroConferenciaNotaPendentes = document.getElementById("btnFiltroConferenciaNotaPendentes");
   const areaAdicionarProdutoMobile = document.getElementById("areaAdicionarProdutoMobile");
   const secaoProdutoRapidoCompra = document.getElementById("secaoProdutoRapidoCompra");
   const avisoRascunhoSalvoCompra = document.getElementById("avisoRascunhoSalvoCompra");
@@ -2711,6 +2812,8 @@
   let revisaoPrecosIndice = 0;
   let revisaoPrecosDecisoes = {};
   let linhaPendenteRemocaoCompra = null;
+  let conferenciaNotaAtiva = false;
+  let filtroConferenciaNota = "todos";
   let rascunhoBloqueado = {% if rascunho_salvo %}true{% else %}false{% endif %};
   const mensagemRascunhoEdicao = [
     "Salve como rascunho para continuar",
@@ -3303,6 +3406,140 @@
     });
   }
 
+  function linhaConferivelNota(linha) {
+    return Boolean(
+      linha &&
+      tabela &&
+      linha.parentElement === tabela.querySelector("tbody") &&
+      !itemProvisorio(linha) &&
+      produtoSelecionadoValido(linha)
+    );
+  }
+
+  function itemConferidoNota(linha) {
+    return linha && linha.dataset.conferido === "1";
+  }
+
+  function limparConferenciaNotaLinha(linha) {
+    if (!linha) return;
+    delete linha.dataset.conferido;
+    atualizarLinhaConferenciaNota(linha);
+    atualizarResumoConferenciaNota();
+  }
+
+  function definirConferenciaNotaLinha(linha, conferido) {
+    if (!linhaConferivelNota(linha)) {
+      limparConferenciaNotaLinha(linha);
+      return;
+    }
+    if (conferido) {
+      linha.dataset.conferido = "1";
+    } else {
+      delete linha.dataset.conferido;
+    }
+    atualizarLinhaConferenciaNota(linha);
+    atualizarResumoConferenciaNota();
+  }
+
+  function atualizarLinhaConferenciaNota(linha) {
+    if (!linha) return;
+    const conferivel = conferenciaNotaAtiva && linhaConferivelNota(linha);
+    const conferido = conferivel && itemConferidoNota(linha);
+    const botao = linha.querySelector(".btn-conferir-item-nota");
+
+    if (!linhaConferivelNota(linha)) {
+      delete linha.dataset.conferido;
+    }
+
+    linha.classList.toggle("item-conferencia-conferido", conferido);
+    linha.classList.toggle("item-conferencia-pendente", conferivel && !conferido);
+
+    if (botao) {
+      botao.classList.toggle("visivel", conferivel);
+      botao.classList.toggle("conferido", conferido);
+      botao.setAttribute("aria-pressed", conferido ? "true" : "false");
+      botao.textContent = conferido ? "\u2713 Conferido" : "Conferir";
+    }
+  }
+
+  function aplicarFiltroConferenciaNota() {
+    if (!tabela) return;
+
+    tabela.querySelectorAll("tbody .linha-item").forEach(function(linha) {
+      const ocultar = conferenciaNotaAtiva &&
+        filtroConferenciaNota === "pendentes" &&
+        linhaConferivelNota(linha) &&
+        itemConferidoNota(linha);
+      linha.classList.toggle("item-conferencia-oculto", ocultar);
+    });
+
+    if (btnFiltroConferenciaNotaTodos) {
+      const ativo = filtroConferenciaNota === "todos";
+      btnFiltroConferenciaNotaTodos.classList.toggle("ativo", ativo);
+      btnFiltroConferenciaNotaTodos.setAttribute("aria-pressed", ativo ? "true" : "false");
+    }
+    if (btnFiltroConferenciaNotaPendentes) {
+      const ativo = filtroConferenciaNota === "pendentes";
+      btnFiltroConferenciaNotaPendentes.classList.toggle("ativo", ativo);
+      btnFiltroConferenciaNotaPendentes.setAttribute("aria-pressed", ativo ? "true" : "false");
+    }
+  }
+
+  function definirFiltroConferenciaNota(filtro) {
+    filtroConferenciaNota = filtro === "pendentes" ? "pendentes" : "todos";
+    aplicarFiltroConferenciaNota();
+  }
+
+  function atualizarResumoConferenciaNota() {
+    if (!tabela) return;
+
+    let lancados = 0;
+    let conferidos = 0;
+
+    tabela.querySelectorAll("tbody .linha-item").forEach(function(linha) {
+      if (!linhaConferivelNota(linha)) {
+        atualizarLinhaConferenciaNota(linha);
+        return;
+      }
+      lancados += 1;
+      if (itemConferidoNota(linha)) {
+        conferidos += 1;
+      }
+      atualizarLinhaConferenciaNota(linha);
+    });
+
+    if (itensLancadosConferenciaNotaCompra) {
+      itensLancadosConferenciaNotaCompra.textContent = String(lancados);
+    }
+    if (itensConferidosConferenciaNotaCompra) {
+      itensConferidosConferenciaNotaCompra.textContent = String(conferidos);
+    }
+    if (itensPendentesConferenciaNotaCompra) {
+      itensPendentesConferenciaNotaCompra.textContent = String(Math.max(lancados - conferidos, 0));
+    }
+
+    aplicarFiltroConferenciaNota();
+  }
+
+  function definirModoConferenciaNota(ativo) {
+    conferenciaNotaAtiva = Boolean(ativo);
+    if (!conferenciaNotaAtiva) {
+      filtroConferenciaNota = "todos";
+    }
+    if (secaoItensCompra) {
+      secaoItensCompra.classList.toggle("conferencia-nota-ativa", conferenciaNotaAtiva);
+    }
+    if (resumoConferenciaNotaCompra) {
+      resumoConferenciaNotaCompra.classList.toggle("visivel", conferenciaNotaAtiva);
+    }
+    if (btnConferirNotaCompra) {
+      btnConferirNotaCompra.textContent = conferenciaNotaAtiva ? "Ocultar Conferencia" : "Conferir Nota";
+      btnConferirNotaCompra.setAttribute("aria-pressed", conferenciaNotaAtiva ? "true" : "false");
+    }
+    atualizarResumoConferenciaNota();
+    aplicarFiltroConferenciaNota();
+  }
+
   function recalcular() {
     let total = 0;
     document.querySelectorAll(".linha-item").forEach((linha) => {
@@ -3328,6 +3565,7 @@
     if (origemDinheiroCompra && origemDinheiroCompra.classList.contains("visivel")) {
       atualizarResumoOrigemDinheiroCompra();
     }
+    atualizarResumoConferenciaNota();
   }
 
   function focarCampo(campo) {
@@ -3389,6 +3627,7 @@
     } else {
       confirmarItemProvisorio(linha);
     }
+    limparConferenciaNotaLinha(linha);
     conferenciaPrecosConfirmada = false;
     definirCustosSelecionadosParaEnvio(false);
     recalcular();
@@ -3707,8 +3946,10 @@
     sincronizarPrecoUnitarioLinha(linha);
     linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
     delete linha.dataset.itemProvisorio;
+    delete linha.dataset.conferido;
     limparHistoricoProduto(linha);
     fecharSugestoes(linha);
+    atualizarLinhaConferenciaNota(linha);
     conferenciaPrecosConfirmada = false;
     definirCustosSelecionadosParaEnvio(false);
   }
@@ -3933,6 +4174,7 @@
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
     const preco = campoPrecoUnitario(linha);
+    const btnConferirItemNota = linha.querySelector(".btn-conferir-item-nota");
     const btnEditarItemMobile = linha.querySelector(".btn-editar-item-mobile");
     const btnSalvarEdicaoItemMobile = linha.querySelector(".btn-salvar-edicao-item-mobile");
     const btnCancelarEdicaoItemMobile = linha.querySelector(".btn-cancelar-edicao-item-mobile");
@@ -3981,6 +4223,7 @@
       unidade.value = "";
       preco.value = "0,00";
       sincronizarPrecoUnitarioLinha(linha);
+      limparConferenciaNotaLinha(linha);
       const estoqueValor = linha.querySelector(".produto-estoque-valor");
       if (estoqueValor) {
         estoqueValor.textContent = "-";
@@ -4005,6 +4248,7 @@
       campo.addEventListener("input", function() {
         if (campo !== produtoBusca && campo !== produto) {
           confirmarItemProvisorio(linha);
+          limparConferenciaNotaLinha(linha);
         }
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
@@ -4016,6 +4260,7 @@
       campo.addEventListener("change", function() {
         if (campo !== produtoBusca && campo !== produto) {
           confirmarItemProvisorio(linha);
+          limparConferenciaNotaLinha(linha);
         }
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
@@ -4120,6 +4365,13 @@
       btnEditarItemMobile.addEventListener("click", function() {
         if (compraRascunhoBloqueado()) return;
         iniciarEdicaoItemMobile(linha);
+      });
+    }
+
+    if (btnConferirItemNota) {
+      btnConferirItemNota.addEventListener("click", function() {
+        if (!conferenciaNotaAtiva || !linhaConferivelNota(linha)) return;
+        definirConferenciaNotaLinha(linha, !itemConferidoNota(linha));
       });
     }
 
@@ -4792,6 +5044,31 @@
     btnSalvarCompra.addEventListener("click", function() {
       window.compraMobileMantendoItemVisivel = false;
       enviarCompraComAcao("{% if finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
+    });
+  }
+
+  if (btnConferirNotaCompra) {
+    btnConferirNotaCompra.addEventListener("click", function() {
+      definirModoConferenciaNota(!conferenciaNotaAtiva);
+    });
+  }
+
+  if (btnSairConferenciaNotaCompra) {
+    btnSairConferenciaNotaCompra.addEventListener("click", function() {
+      definirModoConferenciaNota(false);
+      focarCampo(btnConferirNotaCompra);
+    });
+  }
+
+  if (btnFiltroConferenciaNotaTodos) {
+    btnFiltroConferenciaNotaTodos.addEventListener("click", function() {
+      definirFiltroConferenciaNota("todos");
+    });
+  }
+
+  if (btnFiltroConferenciaNotaPendentes) {
+    btnFiltroConferenciaNotaPendentes.addEventListener("click", function() {
+      definirFiltroConferenciaNota("pendentes");
     });
   }
 
