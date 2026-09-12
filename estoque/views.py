@@ -16305,6 +16305,8 @@ def entregas_dia(request):
     ).select_related("rota").order_by("-rota__data", "-rota_id", "-id")
     status_por_venda = {}
     for item in itens_entrega:
+        if not entrega_rota_item_ativo(item):
+            continue
         status_por_venda.setdefault(
             item.venda_id,
             f"{item.rota.get_tipo_display()} #{item.rota_id} - {item.get_status_display()}",
@@ -16319,7 +16321,7 @@ def entregas_dia(request):
         .order_by("-id")
     )
     for rota in rotas:
-        itens = list(rota.itens.all())
+        itens = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
         for item in itens:
             item.resumo_pendencia = resumo_pendencia_rota_item(item)
         rota.itens_entrega = itens

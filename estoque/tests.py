@@ -12530,6 +12530,84 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn(item_rota.id, [item_ativo.id for item_ativo in itens_detalhe])
         self.assertNotContains(resposta_detalhe, "Cliente Detalhe Rota Cancelada")
 
+    def test_cancelamento_manual_remove_venda_cancelada_de_entregas_dia(self):
+        data_entrega = timezone.localdate()
+        produto = self._produto_teste("Produto Entregas Dia Cancelada")
+        cliente_ativo = Cliente.objects.create(nome="Cliente Entregas Dia Ativo", ativo=True)
+        cliente_cancelado = Cliente.objects.create(nome="Cliente Entregas Dia Cancelado", ativo=True)
+        venda_ativa = Venda.objects.create(
+            cliente=cliente_ativo,
+            data_venda=data_entrega,
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("18.00"),
+        )
+        venda_cancelada = Venda.objects.create(
+            cliente=cliente_cancelado,
+            data_venda=data_entrega,
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("24.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_ativa,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("18.00"),
+            valor_total=Decimal("18.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_cancelada,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("24.00"),
+        )
+        rota = EntregaRota.objects.create(data=data_entrega, tipo=EntregaRota.TIPO_ROTA)
+        item_ativo = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda_ativa,
+            ordem_entrega=1,
+            status=EntregaRotaItem.STATUS_PENDENTE,
+        )
+        item_cancelado = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda_cancelada,
+            ordem_entrega=2,
+            status=EntregaRotaItem.STATUS_PENDENTE,
+        )
+
+        resposta_cancelamento = self._post_cancelar_venda(venda_cancelada)
+
+        self.assertEqual(resposta_cancelamento.status_code, 200)
+        venda_cancelada.refresh_from_db()
+        item_cancelado.refresh_from_db()
+        self.assertTrue(venda_cancelada.cancelada)
+        self.assertEqual(item_cancelado.status, EntregaRotaItem.STATUS_CANCELADA)
+        self.assertTrue(EntregaRotaItem.objects.filter(pk=item_cancelado.pk, venda=venda_cancelada, rota=rota).exists())
+
+        resposta = self.client.get(
+            reverse("estoque:entregas_dia"),
+            {"data": data_entrega.isoformat()},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        vendas_por_id = {venda.id: venda for venda in resposta.context["vendas"]}
+        self.assertTrue(vendas_por_id[venda_ativa.id].tem_entrega_criada)
+        self.assertIn(f"Rota com varias entregas #{rota.id}", vendas_por_id[venda_ativa.id].entrega_status_texto)
+        self.assertFalse(vendas_por_id[venda_cancelada.id].tem_entrega_criada)
+        self.assertEqual(vendas_por_id[venda_cancelada.id].entrega_status_texto, "Sem entrega criada")
+
+        rota_contexto = next(rota_item for rota_item in resposta.context["rotas"] if rota_item.id == rota.id)
+        self.assertEqual([item.id for item in rota_contexto.itens_entrega], [item_ativo.id])
+        self.assertEqual([item.id for item in rota_contexto.itens_carregamento], [item_ativo.id])
+        self.assertNotIn(item_cancelado.id, [item.id for item in rota_contexto.itens_entrega])
+        self.assertNotIn(item_cancelado.id, [item.id for item in rota_contexto.itens_carregamento])
+        self.assertEqual(len(rota_contexto.itens_entrega), 1)
+
     def test_cancelamento_manual_exige_confirmacao_cancelar(self):
         cliente = Cliente.objects.create(nome="Cliente Confirmacao Errada", ativo=True)
         produto = self._produto_teste("Produto Confirmacao Errada")
