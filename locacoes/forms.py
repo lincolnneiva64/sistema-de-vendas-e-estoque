@@ -228,8 +228,6 @@ class LocacaoForm(forms.Form):
         if tipo_pessoa == Locacao.TIPO_PESSOA_AVULSA:
             if not pessoa_avulsa_nome:
                 self.add_error("pessoa_avulsa_nome", "Informe o nome da pessoa avulsa.")
-            if not pessoa_avulsa_telefone:
-                self.add_error("pessoa_avulsa_telefone", "Informe o telefone da pessoa avulsa.")
             cleaned_data["cliente"] = None
 
         if data_entrega and data_prevista_devolucao and data_prevista_devolucao < data_entrega:
