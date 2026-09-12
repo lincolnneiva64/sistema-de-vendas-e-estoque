@@ -3280,16 +3280,40 @@
     document.querySelectorAll(".linha-item").forEach(sincronizarPrecoUnitarioLinha);
   }
 
+  function itemProvisorio(linha) {
+    return linha && linha.dataset.itemProvisorio === "1";
+  }
+
+  function marcarItemProvisorio(linha) {
+    if (!linha) return;
+    linha.dataset.itemProvisorio = "1";
+  }
+
+  function confirmarItemProvisorio(linha) {
+    if (!itemProvisorio(linha)) return;
+    delete linha.dataset.itemProvisorio;
+    recalcular();
+  }
+
+  function desabilitarItensProvisoriosParaEnvio() {
+    document.querySelectorAll(".linha-item[data-item-provisorio='1']").forEach(function(linha) {
+      linha.querySelectorAll("input, select, textarea").forEach(function(campo) {
+        campo.disabled = true;
+      });
+    });
+  }
+
   function recalcular() {
     let total = 0;
     document.querySelectorAll(".linha-item").forEach((linha) => {
       const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
       sincronizarPrecoUnitarioLinha(linha);
       const preco = numero(campoPrecoUnitario(linha).value);
-      const subtotal = quantidade * preco;
+      const subtotal = itemProvisorio(linha) ? 0 : quantidade * preco;
       linha.querySelector(".valor-total-item").textContent = moeda(subtotal);
     });
     tabela.querySelectorAll("tbody .linha-item").forEach((linha) => {
+      if (itemProvisorio(linha)) return;
       const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
       const preco = numero(campoPrecoUnitario(linha).value);
       total += quantidade * preco;
@@ -3299,7 +3323,7 @@
       totalCompraCabecalho.textContent = moeda(total);
     }
     if (totalItensCompraMobile && tabela) {
-      totalItensCompraMobile.textContent = String(tabela.querySelectorAll("tbody .linha-item").length);
+      totalItensCompraMobile.textContent = String(tabela.querySelectorAll("tbody .linha-item:not([data-item-provisorio='1'])").length);
     }
     if (origemDinheiroCompra && origemDinheiroCompra.classList.contains("visivel")) {
       atualizarResumoOrigemDinheiroCompra();
@@ -3343,7 +3367,7 @@
     linha.dataset.sugestaoAtiva = "-1";
   }
 
-  function selecionarProduto(linha, opt) {
+  function selecionarProduto(linha, opt, opcoes = {}) {
     const produto = linha.querySelector('[name="produto_id[]"]');
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
@@ -3360,6 +3384,11 @@
       estoqueValor.textContent = window.estoqueCompraTextoSeguro ? window.estoqueCompraTextoSeguro(opt.dataset.estoque) : (opt.dataset.estoque || "0");
     }
     fecharSugestoes(linha);
+    if (opcoes.provisorio) {
+      marcarItemProvisorio(linha);
+    } else {
+      confirmarItemProvisorio(linha);
+    }
     conferenciaPrecosConfirmada = false;
     definirCustosSelecionadosParaEnvio(false);
     recalcular();
@@ -3677,6 +3706,7 @@
     campoPrecoUnitario(linha).value = "0,00";
     sincronizarPrecoUnitarioLinha(linha);
     linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
+    delete linha.dataset.itemProvisorio;
     limparHistoricoProduto(linha);
     fecharSugestoes(linha);
     conferenciaPrecosConfirmada = false;
@@ -3883,7 +3913,7 @@
 
       const proximaOpcao = proximaOpcaoProduto(linhaDestino, produtoAtual ? produtoAtual.value : "");
       if (proximaOpcao) {
-        selecionarProduto(linhaDestino, proximaOpcao);
+        selecionarProduto(linhaDestino, proximaOpcao, { provisorio: true });
       }
     }
 
@@ -3973,6 +4003,9 @@
 
     linha.querySelectorAll("input, select").forEach((campo) => {
       campo.addEventListener("input", function() {
+        if (campo !== produtoBusca && campo !== produto) {
+          confirmarItemProvisorio(linha);
+        }
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
         if (linha.classList.contains("item-editando-mobile") && !linhaNoFormularioMobile(linha)) {
@@ -3981,6 +4014,9 @@
         recalcular();
       });
       campo.addEventListener("change", function() {
+        if (campo !== produtoBusca && campo !== produto) {
+          confirmarItemProvisorio(linha);
+        }
         conferenciaPrecosConfirmada = false;
         definirCustosSelecionadosParaEnvio(false);
         if (linha.classList.contains("item-editando-mobile") && !linhaNoFormularioMobile(linha)) {
@@ -4037,6 +4073,7 @@
       }
 
       if (!listaAberta && produtoSelecionadoValido(linha)) {
+        confirmarItemProvisorio(linha);
         fecharSugestoes(linha);
         focarCampo(quantidade);
         return;
@@ -4148,6 +4185,7 @@
       const produtoAtual = linhaAtual.querySelector('[name="produto_id[]"]');
       const produtoAtualId = produtoAtual ? produtoAtual.value : "";
 
+      confirmarItemProvisorio(linhaAtual);
       publicarLinhaMobile(linhaAtual);
       rolarParaItemAdicionadoMobile(linhaAtual);
 
@@ -4156,7 +4194,7 @@
       if (nova) {
         const proximaOpcao = proximaOpcaoProduto(nova, produtoAtualId);
         if (proximaOpcao) {
-          selecionarProduto(nova, proximaOpcao);
+          selecionarProduto(nova, proximaOpcao, { provisorio: true });
         }
 
         moverLinhaParaFormularioMobile(nova);
@@ -4285,6 +4323,7 @@
     const vistos = new Set();
 
     tabela.querySelectorAll("tbody .linha-item").forEach(function(linha) {
+      if (itemProvisorio(linha)) return;
       const select = linha.querySelector('[name="produto_id[]"]');
       const precoCampoLinha = campoPrecoUnitario(linha);
       if (!select || !select.value || !precoCampoLinha) return;
@@ -4813,6 +4852,7 @@
         return;
       }
 
+      desabilitarItensProvisoriosParaEnvio();
       formCompra.dataset.enviando = "1";
 
       if (compraMobile()) {

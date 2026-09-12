@@ -2676,6 +2676,25 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, 'btnSalvar.closest(".compras-actions-final")')
         self.assertContains(resposta, "window.compraAtualizarEstadoLimpo = atualizarEstadoLimpoCompra;")
 
+    def test_nova_compra_mantem_proxima_linha_automatica_provisoria(self):
+        resposta = self.client.get(reverse("estoque:compras_nova"), secure=True)
+
+        self.assertContains(resposta, "function marcarItemProvisorio(linha)")
+        self.assertContains(resposta, 'linha.dataset.itemProvisorio = "1";')
+        self.assertContains(resposta, "function confirmarItemProvisorio(linha)")
+        self.assertContains(resposta, "delete linha.dataset.itemProvisorio;")
+        self.assertContains(resposta, "function desabilitarItensProvisoriosParaEnvio()")
+        self.assertContains(resposta, 'document.querySelectorAll(".linha-item[data-item-provisorio=\'1\']")')
+        self.assertContains(resposta, "campo.disabled = true;")
+        self.assertContains(resposta, "const subtotal = itemProvisorio(linha) ? 0 : quantidade * preco;")
+        self.assertContains(resposta, "if (itemProvisorio(linha)) return;")
+        self.assertContains(resposta, 'tbody .linha-item:not([data-item-provisorio=\'1\'])')
+        self.assertContains(resposta, "selecionarProduto(linhaDestino, proximaOpcao, { provisorio: true });")
+        self.assertContains(resposta, "selecionarProduto(nova, proximaOpcao, { provisorio: true });")
+        self.assertContains(resposta, "confirmarItemProvisorio(linha);")
+        self.assertContains(resposta, "confirmarItemProvisorio(linhaAtual);")
+        self.assertContains(resposta, "desabilitarItensProvisoriosParaEnvio();")
+
     def test_edicao_compra_rascunho_continua_exibindo_produto_rapido(self):
         compra = self._criar_compra_rascunho_com_item()
 
