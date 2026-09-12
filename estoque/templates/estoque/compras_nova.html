@@ -1096,22 +1096,54 @@
   .conferencia-nota-ativa .linha-item.item-conferencia-conferido td {
     background:#f0fdf4;
   }
-  .btn-conferir-item-nota {
+  .conferencia-nota-check-wrap {
     display:none;
-    width:100%;
-    margin-bottom:6px;
-    border-color:#16a34a;
-    color:#166534;
+    align-items:center;
+    justify-content:center;
+    width:38px;
+    height:38px;
+    margin:0 10px 6px 0;
+    border:2px solid #86efac;
+    border-radius:10px;
     background:#f0fdf4;
+    cursor:pointer;
+    float:left;
+    vertical-align:top;
+    transition:background .12s ease, border-color .12s ease, box-shadow .12s ease, transform .08s ease;
   }
-  .conferencia-nota-ativa .btn-conferir-item-nota.visivel {
+  .conferencia-nota-check-wrap:active { transform:scale(.96); }
+  .conferencia-nota-check-wrap.visivel {
     display:inline-flex;
   }
-  .btn-conferir-item-nota.conferido {
+  .conferencia-nota-checkbox {
+    width:22px;
+    height:22px;
+    margin:0;
+    accent-color:#16a34a;
+    cursor:pointer;
+  }
+  .conferencia-nota-checkbox:focus-visible {
+    outline:3px solid #2563eb;
+    outline-offset:3px;
+  }
+  .conferencia-nota-ativa .linha-item td:first-child .produto-autocomplete {
+    overflow:hidden;
+  }
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido .conferencia-nota-check-wrap {
     background:#16a34a;
-    color:#fff;
     border-color:#15803d;
-    font-weight:950;
+    box-shadow:0 0 0 4px rgba(22, 163, 74, .16);
+  }
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido td:not(:last-child) input:not(.conferencia-nota-checkbox),
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido td:not(:last-child) select,
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido .produto-sugestoes {
+    pointer-events:none;
+  }
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido td:not(:last-child) input:not(.conferencia-nota-checkbox),
+  .conferencia-nota-ativa .linha-item.item-conferencia-conferido td:not(:last-child) select {
+    color:#166534;
+    border-color:#bbf7d0;
+    background:#f0fdf4;
   }
   .linha-item td { vertical-align:top; }
   .linha-item td:first-child {
@@ -1889,7 +1921,7 @@
     #tabelaItensCompra .linha-item td:last-child::before {
       display:none !important;
     }
-    #tabelaItensCompra .linha-item td:first-child input,
+    #tabelaItensCompra .linha-item td:first-child input:not(.conferencia-nota-checkbox),
     #tabelaItensCompra .linha-item td:nth-child(2) input,
     #tabelaItensCompra .linha-item td:nth-child(3) input,
     #tabelaItensCompra .linha-item td:nth-child(4) input {
@@ -1904,7 +1936,7 @@
       font-weight:850;
       pointer-events:none;
     }
-    #tabelaItensCompra .linha-item td:first-child input {
+    #tabelaItensCompra .linha-item td:first-child input:not(.conferencia-nota-checkbox) {
       max-width:100%;
       color:#172033;
       font-size:.95rem;
@@ -1925,11 +1957,10 @@
       padding:8px 10px;
       border-radius:9px;
     }
-    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .btn-conferir-item-nota.visivel {
-      flex:0 0 100%;
-      width:100%;
-      order:-1;
-      margin:0 0 4px;
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .conferencia-nota-check-wrap.visivel {
+      width:44px;
+      height:44px;
+      margin:0 8px 4px 0;
       position:relative;
       z-index:1;
     }
@@ -2567,6 +2598,9 @@
             {% for linha in item_linhas %}
             <tr class="linha-item">
               <td data-label="Produto">
+                <label class="conferencia-nota-check-wrap" aria-label="Marcar item como conferido">
+                  <input type="checkbox" class="conferencia-nota-checkbox" autocomplete="off">
+                </label>
                 <div class="produto-autocomplete">
                   <div class="produto-estoque-compra">Estoque <span class="produto-estoque-valor">{{ linha.estoque|default:"-" }}</span></div>
                   <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto" value="{{ linha.produto_nome }}">
@@ -2589,7 +2623,6 @@
               <td data-label="Total do item" class="valor-total-item">R$ 0,00</td>
               <td data-label="Acao">
                 <div class="item-mobile-acoes item-mobile-acoes-principais">
-                  <button type="button" class="compras-btn compras-btn-secondary btn-conferir-item-nota" aria-pressed="false">Conferir</button>
                   <button type="button" class="compras-btn compras-btn-secondary compras-mobile-inline-only btn-editar-item-mobile">Editar</button>
                   <button type="button" class="compras-btn compras-btn-secondary btn-remover">Remover</button>
                 </div>
@@ -3452,7 +3485,8 @@
     if (!linha) return;
     const conferivel = conferenciaNotaAtiva && linhaConferivelNota(linha);
     const conferido = conferivel && itemConferidoNota(linha);
-    const botao = linha.querySelector(".btn-conferir-item-nota");
+    const checkbox = linha.querySelector(".conferencia-nota-checkbox");
+    const checkboxWrap = linha.querySelector(".conferencia-nota-check-wrap");
 
     if (!linhaConferivelNota(linha)) {
       delete linha.dataset.conferido;
@@ -3461,11 +3495,13 @@
     linha.classList.toggle("item-conferencia-conferido", conferido);
     linha.classList.toggle("item-conferencia-pendente", conferivel && !conferido);
 
-    if (botao) {
-      botao.classList.toggle("visivel", conferivel);
-      botao.classList.toggle("conferido", conferido);
-      botao.setAttribute("aria-pressed", conferido ? "true" : "false");
-      botao.textContent = conferido ? "\u2713 Conferido" : "Conferir";
+    if (checkboxWrap) {
+      checkboxWrap.classList.toggle("visivel", conferivel);
+    }
+    if (checkbox) {
+      checkbox.checked = conferido;
+      checkbox.disabled = !conferivel;
+      checkbox.setAttribute("aria-checked", conferido ? "true" : "false");
     }
   }
 
@@ -4181,7 +4217,7 @@
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
     const preco = campoPrecoUnitario(linha);
-    const btnConferirItemNota = linha.querySelector(".btn-conferir-item-nota");
+    const checkboxConferenciaNota = linha.querySelector(".conferencia-nota-checkbox");
     const btnEditarItemMobile = linha.querySelector(".btn-editar-item-mobile");
     const btnSalvarEdicaoItemMobile = linha.querySelector(".btn-salvar-edicao-item-mobile");
     const btnCancelarEdicaoItemMobile = linha.querySelector(".btn-cancelar-edicao-item-mobile");
@@ -4252,6 +4288,7 @@
     });
 
     linha.querySelectorAll("input, select").forEach((campo) => {
+      if (campo.classList.contains("conferencia-nota-checkbox")) return;
       campo.addEventListener("input", function() {
         if (campo !== produtoBusca && campo !== produto) {
           confirmarItemProvisorio(linha);
@@ -4375,10 +4412,10 @@
       });
     }
 
-    if (btnConferirItemNota) {
-      btnConferirItemNota.addEventListener("click", function() {
+    if (checkboxConferenciaNota) {
+      checkboxConferenciaNota.addEventListener("change", function() {
         if (!conferenciaNotaAtiva || !linhaConferivelNota(linha)) return;
-        definirConferenciaNotaLinha(linha, !itemConferidoNota(linha));
+        definirConferenciaNotaLinha(linha, checkboxConferenciaNota.checked);
       });
     }
 
