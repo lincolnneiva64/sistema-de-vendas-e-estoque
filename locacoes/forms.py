@@ -239,11 +239,11 @@ class LocacaoForm(forms.Form):
         if sinal_valor and sinal_valor > 0 and not sinal_forma:
             self.add_error("sinal_forma_pagamento", "Informe a forma de pagamento do sinal.")
 
-        cleaned_data["pessoa_avulsa_nome"] = pessoa_avulsa_nome
+        cleaned_data["pessoa_avulsa_nome"] = " ".join(pessoa_avulsa_nome.split()).title()
         cleaned_data["pessoa_avulsa_telefone"] = pessoa_avulsa_telefone
-        endereco_entrega = (
-            cleaned_data.get("endereco_entrega") or ""
-        ).strip()
+        endereco_entrega = " ".join(
+            (cleaned_data.get("endereco_entrega") or "").split()
+        ).title()
 
         if not endereco_entrega:
             self.add_error(
