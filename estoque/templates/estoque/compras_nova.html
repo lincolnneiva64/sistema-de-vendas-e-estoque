@@ -1,5 +1,6 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Nova Compra
+{% block title %}Nova Compra{% endblock %}
+{% block content %}
 <script>
 (function() {
   const abrir = document.getElementById("abrirContasPagarGeralCompra");
@@ -319,8 +320,6 @@
   });
 })();
 </script>
-{% endblock %}
-{% block content %}
 
 <aside class="compra-atalhos-lateral" id="atalhosCompra" aria-label="Atalhos da compra">
   <button type="button" class="compra-atalhos-toggle" id="btnAtalhosCompra" aria-expanded="false" aria-controls="atalhosCompraPainel">Atalhos</button>
