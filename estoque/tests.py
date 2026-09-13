@@ -27340,6 +27340,34 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertNotIn("clienteSelecionado = clientePreviewFinanceiro;", conteudo)
         self.assertIn("preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);", conteudo)
 
+    def test_tela_vendas_modo_edicao_carrega_separacao_existente(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        responsavel = Funcionario.objects.create(
+            nome="Responsavel Edicao Separacao",
+            telefone_whatsapp="11988887777",
+            pode_receber_checklist=True,
+        )
+        separacao, criada, responsavel_atualizado = views.criar_ou_obter_separacao_venda(
+            venda,
+            responsavel=responsavel,
+        )
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(criada)
+        self.assertFalse(responsavel_atualizado)
+        separacao_contexto = resposta.context["venda_edicao"]["separacao"]
+        self.assertEqual(separacao_contexto["id"], separacao.id)
+        self.assertEqual(separacao_contexto["url"], reverse("estoque:separacao_venda_detalhe", args=[separacao.id]))
+        self.assertEqual(separacao_contexto["responsavel_id"], responsavel.id)
+        self.assertEqual(separacao_contexto["responsavel_nome"], responsavel.nome)
+        self.assertContains(resposta, "mostrarBlocoVendaGravada(")
+        self.assertContains(resposta, "vendaEdicaoVenda.separacao || null")
+
     def test_tela_vendas_edicao_exibe_snapshot_historico_do_item_sem_usar_estoque_atual(self):
         cliente, produto, venda, item = self.criar_venda_base()
         item.estoque_antes = Decimal("26.000")

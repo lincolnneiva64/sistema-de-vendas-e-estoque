@@ -11828,6 +11828,7 @@ def vendas(request):
                 "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
                 "tipo_pagamento": _tipo_pagamento_venda_formulario(venda_para_editar.tipo_pagamento),
                 "operador": venda_para_editar.operador or "",
+                "separacao": _separacao_venda_payload(venda_para_editar, request),
                 "itens": [
                     {
                         "item_id": item.id,

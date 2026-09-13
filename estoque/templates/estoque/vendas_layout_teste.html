@@ -2806,9 +2806,10 @@ td:first-child {
                         {% endfor %}
                     </select>
                 </label>
-                <button type="button" id="btnEnviarSeparacaoVendaGravada" class="acao-venda-btn primaria" title="Enviar para separacao">Enviar sep.</button>
-                <a id="btnFilaDepositoVendaGravada" class="acao-venda-btn secundaria" href="{% url 'estoque:separacao_vendas_fila' %}" title="Abrir fila de separacao">Fila notas</a>
                 <button type="button" id="btnWhatsappSeparacaoVendaGravada" class="acao-venda-btn secundaria" title="Enviar checklist pelo WhatsApp" hidden>Enviar Zap</button>
+                <button type="button" id="btnEnviarSeparacaoVendaGravada" class="acao-venda-btn primaria" title="Enviar para separacao">Enviar sep.</button>
+                <button type="button" id="btnAbrirNotaSeparacaoVendaGravada" class="acao-venda-btn secundaria" title="Abrir checklist de separacao" hidden disabled>Abrir nota</button>
+                <a id="btnFilaDepositoVendaGravada" class="acao-venda-btn secundaria" href="{% url 'estoque:separacao_vendas_fila' %}" title="Abrir fila de separacao">Fila notas</a>
             </div>
         </div>
         <aside class="atalhos-venda" id="atalhosVenda" aria-label="Atalhos da venda">
@@ -3150,6 +3151,7 @@ const btnLocacoesOperacionaisVenda = document.getElementById("btnLocacoesOperaci
 const vendaToast = document.getElementById("vendaToast");
 const vendaGravadaBloco = document.getElementById("vendaGravadaBloco");
 const btnEnviarSeparacaoVendaGravada = document.getElementById("btnEnviarSeparacaoVendaGravada");
+const btnAbrirNotaSeparacaoVendaGravada = document.getElementById("btnAbrirNotaSeparacaoVendaGravada");
 const responsavelSeparacaoVendaGravada = document.getElementById("responsavelSeparacaoVendaGravada");
 const btnWhatsappSeparacaoVendaGravada = document.getElementById("btnWhatsappSeparacaoVendaGravada");
 const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay");
@@ -3793,6 +3795,15 @@ function optionResponsavelSeparacaoSelecionado() {
     return responsavelSeparacaoVendaGravada.options[responsavelSeparacaoVendaGravada.selectedIndex] || null;
 }
 
+function dadosResponsavelSeparacaoSelecionado() {
+    const opcao = optionResponsavelSeparacaoSelecionado();
+    const responsavelId = responsavelSeparacaoVendaGravada?.value || "";
+    return {
+        id: responsavelId,
+        telefone: opcao?.dataset.whatsapp || "",
+    };
+}
+
 function aplicarResponsavelSeparacaoPadrao() {
     if (!responsavelSeparacaoVendaGravada) return;
     const salvo = localStorage.getItem(chaveResponsavelSeparacaoVenda) || "";
@@ -3802,17 +3813,79 @@ function aplicarResponsavelSeparacaoPadrao() {
     responsavelSeparacaoVendaGravada.value = (opcaoSalva || primeiraOpcaoValida || opcoes[0])?.value || "";
 }
 
+function atualizarBotoesSeparacaoVendaGravada() {
+    const { telefone } = dadosResponsavelSeparacaoSelecionado();
+    const podeEnviarWhatsapp = Boolean(vendaGravadaId && telefone);
+    if (btnWhatsappSeparacaoVendaGravada) {
+        btnWhatsappSeparacaoVendaGravada.hidden = !podeEnviarWhatsapp;
+        btnWhatsappSeparacaoVendaGravada.disabled = !podeEnviarWhatsapp;
+        btnWhatsappSeparacaoVendaGravada.title = podeEnviarWhatsapp
+            ? "Enviar checklist pelo WhatsApp"
+            : "Responsavel sem WhatsApp disponivel";
+    }
+    if (btnEnviarSeparacaoVendaGravada) {
+        btnEnviarSeparacaoVendaGravada.hidden = Boolean(vendaGravadaSeparacaoUrl);
+        btnEnviarSeparacaoVendaGravada.disabled = false;
+        btnEnviarSeparacaoVendaGravada.textContent = "Enviar sep.";
+        btnEnviarSeparacaoVendaGravada.title = "Enviar para separacao";
+    }
+    if (btnAbrirNotaSeparacaoVendaGravada) {
+        const podeAbrirNota = Boolean(vendaGravadaSeparacaoUrl);
+        btnAbrirNotaSeparacaoVendaGravada.hidden = !podeAbrirNota;
+        btnAbrirNotaSeparacaoVendaGravada.disabled = !podeAbrirNota;
+    }
+}
+
 function atualizarBotaoWhatsappSeparacao() {
-    if (!btnWhatsappSeparacaoVendaGravada) return;
-    const opcao = optionResponsavelSeparacaoSelecionado();
-    const whatsappSelecionado = opcao?.dataset.whatsapp || "";
-    const telefone = whatsappSelecionado || vendaGravadaSeparacaoResponsavelWhatsapp;
+    atualizarBotoesSeparacaoVendaGravada();
+}
+
+function aplicarRetornoSeparacaoVenda(retorno, responsavelId = "") {
+    if (!retorno?.separacao_url) return;
+    vendaGravadaSeparacaoUrl = retorno.separacao_url;
+    vendaGravadaSeparacaoPublicUrl = retorno.separacao_public_url || retorno.separacao_url || "";
+    vendaGravadaSeparacaoStatus = retorno.status_texto || "";
+    vendaGravadaSeparacaoResponsavelNome = retorno.responsavel_nome || "";
+    vendaGravadaSeparacaoResponsavelWhatsapp = retorno.responsavel_whatsapp || "";
+    if (responsavelId) {
+        localStorage.setItem(chaveResponsavelSeparacaoVenda, responsavelId);
+    }
+    atualizarBotoesSeparacaoVendaGravada();
+}
+
+async function criarOuObterSeparacaoVendaGravada() {
+    if (!vendaGravadaId) {
+        throw new Error("Grave a venda antes de enviar para separacao.");
+    }
+    const { id: responsavelId } = dadosResponsavelSeparacaoSelecionado();
+    const url = enviarSeparacaoVendaUrlBase.replace("/0/", "/" + vendaGravadaId + "/");
+    const dados = new URLSearchParams();
+    if (responsavelId) {
+        dados.set("responsavel_separacao", responsavelId);
+    }
+    const resposta = await fetch(url, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": obterCookie("csrftoken"),
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: dados.toString(),
+    });
+    const retorno = await resposta.json();
+    if (!resposta.ok || !retorno.sucesso) {
+        throw new Error(retorno.mensagem || "Nao foi possivel enviar para separacao.");
+    }
+    aplicarRetornoSeparacaoVenda(retorno, responsavelId);
+    return retorno;
+}
+
+function abrirWhatsappSeparacaoVenda(telefone) {
     const podeEnviar = Boolean(vendaGravadaSeparacaoUrl && telefone);
-    btnWhatsappSeparacaoVendaGravada.hidden = !podeEnviar;
-    btnWhatsappSeparacaoVendaGravada.disabled = !podeEnviar;
-    btnWhatsappSeparacaoVendaGravada.title = podeEnviar
-        ? "Enviar checklist pelo WhatsApp"
-        : "Responsavel sem WhatsApp disponivel";
+    if (!podeEnviar) return;
+    const checklistUrl = vendaGravadaSeparacaoPublicUrl || new URL(vendaGravadaSeparacaoUrl, window.location.origin).href;
+    const texto = encodeURIComponent("Checklist de separacao da venda: " + checklistUrl);
+    window.open("https://wa.me/" + telefone + "?text=" + texto, "_blank", "noopener");
 }
 
 function mostrarBlocoVendaGravada(vendaId, visualizarUrl, mensagem, separacao) {
@@ -3833,10 +3906,8 @@ function mostrarBlocoVendaGravada(vendaId, visualizarUrl, mensagem, separacao) {
     }
     if (btnEnviarSeparacaoVendaGravada) {
         btnEnviarSeparacaoVendaGravada.disabled = false;
-        btnEnviarSeparacaoVendaGravada.textContent = vendaGravadaSeparacaoUrl ? "Abrir nota" : "Enviar sep.";
-        btnEnviarSeparacaoVendaGravada.title = vendaGravadaSeparacaoUrl ? "Abrir checklist de separacao" : "Enviar para separacao";
     }
-    atualizarBotaoWhatsappSeparacao();
+    atualizarBotoesSeparacaoVendaGravada();
     vendaGravadaBloco.classList.add("visivel");
 }
 
@@ -3853,11 +3924,6 @@ async function enviarVendaGravadaParaSeparacao() {
         return;
     }
 
-    if (vendaGravadaSeparacaoUrl) {
-        window.open(vendaGravadaSeparacaoUrl, "_blank", "noopener");
-        return;
-    }
-
     const botao = btnEnviarSeparacaoVendaGravada;
     if (botao) {
         botao.disabled = true;
@@ -3865,46 +3931,9 @@ async function enviarVendaGravadaParaSeparacao() {
     }
 
     try {
-        const url = enviarSeparacaoVendaUrlBase.replace("/0/", "/" + vendaGravadaId + "/");
-        const dados = new URLSearchParams();
-        const responsavelId = responsavelSeparacaoVendaGravada?.value || "";
-        if (responsavelId) {
-            dados.set("responsavel_separacao", responsavelId);
-        }
-        const resposta = await fetch(url, {
-            method: "POST",
-            headers: {
-                "X-CSRFToken": obterCookie("csrftoken"),
-                "X-Requested-With": "XMLHttpRequest",
-                "Content-Type": "application/x-www-form-urlencoded",
-            },
-            body: dados.toString(),
-        });
-        const retorno = await resposta.json();
-        if (!resposta.ok || !retorno.sucesso) {
-            throw new Error(retorno.mensagem || "Nao foi possivel enviar para separacao.");
-        }
+        const retorno = await criarOuObterSeparacaoVendaGravada();
         mostrarToastVenda(retorno.mensagem || "Venda enviada para separacao.");
-        if (botao) {
-            botao.textContent = "Abrir nota";
-            botao.title = "Abrir checklist de separacao";
-            botao.disabled = false;
-        }
-        if (retorno.separacao_url) {
-            vendaGravadaSeparacaoUrl = retorno.separacao_url;
-            vendaGravadaSeparacaoPublicUrl = retorno.separacao_public_url || retorno.separacao_url || "";
-            vendaGravadaSeparacaoStatus = retorno.status_texto || "";
-            vendaGravadaSeparacaoResponsavelNome = retorno.responsavel_nome || "";
-            vendaGravadaSeparacaoResponsavelWhatsapp = retorno.responsavel_whatsapp || "";
-            if (responsavelId) {
-                localStorage.setItem(chaveResponsavelSeparacaoVenda, responsavelId);
-            }
-            if (responsavelSeparacaoVendaGravada) {
-                responsavelSeparacaoVendaGravada.disabled = false;
-            }
-            atualizarBotaoWhatsappSeparacao();
-            window.open(retorno.separacao_url, "_blank", "noopener");
-        }
+        if (retorno.separacao_url) window.open(retorno.separacao_url, "_blank", "noopener");
     } catch (erro) {
         mostrarToastVenda(erro.message || "Falha de comunicacao ao enviar para separacao.");
         if (botao) {
@@ -3912,6 +3941,11 @@ async function enviarVendaGravadaParaSeparacao() {
             botao.textContent = "Enviar sep.";
             botao.title = "Enviar para separacao";
         }
+    } finally {
+        if (responsavelSeparacaoVendaGravada) {
+            responsavelSeparacaoVendaGravada.disabled = false;
+        }
+        atualizarBotoesSeparacaoVendaGravada();
     }
 }
 
@@ -5129,6 +5163,13 @@ function prepararVendaEmEdicao() {
         btnGravarVenda.textContent = "Salvar Alteracoes";
         btnGravarVenda.title = "Salvar as alteracoes realizadas nesta venda.";
     }
+
+    mostrarBlocoVendaGravada(
+        vendaGravadaId,
+        vendaGravadaUrl,
+        "",
+        vendaEdicaoVenda.separacao || null
+    );
 
     window.requestAnimationFrame(() => {
         const primeiraLinha = tabelaBody.querySelector("tr");
@@ -6363,19 +6404,45 @@ responsavelSeparacaoVendaGravada?.addEventListener("change", () => {
     if (responsavelSeparacaoVendaGravada.value) {
         localStorage.setItem(chaveResponsavelSeparacaoVenda, responsavelSeparacaoVendaGravada.value);
     }
-    atualizarBotaoWhatsappSeparacao();
+    atualizarBotoesSeparacaoVendaGravada();
     atualizarResponsavelSeparacaoVendaGravada();
 });
 
 btnEnviarSeparacaoVendaGravada?.addEventListener("click", enviarVendaGravadaParaSeparacao);
 
-btnWhatsappSeparacaoVendaGravada?.addEventListener("click", () => {
-    const opcao = optionResponsavelSeparacaoSelecionado();
-    const telefone = opcao?.dataset.whatsapp || vendaGravadaSeparacaoResponsavelWhatsapp || "";
-    if (!vendaGravadaSeparacaoUrl || !telefone) return;
-    const checklistUrl = vendaGravadaSeparacaoPublicUrl || new URL(vendaGravadaSeparacaoUrl, window.location.origin).href;
-    const texto = encodeURIComponent("Checklist de separacao da venda: " + checklistUrl);
-    window.open("https://wa.me/" + telefone + "?text=" + texto, "_blank", "noopener");
+btnAbrirNotaSeparacaoVendaGravada?.addEventListener("click", () => {
+    if (vendaGravadaSeparacaoUrl) {
+        window.open(vendaGravadaSeparacaoUrl, "_blank", "noopener");
+    }
+});
+
+btnWhatsappSeparacaoVendaGravada?.addEventListener("click", async () => {
+    const { id: responsavelId, telefone } = dadosResponsavelSeparacaoSelecionado();
+    if (!vendaGravadaId) {
+        mostrarToastVenda("Grave a venda antes de enviar para separacao.");
+        return;
+    }
+    if (!responsavelId) {
+        mostrarToastVenda("Selecione um responsavel para enviar o Zap.");
+        return;
+    }
+    if (!telefone) {
+        mostrarToastVenda("Responsavel sem WhatsApp disponivel.");
+        return;
+    }
+
+    btnWhatsappSeparacaoVendaGravada.disabled = true;
+    const textoOriginal = btnWhatsappSeparacaoVendaGravada.textContent;
+    btnWhatsappSeparacaoVendaGravada.textContent = "Enviando...";
+    try {
+        await criarOuObterSeparacaoVendaGravada();
+        abrirWhatsappSeparacaoVenda(telefone);
+    } catch (erro) {
+        mostrarToastVenda(erro.message || "Falha de comunicacao ao enviar para separacao.");
+    } finally {
+        btnWhatsappSeparacaoVendaGravada.textContent = textoOriginal;
+        atualizarBotoesSeparacaoVendaGravada();
+    }
 });
 
 aplicarResponsavelSeparacaoPadrao();
