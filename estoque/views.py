@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -54,6 +54,11 @@ from .services.sincronizacao_firebird import (
     registrar_token_previa as sincronizacao_registrar_token_previa,
 )
 from .services.estoque_manual import conferir_ou_ajustar_estoque
+from .services.separacao_vendas import (
+    criar_ou_obter_separacao_venda,
+    divergencias_separacao_venda,
+    recalcular_status_separacao,
+)
 from .services.precos_antigo_snapshot import (
     buscar_registro_antigo_por_codigo,
     carregar_snapshot_precos,
@@ -11937,6 +11942,7 @@ def vendas(request):
         'produtos': produtos,
         'conferencia_estoque_contador': conferencia_estoque_contador,
         'operadores_venda': operadores_venda,
+        'funcionarios_separacao': _funcionarios_separacao_compactos(),
         'cliente_inicial': cliente_inicial,
         'pedido_importado': pedido_importado,
         'pedido_importado_aviso': pedido_importado_aviso,
@@ -17767,6 +17773,7 @@ def gravar_venda(request):
                 reverse("estoque:venda_detalhe", args=[venda.id])
                 + "?nota_atualizada=1"
             ),
+            "separacao": _separacao_venda_payload(venda, request),
             "produtos_estoque_atualizados": _produtos_estoque_atualizados_payload(
                 produtos_estoque_atualizados_ids
             ),
@@ -17971,6 +17978,7 @@ def gravar_venda(request):
         "mensagem": mensagem,
         "venda_id": venda.id,
         "visualizar_url": reverse("estoque:venda_detalhe", args=[venda.id]),
+        "separacao": _separacao_venda_payload(venda, request),
         "produtos_estoque_atualizados": _produtos_estoque_atualizados_payload(
             produtos_estoque_atualizados_ids
         ),
@@ -18097,6 +18105,25 @@ def venda_detalhe(request, pk):
             "checklist_url": checklist_url,
             "status": rota.get_status_display(),
         }
+    separacao_existente = (
+        SeparacaoVenda.objects.select_related("responsavel").filter(venda=venda)
+        .prefetch_related("itens")
+        .first()
+    )
+    separacao_info = None
+    if separacao_existente:
+        itens_separacao = list(separacao_existente.itens.all())
+        separacao_info = {
+            "separacao": separacao_existente,
+            "status": separacao_existente.get_status_display(),
+            "total_itens": len(itens_separacao),
+            "total_pendentes": sum(
+                1 for item in itens_separacao if item.status == SeparacaoVendaItem.STATUS_PENDENTE
+            ),
+            "total_conferidos": sum(
+                1 for item in itens_separacao if item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+            ),
+        }
 
     _registrar_evento_venda(
         venda,
@@ -18123,6 +18150,7 @@ def venda_detalhe(request, pk):
             ),
             "entrega_contexto": entrega_contexto,
             "entrega_info": entrega_info,
+            "separacao_info": separacao_info,
             "funcionarios_habilitados": Funcionario.habilitados_para_checklist(),
             "itens_adicionados_ids": itens_adicionados_ids,
             "itens_adicionados_destacar_ids": itens_adicionados_destacar_ids,
@@ -18169,6 +18197,56 @@ def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
         return None
     messages.warning(request, "Venda cancelada / venda nao realizada. Esta acao esta bloqueada.")
     return redirect(destino, pk=venda.pk)
+
+
+def _separacao_venda_payload(venda, request=None):
+    separacao = SeparacaoVenda.objects.select_related("responsavel").filter(venda=venda).first()
+    if not separacao:
+        return None
+    responsavel = separacao.responsavel
+    url = reverse("estoque:separacao_venda_detalhe", kwargs={"pk": separacao.id})
+    return {
+        "id": separacao.id,
+        "url": url,
+        "public_url": montar_url_publica(request, url) if request else url,
+        "status": separacao.status,
+        "status_texto": separacao.get_status_display(),
+        "responsavel_id": responsavel.id if responsavel else None,
+        "responsavel_nome": responsavel.nome if responsavel else "",
+        "responsavel_whatsapp": (
+            responsavel.telefone_whatsapp_normalizado or responsavel.telefone_whatsapp
+            if responsavel
+            else ""
+        ),
+    }
+
+
+def _nome_funcionario_compacto(nome):
+    partes = [parte for parte in str(nome or "").split() if parte]
+    if len(partes) <= 2:
+        return " ".join(partes)
+
+    particulas = {"da", "de", "do", "das", "dos", "e"}
+    ultimo = next(
+        (parte for parte in reversed(partes[1:]) if parte.lower() not in particulas),
+        partes[-1],
+    )
+    if ultimo == partes[0]:
+        return partes[0]
+    return f"{partes[0]} {ultimo}"
+
+
+def _funcionarios_separacao_compactos():
+    return [
+        {
+            "id": funcionario.id,
+            "nome": funcionario.nome,
+            "nome_compacto": _nome_funcionario_compacto(funcionario.nome),
+            "telefone_whatsapp": funcionario.telefone_whatsapp,
+            "telefone_whatsapp_normalizado": funcionario.telefone_whatsapp_normalizado,
+        }
+        for funcionario in Funcionario.habilitados_para_checklist()
+    ]
 
 
 def _bloquear_edicao_venda_quitada(request, venda, permitir_conta_parcial=False):
@@ -20056,6 +20134,162 @@ def venda_criar_entrega(request, pk):
 
     messages.success(request, f"Entrega unitária #{rota.pk} criada para a venda #{venda.pk}.")
     return redirect("estoque:venda_detalhe", pk=venda.pk)
+
+
+def separacao_vendas_fila(request):
+    separacoes = list(
+        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
+        .prefetch_related("itens")
+        .order_by("enviado_em", "id")
+    )
+    for separacao in separacoes:
+        itens = list(separacao.itens.all())
+        separacao.total_itens = len(itens)
+        separacao.total_conferidos = sum(
+            1 for item in itens if item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+        )
+        separacao.total_pendentes = sum(
+            1 for item in itens if item.status == SeparacaoVendaItem.STATUS_PENDENTE
+        )
+        separacao.total_pendencias = sum(
+            1
+            for item in itens
+            if item.status in {
+                SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
+                SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            }
+        )
+
+    return render(
+        request,
+        "estoque/separacao_vendas_fila.html",
+        {"separacoes": separacoes},
+    )
+
+
+@require_POST
+def venda_enviar_separacao(request, pk):
+    venda = get_object_or_404(Venda, pk=pk)
+    responsavel = None
+    responsavel_id = (request.POST.get("responsavel_separacao") or "").strip()
+    if responsavel_id.isdigit():
+        responsavel = Funcionario.habilitados_para_checklist().filter(pk=responsavel_id).first()
+    try:
+        separacao, criada, responsavel_atualizado = criar_ou_obter_separacao_venda(
+            venda,
+            request.user,
+            responsavel,
+        )
+    except ValueError as exc:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"sucesso": False, "mensagem": str(exc)}, status=400)
+        messages.warning(request, str(exc))
+        return redirect("estoque:venda_detalhe", pk=venda.pk)
+
+    detalhe_url = reverse("estoque:separacao_venda_detalhe", kwargs={"pk": separacao.pk})
+    detalhe_public_url = montar_url_publica(request, detalhe_url)
+    mensagem = (
+        "Venda enviada para separacao."
+        if criada
+        else (
+            "Responsavel da separacao atualizado."
+            if responsavel_atualizado
+            else "Esta venda ja estava na fila de separacao."
+        )
+    )
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        responsavel = separacao.responsavel
+        return JsonResponse({
+            "sucesso": True,
+            "mensagem": mensagem,
+            "separacao_id": separacao.pk,
+            "separacao_url": detalhe_url,
+            "separacao_public_url": detalhe_public_url,
+            "status": separacao.status,
+            "status_texto": separacao.get_status_display(),
+            "responsavel_id": responsavel.id if responsavel else None,
+            "responsavel_nome": responsavel.nome if responsavel else "",
+            "responsavel_whatsapp": (
+                responsavel.telefone_whatsapp_normalizado or responsavel.telefone_whatsapp
+                if responsavel
+                else ""
+            ),
+            "criada": criada,
+            "responsavel_atualizado": responsavel_atualizado,
+        })
+
+    messages.success(request, mensagem)
+    return redirect(detalhe_url)
+
+
+def separacao_venda_detalhe(request, pk):
+    separacao = get_object_or_404(
+        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
+        .prefetch_related("itens__item_venda__produto"),
+        pk=pk,
+    )
+    divergencias = divergencias_separacao_venda(separacao)
+
+    if request.method == "POST":
+        if divergencias:
+            messages.warning(
+                request,
+                "A venda foi alterada apos o envio para separacao. Atualize/reenvie a separacao antes de processar.",
+            )
+            return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
+
+        with transaction.atomic():
+            separacao = (
+                SeparacaoVenda.objects.select_for_update()
+                .prefetch_related("itens")
+                .get(pk=separacao.pk)
+            )
+            for item in separacao.itens.all():
+                status = request.POST.get(f"status_{item.id}") or SeparacaoVendaItem.STATUS_PENDENTE
+                if status not in dict(SeparacaoVendaItem.STATUS_CHOICES):
+                    status = SeparacaoVendaItem.STATUS_PENDENTE
+
+                quantidade_separada = None
+                if status == SeparacaoVendaItem.STATUS_CONFERIDO:
+                    quantidade_separada = item.quantidade_solicitada
+                elif status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
+                    quantidade_separada = Decimal("0.000")
+                elif status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+                    try:
+                        quantidade_separada = _decimal_do_front(
+                            request.POST.get(f"quantidade_separada_{item.id}"),
+                            "0.001",
+                        )
+                    except ValueError:
+                        quantidade_separada = Decimal("0.000")
+
+                item.status = status
+                item.quantidade_separada = quantidade_separada
+                item.observacao = (request.POST.get(f"observacao_{item.id}") or "").strip()
+                item.save(update_fields=[
+                    "status",
+                    "quantidade_separada",
+                    "observacao",
+                    "atualizado_em",
+                ])
+
+            recalcular_status_separacao(separacao, request.user)
+
+        messages.success(request, "Separacao salva.")
+        return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
+
+    itens = list(separacao.itens.select_related("item_venda", "item_venda__produto").all())
+    return render(
+        request,
+        "estoque/separacao_venda_detalhe.html",
+        {
+            "separacao": separacao,
+            "venda": separacao.venda,
+            "itens": itens,
+            "divergencias": divergencias,
+        },
+    )
 
 
 def venda_whatsapp_pdf(request, pk):

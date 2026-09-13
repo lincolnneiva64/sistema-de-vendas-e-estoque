@@ -1,0 +1,109 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Separacao venda #{{ venda.id }}{% endblock %}
+{% block content %}
+<style>
+  .sep-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 14px 0 48px; }
+  .sep-shell { width: min(760px, calc(100vw - 16px)); margin: 0 auto; }
+  .sep-head, .sep-card, .sep-alert { border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .sep-head { padding: 14px; margin-bottom: 10px; }
+  .sep-title { margin: 0; color: #111827; font-size: clamp(1.25rem, 6vw, 1.7rem); font-weight: 950; line-height: 1.1; }
+  .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
+  .sep-status { display: inline-flex; margin-top: 10px; padding: 6px 10px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-weight: 950; font-size: 0.82rem; }
+  .sep-status.com_pendencia { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+  .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .sep-status.em_separacao { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+  .sep-alert { margin-bottom: 10px; padding: 12px; color: #92400e; background: #fffbeb; border-color: #fde68a; font-weight: 850; }
+  .sep-alert ul { margin: 8px 0 0; padding-left: 18px; }
+  .sep-messages { display: grid; gap: 8px; margin-bottom: 10px; }
+  .sep-message { padding: 10px 12px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 850; }
+  .sep-message.warning { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+  .sep-message.success { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .sep-form { display: grid; gap: 10px; }
+  .sep-card { padding: 13px; }
+  .sep-prod { margin: 0; color: #111827; font-size: 1rem; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
+  .sep-qtd { margin: 4px 0 10px; color: #64748b; font-size: 0.86rem; font-weight: 800; }
+  .sep-options { display: grid; gap: 7px; }
+  .sep-option { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; min-height: 42px; border: 1px solid #e2e8f0; border-radius: 11px; background: #f8fafc; padding: 8px 10px; color: #172033; font-weight: 900; }
+  .sep-option input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; }
+  .sep-fields { display: grid; gap: 8px; margin-top: 10px; }
+  .sep-field { display: grid; gap: 4px; color: #475569; font-size: 0.78rem; font-weight: 900; text-transform: uppercase; }
+  .sep-field input, .sep-field textarea { width: 100%; border: 1.5px solid #d3dbe8; border-radius: 10px; padding: 10px 11px; background: #fff; color: #172033; font-size: 1rem; font-weight: 800; box-sizing: border-box; }
+  .sep-field textarea { min-height: 74px; resize: vertical; font-size: 0.95rem; font-weight: 750; text-transform: none; }
+  .sep-actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 2px; }
+  .sep-btn { min-height: 46px; border: 0; border-radius: 12px; background: #2563eb; color: #fff; font-size: 1rem; font-weight: 950; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; }
+  .sep-btn.secondary { background: #e2e8f0; color: #172033; }
+  .sep-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+</style>
+<main class="sep-page">
+  <div class="sep-shell">
+    <header class="sep-head">
+      <h1 class="sep-title">Separacao da venda #{{ venda.id }}</h1>
+      <p class="sep-sub">{{ venda.cliente.nome|default:"Consumidor" }} - enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</p>
+      <p class="sep-sub">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</p>
+      <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+    </header>
+
+    {% if messages %}
+      <div class="sep-messages">
+        {% for message in messages %}
+          <div class="sep-message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if divergencias %}
+      <section class="sep-alert">
+        A venda foi alterada apos o envio para separacao. Este checklist nao deve ser processado ate ser atualizado/reemitido.
+        <ul>
+          {% for divergencia in divergencias %}
+            <li>{{ divergencia }}</li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endif %}
+
+    <form class="sep-form" method="post">
+      {% csrf_token %}
+      {% for item in itens %}
+        <article class="sep-card">
+          <h2 class="sep-prod">{{ item.produto_nome_snapshot }}</h2>
+          <p class="sep-qtd">Solicitado: {{ item.quantidade_solicitada }} {{ item.unidade_snapshot }}</p>
+          <div class="sep-options">
+            <label class="sep-option">
+              <input type="radio" name="status_{{ item.id }}" value="pendente" {% if item.status == "pendente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+              <span>Pendente</span>
+            </label>
+            <label class="sep-option">
+              <input type="radio" name="status_{{ item.id }}" value="conferido" {% if item.status == "conferido" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+              <span>OK</span>
+            </label>
+            <label class="sep-option">
+              <input type="radio" name="status_{{ item.id }}" value="nao_encontrado" {% if item.status == "nao_encontrado" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+              <span>Nao encontrado</span>
+            </label>
+            <label class="sep-option">
+              <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+              <span>Quantidade insuficiente</span>
+            </label>
+          </div>
+          <div class="sep-fields">
+            <label class="sep-field">
+              Quantidade separada
+              <input type="text" inputmode="decimal" name="quantidade_separada_{{ item.id }}" value="{% if item.quantidade_separada is not None %}{{ item.quantidade_separada }}{% endif %}" {% if divergencias %}disabled{% endif %}>
+            </label>
+            <label class="sep-field">
+              Observacao
+              <textarea name="observacao_{{ item.id }}" {% if divergencias %}disabled{% endif %}>{{ item.observacao }}</textarea>
+            </label>
+          </div>
+        </article>
+      {% endfor %}
+      <div class="sep-actions">
+        <button class="sep-btn" type="submit" {% if divergencias %}disabled{% endif %}>Salvar separacao</button>
+        <a class="sep-btn secondary" href="{% url 'estoque:separacao_vendas_fila' %}">Voltar para fila</a>
+        <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
+      </div>
+    </form>
+  </div>
+</main>
+{% endblock %}

@@ -944,6 +944,10 @@
             align-items: center;
         }
 
+        .entrega-actions form {
+            display: contents;
+        }
+
         .entrega-actions button,
         .entrega-actions a {
             height: 24px;
@@ -1923,6 +1927,47 @@
                     {% endif %}
 
                     {% if request.GET.nota_atualizada != "1" and not venda.cancelada %}
+                    <div class="entrega-section">
+                        <div class="entrega-header">
+                            <h3 class="entrega-title">Separacao fisica</h3>
+                        </div>
+                        <div class="entrega-body">
+                            <div class="entrega-layout">
+                                <div class="entrega-main">
+                                {% if separacao_info %}
+                                    <div class="entrega-status">
+                                        Status: {{ separacao_info.status }} -
+                                        Itens: {{ separacao_info.total_itens }} -
+                                        OK: {{ separacao_info.total_conferidos }} -
+                                        Pendentes: {{ separacao_info.total_pendentes }} -
+                                        Responsavel: {{ separacao_info.separacao.responsavel.nome|default:"Nao definido" }}
+                                    </div>
+                                    <div class="entrega-actions">
+                                        <a href="{% url 'estoque:separacao_venda_detalhe' separacao_info.separacao.id %}" class="primary">Abrir separacao</a>
+                                        <a href="{% url 'estoque:separacao_vendas_fila' %}">Fila do deposito</a>
+                                    </div>
+                                {% else %}
+                                    <div class="entrega-status">Ainda nao enviada para separacao</div>
+                                    <div class="entrega-actions">
+                                        <form method="post" action="{% url 'estoque:venda_enviar_separacao' venda.id %}">
+                                            {% csrf_token %}
+                                            <select name="responsavel_separacao" class="entrega-send-select">
+                                                {% for funcionario in funcionarios_habilitados %}
+                                                    <option value="{{ funcionario.id }}">{{ funcionario.nome }}</option>
+                                                {% empty %}
+                                                    <option value="">Sem funcionario habilitado</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="success">Enviar para separacao</button>
+                                        </form>
+                                        <a href="{% url 'estoque:separacao_vendas_fila' %}">Fila do deposito</a>
+                                    </div>
+                                {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="entrega-section">
                         <div class="entrega-header">
                             <h3 class="entrega-title">Entrega / checklist</h3>

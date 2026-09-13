@@ -519,6 +519,100 @@ class ItemVenda(models.Model):
         return f"{nome_produto} - Venda #{self.venda_id}"
 
 
+class SeparacaoVenda(models.Model):
+    STATUS_ENVIADA = "enviada"
+    STATUS_EM_SEPARACAO = "em_separacao"
+    STATUS_SEPARADA = "separada"
+    STATUS_COM_PENDENCIA = "com_pendencia"
+    STATUS_CANCELADA = "cancelada"
+    STATUS_CHOICES = [
+        (STATUS_ENVIADA, "Enviada"),
+        (STATUS_EM_SEPARACAO, "Em separacao"),
+        (STATUS_SEPARADA, "Separada"),
+        (STATUS_COM_PENDENCIA, "Com pendencia"),
+        (STATUS_CANCELADA, "Cancelada"),
+    ]
+
+    venda = models.OneToOneField(
+        Venda,
+        on_delete=models.CASCADE,
+        related_name="separacao",
+    )
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_ENVIADA)
+    enviado_em = models.DateTimeField(default=timezone.now)
+    iniciado_em = models.DateTimeField(blank=True, null=True)
+    finalizado_em = models.DateTimeField(blank=True, null=True)
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="separacoes_venda_enviadas",
+    )
+    responsavel = models.ForeignKey(
+        Funcionario,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="separacoes_venda_responsavel",
+    )
+    separado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="separacoes_venda_realizadas",
+    )
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["enviado_em", "id"]
+
+    def __str__(self):
+        return f"Separacao da venda #{self.venda_id}"
+
+
+class SeparacaoVendaItem(models.Model):
+    STATUS_PENDENTE = "pendente"
+    STATUS_CONFERIDO = "conferido"
+    STATUS_NAO_ENCONTRADO = "nao_encontrado"
+    STATUS_QUANTIDADE_INSUFICIENTE = "quantidade_insuficiente"
+    STATUS_CHOICES = [
+        (STATUS_PENDENTE, "Pendente"),
+        (STATUS_CONFERIDO, "OK"),
+        (STATUS_NAO_ENCONTRADO, "Nao encontrado"),
+        (STATUS_QUANTIDADE_INSUFICIENTE, "Quantidade insuficiente"),
+    ]
+
+    separacao = models.ForeignKey(
+        SeparacaoVenda,
+        on_delete=models.CASCADE,
+        related_name="itens",
+    )
+    item_venda = models.ForeignKey(
+        ItemVenda,
+        on_delete=models.CASCADE,
+        related_name="separacoes",
+    )
+    produto_nome_snapshot = models.CharField(max_length=120)
+    unidade_snapshot = models.CharField(max_length=20, blank=True)
+    quantidade_solicitada = models.DecimalField(max_digits=12, decimal_places=3)
+    quantidade_separada = models.DecimalField(max_digits=12, decimal_places=3, blank=True, null=True)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["item_venda_id"]
+        unique_together = [("separacao", "item_venda")]
+
+    def __str__(self):
+        return f"Separacao #{self.separacao_id} - item #{self.item_venda_id}"
+
+
 class ItemVendaRemovido(models.Model):
     STATUS_REMOVIDO = "removido"
     STATUS_REVERTIDO = "revertido"

@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -29503,3 +29503,302 @@ class PagarFornecedorTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
         self.assertEqual(self.conta.valor_em_aberto, Decimal("260.00"))
         self.assertEqual(self.conta.status, ContaPagar.STATUS_ABERTA)
+
+
+class SeparacaoVendaFase1Tests(TestCase):
+    def setUp(self):
+        self.cliente = Cliente.objects.create(nome="Cliente Separacao")
+        self.produto_a = Produto.objects.create(
+            nome="Produto A",
+            quantidade=Decimal("50.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="UN",
+        )
+        self.produto_b = Produto.objects.create(
+            nome="Produto B",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("3.00"),
+            preco_vista=Decimal("7.50"),
+            preco_prazo=Decimal("7.50"),
+            unidade_compra="UN",
+        )
+        self.venda = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=date.today(),
+            tipo_pagamento="A prazo",
+            total=Decimal("35.00"),
+        )
+        self.item_a = ItemVenda.objects.create(
+            venda=self.venda,
+            produto=self.produto_a,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("20.00"),
+        )
+        self.item_b = ItemVenda.objects.create(
+            venda=self.venda,
+            produto=self.produto_b,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco_unitario=Decimal("7.50"),
+            valor_total=Decimal("15.00"),
+        )
+
+    def _enviar(self, venda=None):
+        venda = venda or self.venda
+        return self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[venda.id]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def _separacao(self):
+        return SeparacaoVenda.objects.get(venda=self.venda)
+
+    def _post_checklist(self, separacao, statuses, quantidades=None):
+        quantidades = quantidades or {}
+        dados = {}
+        for item in separacao.itens.order_by("id"):
+            status = statuses.get(item.item_venda_id, SeparacaoVendaItem.STATUS_PENDENTE)
+            dados[f"status_{item.id}"] = status
+            if item.item_venda_id in quantidades:
+                dados[f"quantidade_separada_{item.id}"] = quantidades[item.item_venda_id]
+        return self.client.post(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), dados, secure=True)
+
+    def test_enviar_venda_cria_separacao_unica_e_segundo_envio_nao_duplica(self):
+        resposta = self._enviar()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["criada"])
+        self.assertEqual(SeparacaoVenda.objects.count(), 1)
+
+        segunda = self._enviar()
+        self.assertEqual(segunda.status_code, 200)
+        self.assertFalse(segunda.json()["criada"])
+        self.assertEqual(SeparacaoVenda.objects.count(), 1)
+
+    def test_enviar_venda_registra_responsavel_da_separacao(self):
+        responsavel = Funcionario.objects.create(
+            nome="Responsavel Separacao",
+            telefone_whatsapp="11999999999",
+            pode_receber_checklist=True,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[self.venda.id]),
+            {"responsavel_separacao": str(responsavel.id)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        separacao = self._separacao()
+        self.assertEqual(separacao.responsavel, responsavel)
+        self.assertEqual(resposta.json()["responsavel_nome"], responsavel.nome)
+
+    def test_trocar_responsavel_de_separacao_existente_preserva_checklist(self):
+        responsavel_inicial = Funcionario.objects.create(
+            nome="Responsavel Inicial",
+            telefone_whatsapp="11999999991",
+            pode_receber_checklist=True,
+        )
+        responsavel_novo = Funcionario.objects.create(
+            nome="Responsavel Novo",
+            telefone_whatsapp="11999999992",
+            pode_receber_checklist=True,
+        )
+        self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[self.venda.id]),
+            {"responsavel_separacao": str(responsavel_inicial.id)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+        item.status = SeparacaoVendaItem.STATUS_CONFERIDO
+        item.quantidade_separada = item.quantidade_solicitada
+        item.observacao = "Separado antes da troca"
+        item.save(update_fields=["status", "quantidade_separada", "observacao", "atualizado_em"])
+        itens_antes = list(separacao.itens.order_by("id").values_list("id", "status", "observacao"))
+
+        resposta = self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[self.venda.id]),
+            {"responsavel_separacao": str(responsavel_novo.id)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.json()["criada"])
+        self.assertTrue(resposta.json()["responsavel_atualizado"])
+        self.assertEqual(SeparacaoVenda.objects.count(), 1)
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.responsavel, responsavel_novo)
+        self.assertEqual(
+            list(separacao.itens.order_by("id").values_list("id", "status", "observacao")),
+            itens_antes,
+        )
+
+    @override_settings(
+        ALLOWED_HOSTS=["127.0.0.1", "testserver"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
+    def test_link_publico_da_separacao_nao_usa_host_local(self):
+        resposta = self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[self.venda.id]),
+            HTTP_HOST="127.0.0.1:8000",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        public_url = resposta.json()["separacao_public_url"]
+        self.assertEqual(
+            public_url,
+            f"https://sistema-de-vendas-e-estoque.onrender.com/separacao-vendas/{self._separacao().id}/",
+        )
+        self.assertNotIn("127.0.0.1", public_url)
+
+    def test_nome_compacto_do_responsavel_preserva_primeiro_e_ultimo_significativo(self):
+        self.assertEqual(views._nome_funcionario_compacto("Francisco Miranda"), "Francisco Miranda")
+        self.assertEqual(views._nome_funcionario_compacto("Lincoln Albuquerque Neiva"), "Lincoln Neiva")
+        self.assertEqual(views._nome_funcionario_compacto("Roseli Da Costa Gama"), "Roseli Gama")
+
+    def test_separacao_inicia_com_status_enviada(self):
+        self._enviar()
+
+        separacao = self._separacao()
+
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_ENVIADA)
+        self.assertIsNone(separacao.iniciado_em)
+
+    def test_fila_do_deposito_exibe_venda_enviada(self):
+        self._enviar()
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f"Venda #{self.venda.id}")
+        self.assertContains(resposta, "Cliente Separacao")
+
+    def test_itens_sao_vinculados_com_snapshot_da_quantidade_do_envio(self):
+        self._enviar()
+        separacao = self._separacao()
+        itens = {
+            item.item_venda_id: item
+            for item in separacao.itens.order_by("item_venda_id")
+        }
+
+        self.assertEqual(set(itens), {self.item_a.id, self.item_b.id})
+        self.assertEqual(itens[self.item_a.id].produto_nome_snapshot, "Produto A")
+        self.assertEqual(itens[self.item_a.id].unidade_snapshot, "UN")
+        self.assertEqual(itens[self.item_a.id].quantidade_solicitada, Decimal("2.000"))
+
+    def test_venda_cancelada_nao_pode_ser_enviada(self):
+        venda_cancelada = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=date.today(),
+            tipo_pagamento="A prazo",
+            total=Decimal("10.00"),
+            cancelada=True,
+        )
+
+        resposta = self._enviar(venda_cancelada)
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(SeparacaoVenda.objects.filter(venda=venda_cancelada).exists())
+
+    def test_todos_itens_ok_deixa_separacao_separada(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        resposta = self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+        })
+
+        self.assertEqual(resposta.status_code, 302)
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+
+    def test_item_nao_encontrado_deixa_com_pendencia(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+        })
+
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
+
+    def test_quantidade_insuficiente_deixa_com_pendencia(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        self._post_checklist(
+            separacao,
+            {
+                self.item_a.id: SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+                self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            },
+            {self.item_a.id: "1,000"},
+        )
+
+        separacao.refresh_from_db()
+        item = separacao.itens.get(item_venda=self.item_a)
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
+        self.assertEqual(item.quantidade_separada, Decimal("1.000"))
+
+    def test_processamento_parcial_deixa_em_separacao(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_PENDENTE,
+        })
+
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_EM_SEPARACAO)
+
+    def test_separacao_nao_altera_venda_estoque_financeiro_ou_entrega(self):
+        self._enviar()
+        separacao = self._separacao()
+        estoque_antes = self.produto_a.quantidade
+        total_antes = self.venda.total
+
+        self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+        })
+
+        self.produto_a.refresh_from_db()
+        self.venda.refresh_from_db()
+        self.assertEqual(self.produto_a.quantidade, estoque_antes)
+        self.assertEqual(self.venda.total, total_antes)
+        self.assertEqual(ContaReceber.objects.count(), 0)
+        self.assertEqual(EntregaRotaItem.objects.count(), 0)
+
+    def test_alteracao_posterior_do_item_e_detectada_e_nao_processa(self):
+        self._enviar()
+        separacao = self._separacao()
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+
+        resposta_get = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+        self.assertContains(resposta_get, "A venda foi alterada apos o envio para separacao")
+
+        self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+        })
+
+        separacao.refresh_from_db()
+        item_sep = separacao.itens.get(item_venda=self.item_a)
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_ENVIADA)
+        self.assertEqual(item_sep.status, SeparacaoVendaItem.STATUS_PENDENTE)

@@ -1,0 +1,64 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Fila de separacao{% endblock %}
+{% block content %}
+<style>
+  .sep-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 14px 0 40px; }
+  .sep-shell { width: min(760px, calc(100vw - 16px)); margin: 0 auto; }
+  .sep-head { margin-bottom: 12px; padding: 14px; border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .sep-title { margin: 0; font-size: clamp(1.3rem, 6vw, 1.8rem); font-weight: 950; color: #111827; line-height: 1.1; }
+  .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
+  .sep-list { display: grid; gap: 10px; }
+  .sep-card { border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; padding: 14px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .sep-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .sep-venda { font-size: 1.08rem; font-weight: 950; color: #1d4ed8; }
+  .sep-cliente { margin-top: 3px; font-size: 1rem; font-weight: 900; color: #172033; overflow-wrap: anywhere; }
+  .sep-meta { margin-top: 4px; color: #64748b; font-size: 0.82rem; font-weight: 750; }
+  .sep-status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 5px 9px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 0.78rem; font-weight: 950; white-space: nowrap; }
+  .sep-status.com_pendencia { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+  .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
+  .sep-status.em_separacao { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+  .sep-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+  .sep-count { border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; text-align: center; }
+  .sep-count strong { display: block; color: #111827; font-size: 1.1rem; font-weight: 950; }
+  .sep-count span { display: block; color: #64748b; font-size: 0.72rem; font-weight: 850; text-transform: uppercase; }
+  .sep-actions { display: grid; margin-top: 12px; }
+  .sep-btn { min-height: 44px; border: 0; border-radius: 11px; background: #2563eb; color: #fff; font-weight: 950; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; }
+  .sep-btn.secondary { background: #e2e8f0; color: #172033; margin-top: 6px; }
+  .sep-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 14px; background: #fff; color: #64748b; font-weight: 850; text-align: center; }
+</style>
+<main class="sep-page">
+  <div class="sep-shell">
+    <header class="sep-head">
+      <h1 class="sep-title">Fila de separacao</h1>
+      <p class="sep-sub">Vendas enviadas para separacao fisica, em ordem de envio.</p>
+    </header>
+
+    <section class="sep-list" aria-label="Separacoes pendentes">
+      {% for separacao in separacoes %}
+        <article class="sep-card">
+          <div class="sep-card-top">
+            <div>
+              <div class="sep-venda">Venda #{{ separacao.venda.id }}</div>
+              <div class="sep-cliente">{{ separacao.venda.cliente.nome|default:"Consumidor" }}</div>
+              <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
+              <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
+            </div>
+            <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+          </div>
+          <div class="sep-counts">
+            <div class="sep-count"><strong>{{ separacao.total_itens }}</strong><span>Itens</span></div>
+            <div class="sep-count"><strong>{{ separacao.total_conferidos }}</strong><span>OK</span></div>
+            <div class="sep-count"><strong>{{ separacao.total_pendentes }}</strong><span>Pendentes</span></div>
+          </div>
+          <div class="sep-actions">
+            <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
+            <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
+          </div>
+        </article>
+      {% empty %}
+        <div class="sep-empty">Nenhuma venda enviada para separacao.</div>
+      {% endfor %}
+    </section>
+  </div>
+</main>
+{% endblock %}
