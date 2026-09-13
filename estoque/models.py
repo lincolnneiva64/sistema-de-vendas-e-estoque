@@ -1769,6 +1769,8 @@ class Compra(models.Model):
     tipo_pagamento = models.CharField(max_length=40, blank=True)
     operador = models.CharField(max_length=120, blank=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_produtos = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    ajuste_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
     observacao = models.TextField(blank=True, null=True)
     cancelada = models.BooleanField(default=False)

@@ -1925,6 +1925,124 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
 
+    def test_compra_sem_diferenca_salva_total_produtos_ajuste_zero_e_total_financeiro(self):
+        resposta = self.client.post(
+            self.url,
+            self.dados(
+                acao_compra="finalizar",
+                tipo_pagamento="aprazo",
+                data_vencimento="2026-09-20",
+                valor_cobrado="",
+                **{
+                    "preco_unitario[]": ["100,00"],
+                    "origem_caixa": "0,00",
+                    "origem_reserva": "0,00",
+                    "origem_banco": "0,00",
+                },
+            ),
+            secure=True,
+        )
+
+        compra = Compra.objects.latest("id")
+
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.total_produtos, Decimal("100.00"))
+        self.assertEqual(compra.ajuste_total, Decimal("0.00"))
+        self.assertEqual(compra.total, Decimal("100.00"))
+
+    def test_compra_com_diferenca_positiva_cria_conta_pagar_pelo_valor_cobrado(self):
+        resposta = self.client.post(
+            self.url,
+            self.dados(
+                acao_compra="finalizar",
+                tipo_pagamento="aprazo",
+                data_vencimento="2026-09-20",
+                valor_cobrado="102,50",
+                **{
+                    "preco_unitario[]": ["100,00"],
+                    "origem_caixa": "0,00",
+                    "origem_reserva": "0,00",
+                    "origem_banco": "0,00",
+                },
+            ),
+            secure=True,
+        )
+
+        compra = Compra.objects.latest("id")
+        conta = ContaPagar.objects.get(compra=compra)
+
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.total_produtos, Decimal("100.00"))
+        self.assertEqual(compra.ajuste_total, Decimal("2.50"))
+        self.assertEqual(compra.total, Decimal("102.50"))
+        self.assertEqual(conta.valor_original, Decimal("102.50"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("102.50"))
+
+    def test_compra_com_diferenca_negativa_salva_total_financeiro_menor_sem_ratear_item(self):
+        resposta = self.client.post(
+            self.url,
+            self.dados(
+                acao_compra="finalizar",
+                tipo_pagamento="aprazo",
+                data_vencimento="2026-09-20",
+                valor_cobrado="98,00",
+                **{
+                    "preco_unitario[]": ["100,00"],
+                    "origem_caixa": "0,00",
+                    "origem_reserva": "0,00",
+                    "origem_banco": "0,00",
+                },
+            ),
+            secure=True,
+        )
+
+        compra = Compra.objects.latest("id")
+        item = compra.itens.get()
+
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.total_produtos, Decimal("100.00"))
+        self.assertEqual(compra.ajuste_total, Decimal("-2.00"))
+        self.assertEqual(compra.total, Decimal("98.00"))
+        self.assertEqual(item.preco_unitario, Decimal("100.00"))
+        self.assertEqual(item.valor_total, Decimal("100.00"))
+
+    def test_compra_a_vista_valida_origem_e_movimento_pelo_valor_cobrado(self):
+        estoque_antes = self.produto.quantidade
+
+        resposta = self.client.post(
+            self.url,
+            self.dados(
+                fechamento_token="v" * 32,
+                acao_compra="confirmar_financeiro",
+                tipo_pagamento="pix",
+                data_vencimento="",
+                valor_cobrado="102,50",
+                **{
+                    "preco_unitario[]": ["100,00"],
+                    "origem_caixa": "102,50",
+                    "origem_reserva": "0,00",
+                    "origem_banco": "0,00",
+                },
+            ),
+            secure=True,
+        )
+
+        compra = Compra.objects.get(fechamento_token="v" * 32)
+        item = compra.itens.get()
+        movimento = MovimentoFinanceiro.objects.get(compra=compra, origem="compra_a_vista")
+        self.produto.refresh_from_db()
+
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.total_produtos, Decimal("100.00"))
+        self.assertEqual(compra.ajuste_total, Decimal("2.50"))
+        self.assertEqual(compra.total, Decimal("102.50"))
+        self.assertEqual(movimento.valor, Decimal("102.50"))
+        self.assertEqual(item.quantidade, Decimal("1.000"))
+        self.assertEqual(item.preco_unitario, Decimal("100.00"))
+        self.assertEqual(item.valor_total, Decimal("100.00"))
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("1.000"))
+        self.assertEqual(self.produto.preco_compra, Decimal("100.00"))
+
     def test_finalizacao_compra_aplica_revisao_preco_venda_uma_vez_sem_duplicar_efeitos(self):
         compra = self._criar_compra_rascunho_com_item(tipo_pagamento="aprazo", total=Decimal("100.00"))
         estoque_antes = self.produto.quantidade
@@ -11827,6 +11945,19 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
         self.assertEqual(self.compra.total, Decimal("130.00"))
         self.assert_financeiro_inalterado()
+
+    def test_corrigir_itens_preserva_ajuste_total_da_compra(self):
+        self.compra.total_produtos = Decimal("110.00")
+        self.compra.ajuste_total = Decimal("2.50")
+        self.compra.total = Decimal("112.50")
+        self.compra.save(update_fields=["total_produtos", "ajuste_total", "total"])
+
+        self.client.post(self.url, self.dados(**{"quantidade[]": ["7", "2"]}), secure=True)
+
+        self.compra.refresh_from_db()
+        self.assertEqual(self.compra.total_produtos, Decimal("80.00"))
+        self.assertEqual(self.compra.ajuste_total, Decimal("2.50"))
+        self.assertEqual(self.compra.total, Decimal("82.50"))
 
     def test_remover_item_desfaz_sua_entrada_no_estoque(self):
         self.client.post(self.url, self.dados(**{"remover_item[]": [str(self.item_a.id)]}), secure=True)

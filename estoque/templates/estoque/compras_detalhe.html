@@ -742,7 +742,15 @@
       </table>
 
       <div class="nota-compra-total">
-        Total da compra:
+        Total dos produtos:
+        <span>R$ {{ compra.total_produtos|default:compra.total }}</span>
+      </div>
+      <div class="nota-compra-total">
+        Ajuste/Diferen&ccedil;a:
+        <span>R$ {{ compra.ajuste_total|default:"0.00" }}</span>
+      </div>
+      <div class="nota-compra-total">
+        Total cobrado:
         <span>R$ {{ compra.total }}</span>
       </div>
     </section>

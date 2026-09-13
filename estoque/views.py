@@ -8619,7 +8619,14 @@ def _dados_compra_post(request, exigir_itens=True):
     if exigir_itens and not itens_validos:
         raise ValueError("Inclua pelo menos um item na compra.")
 
-    total = sum((item["valor_total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+    total_produtos = sum((item["valor_total"] for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+    valor_cobrado_texto = str(request.POST.get("valor_cobrado") or "").strip()
+    total = total_produtos
+    if valor_cobrado_texto:
+        total = _decimal_compra(valor_cobrado_texto, casas=2)
+        if total < Decimal("0.00"):
+            raise ValueError("Informe um valor cobrado maior ou igual a zero.")
+    ajuste_total = (total - total_produtos).quantize(Decimal("0.01"))
     return {
         "fornecedor": fornecedor,
         "data_compra": data_compra,
@@ -8627,6 +8634,8 @@ def _dados_compra_post(request, exigir_itens=True):
         "tipo_pagamento": tipo_pagamento,
         "observacao": observacao,
         "itens": itens_validos,
+        "total_produtos": total_produtos,
+        "ajuste_total": ajuste_total,
         "total": total,
         "compra_a_prazo": compra_a_prazo,
         "compra_conta_futura": compra_conta_futura,
@@ -8640,6 +8649,8 @@ def _salvar_compra_e_itens(compra, dados, status):
     compra.data_vencimento = dados["data_vencimento"]
     compra.tipo_pagamento = dados["tipo_pagamento"]
     compra.total = dados["total"]
+    compra.total_produtos = dados["total_produtos"]
+    compra.ajuste_total = dados["ajuste_total"]
     compra.observacao = dados["observacao"]
     compra.status = status
     compra.save()
@@ -8840,6 +8851,8 @@ def compras_nova(request):
                     data_vencimento=dados["data_vencimento"],
                     tipo_pagamento=dados["tipo_pagamento"],
                     total=dados["total"],
+                    total_produtos=dados["total_produtos"],
+                    ajuste_total=dados["ajuste_total"],
                     observacao=dados["observacao"],
                     status=Compra.STATUS_RASCUNHO,
                     fechamento_token=fechamento_token,
@@ -9424,7 +9437,11 @@ def compra_corrigir_itens(request, pk):
                     raise ValueError("A compra precisa permanecer com pelo menos um item.")
 
                 total_anterior = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
-                novo_total = novo_total.quantize(Decimal("0.01"))
+                novo_total_produtos = novo_total.quantize(Decimal("0.01"))
+                ajuste_total = _financeiro_dinheiro(compra.ajuste_total).quantize(Decimal("0.01"))
+                novo_total = (novo_total_produtos + ajuste_total).quantize(Decimal("0.01"))
+                if novo_total < Decimal("0.00"):
+                    raise ValueError("A correcao dos itens deixaria o valor cobrado da compra negativo.")
                 diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
                 pagamento_vai_mudar = bool(
                     novo_tipo_pagamento_compra
@@ -9466,8 +9483,9 @@ def compra_corrigir_itens(request, pk):
                         valor_total=subtotal,
                     )
 
+                compra.total_produtos = novo_total_produtos
                 compra.total = novo_total
-                compra.save(update_fields=["total", "atualizado_em"])
+                compra.save(update_fields=["total_produtos", "total", "atualizado_em"])
 
                 movimento_financeiro_correcao = request.POST.get("movimento_financeiro_correcao", "").strip()
                 pagamento_alterado, resumo_pagamento = _corrigir_pagamento_simples_compra(
