@@ -29604,6 +29604,49 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
         return venda
 
+    def _criar_rota_para_venda(
+        self,
+        venda,
+        nome="Rota Separacao",
+        status=EntregaRotaItem.STATUS_PENDENTE,
+        is_pendencia=False,
+        data_rota=None,
+    ):
+        rota = EntregaRota.objects.create(
+            data=data_rota or timezone.localdate(),
+            tipo=EntregaRota.TIPO_ROTA,
+            observacao=f"Rota: {nome}",
+        )
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            ordem_entrega=1,
+            status=status,
+            is_pendencia=is_pendencia,
+        )
+        return rota, item_rota
+
+    def _vincular_venda_a_rota(
+        self,
+        venda,
+        rota,
+        status=EntregaRotaItem.STATUS_PENDENTE,
+        is_pendencia=False,
+        ordem_entrega=1,
+    ):
+        return EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            ordem_entrega=ordem_entrega,
+            status=status,
+            is_pendencia=is_pendencia,
+        )
+
+    def _marcar_separacao_status(self, separacao, status):
+        separacao.status = status
+        separacao.save(update_fields=["status", "atualizado_em"])
+        return separacao
+
     def _separacao(self):
         return SeparacaoVenda.objects.get(venda=self.venda)
 
@@ -29817,8 +29860,137 @@ class SeparacaoVendaFase1Tests(TestCase):
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, f"Venda #{self.venda.id}")
+        self.assertContains(resposta, f"Nota #{self.venda.id}")
         self.assertContains(resposta, "Cliente Separacao")
+
+    def test_fila_agrupa_separacoes_por_rota_e_sem_rota(self):
+        venda_rota = self._criar_venda_para_separacao("Cliente Com Rota")
+        venda_sem_rota = self._criar_venda_para_separacao("Cliente Sem Rota")
+        self._criar_rota_para_venda(venda_rota, "Furo da Marinha")
+        self._enviar(venda_rota)
+        self._enviar(venda_sem_rota)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Furo da Marinha")
+        self.assertContains(resposta, "Sem rota definida")
+        self.assertContains(resposta, "Cliente Com Rota")
+        self.assertContains(resposta, "Cliente Sem Rota")
+
+    def test_fila_escolhe_rota_vigente_sem_duplicar_separacao(self):
+        venda = self._criar_venda_para_separacao("Cliente Rota Vigente")
+        self._criar_rota_para_venda(
+            venda,
+            "Rota Cancelada",
+            status=EntregaRotaItem.STATUS_CANCELADA,
+            data_rota=timezone.localdate() + timedelta(days=1),
+        )
+        self._criar_rota_para_venda(
+            venda,
+            "Rota Pendencia Antiga",
+            is_pendencia=True,
+            data_rota=timezone.localdate() + timedelta(days=2),
+        )
+        self._criar_rota_para_venda(venda, "Rota Atual", data_rota=timezone.localdate())
+        self._enviar(venda)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "Rota Atual")
+        self.assertNotContains(resposta, "Rota Cancelada")
+        self.assertNotContains(resposta, "Rota Pendencia Antiga")
+        self.assertEqual(resposta.content.decode().count(f"Nota #{venda.id}"), 1)
+
+    def test_fila_resumo_da_rota_conta_estados(self):
+        vendas = [
+            self._criar_venda_para_separacao("Cliente Separada"),
+            self._criar_venda_para_separacao("Cliente Pendencia"),
+            self._criar_venda_para_separacao("Cliente Em Separacao"),
+            self._criar_venda_para_separacao("Cliente Enviada"),
+        ]
+        rota = EntregaRota.objects.create(
+            data=timezone.localdate(),
+            tipo=EntregaRota.TIPO_ROTA,
+            observacao="Rota: Resumo Rota",
+        )
+        for ordem, venda in enumerate(vendas, start=1):
+            self._vincular_venda_a_rota(venda, rota, ordem_entrega=ordem)
+            self._enviar(venda)
+
+        separacoes = [SeparacaoVenda.objects.get(venda=venda) for venda in vendas]
+        self._marcar_separacao_status(separacoes[0], SeparacaoVenda.STATUS_SEPARADA)
+        self._marcar_separacao_status(separacoes[1], SeparacaoVenda.STATUS_COM_PENDENCIA)
+        self._marcar_separacao_status(separacoes[2], SeparacaoVenda.STATUS_EM_SEPARACAO)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "4 notas")
+        self.assertContains(resposta, "1 separadas")
+        self.assertContains(resposta, "1 com pendencia")
+        self.assertContains(resposta, "1 em separacao")
+        self.assertContains(resposta, "1 enviadas")
+
+    def test_fila_exibe_pendencias_quantidade_faltante_e_botao_correcao(self):
+        self._criar_rota_para_venda(self.venda, "Rota Pendencias")
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+        item.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+        item.quantidade_separada = Decimal("0.750")
+        item.observacao = "Separar depois da compra"
+        item.save(update_fields=["status", "quantidade_separada", "observacao", "atualizado_em"])
+        self._marcar_separacao_status(separacao, SeparacaoVenda.STATUS_COM_PENDENCIA)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "Produto A")
+        self.assertContains(resposta, "Quantidade insuficiente")
+        self.assertContains(resposta, "Solicitado: 2")
+        self.assertContains(resposta, "Separado: 0.75")
+        self.assertContains(resposta, "Faltam: 1.25")
+        self.assertContains(resposta, "Separar depois da compra")
+        self.assertContains(resposta, f"/vendas/?editar={self.venda.id}")
+        self.assertContains(resposta, "Abrir venda para corrigir")
+
+    def test_fila_ordena_pendencias_antes_das_separadas(self):
+        venda_separada = self._criar_venda_para_separacao("Cliente Separada Ordem")
+        venda_pendencia = self._criar_venda_para_separacao("Cliente Pendencia Ordem")
+        rota = EntregaRota.objects.create(
+            data=timezone.localdate(),
+            tipo=EntregaRota.TIPO_ROTA,
+            observacao="Rota: Rota Ordem",
+        )
+        self._vincular_venda_a_rota(venda_separada, rota, ordem_entrega=1)
+        self._vincular_venda_a_rota(venda_pendencia, rota, ordem_entrega=2)
+        self._enviar(venda_separada)
+        self._enviar(venda_pendencia)
+        self._marcar_separacao_status(
+            SeparacaoVenda.objects.get(venda=venda_separada),
+            SeparacaoVenda.STATUS_SEPARADA,
+        )
+        self._marcar_separacao_status(
+            SeparacaoVenda.objects.get(venda=venda_pendencia),
+            SeparacaoVenda.STATUS_COM_PENDENCIA,
+        )
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertLess(
+            conteudo.index("Cliente Pendencia Ordem"),
+            conteudo.index("Cliente Separada Ordem"),
+        )
+
+    def test_fila_sinaliza_divergencia_da_venda(self):
+        self._enviar()
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
 
     def test_itens_sao_vinculados_com_snapshot_da_quantidade_do_envio(self):
         self._enviar()

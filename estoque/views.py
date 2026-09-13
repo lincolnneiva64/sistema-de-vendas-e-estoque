@@ -20155,12 +20155,67 @@ def venda_criar_entrega(request, pk):
     return redirect("estoque:venda_detalhe", pk=venda.pk)
 
 
-def separacao_vendas_fila(request):
-    separacoes = list(
-        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
-        .prefetch_related("itens")
-        .order_by("enviado_em", "id")
-    )
+def _nome_exibicao_rota_separacao(rota):
+    if not rota:
+        return "Sem rota definida"
+    observacao = (rota.observacao or "").strip()
+    if observacao:
+        primeira_linha = observacao.splitlines()[0].strip()
+        if primeira_linha.lower().startswith("rota:"):
+            nome = primeira_linha.split(":", 1)[1].strip()
+            if nome:
+                return nome
+        return primeira_linha
+    return f"{rota.get_tipo_display()} #{rota.id}"
+
+
+def _entrega_rota_vigente_venda(venda):
+    itens_rota = [
+        item
+        for item in venda.entregas_rota.all()
+        if item.status != EntregaRotaItem.STATUS_CANCELADA
+    ]
+    if not itens_rota:
+        return None
+
+    def chave_vigencia(item):
+        data_rota = item.rota.data or date.min
+        return (
+            1 if not item.is_pendencia else 0,
+            data_rota,
+            item.rota_id or 0,
+            item.id or 0,
+        )
+
+    return sorted(itens_rota, key=chave_vigencia, reverse=True)[0]
+
+
+def _ordem_status_separacao(status):
+    return {
+        SeparacaoVenda.STATUS_COM_PENDENCIA: 0,
+        SeparacaoVenda.STATUS_EM_SEPARACAO: 1,
+        SeparacaoVenda.STATUS_ENVIADA: 2,
+        SeparacaoVenda.STATUS_SEPARADA: 3,
+    }.get(status, 4)
+
+
+def _resumo_item_pendencia_separacao(item):
+    quantidade_solicitada = Decimal(item.quantidade_solicitada or 0)
+    quantidade_separada = Decimal(item.quantidade_separada or 0)
+    quantidade_faltante = max(Decimal("0.000"), quantidade_solicitada - quantidade_separada)
+    return {
+        "produto": item.produto_nome_snapshot,
+        "status": item.status,
+        "status_texto": item.get_status_display(),
+        "quantidade_solicitada": _formatar_quantidade(quantidade_solicitada),
+        "quantidade_separada": _formatar_quantidade(quantidade_separada),
+        "quantidade_faltante": _formatar_quantidade(quantidade_faltante),
+        "observacao": item.observacao,
+    }
+
+
+def _montar_grupos_rota_separacao(separacoes):
+    grupos = {}
     for separacao in separacoes:
         itens = list(separacao.itens.all())
         separacao.total_itens = len(itens)
@@ -20178,11 +20233,91 @@ def separacao_vendas_fila(request):
                 SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
             }
         )
+        separacao.itens_com_pendencia = [
+            _resumo_item_pendencia_separacao(item)
+            for item in itens
+            if item.status in {
+                SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
+                SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            }
+        ]
+        separacao.divergencias_fila = divergencias_separacao_venda(separacao)
+        separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
+
+        item_rota = _entrega_rota_vigente_venda(separacao.venda)
+        rota = item_rota.rota if item_rota else None
+        chave = ("rota", rota.id) if rota else ("sem_rota", 0)
+        if chave not in grupos:
+            grupos[chave] = {
+                "rota": rota,
+                "titulo": _nome_exibicao_rota_separacao(rota),
+                "sem_rota": rota is None,
+                "data": rota.data if rota else None,
+                "separacoes": [],
+                "total_notas": 0,
+                "total_separadas": 0,
+                "total_com_pendencia": 0,
+                "total_em_separacao": 0,
+                "total_enviadas": 0,
+            }
+        grupo = grupos[chave]
+        grupo["separacoes"].append(separacao)
+        grupo["total_notas"] += 1
+        if separacao.status == SeparacaoVenda.STATUS_SEPARADA:
+            grupo["total_separadas"] += 1
+        elif separacao.status == SeparacaoVenda.STATUS_COM_PENDENCIA:
+            grupo["total_com_pendencia"] += 1
+        elif separacao.status == SeparacaoVenda.STATUS_EM_SEPARACAO:
+            grupo["total_em_separacao"] += 1
+        elif separacao.status == SeparacaoVenda.STATUS_ENVIADA:
+            grupo["total_enviadas"] += 1
+
+    for grupo in grupos.values():
+        grupo["separacoes"].sort(
+            key=lambda separacao: (
+                _ordem_status_separacao(separacao.status),
+                separacao.numero_sequencial_dia or 999999,
+                separacao.enviado_em,
+                separacao.id,
+            )
+        )
+
+    return sorted(
+        grupos.values(),
+        key=lambda grupo: (
+            1 if grupo["sem_rota"] else 0,
+            -(grupo["data"].toordinal() if grupo["data"] else 0),
+            grupo["titulo"].lower(),
+        ),
+    )
+
+
+def separacao_vendas_fila(request):
+    separacoes = list(
+        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
+        .prefetch_related(
+            "itens__item_venda__produto",
+            "venda__itens__produto",
+            Prefetch(
+                "venda__entregas_rota",
+                queryset=EntregaRotaItem.objects.select_related("rota").order_by(
+                    "-rota__data",
+                    "-rota_id",
+                    "-id",
+                ),
+            ),
+        )
+        .order_by("enviado_em", "id")
+    )
+    grupos_rota = _montar_grupos_rota_separacao(separacoes)
 
     return render(
         request,
         "estoque/separacao_vendas_fila.html",
-        {"separacoes": separacoes},
+        {
+            "grupos_rota": grupos_rota,
+            "separacoes": separacoes,
+        },
     )
 
 

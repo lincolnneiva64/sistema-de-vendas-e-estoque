@@ -131,11 +131,20 @@ def recalcular_status_separacao(separacao, usuario=None):
 
 def divergencias_separacao_venda(separacao):
     divergencias = []
-    itens_separacao = list(separacao.itens.select_related("item_venda", "item_venda__produto"))
-    itens_atuais = {
-        item.id: item
-        for item in ItemVenda.objects.select_related("produto").filter(venda=separacao.venda)
-    }
+    itens_separacao_prefetch = getattr(separacao, "_prefetched_objects_cache", {}).get("itens")
+    if itens_separacao_prefetch is not None:
+        itens_separacao = list(itens_separacao_prefetch)
+    else:
+        itens_separacao = list(separacao.itens.select_related("item_venda", "item_venda__produto"))
+
+    itens_venda_prefetch = getattr(separacao.venda, "_prefetched_objects_cache", {}).get("itens")
+    if itens_venda_prefetch is not None:
+        itens_atuais = {item.id: item for item in itens_venda_prefetch}
+    else:
+        itens_atuais = {
+            item.id: item
+            for item in ItemVenda.objects.select_related("produto").filter(venda=separacao.venda)
+        }
     ids_snapshot = {item.item_venda_id for item in itens_separacao}
     ids_atuais = set(itens_atuais)
 

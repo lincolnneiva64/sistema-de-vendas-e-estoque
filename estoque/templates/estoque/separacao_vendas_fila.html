@@ -3,58 +3,145 @@
 {% block content %}
 <style>
   .sep-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 14px 0 40px; }
-  .sep-shell { width: min(760px, calc(100vw - 16px)); margin: 0 auto; }
-  .sep-head { margin-bottom: 12px; padding: 14px; border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
-  .sep-title { margin: 0; font-size: clamp(1.3rem, 6vw, 1.8rem); font-weight: 950; color: #111827; line-height: 1.1; }
+  .sep-shell { width: min(980px, calc(100vw - 16px)); margin: 0 auto; }
+  .sep-head { margin-bottom: 12px; padding: 14px; border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .sep-title { margin: 0; font-size: clamp(1.3rem, 5vw, 1.8rem); font-weight: 950; color: #111827; line-height: 1.1; }
   .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
-  .sep-list { display: grid; gap: 10px; }
-  .sep-card { border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; padding: 14px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .rota-list { display: grid; gap: 14px; }
+  .rota-group { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; overflow: hidden; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
+  .rota-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 13px 14px; background: #172033; color: #fff; }
+  .rota-title { margin: 0; font-size: 1.05rem; font-weight: 950; text-transform: uppercase; overflow-wrap: anywhere; }
+  .rota-title.sem-rota { color: #fde68a; }
+  .rota-date { margin-top: 3px; font-size: 0.78rem; color: #cbd5e1; font-weight: 800; }
+  .rota-summary { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .rota-chip { display: inline-flex; min-height: 28px; align-items: center; border-radius: 999px; background: rgba(255,255,255,0.11); border: 1px solid rgba(255,255,255,0.18); padding: 4px 8px; font-size: 0.76rem; font-weight: 900; white-space: nowrap; }
+  .sep-list { display: grid; gap: 8px; padding: 10px; }
+  .sep-card { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 12px; }
+  .sep-card.com_pendencia { border-color: #f97316; background: #fff7ed; box-shadow: inset 4px 0 0 #ea580c; }
+  .sep-card.tem-divergencia { border-color: #dc2626; }
   .sep-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  .sep-venda { font-size: 1.08rem; font-weight: 950; color: #1d4ed8; }
-  .sep-cliente { margin-top: 3px; font-size: 1rem; font-weight: 900; color: #172033; overflow-wrap: anywhere; }
-  .sep-meta { margin-top: 4px; color: #64748b; font-size: 0.82rem; font-weight: 750; }
+  .sep-main { min-width: 0; }
+  .sep-line { display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline; font-weight: 950; color: #111827; }
+  .sep-seq { color: #1d4ed8; font-size: 1.05rem; }
+  .sep-venda { color: #172033; }
+  .sep-cliente { overflow-wrap: anywhere; }
+  .sep-meta { margin-top: 5px; color: #64748b; font-size: 0.82rem; font-weight: 750; }
   .sep-status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 5px 9px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 0.78rem; font-weight: 950; white-space: nowrap; }
-  .sep-status.com_pendencia { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
+  .sep-status.com_pendencia { background: #ffedd5; color: #9a3412; border-color: #fb923c; }
   .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
   .sep-status.em_separacao { background: #fef9c3; color: #854d0e; border-color: #fde047; }
-  .sep-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
-  .sep-count { border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; text-align: center; }
-  .sep-count strong { display: block; color: #111827; font-size: 1.1rem; font-weight: 950; }
-  .sep-count span { display: block; color: #64748b; font-size: 0.72rem; font-weight: 850; text-transform: uppercase; }
-  .sep-actions { display: grid; margin-top: 12px; }
-  .sep-btn { min-height: 44px; border: 0; border-radius: 11px; background: #2563eb; color: #fff; font-weight: 950; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; }
-  .sep-btn.secondary { background: #e2e8f0; color: #172033; margin-top: 6px; }
-  .sep-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 14px; background: #fff; color: #64748b; font-weight: 850; text-align: center; }
+  .sep-alert { margin-top: 10px; border-radius: 8px; border: 1px solid #fca5a5; background: #fef2f2; color: #991b1b; padding: 9px 10px; font-size: 0.82rem; font-weight: 900; }
+  .pend-list { display: grid; gap: 8px; margin-top: 10px; }
+  .pend-item { border: 1px solid #fdba74; border-radius: 8px; background: #fff; padding: 9px; }
+  .pend-name { font-weight: 950; color: #9a3412; overflow-wrap: anywhere; }
+  .pend-grid { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 5px; color: #7c2d12; font-size: 0.82rem; font-weight: 850; }
+  .pend-obs { margin-top: 5px; color: #64748b; font-size: 0.82rem; font-weight: 750; overflow-wrap: anywhere; }
+  .sep-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sep-count { border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 8px; color: #475569; font-size: 0.78rem; font-weight: 850; }
+  .sep-count strong { color: #111827; }
+  .sep-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .sep-btn { min-height: 40px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font-weight: 950; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 9px 12px; }
+  .sep-btn.secondary { background: #e2e8f0; color: #172033; }
+  .sep-btn.warning { background: #ea580c; color: #fff; }
+  .sep-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff; color: #64748b; font-weight: 850; text-align: center; }
+  @media (max-width: 640px) {
+    .rota-head, .sep-card-top { display: grid; }
+    .rota-summary { justify-content: flex-start; }
+    .sep-status { justify-self: start; }
+    .sep-btn { width: 100%; }
+  }
 </style>
 <main class="sep-page">
   <div class="sep-shell">
     <header class="sep-head">
       <h1 class="sep-title">Fila de separacao</h1>
-      <p class="sep-sub">Vendas enviadas para separacao fisica, em ordem de envio.</p>
+      <p class="sep-sub">Vendas enviadas para separacao fisica, agrupadas por rota de entrega.</p>
     </header>
 
-    <section class="sep-list" aria-label="Separacoes pendentes">
-      {% for separacao in separacoes %}
-        <article class="sep-card">
-          <div class="sep-card-top">
+    <section class="rota-list" aria-label="Separacoes por rota">
+      {% for grupo in grupos_rota %}
+        <section class="rota-group" aria-labelledby="rota-{{ forloop.counter }}">
+          <header class="rota-head">
             <div>
-              <div class="sep-venda">Venda #{{ separacao.venda.id }}</div>
-              <div class="sep-cliente">{{ separacao.venda.cliente.nome|default:"Consumidor" }}</div>
-              <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
-              <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
+              <h2 id="rota-{{ forloop.counter }}" class="rota-title{% if grupo.sem_rota %} sem-rota{% endif %}">
+                {% if grupo.sem_rota %}Sem rota definida{% else %}{{ grupo.titulo }}{% endif %}
+              </h2>
+              {% if grupo.data %}
+                <div class="rota-date">Entrega em {{ grupo.data|date:"d/m/Y" }}</div>
+              {% endif %}
             </div>
-            <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+            <div class="rota-summary" aria-label="Resumo da rota">
+              <span class="rota-chip">{{ grupo.total_notas }} notas</span>
+              <span class="rota-chip">{{ grupo.total_separadas }} separadas</span>
+              <span class="rota-chip">{{ grupo.total_com_pendencia }} com pendencia</span>
+              <span class="rota-chip">{{ grupo.total_em_separacao }} em separacao</span>
+              {% if grupo.total_enviadas %}
+                <span class="rota-chip">{{ grupo.total_enviadas }} enviadas</span>
+              {% endif %}
+            </div>
+          </header>
+
+          <div class="sep-list">
+            {% for separacao in grupo.separacoes %}
+              <article class="sep-card {{ separacao.status }}{% if separacao.tem_divergencia_fila %} tem-divergencia{% endif %}">
+                <div class="sep-card-top">
+                  <div class="sep-main">
+                    <div class="sep-line">
+                      <span class="sep-seq">{{ separacao.numero_sequencial_dia }}</span>
+                      <span>|</span>
+                      <span class="sep-venda">Nota #{{ separacao.venda.id }}</span>
+                      <span>|</span>
+                      <span class="sep-cliente">{{ separacao.venda.cliente.nome|default:"Consumidor" }}</span>
+                    </div>
+                    <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
+                    <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
+                  </div>
+                  <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+                </div>
+
+                {% if separacao.tem_divergencia_fila %}
+                  <div class="sep-alert">VENDA ALTERADA - REVISAO NECESSARIA</div>
+                {% endif %}
+
+                {% if separacao.itens_com_pendencia %}
+                  <div class="pend-list" aria-label="Itens com pendencia">
+                    {% for item in separacao.itens_com_pendencia %}
+                      <div class="pend-item">
+                        <div class="pend-name">{{ item.produto }}</div>
+                        <div class="pend-grid">
+                          <span>{{ item.status_texto }}</span>
+                          <span>Solicitado: {{ item.quantidade_solicitada }}</span>
+                          <span>Separado: {{ item.quantidade_separada }}</span>
+                          <span>Faltam: {{ item.quantidade_faltante }}</span>
+                        </div>
+                        {% if item.observacao %}
+                          <div class="pend-obs">{{ item.observacao }}</div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+
+                <div class="sep-counts">
+                  <span class="sep-count"><strong>{{ separacao.total_itens }}</strong> itens</span>
+                  <span class="sep-count"><strong>{{ separacao.total_conferidos }}</strong> OK</span>
+                  <span class="sep-count"><strong>{{ separacao.total_pendentes }}</strong> pendentes</span>
+                  {% if separacao.total_pendencias %}
+                    <span class="sep-count"><strong>{{ separacao.total_pendencias }}</strong> com problema</span>
+                  {% endif %}
+                </div>
+
+                <div class="sep-actions">
+                  <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
+                  <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
+                  {% if separacao.status == "com_pendencia" %}
+                    <a class="sep-btn warning" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}">Abrir venda para corrigir</a>
+                  {% endif %}
+                </div>
+              </article>
+            {% endfor %}
           </div>
-          <div class="sep-counts">
-            <div class="sep-count"><strong>{{ separacao.total_itens }}</strong><span>Itens</span></div>
-            <div class="sep-count"><strong>{{ separacao.total_conferidos }}</strong><span>OK</span></div>
-            <div class="sep-count"><strong>{{ separacao.total_pendentes }}</strong><span>Pendentes</span></div>
-          </div>
-          <div class="sep-actions">
-            <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
-            <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
-          </div>
-        </article>
+        </section>
       {% empty %}
         <div class="sep-empty">Nenhuma venda enviada para separacao.</div>
       {% endfor %}
