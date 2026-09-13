@@ -29586,8 +29586,8 @@ class SeparacaoVendaFase1Tests(TestCase):
             secure=True,
         )
 
-    def _criar_venda_para_separacao(self, cliente_nome="Cliente Separacao Extra"):
-        cliente = Cliente.objects.create(nome=cliente_nome)
+    def _criar_venda_para_separacao(self, cliente_nome="Cliente Separacao Extra", bairro="", cidade=""):
+        cliente = Cliente.objects.create(nome=cliente_nome, bairro=bairro, cidade=cidade)
         venda = Venda.objects.create(
             cliente=cliente,
             data_venda=date.today(),
@@ -29863,23 +29863,38 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, f"Nota #{self.venda.id}")
         self.assertContains(resposta, "Cliente Separacao")
 
-    def test_fila_agrupa_separacoes_por_rota_e_sem_rota(self):
-        venda_rota = self._criar_venda_para_separacao("Cliente Com Rota")
-        venda_sem_rota = self._criar_venda_para_separacao("Cliente Sem Rota")
-        self._criar_rota_para_venda(venda_rota, "Furo da Marinha")
-        self._enviar(venda_rota)
-        self._enviar(venda_sem_rota)
+    def test_fila_agrupa_separacoes_por_localidade_do_cliente(self):
+        casos = [
+            ("Rubem Arruda", "Furo da Marinha", "Mosqueiro", "Furo da Marinha - Mosqueiro"),
+            ("Magno Recem Mescouto", "Genipauba", "Santa Bárbara do Pará", "Genipauba - Santa Bárbara do Pará"),
+            ("Emerson Barata", "Centro", "Santa Bárbara do Pará", "Centro - Santa Bárbara do Pará"),
+            ("Francisco Miranda", "Livramento", "Santa Bárbara do Pará", "Livramento - Santa Bárbara do Pará"),
+        ]
+        for nome, bairro, cidade, _localidade in casos:
+            self._enviar(self._criar_venda_para_separacao(nome, bairro=bairro, cidade=cidade))
 
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Furo da Marinha")
-        self.assertContains(resposta, "Sem rota definida")
-        self.assertContains(resposta, "Cliente Com Rota")
-        self.assertContains(resposta, "Cliente Sem Rota")
+        for nome, _bairro, _cidade, localidade in casos:
+            self.assertContains(resposta, localidade)
+            self.assertContains(resposta, nome)
 
-    def test_fila_escolhe_rota_vigente_sem_duplicar_separacao(self):
-        venda = self._criar_venda_para_separacao("Cliente Rota Vigente")
+    def test_fila_sem_bairro_ou_cidade_fica_sem_rota_definida(self):
+        venda = self._criar_venda_para_separacao("Cliente Sem Localidade")
+        self._enviar(venda)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "Sem rota definida")
+        self.assertContains(resposta, "Cliente Sem Localidade")
+
+    def test_fila_nao_duplica_separacao_mesmo_com_entregas_existentes(self):
+        venda = self._criar_venda_para_separacao(
+            "Cliente Rota Vigente",
+            bairro="Furo da Marinha",
+            cidade="Mosqueiro",
+        )
         self._criar_rota_para_venda(
             venda,
             "Rota Cancelada",
@@ -29897,25 +29912,20 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
-        self.assertContains(resposta, "Rota Atual")
+        self.assertContains(resposta, "Furo da Marinha - Mosqueiro")
         self.assertNotContains(resposta, "Rota Cancelada")
         self.assertNotContains(resposta, "Rota Pendencia Antiga")
+        self.assertNotContains(resposta, "Rota Atual")
         self.assertEqual(resposta.content.decode().count(f"Nota #{venda.id}"), 1)
 
     def test_fila_resumo_da_rota_conta_estados(self):
         vendas = [
-            self._criar_venda_para_separacao("Cliente Separada"),
-            self._criar_venda_para_separacao("Cliente Pendencia"),
-            self._criar_venda_para_separacao("Cliente Em Separacao"),
-            self._criar_venda_para_separacao("Cliente Enviada"),
+            self._criar_venda_para_separacao("Cliente Separada", bairro="Centro", cidade="Santa Bárbara do Pará"),
+            self._criar_venda_para_separacao("Cliente Pendencia", bairro="Centro", cidade="Santa Bárbara do Pará"),
+            self._criar_venda_para_separacao("Cliente Em Separacao", bairro="Centro", cidade="Santa Bárbara do Pará"),
+            self._criar_venda_para_separacao("Cliente Enviada", bairro="Centro", cidade="Santa Bárbara do Pará"),
         ]
-        rota = EntregaRota.objects.create(
-            data=timezone.localdate(),
-            tipo=EntregaRota.TIPO_ROTA,
-            observacao="Rota: Resumo Rota",
-        )
-        for ordem, venda in enumerate(vendas, start=1):
-            self._vincular_venda_a_rota(venda, rota, ordem_entrega=ordem)
+        for venda in vendas:
             self._enviar(venda)
 
         separacoes = [SeparacaoVenda.objects.get(venda=venda) for venda in vendas]
@@ -29932,7 +29942,6 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "1 enviadas")
 
     def test_fila_exibe_pendencias_quantidade_faltante_e_botao_correcao(self):
-        self._criar_rota_para_venda(self.venda, "Rota Pendencias")
         self._enviar()
         separacao = self._separacao()
         item = separacao.itens.get(item_venda=self.item_a)
@@ -29954,15 +29963,16 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "Abrir venda para corrigir")
 
     def test_fila_ordena_pendencias_antes_das_separadas(self):
-        venda_separada = self._criar_venda_para_separacao("Cliente Separada Ordem")
-        venda_pendencia = self._criar_venda_para_separacao("Cliente Pendencia Ordem")
-        rota = EntregaRota.objects.create(
-            data=timezone.localdate(),
-            tipo=EntregaRota.TIPO_ROTA,
-            observacao="Rota: Rota Ordem",
+        venda_separada = self._criar_venda_para_separacao(
+            "Cliente Separada Ordem",
+            bairro="Genipauba",
+            cidade="Santa Bárbara do Pará",
         )
-        self._vincular_venda_a_rota(venda_separada, rota, ordem_entrega=1)
-        self._vincular_venda_a_rota(venda_pendencia, rota, ordem_entrega=2)
+        venda_pendencia = self._criar_venda_para_separacao(
+            "Cliente Pendencia Ordem",
+            bairro="Genipauba",
+            cidade="Santa Bárbara do Pará",
+        )
         self._enviar(venda_separada)
         self._enviar(venda_pendencia)
         self._marcar_separacao_status(

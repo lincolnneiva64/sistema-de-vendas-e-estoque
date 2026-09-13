@@ -20155,39 +20155,14 @@ def venda_criar_entrega(request, pk):
     return redirect("estoque:venda_detalhe", pk=venda.pk)
 
 
-def _nome_exibicao_rota_separacao(rota):
-    if not rota:
-        return "Sem rota definida"
-    observacao = (rota.observacao or "").strip()
-    if observacao:
-        primeira_linha = observacao.splitlines()[0].strip()
-        if primeira_linha.lower().startswith("rota:"):
-            nome = primeira_linha.split(":", 1)[1].strip()
-            if nome:
-                return nome
-        return primeira_linha
-    return f"{rota.get_tipo_display()} #{rota.id}"
-
-
-def _entrega_rota_vigente_venda(venda):
-    itens_rota = [
-        item
-        for item in venda.entregas_rota.all()
-        if item.status != EntregaRotaItem.STATUS_CANCELADA
-    ]
-    if not itens_rota:
-        return None
-
-    def chave_vigencia(item):
-        data_rota = item.rota.data or date.min
-        return (
-            1 if not item.is_pendencia else 0,
-            data_rota,
-            item.rota_id or 0,
-            item.id or 0,
-        )
-
-    return sorted(itens_rota, key=chave_vigencia, reverse=True)[0]
+def _localidade_operacional_cliente(cliente):
+    if not cliente:
+        return ""
+    bairro = " ".join((cliente.bairro or "").strip().split())
+    cidade = " ".join((cliente.cidade or "").strip().split())
+    if bairro and cidade:
+        return f"{bairro} - {cidade}"
+    return bairro or cidade
 
 
 def _ordem_status_separacao(status):
@@ -20244,15 +20219,14 @@ def _montar_grupos_rota_separacao(separacoes):
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
 
-        item_rota = _entrega_rota_vigente_venda(separacao.venda)
-        rota = item_rota.rota if item_rota else None
-        chave = ("rota", rota.id) if rota else ("sem_rota", 0)
+        localidade = _localidade_operacional_cliente(separacao.venda.cliente)
+        chave = ("localidade", localidade.lower()) if localidade else ("sem_rota", "")
         if chave not in grupos:
             grupos[chave] = {
-                "rota": rota,
-                "titulo": _nome_exibicao_rota_separacao(rota),
-                "sem_rota": rota is None,
-                "data": rota.data if rota else None,
+                "rota": None,
+                "titulo": localidade or "Sem rota definida",
+                "sem_rota": not localidade,
+                "data": None,
                 "separacoes": [],
                 "total_notas": 0,
                 "total_separadas": 0,
@@ -20286,7 +20260,6 @@ def _montar_grupos_rota_separacao(separacoes):
         grupos.values(),
         key=lambda grupo: (
             1 if grupo["sem_rota"] else 0,
-            -(grupo["data"].toordinal() if grupo["data"] else 0),
             grupo["titulo"].lower(),
         ),
     )
@@ -20298,14 +20271,6 @@ def separacao_vendas_fila(request):
         .prefetch_related(
             "itens__item_venda__produto",
             "venda__itens__produto",
-            Prefetch(
-                "venda__entregas_rota",
-                queryset=EntregaRotaItem.objects.select_related("rota").order_by(
-                    "-rota__data",
-                    "-rota_id",
-                    "-id",
-                ),
-            ),
         )
         .order_by("enviado_em", "id")
     )
