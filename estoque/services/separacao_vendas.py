@@ -18,52 +18,73 @@ def usuario_autenticado_ou_none(usuario):
     return None
 
 
+def _proximo_numero_sequencial_dia(data_sequencia):
+    sequencias = list(
+        SeparacaoVenda.objects
+        .select_for_update()
+        .filter(data_sequencia=data_sequencia)
+        .order_by("-numero_sequencial_dia")
+        .values_list("numero_sequencial_dia", flat=True)[:1]
+    )
+    return (sequencias[0] if sequencias else 0) + 1
+
+
 def criar_ou_obter_separacao_venda(venda, usuario=None, responsavel=None):
     if venda.cancelada:
         raise ValueError("Venda cancelada nao pode ser enviada para separacao.")
 
     usuario = usuario_autenticado_ou_none(usuario)
 
-    with transaction.atomic():
-        venda_bloqueada = Venda.objects.select_for_update().get(pk=venda.pk)
-        if venda_bloqueada.cancelada:
-            raise ValueError("Venda cancelada nao pode ser enviada para separacao.")
-
-        separacao = SeparacaoVenda.objects.filter(venda=venda_bloqueada).first()
-        if separacao:
-            responsavel_atualizado = False
-            if responsavel and separacao.responsavel_id != responsavel.id:
-                separacao.responsavel = responsavel
-                separacao.save(update_fields=["responsavel", "atualizado_em"])
-                responsavel_atualizado = True
-            return separacao, False, responsavel_atualizado
-
+    for _tentativa in range(3):
         try:
-            separacao = SeparacaoVenda.objects.create(
-                venda=venda_bloqueada,
-                enviado_por=usuario,
-                responsavel=responsavel,
-            )
+            with transaction.atomic():
+                venda_bloqueada = Venda.objects.select_for_update().get(pk=venda.pk)
+                if venda_bloqueada.cancelada:
+                    raise ValueError("Venda cancelada nao pode ser enviada para separacao.")
+
+                separacao = SeparacaoVenda.objects.filter(venda=venda_bloqueada).first()
+                if separacao:
+                    responsavel_atualizado = False
+                    if responsavel and separacao.responsavel_id != responsavel.id:
+                        separacao.responsavel = responsavel
+                        separacao.save(update_fields=["responsavel", "atualizado_em"])
+                        responsavel_atualizado = True
+                    return separacao, False, responsavel_atualizado
+
+                data_sequencia = timezone.localdate()
+                separacao = SeparacaoVenda.objects.create(
+                    venda=venda_bloqueada,
+                    enviado_por=usuario,
+                    responsavel=responsavel,
+                    data_sequencia=data_sequencia,
+                    numero_sequencial_dia=_proximo_numero_sequencial_dia(data_sequencia),
+                )
+
+                itens = list(
+                    ItemVenda.objects.select_related("produto")
+                    .filter(venda=venda_bloqueada)
+                    .order_by("id")
+                )
+                SeparacaoVendaItem.objects.bulk_create([
+                    SeparacaoVendaItem(
+                        separacao=separacao,
+                        item_venda=item,
+                        produto_nome_snapshot=item.produto.nome if item.produto else "Produto nao identificado",
+                        unidade_snapshot=item.unidade or "",
+                        quantidade_solicitada=Decimal(item.quantidade or "0").quantize(Decimal("0.001")),
+                    )
+                    for item in itens
+                ])
+            return separacao, True, False
         except IntegrityError:
-            return SeparacaoVenda.objects.get(venda=venda_bloqueada), False, False
+            separacao = SeparacaoVenda.objects.filter(venda_id=venda.pk).first()
+            if separacao:
+                return separacao, False, False
 
-        itens = list(
-            ItemVenda.objects.select_related("produto")
-            .filter(venda=venda_bloqueada)
-            .order_by("id")
-        )
-        SeparacaoVendaItem.objects.bulk_create([
-            SeparacaoVendaItem(
-                separacao=separacao,
-                item_venda=item,
-                produto_nome_snapshot=item.produto.nome if item.produto else "Produto nao identificado",
-                unidade_snapshot=item.unidade or "",
-                quantidade_solicitada=Decimal(item.quantidade or "0").quantize(Decimal("0.001")),
-            )
-            for item in itens
-        ])
-
-    return separacao, True, False
+    separacao = SeparacaoVenda.objects.filter(venda_id=venda.pk).first()
+    if separacao:
+        return separacao, False, False
+    raise IntegrityError("Nao foi possivel atribuir a sequencia diaria da separacao.")
 
 
 def recalcular_status_separacao(separacao, usuario=None):

@@ -3444,6 +3444,8 @@ let vendaGravadaSeparacaoPublicUrl = "";
 let vendaGravadaSeparacaoStatus = "";
 let vendaGravadaSeparacaoResponsavelNome = "";
 let vendaGravadaSeparacaoResponsavelWhatsapp = "";
+let vendaGravadaSeparacaoSequencia = "";
+let vendaGravadaSeparacaoWhatsappTexto = "";
 
 function dataLocalHojeInput() {
     const hoje = new Date();
@@ -3847,6 +3849,8 @@ function aplicarRetornoSeparacaoVenda(retorno, responsavelId = "") {
     vendaGravadaSeparacaoStatus = retorno.status_texto || "";
     vendaGravadaSeparacaoResponsavelNome = retorno.responsavel_nome || "";
     vendaGravadaSeparacaoResponsavelWhatsapp = retorno.responsavel_whatsapp || "";
+    vendaGravadaSeparacaoSequencia = retorno.numero_sequencial_dia || "";
+    vendaGravadaSeparacaoWhatsappTexto = retorno.whatsapp_texto || "";
     if (responsavelId) {
         localStorage.setItem(chaveResponsavelSeparacaoVenda, responsavelId);
     }
@@ -3884,7 +3888,11 @@ function abrirWhatsappSeparacaoVenda(telefone) {
     const podeEnviar = Boolean(vendaGravadaSeparacaoUrl && telefone);
     if (!podeEnviar) return;
     const checklistUrl = vendaGravadaSeparacaoPublicUrl || new URL(vendaGravadaSeparacaoUrl, window.location.origin).href;
-    const texto = encodeURIComponent("Checklist de separacao da venda: " + checklistUrl);
+    const textoMensagem = vendaGravadaSeparacaoWhatsappTexto || (
+        (vendaGravadaSeparacaoSequencia || "") + " - Nota #" + vendaGravadaId + " - " + (clienteSelecionado?.nome || "Consumidor")
+        + "\nChecklist de separação: " + checklistUrl
+    );
+    const texto = encodeURIComponent(textoMensagem);
     window.open("https://wa.me/" + telefone + "?text=" + texto, "_blank", "noopener");
 }
 
@@ -3896,6 +3904,8 @@ function mostrarBlocoVendaGravada(vendaId, visualizarUrl, mensagem, separacao) {
     vendaGravadaSeparacaoStatus = separacao?.status_texto || "";
     vendaGravadaSeparacaoResponsavelNome = separacao?.responsavel_nome || "";
     vendaGravadaSeparacaoResponsavelWhatsapp = separacao?.responsavel_whatsapp || "";
+    vendaGravadaSeparacaoSequencia = separacao?.numero_sequencial_dia || "";
+    vendaGravadaSeparacaoWhatsappTexto = separacao?.whatsapp_texto || "";
     if (responsavelSeparacaoVendaGravada) {
         if (separacao?.responsavel_id) {
             responsavelSeparacaoVendaGravada.value = String(separacao.responsavel_id);
@@ -6371,6 +6381,8 @@ btnNovaVenda.addEventListener("click", async () => {
     vendaGravadaSeparacaoUrl = "";
     vendaGravadaSeparacaoPublicUrl = "";
     vendaGravadaSeparacaoStatus = "";
+    vendaGravadaSeparacaoSequencia = "";
+    vendaGravadaSeparacaoWhatsappTexto = "";
     ocultarBlocoVendaGravada();
     mostrarToastVenda("Venda atual limpa.");
 });

@@ -27363,8 +27363,11 @@ class VendaEdicaoUnificadaTests(TestCase):
         separacao_contexto = resposta.context["venda_edicao"]["separacao"]
         self.assertEqual(separacao_contexto["id"], separacao.id)
         self.assertEqual(separacao_contexto["url"], reverse("estoque:separacao_venda_detalhe", args=[separacao.id]))
+        self.assertEqual(separacao_contexto["numero_sequencial_dia"], separacao.numero_sequencial_dia)
         self.assertEqual(separacao_contexto["responsavel_id"], responsavel.id)
         self.assertEqual(separacao_contexto["responsavel_nome"], responsavel.nome)
+        self.assertIn(f"{separacao.numero_sequencial_dia} - Nota #{venda.id}", separacao_contexto["whatsapp_texto"])
+        self.assertIn(venda.cliente.nome, separacao_contexto["whatsapp_texto"])
         self.assertContains(resposta, "mostrarBlocoVendaGravada(")
         self.assertContains(resposta, "vendaEdicaoVenda.separacao || null")
 
@@ -29583,6 +29586,24 @@ class SeparacaoVendaFase1Tests(TestCase):
             secure=True,
         )
 
+    def _criar_venda_para_separacao(self, cliente_nome="Cliente Separacao Extra"):
+        cliente = Cliente.objects.create(nome=cliente_nome)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=date.today(),
+            tipo_pagamento="A prazo",
+            total=Decimal("10.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=self.produto_a,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+        return venda
+
     def _separacao(self):
         return SeparacaoVenda.objects.get(venda=self.venda)
 
@@ -29606,6 +29627,93 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(segunda.status_code, 200)
         self.assertFalse(segunda.json()["criada"])
         self.assertEqual(SeparacaoVenda.objects.count(), 1)
+
+    def test_primeira_separacao_do_dia_recebe_sequencia_1(self):
+        self._enviar()
+
+        separacao = self._separacao()
+
+        self.assertEqual(separacao.numero_sequencial_dia, 1)
+        self.assertEqual(separacao.data_sequencia, timezone.localdate())
+
+    def test_segunda_separacao_do_dia_recebe_sequencia_2(self):
+        segunda_venda = self._criar_venda_para_separacao("Cliente Sequencia 2")
+
+        self._enviar()
+        resposta = self._enviar(segunda_venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(self._separacao().numero_sequencial_dia, 1)
+        self.assertEqual(SeparacaoVenda.objects.get(venda=segunda_venda).numero_sequencial_dia, 2)
+
+    def test_reenvio_reutiliza_separacao_e_mantem_sequencia_original(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        segunda = self._enviar()
+        separacao.refresh_from_db()
+
+        self.assertFalse(segunda.json()["criada"])
+        self.assertEqual(separacao.numero_sequencial_dia, 1)
+        self.assertEqual(segunda.json()["numero_sequencial_dia"], 1)
+
+    def test_colisao_de_sequencia_em_venda_diferente_tenta_novamente(self):
+        venda_existente = self._criar_venda_para_separacao("Cliente Sequencia Ja Usada")
+        venda_em_colisao = self._criar_venda_para_separacao("Cliente Retry Sequencia")
+        data_sequencia = timezone.localdate()
+        SeparacaoVenda.objects.create(
+            venda=venda_existente,
+            data_sequencia=data_sequencia,
+            numero_sequencial_dia=1,
+        )
+
+        with patch(
+            "estoque.services.separacao_vendas._proximo_numero_sequencial_dia",
+            side_effect=[1, 2],
+        ):
+            resposta = self._enviar(venda_em_colisao)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["criada"])
+        separacao = SeparacaoVenda.objects.get(venda=venda_em_colisao)
+        self.assertEqual(separacao.data_sequencia, data_sequencia)
+        self.assertEqual(separacao.numero_sequencial_dia, 2)
+
+    def test_sequencia_reinicia_no_dia_seguinte(self):
+        venda_dia_seguinte = self._criar_venda_para_separacao("Cliente Dia Seguinte")
+
+        with patch("estoque.services.separacao_vendas.timezone.localdate", return_value=date(2026, 9, 13)):
+            self._enviar()
+        with patch("estoque.services.separacao_vendas.timezone.localdate", return_value=date(2026, 9, 14)):
+            self._enviar(venda_dia_seguinte)
+
+        self.assertEqual(self._separacao().numero_sequencial_dia, 1)
+        self.assertEqual(SeparacaoVenda.objects.get(venda=venda_dia_seguinte).numero_sequencial_dia, 1)
+
+    def test_vendas_diferentes_nao_recebem_mesma_sequencia_no_mesmo_dia(self):
+        segunda_venda = self._criar_venda_para_separacao("Cliente Sequencia Unica")
+
+        self._enviar()
+        self._enviar(segunda_venda)
+
+        sequencias = list(
+            SeparacaoVenda.objects.order_by("numero_sequencial_dia")
+            .values_list("numero_sequencial_dia", flat=True)
+        )
+        self.assertEqual(sequencias, [1, 2])
+        self.assertEqual(len(sequencias), len(set(sequencias)))
+
+    def test_payload_da_separacao_inclui_sequencia_e_texto_whatsapp(self):
+        resposta = self._enviar()
+        dados = resposta.json()
+
+        self.assertEqual(dados["numero_sequencial_dia"], 1)
+        self.assertEqual(dados["data_sequencia"], timezone.localdate().isoformat())
+        self.assertIn("1 - Nota #", dados["whatsapp_texto"])
+        self.assertIn(str(self.venda.id), dados["whatsapp_texto"])
+        self.assertIn("Cliente Separacao", dados["whatsapp_texto"])
+        self.assertIn("Checklist de separação:", dados["whatsapp_texto"])
+        self.assertIn(dados["separacao_public_url"], dados["whatsapp_texto"])
 
     def test_enviar_venda_registra_responsavel_da_separacao(self):
         responsavel = Funcionario.objects.create(
@@ -29664,6 +29772,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(SeparacaoVenda.objects.count(), 1)
         separacao.refresh_from_db()
         self.assertEqual(separacao.responsavel, responsavel_novo)
+        self.assertEqual(separacao.numero_sequencial_dia, 1)
         self.assertEqual(
             list(separacao.itens.order_by("id").values_list("id", "status", "observacao")),
             itens_antes,

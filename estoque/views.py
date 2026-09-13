@@ -18200,16 +18200,34 @@ def _bloquear_venda_cancelada(request, venda, destino="estoque:venda_detalhe"):
     return redirect(destino, pk=venda.pk)
 
 
+def _mensagem_whatsapp_separacao_venda(separacao, public_url):
+    venda = separacao.venda
+    cliente_nome = venda.cliente.nome if venda.cliente else "Consumidor"
+    return (
+        f"{separacao.numero_sequencial_dia} - Nota #{venda.id} - {cliente_nome}\n"
+        f"Checklist de separação: {public_url}"
+    )
+
+
 def _separacao_venda_payload(venda, request=None):
-    separacao = SeparacaoVenda.objects.select_related("responsavel").filter(venda=venda).first()
+    separacao = (
+        SeparacaoVenda.objects
+        .select_related("responsavel", "venda", "venda__cliente")
+        .filter(venda=venda)
+        .first()
+    )
     if not separacao:
         return None
     responsavel = separacao.responsavel
     url = reverse("estoque:separacao_venda_detalhe", kwargs={"pk": separacao.id})
+    public_url = montar_url_publica(request, url) if request else url
     return {
         "id": separacao.id,
         "url": url,
-        "public_url": montar_url_publica(request, url) if request else url,
+        "public_url": public_url,
+        "numero_sequencial_dia": separacao.numero_sequencial_dia,
+        "data_sequencia": separacao.data_sequencia.isoformat() if separacao.data_sequencia else "",
+        "whatsapp_texto": _mensagem_whatsapp_separacao_venda(separacao, public_url),
         "status": separacao.status,
         "status_texto": separacao.get_status_display(),
         "responsavel_id": responsavel.id if responsavel else None,
@@ -20207,6 +20225,9 @@ def venda_enviar_separacao(request, pk):
             "separacao_id": separacao.pk,
             "separacao_url": detalhe_url,
             "separacao_public_url": detalhe_public_url,
+            "numero_sequencial_dia": separacao.numero_sequencial_dia,
+            "data_sequencia": separacao.data_sequencia.isoformat() if separacao.data_sequencia else "",
+            "whatsapp_texto": _mensagem_whatsapp_separacao_venda(separacao, detalhe_public_url),
             "status": separacao.status,
             "status_texto": separacao.get_status_display(),
             "responsavel_id": responsavel.id if responsavel else None,

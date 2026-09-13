@@ -540,6 +540,8 @@ class SeparacaoVenda(models.Model):
     )
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_ENVIADA)
     enviado_em = models.DateTimeField(default=timezone.now)
+    data_sequencia = models.DateField(default=timezone.localdate)
+    numero_sequencial_dia = models.PositiveIntegerField(default=1)
     iniciado_em = models.DateTimeField(blank=True, null=True)
     finalizado_em = models.DateTimeField(blank=True, null=True)
     enviado_por = models.ForeignKey(
@@ -569,6 +571,12 @@ class SeparacaoVenda(models.Model):
 
     class Meta:
         ordering = ["enviado_em", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["data_sequencia", "numero_sequencial_dia"],
+                name="uniq_separacao_venda_sequencia_dia",
+            ),
+        ]
 
     def __str__(self):
         return f"Separacao da venda #{self.venda_id}"
