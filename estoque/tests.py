@@ -29913,6 +29913,86 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, f"Nota #{self.venda.id}")
         self.assertContains(resposta, "Cliente Separacao")
 
+    def test_fila_sem_parametro_mostra_somente_hoje(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        venda_ontem = self._criar_venda_para_separacao("Cliente Separacao Ontem")
+        self._enviar()
+        self._enviar(venda_ontem)
+        SeparacaoVenda.objects.filter(venda=self.venda).update(data_sequencia=hoje, numero_sequencial_dia=1)
+        SeparacaoVenda.objects.filter(venda=venda_ontem).update(data_sequencia=ontem, numero_sequencial_dia=1)
+
+        with patch("estoque.views.timezone.localdate", return_value=hoje):
+            resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Separacao")
+        self.assertNotContains(resposta, "Cliente Separacao Ontem")
+
+    def test_fila_ontem_nao_aparece_por_padrao(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        venda_ontem = self._criar_venda_para_separacao("Cliente Antigo Fora Da Fila")
+        self._enviar(venda_ontem)
+        SeparacaoVenda.objects.filter(venda=venda_ontem).update(data_sequencia=ontem, numero_sequencial_dia=1)
+
+        with patch("estoque.views.timezone.localdate", return_value=hoje):
+            resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertNotContains(resposta, "Cliente Antigo Fora Da Fila")
+        self.assertContains(resposta, "Nenhuma venda enviada para separacao.")
+
+    def test_fila_com_data_ontem_mostra_somente_ontem(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        venda_ontem = self._criar_venda_para_separacao("Cliente Consulta Ontem")
+        self._enviar()
+        self._enviar(venda_ontem)
+        SeparacaoVenda.objects.filter(venda=self.venda).update(data_sequencia=hoje, numero_sequencial_dia=1)
+        SeparacaoVenda.objects.filter(venda=venda_ontem).update(data_sequencia=ontem, numero_sequencial_dia=1)
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": ontem.isoformat()},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Cliente Consulta Ontem")
+        self.assertNotContains(resposta, "Cliente Separacao")
+
+    def test_fila_data_invalida_volta_para_hoje(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        venda_ontem = self._criar_venda_para_separacao("Cliente Data Invalida Ontem")
+        self._enviar()
+        self._enviar(venda_ontem)
+        SeparacaoVenda.objects.filter(venda=self.venda).update(data_sequencia=hoje, numero_sequencial_dia=1)
+        SeparacaoVenda.objects.filter(venda=venda_ontem).update(data_sequencia=ontem, numero_sequencial_dia=1)
+
+        with patch("estoque.views.timezone.localdate", return_value=hoje):
+            resposta = self.client.get(
+                reverse("estoque:separacao_vendas_fila"),
+                {"data": "data-invalida"},
+                secure=True,
+            )
+
+        self.assertEqual(resposta.context["data_referencia"], hoje)
+        self.assertContains(resposta, "Cliente Separacao")
+        self.assertNotContains(resposta, "Cliente Data Invalida Ontem")
+
+    def test_fila_exibe_atalhos_hoje_e_ontem(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+
+        with patch("estoque.views.timezone.localdate", return_value=hoje):
+            resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, f"?data={hoje.isoformat()}")
+        self.assertContains(resposta, f"?data={ontem.isoformat()}")
+        self.assertContains(resposta, ">Hoje<")
+        self.assertContains(resposta, ">Ontem<")
+        self.assertContains(resposta, ">Buscar<")
+
     def test_fila_agrupa_separacoes_por_localidade_do_cliente(self):
         casos = [
             ("Rubem Arruda", "Furo da Marinha", "Mosqueiro", "Furo da Marinha - Mosqueiro"),
@@ -29990,6 +30070,41 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "1 com pendencia")
         self.assertContains(resposta, "1 em separacao")
         self.assertContains(resposta, "1 enviadas")
+
+    def test_fila_agrupamento_e_contadores_respeitam_data_filtrada(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        vendas_hoje = [
+            self._criar_venda_para_separacao("Cliente Hoje Separada", bairro="Centro", cidade="Santa Barbara do Para"),
+            self._criar_venda_para_separacao("Cliente Hoje Pendencia", bairro="Centro", cidade="Santa Barbara do Para"),
+        ]
+        venda_ontem = self._criar_venda_para_separacao(
+            "Cliente Ontem Mesmo Grupo",
+            bairro="Centro",
+            cidade="Santa Barbara do Para",
+        )
+        for venda in [*vendas_hoje, venda_ontem]:
+            self._enviar(venda)
+
+        separacoes_hoje = [SeparacaoVenda.objects.get(venda=venda) for venda in vendas_hoje]
+        for indice, venda in enumerate(vendas_hoje, start=1):
+            SeparacaoVenda.objects.filter(venda=venda).update(
+                data_sequencia=hoje,
+                numero_sequencial_dia=indice,
+            )
+        self._marcar_separacao_status(separacoes_hoje[0], SeparacaoVenda.STATUS_SEPARADA)
+        self._marcar_separacao_status(separacoes_hoje[1], SeparacaoVenda.STATUS_COM_PENDENCIA)
+        SeparacaoVenda.objects.filter(venda=venda_ontem).update(data_sequencia=ontem, numero_sequencial_dia=1)
+
+        with patch("estoque.views.timezone.localdate", return_value=hoje):
+            resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "Centro - Santa Barbara do Para")
+        self.assertContains(resposta, "2 notas")
+        self.assertContains(resposta, "1 separadas")
+        self.assertContains(resposta, "1 com pendencia")
+        self.assertNotContains(resposta, "Cliente Ontem Mesmo Grupo")
+        self.assertNotContains(resposta, "3 notas")
 
     def test_fila_exibe_pendencias_quantidade_faltante_e_botao_correcao(self):
         self._enviar()

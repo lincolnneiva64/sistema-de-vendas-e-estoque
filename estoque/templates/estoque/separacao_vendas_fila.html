@@ -7,6 +7,11 @@
   .sep-head { margin-bottom: 12px; padding: 14px; border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
   .sep-title { margin: 0; font-size: clamp(1.3rem, 5vw, 1.8rem); font-weight: 950; color: #111827; line-height: 1.1; }
   .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
+  .sep-filter { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+  .sep-filter-field { display: grid; gap: 4px; min-width: min(220px, 100%); }
+  .sep-filter-field label { color: #475569; font-size: 0.78rem; font-weight: 900; text-transform: uppercase; }
+  .sep-filter-field input { min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #172033; padding: 8px 10px; font: inherit; font-weight: 850; }
+  .sep-filter-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .rota-list { display: grid; gap: 14px; }
   .rota-group { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; overflow: hidden; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
   .rota-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 13px 14px; background: #172033; color: #fff; }
@@ -50,6 +55,11 @@
     .sep-head { margin-bottom: 10px; padding: 10px 12px; }
     .sep-title { font-size: 1.35rem; font-weight: 800; }
     .sep-sub { margin-top: 3px; font-size: 0.86rem; font-weight: 600; }
+    .sep-filter { margin-top: 8px; gap: 6px; }
+    .sep-filter-field { min-width: 190px; }
+    .sep-filter-field label { font-size: 0.78rem; font-weight: 700; }
+    .sep-filter-field input { min-height: 31px; padding: 4px 8px; font-size: 0.86rem; font-weight: 650; }
+    .sep-filter-actions { gap: 5px; }
     .rota-list { gap: 10px; }
     .rota-head { align-items: center; gap: 10px; padding: 7px 10px; }
     .rota-title { font-size: 1rem; font-weight: 800; }
@@ -76,6 +86,10 @@
   }
   @media (max-width: 640px) {
     .rota-head, .sep-card-top { display: grid; }
+    .sep-filter,
+    .sep-filter-field,
+    .sep-filter-actions,
+    .sep-filter-actions .sep-btn { width: 100%; }
     .rota-summary { justify-content: flex-start; }
     .sep-status { justify-self: start; }
     .sep-btn { width: 100%; }
@@ -85,7 +99,18 @@
   <div class="sep-shell">
     <header class="sep-head">
       <h1 class="sep-title">Fila de separacao</h1>
-      <p class="sep-sub">Vendas enviadas para separacao fisica, agrupadas por rota de entrega.</p>
+      <p class="sep-sub">Vendas enviadas para separacao fisica em {{ data_referencia|date:"d/m/Y" }}, agrupadas por rota de entrega.</p>
+      <form class="sep-filter" method="get" action="{% url 'estoque:separacao_vendas_fila' %}">
+        <div class="sep-filter-field">
+          <label for="dataFilaSeparacao">Data da fila</label>
+          <input id="dataFilaSeparacao" name="data" type="date" value="{{ data_referencia_iso }}">
+        </div>
+        <div class="sep-filter-actions">
+          <a class="sep-btn secondary" href="{{ hoje_url }}">Hoje</a>
+          <a class="sep-btn secondary" href="{{ ontem_url }}">Ontem</a>
+          <button class="sep-btn" type="submit">Buscar</button>
+        </div>
+      </form>
     </header>
 
     <section class="rota-list" aria-label="Separacoes por rota">

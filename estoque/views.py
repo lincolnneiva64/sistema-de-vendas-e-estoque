@@ -20284,8 +20284,18 @@ def _montar_grupos_rota_separacao(separacoes):
 
 
 def separacao_vendas_fila(request):
+    hoje = timezone.localdate()
+    ontem = hoje - timedelta(days=1)
+    data_texto = request.GET.get("data", "").strip()
+    data_referencia = parse_date(data_texto) if data_texto else hoje
+    if data_texto and not data_referencia:
+        messages.warning(request, "Data invalida. Mostrando as separacoes de hoje.")
+        data_referencia = hoje
+
+    url_base = reverse("estoque:separacao_vendas_fila")
     separacoes = list(
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
+        .filter(data_sequencia=data_referencia)
         .prefetch_related(
             "itens__item_venda__produto",
             "venda__itens__produto",
@@ -20300,6 +20310,10 @@ def separacao_vendas_fila(request):
         {
             "grupos_rota": grupos_rota,
             "separacoes": separacoes,
+            "data_referencia": data_referencia,
+            "data_referencia_iso": data_referencia.isoformat(),
+            "hoje_url": f"{url_base}?{urlencode({'data': hoje.isoformat()})}",
+            "ontem_url": f"{url_base}?{urlencode({'data': ontem.isoformat()})}",
         },
     )
 
