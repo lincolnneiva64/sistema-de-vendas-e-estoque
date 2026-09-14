@@ -16915,15 +16915,26 @@ UNIDADES_ESTOQUE_FRACIONAVEIS = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA", 
 
 def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
     quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
+
     if quantidade_decimal != quantidade_decimal.to_integral_value():
         unidade_texto = str(unidade or "").strip()
         unidade_normalizada = unidade_texto.upper()
-        if unidade_normalizada not in UNIDADES_ESTOQUE_FRACIONAVEIS:
+
+        fracao_valida = unidade_normalizada in UNIDADES_ESTOQUE_FRACIONAVEIS
+
+        if unidade_normalizada == "DZ":
+            quantidade_unidades = quantidade_decimal * Decimal("12")
+            fracao_valida = (
+                quantidade_unidades == quantidade_unidades.to_integral_value()
+            )
+
+        if not fracao_valida:
             unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
             raise ValueError(
                 f"Produto {produto_nome} nao permite venda fracionada. "
                 f"Informe quantidade inteira{unidade_sufixo}."
             )
+
     return quantidade_decimal
 
 
@@ -20408,6 +20419,9 @@ def _item_separacao_permite_quantidade_fracionada(item):
         unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
         if produto.vende_fracionado and unidade_fracionada and unidade == unidade_fracionada:
             return True
+    if unidade == "DZ":
+        return True
+
     return unidade in UNIDADES_ESTOQUE_FRACIONAVEIS
 
 
