@@ -11809,6 +11809,7 @@ def vendas(request):
     pedido_importado = None
     pedido_importado_aviso = ""
     venda_edicao = None
+    venda_edicao_next = _url_next_segura_request(request)
 
     venda_edicao_id = request.GET.get("editar")
     if venda_edicao_id:
@@ -11823,6 +11824,7 @@ def vendas(request):
             venda_edicao = {
                 "id": venda_para_editar.id,
                 "visualizar_url": reverse("estoque:venda_detalhe", args=[venda_para_editar.id]),
+                "next": venda_edicao_next,
                 "cliente_id": venda_para_editar.cliente_id,
                 "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
                 "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
@@ -17232,6 +17234,13 @@ def gravar_venda(request):
 
     venda_edicao_id = str(dados.get("venda_id") or "").strip()
     venda_em_edicao = None
+    venda_edicao_next = str(dados.get("next") or "").strip()
+    if venda_edicao_next and not url_has_allowed_host_and_scheme(
+        url=venda_edicao_next,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        venda_edicao_next = ""
 
     if venda_edicao_id:
         if not venda_edicao_id.isdigit():
@@ -17770,7 +17779,7 @@ def gravar_venda(request):
             "sucesso": True,
             "mensagem": f"Venda #{venda.id} atualizada com sucesso.",
             "venda_id": venda.id,
-            "visualizar_url": (
+            "visualizar_url": venda_edicao_next or (
                 reverse("estoque:venda_detalhe", args=[venda.id])
                 + "?nota_atualizada=1"
             ),
@@ -20534,17 +20543,13 @@ def separacao_venda_detalhe(request, pk):
                 .get(pk=separacao.pk)
             )
             itens_bloqueados = list(separacao.itens.all())
-            atualizacoes = []
-            erros = []
-            for item in itens_bloqueados:
-                status, quantidade_separada, erro = _validar_item_checklist_separacao(item, request.POST)
-                if erro:
-                    erros.append(erro)
-                atualizacoes.append((item, status, quantidade_separada))
+            itens_pendentes = [
+                item for item in itens_bloqueados
+                if item.status == SeparacaoVendaItem.STATUS_PENDENTE
+            ]
 
-            if erros:
-                for erro in erros:
-                    messages.warning(request, erro)
+            if itens_pendentes:
+                messages.warning(request, "Confira todos os itens antes de concluir a separacao.")
                 itens = [
                     _preparar_item_checklist_separacao(item)
                     for item in separacao.itens.select_related("item_venda", "item_venda__produto").all()
@@ -20562,19 +20567,10 @@ def separacao_venda_detalhe(request, pk):
                     status=200,
                 )
 
-            for item, status, quantidade_separada in atualizacoes:
-                item.status = status
-                item.quantidade_separada = quantidade_separada
-                item.save(update_fields=[
-                    "status",
-                    "quantidade_separada",
-                    "atualizado_em",
-                ])
-
             recalcular_status_separacao(separacao, request.user)
 
-        messages.success(request, "Separacao salva.")
-        return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
+        messages.success(request, "Separacao concluida.")
+        return redirect("estoque:separacao_vendas_fila")
 
     itens = [
         _preparar_item_checklist_separacao(item)

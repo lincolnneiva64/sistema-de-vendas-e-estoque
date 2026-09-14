@@ -135,7 +135,7 @@
                   <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
                   <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
                   {% if separacao.status == "com_pendencia" %}
-                    <a class="sep-btn warning" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}">Abrir venda para corrigir</a>
+                    <a class="sep-btn warning" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}&next={{ request.get_full_path|urlencode }}">Editar nota</a>
                   {% endif %}
                 </div>
               </article>

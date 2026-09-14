@@ -3352,6 +3352,7 @@ document.addEventListener("click", function(event) {
 const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVenda").textContent || "null");
 let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
 const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").textContent || "null");
+const vendaEdicaoRetornoUrl = vendaEdicaoVenda?.next || "";
 
 let vendaEdicaoSemAlteracoesPendentes = false;
 let vendaEdicaoBloqueada = false;
@@ -5005,7 +5006,7 @@ function limparVendaAposGravacao() {
 }
 
 function sairModoEdicaoParaNovaVenda() {
-    window.location.href = vendasUrl;
+    window.location.href = vendaEdicaoRetornoUrl || vendasUrl;
 }
 
 function formatarQuantidadeSnapshotVenda(valor) {
@@ -5751,6 +5752,7 @@ function coletarItensVenda() {
 function coletarDadosVenda() {
     return {
         venda_id: vendaEdicaoVenda?.id || null,
+        next: vendaEdicaoRetornoUrl || "",
         pedido_id: pedidoImportadoVenda?.id || null,
         cliente_id: clienteId.value || null,
         data_venda: dataVenda.value,
@@ -6125,6 +6127,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         vendaGravadaUrl = retorno.visualizar_url || "";
         atualizarEstoquesProdutosVenda(retorno.produtos_estoque_atualizados);
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
+        if (vendaEdicaoVenda?.id && vendaEdicaoRetornoUrl && retorno.visualizar_url) {
+            window.location.href = retorno.visualizar_url;
+            return;
+        }
         mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem, retorno.separacao);
         if (vendaEdicaoVenda?.id) {
             limparFechamentoVenda();

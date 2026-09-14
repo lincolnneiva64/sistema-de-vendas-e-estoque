@@ -56,7 +56,7 @@
   .sep-done-all.is-visible { display: flex; }
   @media (min-width: 560px) {
     .sep-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .sep-actions { grid-template-columns: 1fr 1fr 1fr; }
+    .sep-actions { grid-template-columns: 1fr 1fr; }
   }
 </style>
 <main class="sep-page">
@@ -166,9 +166,8 @@
         <span>Conferencia dos itens concluida</span>
       </div>
       <div class="sep-actions">
-        <button class="sep-btn" type="submit" id="sepSubmitBtn" {% if divergencias %}disabled{% endif %}>{% if checklist_resumo.concluida %}CONCLUIR SEPARACAO{% else %}Salvar separacao{% endif %}</button>
+        <button class="sep-btn" type="submit" id="sepSubmitBtn" {% if divergencias %}disabled{% endif %}>CONCLUIR SEPARACAO</button>
         <a class="sep-btn secondary" href="{% url 'estoque:separacao_vendas_fila' %}">Voltar para fila</a>
-        <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
       </div>
     </form>
   </div>
@@ -204,7 +203,7 @@
   const updateCompletion = () => {
     const concluded = cards.every((card) => card.classList.contains("is-done"));
     if (doneAll) doneAll.classList.toggle("is-visible", concluded);
-    if (submitBtn) submitBtn.textContent = concluded ? "CONCLUIR SEPARACAO" : "Salvar separacao";
+    if (submitBtn) submitBtn.textContent = "CONCLUIR SEPARACAO";
     return concluded;
   };
 
