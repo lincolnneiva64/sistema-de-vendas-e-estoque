@@ -27675,6 +27675,167 @@ class VendaEdicaoUnificadaTests(TestCase):
 
     def test_gravar_venda_produto_cx_un_quantidade_2_un_com_estoque_equivalente_permite(self):
         cliente = Cliente.objects.create(nome="Cliente UN Permite", ativo=True)
+    def test_tela_vendas_modo_ajuste_separacao_valida_separacao_da_mesma_venda(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        _cliente_outra, _produto_outra, venda_outra, _item_outra = self.criar_venda_base()
+        separacao_outra, _criada, _responsavel_atualizado = views.criar_ou_obter_separacao_venda(venda_outra)
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao_outra.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["venda_edicao"]["id"], venda.id)
+        self.assertNotIn("ajuste_separacao", resposta.context["venda_edicao"])
+
+    def test_tela_vendas_modo_ajuste_separacao_carrega_somente_itens_problematicos(self):
+        cliente, produto, venda, item_nao_encontrado = self.criar_venda_base()
+        produto_insuficiente = self.criar_produto("Produto Separacao Insuficiente", "10.000")
+        produto_ok = self.criar_produto("Produto Separacao OK", "10.000")
+        item_insuficiente = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_insuficiente,
+            quantidade=Decimal("3.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("30.00"),
+        )
+        item_ok = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto_ok,
+            quantidade=Decimal("4.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("40.00"),
+        )
+        separacao, _criada, _responsavel_atualizado = views.criar_ou_obter_separacao_venda(venda)
+        item_sep_nao_encontrado = separacao.itens.get(item_venda=item_nao_encontrado)
+        item_sep_nao_encontrado.status = SeparacaoVendaItem.STATUS_NAO_ENCONTRADO
+        item_sep_nao_encontrado.quantidade_separada = Decimal("0.000")
+        item_sep_nao_encontrado.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        item_sep_insuficiente = separacao.itens.get(item_venda=item_insuficiente)
+        item_sep_insuficiente.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+        item_sep_insuficiente.quantidade_separada = Decimal("2.000")
+        item_sep_insuficiente.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        item_sep_ok = separacao.itens.get(item_venda=item_ok)
+        item_sep_ok.status = SeparacaoVendaItem.STATUS_CONFERIDO
+        item_sep_ok.quantidade_separada = item_sep_ok.quantidade_solicitada
+        item_sep_ok.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}",
+            secure=True,
+        )
+
+        ajuste = resposta.context["venda_edicao"]["ajuste_separacao"]
+        self.assertEqual(ajuste["separacao_id"], separacao.id)
+        self.assertEqual(len(ajuste["itens"]), 2)
+        tipos = {item["item_venda_id"]: item for item in ajuste["itens"]}
+        self.assertEqual(tipos[item_nao_encontrado.id]["tipo_sugestao"], "remover_item")
+        self.assertEqual(tipos[item_nao_encontrado.id]["sugestao"], "Remover item")
+        self.assertEqual(tipos[item_insuficiente.id]["tipo_sugestao"], "alterar_quantidade")
+        self.assertEqual(tipos[item_insuficiente.id]["quantidade_sugerida"], "2.000")
+        self.assertNotIn(item_ok.id, tipos)
+        self.assertContains(resposta, "Ajustes da separacao")
+        self.assertContains(resposta, "data-aplicar-ajuste-separacao")
+        self.assertContains(resposta, "linha-ajuste-separacao")
+
+    def test_tela_vendas_modo_ajuste_separacao_quantidade_un_decimal_exige_revisao_manual(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        separacao, _criada, _responsavel_atualizado = views.criar_ou_obter_separacao_venda(venda)
+        item_sep = separacao.itens.get(item_venda=item)
+        item_sep.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+        item_sep.quantidade_separada = Decimal("0.001")
+        item_sep.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}",
+            secure=True,
+        )
+
+        ajuste_item = resposta.context["venda_edicao"]["ajuste_separacao"]["itens"][0]
+        self.assertEqual(ajuste_item["tipo_sugestao"], "revisar_manual")
+        self.assertEqual(ajuste_item["sugestao"], "Revisar manualmente")
+        self.assertEqual(ajuste_item["quantidade_sugerida"], "")
+        self.assertContains(resposta, "Revisar manualmente")
+        self.assertContains(resposta, "disabled")
+
+    def test_abrir_modo_ajuste_separacao_nao_altera_dados(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        separacao, _criada, _responsavel_atualizado = views.criar_ou_obter_separacao_venda(venda)
+        item_sep = separacao.itens.get(item_venda=item)
+        item_sep.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+        item_sep.quantidade_separada = Decimal("1.000")
+        item_sep.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        estado_venda = list(ItemVenda.objects.filter(venda=venda).values_list("id", "quantidade", "valor_total"))
+        estoque_antes = Produto.objects.get(pk=produto.pk).quantidade
+        separacao_antes = list(separacao.itens.values_list("id", "status", "quantidade_separada"))
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(list(ItemVenda.objects.filter(venda=venda).values_list("id", "quantidade", "valor_total")), estado_venda)
+        self.assertEqual(Produto.objects.get(pk=produto.pk).quantidade, estoque_antes)
+        self.assertEqual(list(separacao.itens.values_list("id", "status", "quantidade_separada")), separacao_antes)
+
+    def test_modo_ajuste_separacao_aplicar_sugestao_e_salvar_usam_fluxo_normal(self):
+        cliente, produto, venda, item = self.criar_venda_base(quantidade="3.000", estoque="7.000")
+        separacao, _criada, _responsavel_atualizado = views.criar_ou_obter_separacao_venda(venda)
+        item_sep = separacao.itens.get(item_venda=item)
+        item_sep.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+        item_sep.quantidade_separada = Decimal("2.000")
+        item_sep.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        url_next = reverse("estoque:separacao_vendas_fila")
+
+        resposta_tela = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}&next={url_next}",
+            secure=True,
+        )
+        self.assertContains(resposta_tela, "function aplicarSugestaoAjusteSeparacao")
+        self.assertContains(resposta_tela, "Clique em Salvar Alteracoes para confirmar")
+        self.assertEqual(resposta_tela.context["venda_edicao"]["next"], url_next)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps({
+                "venda_id": venda.id,
+                "next": url_next,
+                "cliente_id": cliente.id,
+                "data_venda": venda.data_venda.isoformat(),
+                "data_vencimento": venda.data_vencimento.isoformat(),
+                "tipo_pagamento": venda.tipo_pagamento,
+                "operador": venda.operador,
+                "itens": [
+                    {
+                        "item_id": item.id,
+                        "produto_id": produto.id,
+                        "produto_nome": produto.nome,
+                        "quantidade": "2.000",
+                        "unidade": "UN",
+                        "preco_unitario": "10.00",
+                    }
+                ],
+            }),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(dados["visualizar_url"], url_next)
+        item.refresh_from_db()
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(venda.total, Decimal("20.00"))
+        self.assertEqual(produto.quantidade, Decimal("8.000"))
+
         produto = self.criar_produto_cx_un("Vinagre Teste UN", estoque="1.667")
         payload = self.payload_venda_nova(cliente, produto, quantidade="2.000")
         payload["itens"][0]["unidade"] = "UN"
@@ -30429,6 +30590,7 @@ class SeparacaoVendaFase1Tests(TestCase):
             nome="Produto Kg Checklist Separacao",
             quantidade=Decimal("20.000"),
             preco_compra=Decimal("5.00"),
+        self.assertContains(resposta, f"ajuste_separacao={separacao.id}")
             preco_vista=Decimal("10.00"),
             preco_prazo=Decimal("10.00"),
             unidade_compra="KG",

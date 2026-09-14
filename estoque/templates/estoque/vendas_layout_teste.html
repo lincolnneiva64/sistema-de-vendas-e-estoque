@@ -1682,6 +1682,91 @@ td:first-child {
     box-shadow: none;
 }
 
+.ajuste-separacao-painel {
+    display: grid;
+    gap: 8px;
+    margin: 8px 0 10px;
+    padding: 10px;
+    border: 1px solid #f97316;
+    border-radius: 8px;
+    background: #fff7ed;
+    color: #7c2d12;
+}
+
+.ajuste-separacao-titulo {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 1.15;
+}
+
+.ajuste-separacao-lista {
+    display: grid;
+    gap: 7px;
+}
+
+.ajuste-separacao-item {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    background: #ffffff;
+}
+
+.ajuste-separacao-produto {
+    font-weight: 900;
+    color: #111827;
+    overflow-wrap: anywhere;
+}
+
+.ajuste-separacao-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 9px;
+    margin-top: 4px;
+    color: #7c2d12;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.ajuste-separacao-sugestao {
+    margin-top: 4px;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.ajuste-separacao-aplicada {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
+.ajuste-separacao-aplicar {
+    min-height: 30px;
+    padding: 4px 9px;
+    border-radius: 7px;
+    border: 1px solid #f97316;
+    background: #ea580c;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.ajuste-separacao-aplicar:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.linha-ajuste-separacao {
+    outline: 2px solid #f97316;
+    outline-offset: -2px;
+    background: #fff7ed !important;
+}
+
 @media (max-width: 980px) {
     .resumo-vendas-hoje-na-barra {
         justify-content: flex-start;
@@ -1697,6 +1782,14 @@ td:first-child {
 
     .venda-edicao-alerta .acao-venda-btn {
         flex: 0 0 auto;
+    }
+
+    .ajuste-separacao-item {
+        grid-template-columns: 1fr;
+    }
+
+    .ajuste-separacao-aplicar {
+        width: 100%;
     }
 }
 </style>
@@ -1758,6 +1851,40 @@ td:first-child {
                 <button type="button" id="btnAlternarEdicaoVenda" class="acao-venda-btn" disabled>Editando venda #{{ venda_edicao.id }}</button>
                 <button type="button" id="btnNovaVendaEdicao" class="acao-venda-btn">Nova venda</button>
             </div>
+        {% endif %}
+
+        {% if venda_edicao.ajuste_separacao and venda_edicao.ajuste_separacao.itens %}
+            <section class="ajuste-separacao-painel" id="ajusteSeparacaoPainel" data-separacao-id="{{ venda_edicao.ajuste_separacao.separacao_id }}">
+                <h3 class="ajuste-separacao-titulo">Ajustes da separacao</h3>
+                <div class="ajuste-separacao-lista">
+                    {% for item in venda_edicao.ajuste_separacao.itens %}
+                        <article
+                            class="ajuste-separacao-item"
+                            data-ajuste-separacao-item
+                            data-item-venda-id="{{ item.item_venda_id }}"
+                            data-sugestao-tipo="{{ item.tipo_sugestao }}"
+                            data-quantidade-sugerida="{{ item.quantidade_sugerida }}"
+                        >
+                            <div>
+                                <div class="ajuste-separacao-produto">{{ item.produto }}</div>
+                                <div class="ajuste-separacao-meta">
+                                    <span>{{ item.status_texto }}</span>
+                                    <span>Solicitado: {{ item.quantidade_solicitada_formatada }} {{ item.unidade }}</span>
+                                    <span>Separado: {{ item.quantidade_separada_formatada }} {{ item.unidade }}</span>
+                                    <span>Diferença: {{ item.diferenca_formatada }} {{ item.unidade }}</span>
+                                </div>
+                                <div class="ajuste-separacao-sugestao">{{ item.sugestao }}</div>
+                            </div>
+                            <button
+                                type="button"
+                                class="ajuste-separacao-aplicar"
+                                data-aplicar-ajuste-separacao
+                                {% if item.tipo_sugestao == "revisar_manual" %}disabled{% endif %}
+                            >Aplicar sugestão</button>
+                        </article>
+                    {% endfor %}
+                </div>
+            </section>
         {% endif %}
 
         <div class="linha linha-cabecalho-venda">
@@ -3353,6 +3480,7 @@ const clienteInicialVenda = JSON.parse(document.getElementById("clienteInicialVe
 let pedidoImportadoVenda = JSON.parse(document.getElementById("pedidoImportadoVenda").textContent || "null");
 const vendaEdicaoVenda = JSON.parse(document.getElementById("vendaEdicaoVenda").textContent || "null");
 const vendaEdicaoRetornoUrl = vendaEdicaoVenda?.next || "";
+const ajusteSeparacaoVenda = vendaEdicaoVenda?.ajuste_separacao || null;
 
 let vendaEdicaoSemAlteracoesPendentes = false;
 let vendaEdicaoBloqueada = false;
@@ -5102,6 +5230,102 @@ function criarLinhaItemVenda(item) {
     return linha;
 }
 
+function itensAjusteSeparacao() {
+    return Array.isArray(ajusteSeparacaoVenda?.itens) ? ajusteSeparacaoVenda.itens : [];
+}
+
+function linhaVendaPorItemId(itemId) {
+    const idTexto = String(itemId || "");
+    if (!idTexto || !tabelaBody) return null;
+    return Array.from(tabelaBody.querySelectorAll("tr")).find((linha) => {
+        return String(linha.dataset.itemId || "") === idTexto;
+    }) || null;
+}
+
+function destacarLinhasAjusteSeparacao() {
+    itensAjusteSeparacao().forEach((item) => {
+        const linha = linhaVendaPorItemId(item.item_venda_id);
+        if (!linha) return;
+        linha.classList.add("linha-ajuste-separacao");
+        linha.dataset.ajusteSeparacao = "true";
+        linha.dataset.separacaoItemId = String(item.separacao_item_id || "");
+    });
+}
+
+function marcarCardAjusteSeparacaoAplicado(itemId) {
+    const card = Array.from(document.querySelectorAll("[data-ajuste-separacao-item]")).find((elemento) => {
+        return String(elemento.dataset.itemVendaId || "") === String(itemId || "");
+    });
+    if (!card) return;
+    card.classList.add("ajuste-separacao-aplicada");
+    const botao = card.querySelector("[data-aplicar-ajuste-separacao]");
+    if (botao) {
+        botao.disabled = true;
+        botao.textContent = "Aplicado na tela";
+    }
+}
+
+function aplicarSugestaoAjusteSeparacao(item) {
+    if (!item || vendaEdicaoBloqueada) return false;
+    const linha = linhaVendaPorItemId(item.item_venda_id);
+    if (!linha) {
+        mostrarToastVenda("Item da separacao nao foi encontrado na nota.");
+        return false;
+    }
+
+    if (item.tipo_sugestao === "remover_item") {
+        linha.remove();
+        limparEstadoEdicaoItemVenda();
+        atualizarTotalGeral();
+        marcarVendaEdicaoComoAlterada();
+        marcarCardAjusteSeparacaoAplicado(item.item_venda_id);
+        mostrarToastVenda("Sugestao aplicada na tela. Clique em Salvar Alteracoes para confirmar.");
+        return true;
+    }
+
+    if (item.tipo_sugestao === "alterar_quantidade" && item.quantidade_sugerida) {
+        const quantidadeNova = normalizarNumeroVenda(item.quantidade_sugerida);
+        const precoNumero = parseFloat(normalizarNumeroVenda(linha.dataset.precoUnitario || linha.children[3]?.textContent || "0"));
+        const quantidadeNumero = parseFloat(quantidadeNova);
+        if (!Number.isFinite(precoNumero) || !Number.isFinite(quantidadeNumero) || quantidadeNumero <= 0) {
+            mostrarToastVenda("Sugestao de quantidade invalida. Revise manualmente.");
+            return false;
+        }
+        atualizarLinhaItemVenda(linha, {
+            produto_id: linha.dataset.produtoId || "",
+            produto_nome: obterNomeProdutoLinhaVenda(linha),
+            quantidade: quantidadeNova,
+            unidade: linha.dataset.unidade || linha.children[2]?.textContent || "",
+            preco_unitario: normalizarNumeroVenda(linha.dataset.precoUnitario || linha.children[3]?.textContent || "0"),
+            valor_total: (quantidadeNumero * precoNumero).toFixed(2),
+        });
+        limparEstadoEdicaoItemVenda();
+        atualizarTotalGeral();
+        marcarVendaEdicaoComoAlterada();
+        marcarCardAjusteSeparacaoAplicado(item.item_venda_id);
+        mostrarToastVenda("Sugestao aplicada na tela. Clique em Salvar Alteracoes para confirmar.");
+        return true;
+    }
+
+    mostrarToastVenda("Revise este item manualmente.");
+    return false;
+}
+
+function inicializarAjustesSeparacao() {
+    if (!ajusteSeparacaoVenda?.separacao_id || !itensAjusteSeparacao().length) return;
+    destacarLinhasAjusteSeparacao();
+    document.querySelectorAll("[data-aplicar-ajuste-separacao]").forEach((botao) => {
+        botao.addEventListener("click", () => {
+            const card = botao.closest("[data-ajuste-separacao-item]");
+            const itemId = card?.dataset?.itemVendaId || "";
+            const item = itensAjusteSeparacao().find((pendencia) => {
+                return String(pendencia.item_venda_id || "") === String(itemId);
+            });
+            aplicarSugestaoAjusteSeparacao(item);
+        });
+    });
+}
+
 function prepararVendaComPedidoImportado() {
     if (!pedidoImportadoVenda || !Array.isArray(pedidoImportadoVenda.itens)) return;
 
@@ -5191,6 +5415,7 @@ function prepararVendaEmEdicao() {
 }
 
 prepararVendaEmEdicao();
+inicializarAjustesSeparacao();
 
 function quantidadeInformadaValida() {
     const valor = parseFloat(String(quantidade.value || "").replace(",", "."));

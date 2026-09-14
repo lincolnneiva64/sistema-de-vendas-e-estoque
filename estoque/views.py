@@ -11803,6 +11803,89 @@ def registrar_visita_fornecedor_sem_compra(request):
     return redirect("estoque:vendas")
 
 
+STATUS_AJUSTE_SEPARACAO_VENDA = {
+    SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
+    SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+}
+
+
+def _formatar_decimal_payload_separacao(valor):
+    if valor is None:
+        return ""
+    return f"{Decimal(valor or 0).quantize(Decimal('0.001')):f}"
+
+
+def _quantidade_sugerida_ajuste_separacao_valida(item_separacao, quantidade):
+    quantidade = Decimal(quantidade or 0).quantize(Decimal("0.001"))
+    if quantidade <= Decimal("0.000"):
+        return False
+    if quantidade >= Decimal(item_separacao.quantidade_solicitada or 0).quantize(Decimal("0.001")):
+        return False
+    if not _item_separacao_permite_quantidade_fracionada(item_separacao) and quantidade != quantidade.to_integral_value():
+        return False
+    return True
+
+
+def _montar_payload_ajuste_separacao_venda(separacao):
+    itens = (
+        separacao.itens
+        .select_related("item_venda", "item_venda__produto")
+        .filter(status__in=STATUS_AJUSTE_SEPARACAO_VENDA)
+        .order_by("item_venda_id")
+    )
+    itens_payload = []
+    for item in itens:
+        item_venda = item.item_venda
+        quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
+        quantidade_original = Decimal(getattr(item_venda, "quantidade", quantidade_solicitada) or 0).quantize(Decimal("0.001"))
+        quantidade_separada = (
+            Decimal(item.quantidade_separada or 0).quantize(Decimal("0.001"))
+            if item.quantidade_separada is not None
+            else Decimal("0.000")
+        )
+        diferenca = max(quantidade_solicitada - quantidade_separada, Decimal("0.000")).quantize(Decimal("0.001"))
+        tipo_sugestao = "revisar_manual"
+        sugestao = "Revisar manualmente"
+        quantidade_sugerida = ""
+
+        if item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
+            tipo_sugestao = "remover_item"
+            sugestao = "Remover item"
+        elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+            if _quantidade_sugerida_ajuste_separacao_valida(item, quantidade_separada):
+                tipo_sugestao = "alterar_quantidade"
+                quantidade_sugerida = _formatar_decimal_payload_separacao(quantidade_separada)
+                sugestao = f"Alterar quantidade para {_formatar_quantidade(quantidade_separada)}"
+
+        itens_payload.append({
+            "separacao_item_id": item.id,
+            "item_venda_id": item.item_venda_id,
+            "produto": item.produto_nome_snapshot,
+            "unidade": item.unidade_snapshot or getattr(item_venda, "unidade", "") or "",
+            "quantidade_original": _formatar_decimal_payload_separacao(quantidade_original),
+            "quantidade_original_formatada": _formatar_quantidade(quantidade_original),
+            "quantidade_solicitada": _formatar_decimal_payload_separacao(quantidade_solicitada),
+            "quantidade_solicitada_formatada": _formatar_quantidade(quantidade_solicitada),
+            "quantidade_separada": _formatar_decimal_payload_separacao(quantidade_separada),
+            "quantidade_separada_formatada": _formatar_quantidade(quantidade_separada),
+            "diferenca": _formatar_decimal_payload_separacao(diferenca),
+            "diferenca_formatada": _formatar_quantidade(diferenca),
+            "status": item.status,
+            "status_texto": item.get_status_display(),
+            "tipo_sugestao": tipo_sugestao,
+            "quantidade_sugerida": quantidade_sugerida,
+            "sugestao": sugestao,
+        })
+
+    if not itens_payload:
+        return None
+
+    return {
+        "separacao_id": separacao.id,
+        "itens": itens_payload,
+    }
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()
@@ -11814,6 +11897,7 @@ def vendas(request):
     venda_edicao_next = _url_next_segura_request(request)
 
     venda_edicao_id = request.GET.get("editar")
+    ajuste_separacao_id = request.GET.get("ajuste_separacao")
     if venda_edicao_id:
         venda_para_editar = (
             Venda.objects
@@ -11851,6 +11935,17 @@ def vendas(request):
                     for item in venda_para_editar.itens.all()
                 ],
             }
+            if ajuste_separacao_id:
+                separacao_ajuste = (
+                    SeparacaoVenda.objects
+                    .filter(pk=ajuste_separacao_id, venda=venda_para_editar)
+                    .prefetch_related("itens__item_venda__produto")
+                    .first()
+                )
+                if separacao_ajuste:
+                    venda_edicao["ajuste_separacao"] = _montar_payload_ajuste_separacao_venda(separacao_ajuste)
+                else:
+                    messages.warning(request, "A separacao informada nao pertence a esta venda.")
             if venda_para_editar.cliente:
                 cliente_inicial = _resumo_cliente_venda(venda_para_editar.cliente)
     if cliente_id:
