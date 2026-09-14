@@ -97,6 +97,9 @@
           data-save-url="{% url 'estoque:separacao_venda_item_salvar' separacao.id item.id %}"
           data-status="{{ item.status }}"
           data-solicitada="{{ item.quantidade_solicitada_data }}"
+          data-minima="{{ item.quantidade_minima_data }}"
+          data-maxima="{{ item.quantidade_maxima_data }}"
+          data-passo="{{ item.quantidade_passo_data }}"
         >
           <button class="sep-compact" type="button" data-reabrir-item>
             <span class="sep-icon {{ item.resultado_classe }}" data-resultado-icone>{{ item.resultado_icone }}</span>
@@ -117,7 +120,7 @@
                 <span>Nao encontrado</span>
               </label>
               <label class="sep-option">
-                <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+                <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}>
                 <span>Quantidade insuficiente</span>
               </label>
             </div>
@@ -131,20 +134,20 @@
                 </div>
               {% else %}
                 <div class="sep-stepper">
-                  <button class="sep-step-btn" type="button" data-step="-1">-</button>
+                  <button class="sep-step-btn" type="button" data-step="-{{ item.quantidade_passo_data }}">-</button>
                   <input
                     class="sep-step-input"
                     type="number"
                     inputmode="decimal"
-                    step="0.001"
-                    min="0.001"
+                    step="{{ item.quantidade_passo_data }}"
+                    min="{{ item.quantidade_minima_data }}"
                     max="{{ item.quantidade_maxima_data }}"
                     name="quantidade_separada_{{ item.id }}"
                     value="{{ item.quantidade_separada_data }}"
                     data-qtd-input
-                    {% if divergencias %}disabled{% endif %}
+                    {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}
                   >
-                  <button class="sep-step-btn" type="button" data-step="1">+</button>
+                  <button class="sep-step-btn" type="button" data-step="{{ item.quantidade_passo_data }}">+</button>
                 </div>
               {% endif %}
               {% if item.valores_rapidos %}
@@ -153,7 +156,7 @@
                   name="quantidade_separada_{{ item.id }}"
                   value="{{ item.quantidade_separada_data }}"
                   data-qtd-input
-                  {% if divergencias %}disabled{% endif %}
+                  {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}
                 >
               {% endif %}
             </div>
@@ -188,11 +191,19 @@
   };
 
   const clampInsuficiente = (card, value) => {
-    const solicitada = Number(card.dataset.solicitada || 0);
-    const max = Math.max(0.001, solicitada - 0.001);
+    const min = Number(card.dataset.minima || 0.001);
+    const max = Number(card.dataset.maxima || 0);
+    const step = Number(card.dataset.passo || min || 0.001);
+    if (!Number.isFinite(max) || !Number.isFinite(min) || max < min) return 0;
     let next = Number(value || 0);
-    if (!Number.isFinite(next) || next <= 0) next = 0.001;
-    if (next >= solicitada) next = max;
+    if (!Number.isFinite(next) || next <= 0) next = min;
+    if (next < min) next = min;
+    if (next > max) next = max;
+    if (Number.isFinite(step) && step > 0) {
+      next = Math.round(next / step) * step;
+      if (next < min) next = min;
+      if (next > max) next = max;
+    }
     return Number(next.toFixed(3));
   };
 
@@ -300,6 +311,15 @@
     if (!checked || checked.value === "pendente") return false;
     const input = card.querySelector("[data-qtd-input]");
     if (checked.value === "quantidade_insuficiente") {
+      const min = Number(card.dataset.minima || 0);
+      const max = Number(card.dataset.maxima || 0);
+      if (!Number.isFinite(max) || !Number.isFinite(min) || max < min) {
+        if (state) {
+          state.textContent = "Quantidade insuficiente nao se aplica a este item.";
+          state.classList.add("is-error");
+        }
+        return false;
+      }
       if (!input || !input.value) {
         if (state) {
           state.textContent = "Informe a quantidade encontrada.";

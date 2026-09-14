@@ -29604,6 +29604,25 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
         return venda
 
+    def _criar_venda_com_item(self, produto, quantidade, unidade="UN", cliente_nome="Cliente Separacao Item"):
+        quantidade_decimal = Decimal(quantidade).quantize(Decimal("0.001"))
+        cliente = Cliente.objects.create(nome=cliente_nome)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=date.today(),
+            tipo_pagamento="A prazo",
+            total=(quantidade_decimal * Decimal("10.00")).quantize(Decimal("0.01")),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade_decimal,
+            unidade=unidade,
+            preco_unitario=Decimal("10.00"),
+            valor_total=(quantidade_decimal * Decimal("10.00")).quantize(Decimal("0.01")),
+        )
+        return venda
+
     def _criar_rota_para_venda(
         self,
         venda,
@@ -30180,6 +30199,88 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(item.quantidade_separada, Decimal("1.000"))
         self.assertIn("Quantidade insuficiente", dados["item"]["resultado_texto"])
         self.assertEqual(dados["total_pendentes"], 1)
+
+    def test_checklist_quantidade_insuficiente_produto_inteiro_nao_oferece_fracao_artificial(self):
+        venda = self._criar_venda_para_separacao("Cliente Produto Inteiro")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.select_related("item_venda__produto").get()
+
+        views._preparar_item_checklist_separacao(item)
+        resposta = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+        conteudo = resposta.content.decode()
+
+        self.assertEqual(item.quantidade_passo_data, "1.000")
+        self.assertEqual(item.quantidade_minima_data, "1.000")
+        self.assertEqual(item.quantidade_maxima_data, "0.000")
+        self.assertFalse(item.quantidade_insuficiente_permitida)
+        self.assertContains(resposta, 'data-passo="1.000"')
+        self.assertContains(resposta, 'data-maxima="0.000"')
+        self.assertContains(resposta, 'step="1.000"')
+        self.assertNotContains(resposta, 'step="0.001"')
+        self.assertRegex(conteudo, r'value="quantidade_insuficiente"[^>]*disabled')
+
+    def test_quantidade_insuficiente_rejeita_fracao_artificial_em_produto_inteiro(self):
+        venda = self._criar_venda_para_separacao("Cliente Produto Inteiro Fracao")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        for quantidade in ("0,001", "0,999"):
+            resposta = self._post_item_checklist(
+                separacao,
+                item,
+                SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+                quantidade,
+            )
+
+            self.assertEqual(resposta.status_code, 400)
+            self.assertIn("numero inteiro", resposta.json()["mensagem"])
+            item.refresh_from_db()
+            self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
+            self.assertIsNone(item.quantidade_separada)
+
+    def test_quantidade_insuficiente_fracionada_continua_permitida_para_unidade_fracionada(self):
+        produto = Produto.objects.create(
+            nome="Produto Fracionado Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="CX",
+            vende_fracionado=True,
+            fator_conversao=Decimal("12.00"),
+            unidade_venda_2="UN",
+            preco_vista_fracionado=Decimal("1.00"),
+            preco_prazo_fracionado=Decimal("1.00"),
+        )
+        venda = self._criar_venda_com_item(
+            produto,
+            "1.000",
+            unidade="UN",
+            cliente_nome="Cliente Produto Fracionado",
+        )
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.select_related("item_venda__produto").get()
+
+        views._preparar_item_checklist_separacao(item)
+        resposta = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "0,500",
+        )
+
+        self.assertTrue(item.quantidade_insuficiente_permitida)
+        self.assertEqual(item.quantidade_passo_data, "0.001")
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
+        self.assertEqual(item.quantidade_separada, Decimal("0.500"))
+        self.assertEqual(dados["item"]["quantidade_faltante"], "0.5")
+        self.assertIn("faltam 0.5", dados["item"]["resultado_texto"])
 
     def test_quantidade_insuficiente_rejeita_zero(self):
         self._enviar()

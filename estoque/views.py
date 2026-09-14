@@ -16910,13 +16910,15 @@ def _quantidade_decimal_estoque(quantidade):
     return Decimal(quantidade or "0").quantize(Decimal("0.001"))
 
 
+UNIDADES_ESTOQUE_FRACIONAVEIS = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA", "KG"}
+
+
 def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
     quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
     if quantidade_decimal != quantidade_decimal.to_integral_value():
         unidade_texto = str(unidade or "").strip()
         unidade_normalizada = unidade_texto.upper()
-        unidades_que_podem_meio = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA", "KG"}
-        if unidade_normalizada not in unidades_que_podem_meio:
+        if unidade_normalizada not in UNIDADES_ESTOQUE_FRACIONAVEIS:
             unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
             raise ValueError(
                 f"Produto {produto_nome} nao permite venda fracionada. "
@@ -20387,9 +20389,30 @@ def _validar_item_checklist_separacao(item, post_data):
                 None,
                 f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser menor que a solicitada.",
             )
+        if not _item_separacao_permite_quantidade_fracionada(item) and quantidade_separada != quantidade_separada.to_integral_value():
+            return (
+                status,
+                None,
+                f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser informada em numero inteiro.",
+            )
         return status, quantidade_separada, ""
 
     return SeparacaoVendaItem.STATUS_PENDENTE, None, ""
+
+
+def _item_separacao_permite_quantidade_fracionada(item):
+    unidade = _normalizar_unidade_estoque(getattr(item, "unidade_snapshot", ""))
+    item_venda = getattr(item, "item_venda", None)
+    produto = getattr(item_venda, "produto", None)
+    if produto:
+        unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
+        if produto.vende_fracionado and unidade_fracionada and unidade == unidade_fracionada:
+            return True
+    return unidade in UNIDADES_ESTOQUE_FRACIONAVEIS
+
+
+def _passo_quantidade_separacao(item):
+    return Decimal("0.001") if _item_separacao_permite_quantidade_fracionada(item) else Decimal("1.000")
 
 
 def _preparar_item_checklist_separacao(item):
@@ -20412,11 +20435,20 @@ def _preparar_item_checklist_separacao(item):
     item.quantidade_faltante_formatada = _formatar_quantidade(quantidade_faltante)
     item.quantidade_solicitada_data = f"{quantidade_solicitada:f}"
     item.quantidade_separada_data = f"{quantidade_separada:f}" if quantidade_separada is not None else ""
-    item.quantidade_minima_data = "0.001"
-    item.quantidade_maxima_data = f"{max(Decimal('0.000'), quantidade_solicitada - Decimal('0.001')):f}"
+    passo_quantidade = _passo_quantidade_separacao(item)
+    quantidade_minima = passo_quantidade
+    quantidade_maxima = max(Decimal("0.000"), quantidade_solicitada - passo_quantidade)
+    item.quantidade_passo_data = f"{passo_quantidade:f}"
+    item.quantidade_minima_data = f"{quantidade_minima:f}"
+    item.quantidade_maxima_data = f"{quantidade_maxima:f}"
+    item.quantidade_insuficiente_permitida = quantidade_maxima >= quantidade_minima
 
     item.valores_rapidos = []
-    if quantidade_solicitada == quantidade_solicitada.to_integral_value() and Decimal("1.000") < quantidade_solicitada <= Decimal("10.000"):
+    if (
+        passo_quantidade == Decimal("1.000")
+        and quantidade_solicitada == quantidade_solicitada.to_integral_value()
+        and Decimal("1.000") < quantidade_solicitada <= Decimal("10.000")
+    ):
         total = int(quantidade_solicitada)
         item.valores_rapidos = [
             {"valor": str(valor), "rotulo": str(valor)}
