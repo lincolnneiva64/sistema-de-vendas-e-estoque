@@ -44,6 +44,36 @@
   .sep-btn.secondary { background: #e2e8f0; color: #172033; }
   .sep-btn.warning { background: #ea580c; color: #fff; }
   .sep-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff; color: #64748b; font-weight: 850; text-align: center; }
+  @media (min-width: 641px) {
+    .sep-page { padding: 10px 0 28px; }
+    .sep-shell { width: min(900px, calc(100vw - 24px)); }
+    .sep-head { margin-bottom: 10px; padding: 10px 12px; }
+    .sep-title { font-size: 1.45rem; font-weight: 900; }
+    .sep-sub { margin-top: 4px; font-size: 0.84rem; font-weight: 700; }
+    .rota-list { gap: 10px; }
+    .rota-head { gap: 10px; padding: 9px 11px; }
+    .rota-title { font-size: 0.95rem; font-weight: 900; }
+    .rota-date { margin-top: 2px; font-size: 0.72rem; font-weight: 750; }
+    .rota-summary { gap: 5px; }
+    .rota-chip { min-height: 22px; padding: 2px 7px; font-size: 0.7rem; font-weight: 800; }
+    .sep-list { gap: 6px; padding: 7px; }
+    .sep-card { padding: 9px; }
+    .sep-card-top { gap: 8px; }
+    .sep-line { gap: 5px; font-size: 0.9rem; font-weight: 900; }
+    .sep-seq { font-size: 0.95rem; }
+    .sep-meta { margin-top: 3px; font-size: 0.76rem; font-weight: 700; }
+    .sep-status { min-height: 24px; padding: 3px 7px; font-size: 0.72rem; font-weight: 850; }
+    .sep-alert { margin-top: 7px; padding: 6px 8px; font-size: 0.76rem; font-weight: 850; }
+    .pend-list { gap: 6px; margin-top: 7px; }
+    .pend-item { padding: 7px; }
+    .pend-name { font-size: 0.88rem; font-weight: 900; }
+    .pend-grid { gap: 4px 8px; margin-top: 4px; font-size: 0.76rem; font-weight: 800; }
+    .pend-obs { margin-top: 4px; font-size: 0.76rem; font-weight: 700; }
+    .sep-counts { gap: 5px; margin-top: 7px; }
+    .sep-count { padding: 4px 7px; font-size: 0.72rem; font-weight: 800; }
+    .sep-actions { gap: 5px; margin-top: 7px; }
+    .sep-btn { min-height: 32px; padding: 6px 9px; font-size: 0.84rem; font-weight: 850; }
+  }
   @media (max-width: 640px) {
     .rota-head, .sep-card-top { display: grid; }
     .rota-summary { justify-content: flex-start; }
