@@ -45,34 +45,34 @@
   .sep-btn.warning { background: #ea580c; color: #fff; }
   .sep-empty { padding: 18px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #fff; color: #64748b; font-weight: 850; text-align: center; }
   @media (min-width: 641px) {
-    .sep-page { padding: 10px 0 28px; }
-    .sep-shell { width: min(900px, calc(100vw - 24px)); }
+    .sep-page { padding: 10px 0 24px; font-size: 14px; }
+    .sep-shell { width: min(1060px, calc(100vw - 32px)); }
     .sep-head { margin-bottom: 10px; padding: 10px 12px; }
-    .sep-title { font-size: 1.45rem; font-weight: 900; }
-    .sep-sub { margin-top: 4px; font-size: 0.84rem; font-weight: 700; }
+    .sep-title { font-size: 1.35rem; font-weight: 800; }
+    .sep-sub { margin-top: 3px; font-size: 0.86rem; font-weight: 600; }
     .rota-list { gap: 10px; }
-    .rota-head { gap: 10px; padding: 9px 11px; }
-    .rota-title { font-size: 0.95rem; font-weight: 900; }
-    .rota-date { margin-top: 2px; font-size: 0.72rem; font-weight: 750; }
+    .rota-head { align-items: center; gap: 10px; padding: 7px 10px; }
+    .rota-title { font-size: 1rem; font-weight: 800; }
+    .rota-date { margin-top: 1px; font-size: 0.82rem; font-weight: 600; }
     .rota-summary { gap: 5px; }
-    .rota-chip { min-height: 22px; padding: 2px 7px; font-size: 0.7rem; font-weight: 800; }
-    .sep-list { gap: 6px; padding: 7px; }
-    .sep-card { padding: 9px; }
-    .sep-card-top { gap: 8px; }
-    .sep-line { gap: 5px; font-size: 0.9rem; font-weight: 900; }
-    .sep-seq { font-size: 0.95rem; }
-    .sep-meta { margin-top: 3px; font-size: 0.76rem; font-weight: 700; }
-    .sep-status { min-height: 24px; padding: 3px 7px; font-size: 0.72rem; font-weight: 850; }
-    .sep-alert { margin-top: 7px; padding: 6px 8px; font-size: 0.76rem; font-weight: 850; }
-    .pend-list { gap: 6px; margin-top: 7px; }
-    .pend-item { padding: 7px; }
-    .pend-name { font-size: 0.88rem; font-weight: 900; }
-    .pend-grid { gap: 4px 8px; margin-top: 4px; font-size: 0.76rem; font-weight: 800; }
-    .pend-obs { margin-top: 4px; font-size: 0.76rem; font-weight: 700; }
-    .sep-counts { gap: 5px; margin-top: 7px; }
-    .sep-count { padding: 4px 7px; font-size: 0.72rem; font-weight: 800; }
-    .sep-actions { gap: 5px; margin-top: 7px; }
-    .sep-btn { min-height: 32px; padding: 6px 9px; font-size: 0.84rem; font-weight: 850; }
+    .rota-chip { min-height: 24px; padding: 2px 8px; font-size: 0.86rem; font-weight: 700; }
+    .sep-list { gap: 6px; padding: 8px; }
+    .sep-card { display: grid; grid-template-columns: minmax(260px, 1fr) auto auto auto; align-items: center; gap: 8px 10px; padding: 10px 12px; }
+    .sep-card-top { display: contents; }
+    .sep-line { gap: 5px; font-size: 1rem; font-weight: 700; line-height: 1.18; }
+    .sep-seq { font-size: 1rem; }
+    .sep-meta { margin-top: 2px; font-size: 0.86rem; font-weight: 600; line-height: 1.2; }
+    .sep-status { min-height: 24px; padding: 2px 8px; font-size: 0.82rem; font-weight: 700; }
+    .sep-alert { grid-column: 1 / -1; margin-top: 0; padding: 6px 8px; font-size: 0.82rem; font-weight: 750; }
+    .pend-list { grid-column: 1 / -1; gap: 6px; margin-top: 0; }
+    .pend-item { padding: 7px 8px; }
+    .pend-name { font-size: 0.9rem; font-weight: 750; line-height: 1.18; }
+    .pend-grid { gap: 4px 10px; margin-top: 3px; font-size: 0.82rem; font-weight: 650; line-height: 1.18; }
+    .pend-obs { margin-top: 3px; font-size: 0.82rem; font-weight: 600; line-height: 1.18; }
+    .sep-counts { gap: 5px; margin-top: 0; justify-content: flex-end; }
+    .sep-count { min-height: 24px; padding: 2px 7px; font-size: 0.82rem; font-weight: 650; }
+    .sep-actions { gap: 5px; margin-top: 0; justify-content: flex-end; }
+    .sep-btn { min-height: 31px; padding: 5px 10px; font-size: 0.86rem; font-weight: 700; }
   }
   @media (max-width: 640px) {
     .rota-head, .sep-card-top { display: grid; }
