@@ -30612,6 +30612,19 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "Voltar para fila")
         self.assertNotContains(resposta, "Abrir nota")
 
+    def test_checklist_publico_sincroniza_validacao_html_do_input_por_card(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+        self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        resposta = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, "novalidate")
+        self.assertContains(resposta, "const syncQuantidadeValidation = (card) =>")
+        self.assertContains(resposta, "input.removeAttribute(\"max\")")
+
     def test_concluir_checklist_redireciona_para_fila(self):
         self._enviar()
         separacao = self._separacao()

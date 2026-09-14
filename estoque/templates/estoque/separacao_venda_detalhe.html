@@ -219,8 +219,38 @@
     return Number(next.toFixed(3));
   };
 
+  const statusSelecionado = (card) => {
+    const checked = card.querySelector("input[type='radio']:checked");
+    return checked ? checked.value : "pendente";
+  };
+
+  const statusUsaQuantidade = (status) => (
+    status === "quantidade_insuficiente" || status === "peso_separado"
+  );
+
+  const syncQuantidadeValidation = (card) => {
+    const input = card.querySelector("[data-qtd-input]");
+    if (!input) return;
+    const deveValidar = card.classList.contains("is-active") && statusUsaQuantidade(statusSelecionado(card));
+    input.required = deveValidar;
+    if (!deveValidar) {
+      input.removeAttribute("min");
+      input.removeAttribute("max");
+      input.removeAttribute("step");
+      return;
+    }
+    input.min = card.dataset.minima || "";
+    input.step = card.dataset.passo || "";
+    if (card.dataset.maxima) {
+      input.max = card.dataset.maxima;
+    } else {
+      input.removeAttribute("max");
+    }
+  };
+
   const setActive = (card) => {
     cards.forEach((item) => item.classList.toggle("is-active", item === card));
+    cards.forEach((item) => syncQuantidadeValidation(item));
   };
 
   const updateCompletion = () => {
@@ -237,9 +267,8 @@
   };
 
   const refreshCard = (card, advance = false) => {
-    const checked = card.querySelector("input[type='radio']:checked");
-    const status = checked ? checked.value : "pendente";
-    const pedeQuantidade = status === "quantidade_insuficiente" || status === "peso_separado";
+    const status = statusSelecionado(card);
+    const pedeQuantidade = statusUsaQuantidade(status);
     const input = card.querySelector("[data-qtd-input]");
     const box = card.querySelector("[data-insuficiente-box]");
     const icon = card.querySelector("[data-resultado-icone]");
@@ -250,7 +279,6 @@
     let resumo = "Pendente";
 
     if (box) box.classList.toggle("is-visible", pedeQuantidade);
-    if (input) input.required = pedeQuantidade;
 
     if (status === "conferido") {
       classe = "ok";
@@ -297,6 +325,7 @@
       text.className = `sep-result ${classe}`;
       text.textContent = resumo;
     }
+    syncQuantidadeValidation(card);
 
     if (advance && status !== "quantidade_insuficiente") {
       const next = nextPending(card);
@@ -325,6 +354,7 @@
     }
     card.classList.toggle("is-done", Boolean(item.conferido));
     card.classList.toggle("is-pending", !item.conferido);
+    syncQuantidadeValidation(card);
     updateCompletion();
   };
 
