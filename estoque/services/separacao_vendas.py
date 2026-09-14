@@ -12,6 +12,25 @@ STATUS_ITENS_COM_PENDENCIA = {
 }
 
 
+UNIDADES_PESO_REAL = {"KG"}
+
+
+def _normalizar_unidade(unidade):
+    return str(unidade or "").strip().upper()
+
+
+def item_separacao_registra_peso_real(item):
+    return _normalizar_unidade(getattr(item, "unidade_snapshot", "")) in UNIDADES_PESO_REAL
+
+
+def item_separacao_tem_pendencia(item):
+    if item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
+        return True
+    if item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+        return not item_separacao_registra_peso_real(item)
+    return False
+
+
 def usuario_autenticado_ou_none(usuario):
     if getattr(usuario, "is_authenticated", False):
         return usuario
@@ -94,7 +113,7 @@ def recalcular_status_separacao(separacao, usuario=None):
 
     if not itens or all(item.status == SeparacaoVendaItem.STATUS_PENDENTE for item in itens):
         novo_status = SeparacaoVenda.STATUS_ENVIADA
-    elif any(item.status in STATUS_ITENS_COM_PENDENCIA for item in itens):
+    elif any(item_separacao_tem_pendencia(item) for item in itens):
         novo_status = SeparacaoVenda.STATUS_COM_PENDENCIA
     elif all(item.status == SeparacaoVendaItem.STATUS_CONFERIDO for item in itens):
         novo_status = SeparacaoVenda.STATUS_SEPARADA

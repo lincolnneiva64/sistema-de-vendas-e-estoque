@@ -30282,6 +30282,194 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(dados["item"]["quantidade_faltante"], "0.5")
         self.assertIn("faltam 0.5", dados["item"]["resultado_texto"])
 
+    def test_peso_separado_kg_acima_do_solicitado_e_valido_sem_pendencia(self):
+        produto = Produto.objects.create(
+            nome="Frango Kg Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "3.000", unidade="KG", cliente_nome="Cliente Kg Acima")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, "peso_separado", "3,200")
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("3.200"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(dados["item"]["quantidade_diferenca"], "+0.2")
+        self.assertIn("Peso separado", dados["item"]["resultado_texto"])
+        self.assertNotIn("faltam", dados["item"]["resultado_texto"])
+
+    def test_checklist_kg_exibe_peso_separado_sem_limite_superior_artificial(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Checklist Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "3.000", unidade="KG", cliente_nome="Cliente Kg Checklist")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+
+        resposta = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+
+        self.assertContains(resposta, "Peso separado")
+        self.assertContains(resposta, 'data-permite-acima="true"')
+        self.assertContains(resposta, 'step="0.001"')
+        self.assertNotContains(resposta, 'max="2.999"')
+
+    def test_peso_separado_kg_abaixo_do_solicitado_e_valido_sem_pendencia(self):
+        produto = Produto.objects.create(
+            nome="Carne Kg Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "3.000", unidade="KG", cliente_nome="Cliente Kg Abaixo")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, "peso_separado", "2,300")
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("2.300"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(dados["item"]["quantidade_diferenca"], "-0.7")
+        self.assertIn("diferenca -0.7 KG", dados["item"]["resultado_texto"])
+
+    def test_peso_separado_kg_calcula_diferenca_com_tres_casas(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Diferenca Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "1.000", unidade="KG", cliente_nome="Cliente Kg Diferenca")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, "peso_separado", "0,760")
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.quantidade_separada, Decimal("0.760"))
+        self.assertEqual(dados["item"]["quantidade_diferenca"], "-0.24")
+        self.assertIn("diferenca -0.24 KG", dados["item"]["resultado_texto"])
+
+    def test_peso_separado_kg_aceita_tres_casas_decimais(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Tres Casas Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "1.000", unidade="KG", cliente_nome="Cliente Kg Tres Casas")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, "peso_separado", "0,761")
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.quantidade_separada, Decimal("0.761"))
+
+    def test_nao_encontrado_em_kg_continua_gerando_pendencia(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Nao Encontrado Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "3.000", unidade="KG", cliente_nome="Cliente Kg Falta")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+        self.assertEqual(item.quantidade_separada, Decimal("0.000"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
+
+    def test_quantidade_insuficiente_un_continua_aceitando_inteiro_menor_que_solicitado(self):
+        venda = self._criar_venda_com_item(
+            self.produto_a,
+            "5.000",
+            unidade="UN",
+            cliente_nome="Cliente Un Inteiro",
+        )
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "3",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
+        self.assertEqual(item.quantidade_separada, Decimal("3.000"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
+
+    def test_quantidade_insuficiente_un_rejeita_valor_fracionado(self):
+        venda = self._criar_venda_com_item(
+            self.produto_a,
+            "5.000",
+            unidade="UN",
+            cliente_nome="Cliente Un Fracionado",
+        )
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "3,500",
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("numero inteiro", resposta.json()["mensagem"])
+        item.refresh_from_db()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self.assertIsNone(item.quantidade_separada)
+
     def test_quantidade_insuficiente_rejeita_zero(self):
         self._enviar()
         separacao = self._separacao()

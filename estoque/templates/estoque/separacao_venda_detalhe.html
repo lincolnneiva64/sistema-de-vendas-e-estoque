@@ -100,6 +100,7 @@
           data-minima="{{ item.quantidade_minima_data }}"
           data-maxima="{{ item.quantidade_maxima_data }}"
           data-passo="{{ item.quantidade_passo_data }}"
+          data-permite-acima="{{ item.permite_quantidade_acima|yesno:'true,false' }}"
         >
           <button class="sep-compact" type="button" data-reabrir-item>
             <span class="sep-icon {{ item.resultado_classe }}" data-resultado-icone>{{ item.resultado_icone }}</span>
@@ -119,13 +120,20 @@
                 <input type="radio" name="status_{{ item.id }}" value="nao_encontrado" {% if item.status == "nao_encontrado" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
                 <span>Nao encontrado</span>
               </label>
-              <label class="sep-option">
-                <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}>
-                <span>Quantidade insuficiente</span>
-              </label>
+              {% if item.registra_peso_real %}
+                <label class="sep-option">
+                  <input type="radio" name="status_{{ item.id }}" value="peso_separado" {% if item.status_input == "peso_separado" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+                  <span>Peso separado</span>
+                </label>
+              {% else %}
+                <label class="sep-option">
+                  <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}>
+                  <span>Quantidade insuficiente</span>
+                </label>
+              {% endif %}
             </div>
-            <div class="sep-insuf {% if item.status == 'quantidade_insuficiente' %}is-visible{% endif %}" data-insuficiente-box>
-              <p class="sep-insuf-title">Quanto foi encontrado?</p>
+            <div class="sep-insuf {% if item.status == 'quantidade_insuficiente' or item.status_input == 'peso_separado' %}is-visible{% endif %}" data-insuficiente-box>
+              <p class="sep-insuf-title">{% if item.registra_peso_real %}Peso separado{% else %}Quanto foi encontrado?{% endif %}</p>
               {% if item.valores_rapidos %}
                 <div class="sep-quick">
                   {% for opcao in item.valores_rapidos %}
@@ -141,7 +149,9 @@
                     inputmode="decimal"
                     step="{{ item.quantidade_passo_data }}"
                     min="{{ item.quantidade_minima_data }}"
+                    {% if item.quantidade_maxima_data %}
                     max="{{ item.quantidade_maxima_data }}"
+                    {% endif %}
                     name="quantidade_separada_{{ item.id }}"
                     value="{{ item.quantidade_separada_data }}"
                     data-qtd-input
@@ -194,15 +204,17 @@
     const min = Number(card.dataset.minima || 0.001);
     const max = Number(card.dataset.maxima || 0);
     const step = Number(card.dataset.passo || min || 0.001);
-    if (!Number.isFinite(max) || !Number.isFinite(min) || max < min) return 0;
+    const permiteAcima = card.dataset.permiteAcima === "true";
+    if (!Number.isFinite(min)) return 0;
+    if (!permiteAcima && (!Number.isFinite(max) || max < min)) return 0;
     let next = Number(value || 0);
     if (!Number.isFinite(next) || next <= 0) next = min;
     if (next < min) next = min;
-    if (next > max) next = max;
+    if (!permiteAcima && next > max) next = max;
     if (Number.isFinite(step) && step > 0) {
       next = Math.round(next / step) * step;
       if (next < min) next = min;
-      if (next > max) next = max;
+      if (!permiteAcima && next > max) next = max;
     }
     return Number(next.toFixed(3));
   };
@@ -227,6 +239,7 @@
   const refreshCard = (card, advance = false) => {
     const checked = card.querySelector("input[type='radio']:checked");
     const status = checked ? checked.value : "pendente";
+    const pedeQuantidade = status === "quantidade_insuficiente" || status === "peso_separado";
     const input = card.querySelector("[data-qtd-input]");
     const box = card.querySelector("[data-insuficiente-box]");
     const icon = card.querySelector("[data-resultado-icone]");
@@ -236,8 +249,8 @@
     let icone = "";
     let resumo = "Pendente";
 
-    if (box) box.classList.toggle("is-visible", status === "quantidade_insuficiente");
-    if (input) input.required = status === "quantidade_insuficiente";
+    if (box) box.classList.toggle("is-visible", pedeQuantidade);
+    if (input) input.required = pedeQuantidade;
 
     if (status === "conferido") {
       classe = "ok";
@@ -259,6 +272,16 @@
       resumo = quantidade > 0
         ? `Quantidade insuficiente - ${formatQtd(quantidade)} de ${formatQtd(solicitada)} - faltam ${formatQtd(faltante)}`
         : "Quantidade insuficiente";
+      card.classList.toggle("is-done", quantidade > 0);
+      card.classList.toggle("is-pending", quantidade <= 0);
+    } else if (status === "peso_separado") {
+      const quantidade = input && input.value ? clampInsuficiente(card, input.value) : 0;
+      const diferenca = quantidade - solicitada;
+      classe = "ok";
+      icone = "âœ“";
+      resumo = quantidade > 0
+        ? `Peso separado - ${formatQtd(quantidade)} de ${formatQtd(solicitada)} - diferenca ${diferenca > 0 ? "+" : ""}${formatQtd(diferenca)}`
+        : "Peso separado";
       card.classList.toggle("is-done", quantidade > 0);
       card.classList.toggle("is-pending", quantidade <= 0);
     } else {
@@ -286,7 +309,7 @@
     if (!data || !data.item) return;
     const item = data.item;
     const input = card.querySelector("[data-qtd-input]");
-    const radio = card.querySelector(`input[type='radio'][value='${item.status}']`);
+    const radio = card.querySelector(`input[type='radio'][value='${item.status_input || item.status}']`);
     if (radio) radio.checked = true;
     if (input) input.value = item.quantidade_separada || "";
     card.dataset.status = item.status;
@@ -310,10 +333,11 @@
     const state = card.querySelector("[data-save-state]");
     if (!checked || checked.value === "pendente") return false;
     const input = card.querySelector("[data-qtd-input]");
-    if (checked.value === "quantidade_insuficiente") {
+    if (checked.value === "quantidade_insuficiente" || checked.value === "peso_separado") {
       const min = Number(card.dataset.minima || 0);
       const max = Number(card.dataset.maxima || 0);
-      if (!Number.isFinite(max) || !Number.isFinite(min) || max < min) {
+      const permiteAcima = card.dataset.permiteAcima === "true";
+      if (!Number.isFinite(min) || (!permiteAcima && (!Number.isFinite(max) || max < min))) {
         if (state) {
           state.textContent = "Quantidade insuficiente nao se aplica a este item.";
           state.classList.add("is-error");
@@ -380,7 +404,7 @@
     card.querySelectorAll("input[type='radio']").forEach((input) => {
       input.addEventListener("change", () => {
         refreshCard(card);
-        if (input.value !== "quantidade_insuficiente") saveItem(card);
+        if (input.value !== "quantidade_insuficiente" && input.value !== "peso_separado") saveItem(card);
       });
     });
     card.querySelectorAll("[data-qtd-rapida]").forEach((button) => {

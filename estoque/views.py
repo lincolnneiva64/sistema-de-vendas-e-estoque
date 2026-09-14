@@ -57,6 +57,8 @@ from .services.estoque_manual import conferir_ou_ajustar_estoque
 from .services.separacao_vendas import (
     criar_ou_obter_separacao_venda,
     divergencias_separacao_venda,
+    item_separacao_registra_peso_real,
+    item_separacao_tem_pendencia,
     recalcular_status_separacao,
 )
 from .services.precos_antigo_snapshot import (
@@ -20225,18 +20227,12 @@ def _montar_grupos_rota_separacao(separacoes):
         separacao.total_pendencias = sum(
             1
             for item in itens
-            if item.status in {
-                SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
-                SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
-            }
+            if item_separacao_tem_pendencia(item)
         )
         separacao.itens_com_pendencia = [
             _resumo_item_pendencia_separacao(item)
             for item in itens
-            if item.status in {
-                SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
-                SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
-            }
+            if item_separacao_tem_pendencia(item)
         ]
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
@@ -20369,11 +20365,13 @@ def venda_enviar_separacao(request, pk):
 
 def _validar_item_checklist_separacao(item, post_data):
     status = post_data.get(f"status_{item.id}") or SeparacaoVendaItem.STATUS_PENDENTE
+    status_peso_separado = "peso_separado"
     status_validos = {
         SeparacaoVendaItem.STATUS_PENDENTE,
         SeparacaoVendaItem.STATUS_CONFERIDO,
         SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
         SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+        status_peso_separado,
     }
     if status not in status_validos:
         status = SeparacaoVendaItem.STATUS_PENDENTE
@@ -20382,7 +20380,7 @@ def _validar_item_checklist_separacao(item, post_data):
         return status, Decimal(item.quantidade_solicitada or 0), ""
     if status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
         return status, Decimal("0.000"), ""
-    if status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+    if status in {SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE, status_peso_separado}:
         try:
             quantidade_separada = _decimal_do_front(
                 post_data.get(f"quantidade_separada_{item.id}"),
@@ -20394,6 +20392,10 @@ def _validar_item_checklist_separacao(item, post_data):
         quantidade_solicitada = Decimal(item.quantidade_solicitada or 0)
         if quantidade_separada <= Decimal("0.000"):
             return status, None, f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser maior que zero."
+        if item_separacao_registra_peso_real(item):
+            return SeparacaoVendaItem.STATUS_CONFERIDO, quantidade_separada, ""
+        if status == status_peso_separado:
+            return status, None, "Peso separado so pode ser informado para produto em KG."
         if quantidade_separada >= quantidade_solicitada:
             return (
                 status,
@@ -20429,6 +20431,12 @@ def _passo_quantidade_separacao(item):
     return Decimal("0.001") if _item_separacao_permite_quantidade_fracionada(item) else Decimal("1.000")
 
 
+def _formatar_diferenca_quantidade(valor):
+    quantidade = Decimal(valor or 0).quantize(Decimal("0.001"))
+    sinal = "+" if quantidade > 0 else ""
+    return f"{sinal}{_formatar_quantidade(quantidade)}"
+
+
 def _preparar_item_checklist_separacao(item):
     quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
     quantidade_separada = (
@@ -20450,16 +20458,38 @@ def _preparar_item_checklist_separacao(item):
     item.quantidade_solicitada_data = f"{quantidade_solicitada:f}"
     item.quantidade_separada_data = f"{quantidade_separada:f}" if quantidade_separada is not None else ""
     passo_quantidade = _passo_quantidade_separacao(item)
-    quantidade_minima = passo_quantidade
-    quantidade_maxima = max(Decimal("0.000"), quantidade_solicitada - passo_quantidade)
+    item.registra_peso_real = item_separacao_registra_peso_real(item)
+    quantidade_minima = Decimal("0.001") if item.registra_peso_real else passo_quantidade
+    quantidade_maxima = (
+        None
+        if item.registra_peso_real
+        else max(Decimal("0.000"), quantidade_solicitada - passo_quantidade)
+    )
+    quantidade_diferenca = (
+        (quantidade_separada - quantidade_solicitada).quantize(Decimal("0.001"))
+        if quantidade_separada is not None
+        else Decimal("0.000")
+    )
     item.quantidade_passo_data = f"{passo_quantidade:f}"
     item.quantidade_minima_data = f"{quantidade_minima:f}"
-    item.quantidade_maxima_data = f"{quantidade_maxima:f}"
-    item.quantidade_insuficiente_permitida = quantidade_maxima >= quantidade_minima
+    item.quantidade_maxima_data = f"{quantidade_maxima:f}" if quantidade_maxima is not None else ""
+    item.quantidade_insuficiente_permitida = (
+        True if item.registra_peso_real else quantidade_maxima >= quantidade_minima
+    )
+    item.permite_quantidade_acima = item.registra_peso_real
+    item.modo_peso_separado = (
+        item.registra_peso_real
+        and item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+        and quantidade_separada is not None
+        and quantidade_separada != quantidade_solicitada
+    )
+    item.status_input = "peso_separado" if item.modo_peso_separado else item.status
+    item.quantidade_diferenca_formatada = _formatar_diferenca_quantidade(quantidade_diferenca)
 
     item.valores_rapidos = []
     if (
-        passo_quantidade == Decimal("1.000")
+        not item.registra_peso_real
+        and passo_quantidade == Decimal("1.000")
         and quantidade_solicitada == quantidade_solicitada.to_integral_value()
         and Decimal("1.000") < quantidade_solicitada <= Decimal("10.000")
     ):
@@ -20473,9 +20503,16 @@ def _preparar_item_checklist_separacao(item):
     if item.status == SeparacaoVendaItem.STATUS_CONFERIDO:
         item.resultado_classe = "ok"
         item.resultado_icone = "✓"
-        item.resultado_texto = (
-            f"OK - {item.quantidade_solicitada_formatada} de {item.quantidade_solicitada_formatada}"
-        )
+        if item.modo_peso_separado:
+            unidade_sufixo = f" {item.unidade_snapshot}" if item.unidade_snapshot else ""
+            item.resultado_texto = (
+                f"Peso separado - {item.quantidade_separada_formatada} de {item.quantidade_solicitada_formatada}"
+                f" - diferenca {item.quantidade_diferenca_formatada}{unidade_sufixo}"
+            )
+        else:
+            item.resultado_texto = (
+                f"OK - {item.quantidade_solicitada_formatada} de {item.quantidade_solicitada_formatada}"
+            )
     elif item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
         item.resultado_classe = "pendencia"
         item.resultado_icone = "!"
@@ -20500,10 +20537,13 @@ def _payload_item_checklist_separacao(item):
     return {
         "id": item.id,
         "status": item.status,
+        "status_input": item.status_input,
         "status_texto": item.get_status_display(),
         "quantidade_solicitada": item.quantidade_solicitada_formatada,
         "quantidade_separada": item.quantidade_separada_formatada,
         "quantidade_faltante": item.quantidade_faltante_formatada,
+        "quantidade_diferenca": item.quantidade_diferenca_formatada,
+        "registra_peso_real": item.registra_peso_real,
         "resultado_classe": item.resultado_classe,
         "resultado_icone": item.resultado_icone,
         "resultado_texto": item.resultado_texto,
