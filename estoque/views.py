@@ -20345,6 +20345,101 @@ def venda_enviar_separacao(request, pk):
     return redirect(detalhe_url)
 
 
+def _validar_item_checklist_separacao(item, post_data):
+    status = post_data.get(f"status_{item.id}") or SeparacaoVendaItem.STATUS_PENDENTE
+    status_validos = {
+        SeparacaoVendaItem.STATUS_PENDENTE,
+        SeparacaoVendaItem.STATUS_CONFERIDO,
+        SeparacaoVendaItem.STATUS_NAO_ENCONTRADO,
+        SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+    }
+    if status not in status_validos:
+        status = SeparacaoVendaItem.STATUS_PENDENTE
+
+    if status == SeparacaoVendaItem.STATUS_CONFERIDO:
+        return status, Decimal(item.quantidade_solicitada or 0), ""
+    if status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
+        return status, Decimal("0.000"), ""
+    if status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+        try:
+            quantidade_separada = _decimal_do_front(
+                post_data.get(f"quantidade_separada_{item.id}"),
+                "0.001",
+            )
+        except ValueError:
+            return status, None, f"Informe a quantidade encontrada de {item.produto_nome_snapshot}."
+
+        quantidade_solicitada = Decimal(item.quantidade_solicitada or 0)
+        if quantidade_separada <= Decimal("0.000"):
+            return status, None, f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser maior que zero."
+        if quantidade_separada >= quantidade_solicitada:
+            return (
+                status,
+                None,
+                f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser menor que a solicitada.",
+            )
+        return status, quantidade_separada, ""
+
+    return SeparacaoVendaItem.STATUS_PENDENTE, None, ""
+
+
+def _preparar_item_checklist_separacao(item):
+    quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
+    quantidade_separada = (
+        Decimal(item.quantidade_separada).quantize(Decimal("0.001"))
+        if item.quantidade_separada is not None
+        else None
+    )
+    quantidade_faltante = max(
+        Decimal("0.000"),
+        quantidade_solicitada - (quantidade_separada or Decimal("0.000")),
+    )
+    item.quantidade_solicitada_formatada = _formatar_quantidade(quantidade_solicitada)
+    item.quantidade_separada_formatada = (
+        _formatar_quantidade(quantidade_separada)
+        if quantidade_separada is not None
+        else ""
+    )
+    item.quantidade_faltante_formatada = _formatar_quantidade(quantidade_faltante)
+    item.quantidade_solicitada_data = f"{quantidade_solicitada:f}"
+    item.quantidade_separada_data = f"{quantidade_separada:f}" if quantidade_separada is not None else ""
+    item.quantidade_minima_data = "0.001"
+    item.quantidade_maxima_data = f"{max(Decimal('0.000'), quantidade_solicitada - Decimal('0.001')):f}"
+
+    item.valores_rapidos = []
+    if quantidade_solicitada == quantidade_solicitada.to_integral_value() and Decimal("1.000") < quantidade_solicitada <= Decimal("10.000"):
+        total = int(quantidade_solicitada)
+        item.valores_rapidos = [
+            {"valor": str(valor), "rotulo": str(valor)}
+            for valor in range(1, total)
+        ]
+
+    item.conferido = item.status != SeparacaoVendaItem.STATUS_PENDENTE
+    if item.status == SeparacaoVendaItem.STATUS_CONFERIDO:
+        item.resultado_classe = "ok"
+        item.resultado_icone = "✓"
+        item.resultado_texto = (
+            f"OK - {item.quantidade_solicitada_formatada} de {item.quantidade_solicitada_formatada}"
+        )
+    elif item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
+        item.resultado_classe = "pendencia"
+        item.resultado_icone = "!"
+        item.resultado_texto = f"Nao encontrado - faltam {item.quantidade_solicitada_formatada}"
+    elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+        item.resultado_classe = "pendencia"
+        item.resultado_icone = "!"
+        item.resultado_texto = (
+            "Quantidade insuficiente - "
+            f"{item.quantidade_separada_formatada or '0'} de {item.quantidade_solicitada_formatada}"
+            f" - faltam {item.quantidade_faltante_formatada}"
+        )
+    else:
+        item.resultado_classe = "pendente"
+        item.resultado_icone = ""
+        item.resultado_texto = "Pendente"
+    return item
+
+
 def separacao_venda_detalhe(request, pk):
     separacao = get_object_or_404(
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
@@ -20367,32 +20462,40 @@ def separacao_venda_detalhe(request, pk):
                 .prefetch_related("itens")
                 .get(pk=separacao.pk)
             )
-            for item in separacao.itens.all():
-                status = request.POST.get(f"status_{item.id}") or SeparacaoVendaItem.STATUS_PENDENTE
-                if status not in dict(SeparacaoVendaItem.STATUS_CHOICES):
-                    status = SeparacaoVendaItem.STATUS_PENDENTE
+            itens_bloqueados = list(separacao.itens.all())
+            atualizacoes = []
+            erros = []
+            for item in itens_bloqueados:
+                status, quantidade_separada, erro = _validar_item_checklist_separacao(item, request.POST)
+                if erro:
+                    erros.append(erro)
+                atualizacoes.append((item, status, quantidade_separada))
 
-                quantidade_separada = None
-                if status == SeparacaoVendaItem.STATUS_CONFERIDO:
-                    quantidade_separada = item.quantidade_solicitada
-                elif status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
-                    quantidade_separada = Decimal("0.000")
-                elif status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
-                    try:
-                        quantidade_separada = _decimal_do_front(
-                            request.POST.get(f"quantidade_separada_{item.id}"),
-                            "0.001",
-                        )
-                    except ValueError:
-                        quantidade_separada = Decimal("0.000")
+            if erros:
+                for erro in erros:
+                    messages.warning(request, erro)
+                itens = [
+                    _preparar_item_checklist_separacao(item)
+                    for item in separacao.itens.select_related("item_venda", "item_venda__produto").all()
+                ]
+                return render(
+                    request,
+                    "estoque/separacao_venda_detalhe.html",
+                    {
+                        "separacao": separacao,
+                        "venda": separacao.venda,
+                        "itens": itens,
+                        "divergencias": divergencias,
+                    },
+                    status=200,
+                )
 
+            for item, status, quantidade_separada in atualizacoes:
                 item.status = status
                 item.quantidade_separada = quantidade_separada
-                item.observacao = (request.POST.get(f"observacao_{item.id}") or "").strip()
                 item.save(update_fields=[
                     "status",
                     "quantidade_separada",
-                    "observacao",
                     "atualizado_em",
                 ])
 
@@ -20401,7 +20504,10 @@ def separacao_venda_detalhe(request, pk):
         messages.success(request, "Separacao salva.")
         return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
 
-    itens = list(separacao.itens.select_related("item_venda", "item_venda__produto").all())
+    itens = [
+        _preparar_item_checklist_separacao(item)
+        for item in separacao.itens.select_related("item_venda", "item_venda__produto").all()
+    ]
     return render(
         request,
         "estoque/separacao_venda_detalhe.html",

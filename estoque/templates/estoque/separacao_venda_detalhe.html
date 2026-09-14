@@ -2,12 +2,12 @@
 {% block title %}Separacao venda #{{ venda.id }}{% endblock %}
 {% block content %}
 <style>
-  .sep-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 14px 0 48px; }
-  .sep-shell { width: min(760px, calc(100vw - 16px)); margin: 0 auto; }
+  .sep-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 10px 0 42px; }
+  .sep-shell { width: min(760px, calc(100vw - 14px)); margin: 0 auto; }
   .sep-head, .sep-card, .sep-alert { border: 1px solid #dbe5f0; border-radius: 14px; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); }
-  .sep-head { padding: 14px; margin-bottom: 10px; }
-  .sep-title { margin: 0; color: #111827; font-size: clamp(1.25rem, 6vw, 1.7rem); font-weight: 950; line-height: 1.1; }
-  .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.92rem; font-weight: 750; }
+  .sep-head { padding: 13px; margin-bottom: 10px; }
+  .sep-title { margin: 0; color: #111827; font-size: clamp(1.2rem, 5vw, 1.65rem); font-weight: 950; line-height: 1.1; }
+  .sep-sub { margin: 6px 0 0; color: #64748b; font-size: 0.9rem; font-weight: 750; }
   .sep-status { display: inline-flex; margin-top: 10px; padding: 6px 10px; border-radius: 999px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1d4ed8; font-weight: 950; font-size: 0.82rem; }
   .sep-status.com_pendencia { background: #fff7ed; color: #9a3412; border-color: #fdba74; }
   .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
@@ -18,21 +18,42 @@
   .sep-message { padding: 10px 12px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-weight: 850; }
   .sep-message.warning { background: #fffbeb; color: #92400e; border-color: #fde68a; }
   .sep-message.success { background: #dcfce7; color: #166534; border-color: #86efac; }
-  .sep-form { display: grid; gap: 10px; }
-  .sep-card { padding: 13px; }
-  .sep-prod { margin: 0; color: #111827; font-size: 1rem; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
-  .sep-qtd { margin: 4px 0 10px; color: #64748b; font-size: 0.86rem; font-weight: 800; }
-  .sep-options { display: grid; gap: 7px; }
-  .sep-option { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; min-height: 42px; border: 1px solid #e2e8f0; border-radius: 11px; background: #f8fafc; padding: 8px 10px; color: #172033; font-weight: 900; }
+  .sep-form { display: grid; gap: 8px; }
+  .sep-card { padding: 11px; transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
+  .sep-card.is-active { border-color: #2563eb; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
+  .sep-card.is-done:not(.is-active) { padding: 9px 10px; background: #fbfdff; }
+  .sep-card.is-done:not(.is-active) .sep-work { display: none; }
+  .sep-card.is-pending:not(.is-active) { opacity: 0.88; }
+  .sep-compact { width: 100%; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
+  .sep-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 1rem; font-weight: 950; }
+  .sep-icon.ok { background: #dcfce7; color: #166534; }
+  .sep-icon.pendencia { background: #ffedd5; color: #c2410c; }
+  .sep-icon.pendente { background: #dbeafe; color: #1d4ed8; }
+  .sep-prod { margin: 0; color: #111827; font-size: 0.98rem; font-weight: 950; line-height: 1.2; overflow-wrap: anywhere; }
+  .sep-result { margin: 3px 0 0; color: #64748b; font-size: 0.86rem; font-weight: 850; line-height: 1.25; }
+  .sep-result.ok { color: #166534; }
+  .sep-result.pendencia { color: #9a3412; }
+  .sep-qtd { margin: 10px 0 8px; color: #64748b; font-size: 0.86rem; font-weight: 800; }
+  .sep-options { display: grid; grid-template-columns: 1fr; gap: 7px; }
+  .sep-option { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; min-height: 46px; border: 1px solid #dbe5f0; border-radius: 12px; background: #f8fafc; padding: 9px 10px; color: #172033; font-weight: 950; cursor: pointer; }
   .sep-option input { width: 22px; height: 22px; margin: 0; accent-color: #16a34a; }
-  .sep-fields { display: grid; gap: 8px; margin-top: 10px; }
-  .sep-field { display: grid; gap: 4px; color: #475569; font-size: 0.78rem; font-weight: 900; text-transform: uppercase; }
-  .sep-field input, .sep-field textarea { width: 100%; border: 1.5px solid #d3dbe8; border-radius: 10px; padding: 10px 11px; background: #fff; color: #172033; font-size: 1rem; font-weight: 800; box-sizing: border-box; }
-  .sep-field textarea { min-height: 74px; resize: vertical; font-size: 0.95rem; font-weight: 750; text-transform: none; }
-  .sep-actions { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 2px; }
+  .sep-option:has(input:checked) { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+  .sep-insuf { display: none; margin-top: 9px; padding: 10px; border-radius: 12px; border: 1px dashed #fdba74; background: #fff7ed; }
+  .sep-insuf.is-visible { display: grid; gap: 8px; }
+  .sep-insuf-title { margin: 0; color: #9a3412; font-size: 0.82rem; font-weight: 950; text-transform: uppercase; }
+  .sep-quick { display: flex; flex-wrap: wrap; gap: 7px; }
+  .sep-quick-btn, .sep-step-btn { min-width: 46px; min-height: 42px; border: 1px solid #fed7aa; border-radius: 10px; background: #fff; color: #9a3412; font-size: 1rem; font-weight: 950; cursor: pointer; }
+  .sep-quick-btn.is-selected { background: #ea580c; color: #fff; border-color: #ea580c; }
+  .sep-stepper { display: grid; grid-template-columns: 48px minmax(0, 1fr) 48px; gap: 7px; align-items: center; }
+  .sep-step-input { width: 100%; min-height: 42px; border: 1.5px solid #fdba74; border-radius: 10px; padding: 8px 10px; box-sizing: border-box; color: #172033; font-size: 1.08rem; font-weight: 950; text-align: center; }
+  .sep-actions { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 2px; padding: 9px 0 0; background: linear-gradient(180deg, rgba(244, 246, 249, 0), #f4f6f9 28%); }
   .sep-btn { min-height: 46px; border: 0; border-radius: 12px; background: #2563eb; color: #fff; font-size: 1rem; font-weight: 950; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; }
   .sep-btn.secondary { background: #e2e8f0; color: #172033; }
   .sep-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  @media (min-width: 560px) {
+    .sep-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .sep-actions { grid-template-columns: 1fr 1fr 1fr; }
+  }
 </style>
 <main class="sep-page">
   <div class="sep-shell">
@@ -62,39 +83,74 @@
       </section>
     {% endif %}
 
-    <form class="sep-form" method="post">
+    <form class="sep-form" method="post" id="separacaoChecklistForm">
       {% csrf_token %}
       {% for item in itens %}
-        <article class="sep-card">
-          <h2 class="sep-prod">{{ item.produto_nome_snapshot }}</h2>
-          <p class="sep-qtd">Solicitado: {{ item.quantidade_solicitada }} {{ item.unidade_snapshot }}</p>
-          <div class="sep-options">
-            <label class="sep-option">
-              <input type="radio" name="status_{{ item.id }}" value="pendente" {% if item.status == "pendente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
-              <span>Pendente</span>
-            </label>
-            <label class="sep-option">
-              <input type="radio" name="status_{{ item.id }}" value="conferido" {% if item.status == "conferido" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
-              <span>OK</span>
-            </label>
-            <label class="sep-option">
-              <input type="radio" name="status_{{ item.id }}" value="nao_encontrado" {% if item.status == "nao_encontrado" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
-              <span>Nao encontrado</span>
-            </label>
-            <label class="sep-option">
-              <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
-              <span>Quantidade insuficiente</span>
-            </label>
-          </div>
-          <div class="sep-fields">
-            <label class="sep-field">
-              Quantidade separada
-              <input type="text" inputmode="decimal" name="quantidade_separada_{{ item.id }}" value="{% if item.quantidade_separada is not None %}{{ item.quantidade_separada }}{% endif %}" {% if divergencias %}disabled{% endif %}>
-            </label>
-            <label class="sep-field">
-              Observacao
-              <textarea name="observacao_{{ item.id }}" {% if divergencias %}disabled{% endif %}>{{ item.observacao }}</textarea>
-            </label>
+        <article
+          class="sep-card {% if item.conferido %}is-done{% else %}is-pending{% endif %}"
+          data-sep-item
+          data-status="{{ item.status }}"
+          data-solicitada="{{ item.quantidade_solicitada_data }}"
+        >
+          <button class="sep-compact" type="button" data-reabrir-item>
+            <span class="sep-icon {{ item.resultado_classe }}" data-resultado-icone>{{ item.resultado_icone }}</span>
+            <span>
+              <span class="sep-prod">{{ item.produto_nome_snapshot }}</span>
+              <span class="sep-result {{ item.resultado_classe }}" data-resultado-texto>{{ item.resultado_texto }}</span>
+            </span>
+          </button>
+          <div class="sep-work">
+            <p class="sep-qtd">Solicitado: {{ item.quantidade_solicitada_formatada }} {{ item.unidade_snapshot }}</p>
+            <div class="sep-options">
+              <label class="sep-option">
+                <input type="radio" name="status_{{ item.id }}" value="conferido" {% if item.status == "conferido" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+                <span>OK</span>
+              </label>
+              <label class="sep-option">
+                <input type="radio" name="status_{{ item.id }}" value="nao_encontrado" {% if item.status == "nao_encontrado" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+                <span>Nao encontrado</span>
+              </label>
+              <label class="sep-option">
+                <input type="radio" name="status_{{ item.id }}" value="quantidade_insuficiente" {% if item.status == "quantidade_insuficiente" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
+                <span>Quantidade insuficiente</span>
+              </label>
+            </div>
+            <div class="sep-insuf {% if item.status == 'quantidade_insuficiente' %}is-visible{% endif %}" data-insuficiente-box>
+              <p class="sep-insuf-title">Quanto foi encontrado?</p>
+              {% if item.valores_rapidos %}
+                <div class="sep-quick">
+                  {% for opcao in item.valores_rapidos %}
+                    <button class="sep-quick-btn {% if item.quantidade_separada_formatada == opcao.rotulo %}is-selected{% endif %}" type="button" data-qtd-rapida="{{ opcao.valor }}">{{ opcao.rotulo }}</button>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="sep-stepper">
+                  <button class="sep-step-btn" type="button" data-step="-1">-</button>
+                  <input
+                    class="sep-step-input"
+                    type="number"
+                    inputmode="decimal"
+                    step="0.001"
+                    min="0.001"
+                    max="{{ item.quantidade_maxima_data }}"
+                    name="quantidade_separada_{{ item.id }}"
+                    value="{{ item.quantidade_separada_data }}"
+                    data-qtd-input
+                    {% if divergencias %}disabled{% endif %}
+                  >
+                  <button class="sep-step-btn" type="button" data-step="1">+</button>
+                </div>
+              {% endif %}
+              {% if item.valores_rapidos %}
+                <input
+                  type="hidden"
+                  name="quantidade_separada_{{ item.id }}"
+                  value="{{ item.quantidade_separada_data }}"
+                  data-qtd-input
+                  {% if divergencias %}disabled{% endif %}
+                >
+              {% endif %}
+            </div>
           </div>
         </article>
       {% endfor %}
@@ -106,4 +162,123 @@
     </form>
   </div>
 </main>
+<script>
+(() => {
+  const cards = Array.from(document.querySelectorAll("[data-sep-item]"));
+  if (!cards.length) return;
+
+  const formatQtd = (value) => {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return "0";
+    return number.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  };
+
+  const clampInsuficiente = (card, value) => {
+    const solicitada = Number(card.dataset.solicitada || 0);
+    const max = Math.max(0.001, solicitada - 0.001);
+    let next = Number(value || 0);
+    if (!Number.isFinite(next) || next <= 0) next = 0.001;
+    if (next >= solicitada) next = max;
+    return Number(next.toFixed(3));
+  };
+
+  const setActive = (card) => {
+    cards.forEach((item) => item.classList.toggle("is-active", item === card));
+  };
+
+  const nextPending = (afterCard) => {
+    const start = Math.max(0, cards.indexOf(afterCard) + 1);
+    return cards.slice(start).find((card) => !card.classList.contains("is-done"))
+      || cards.find((card) => !card.classList.contains("is-done"));
+  };
+
+  const refreshCard = (card, advance = false) => {
+    const checked = card.querySelector("input[type='radio']:checked");
+    const status = checked ? checked.value : "pendente";
+    const input = card.querySelector("[data-qtd-input]");
+    const box = card.querySelector("[data-insuficiente-box]");
+    const icon = card.querySelector("[data-resultado-icone]");
+    const text = card.querySelector("[data-resultado-texto]");
+    const solicitada = Number(card.dataset.solicitada || 0);
+    let classe = "pendente";
+    let icone = "";
+    let resumo = "Pendente";
+
+    if (box) box.classList.toggle("is-visible", status === "quantidade_insuficiente");
+    if (input) input.required = status === "quantidade_insuficiente";
+
+    if (status === "conferido") {
+      classe = "ok";
+      icone = "✓";
+      resumo = `OK - ${formatQtd(solicitada)} de ${formatQtd(solicitada)}`;
+      card.classList.add("is-done");
+      card.classList.remove("is-pending");
+    } else if (status === "nao_encontrado") {
+      classe = "pendencia";
+      icone = "!";
+      resumo = `Nao encontrado - faltam ${formatQtd(solicitada)}`;
+      card.classList.add("is-done");
+      card.classList.remove("is-pending");
+    } else if (status === "quantidade_insuficiente") {
+      const quantidade = input && input.value ? clampInsuficiente(card, input.value) : 0;
+      const faltante = Math.max(0, solicitada - quantidade);
+      classe = "pendencia";
+      icone = "!";
+      resumo = quantidade > 0
+        ? `Quantidade insuficiente - ${formatQtd(quantidade)} de ${formatQtd(solicitada)} - faltam ${formatQtd(faltante)}`
+        : "Quantidade insuficiente";
+      card.classList.toggle("is-done", quantidade > 0);
+      card.classList.toggle("is-pending", quantidade <= 0);
+    } else {
+      card.classList.remove("is-done");
+      card.classList.add("is-pending");
+    }
+
+    if (icon) {
+      icon.className = `sep-icon ${classe}`;
+      icon.textContent = icone;
+    }
+    if (text) {
+      text.className = `sep-result ${classe}`;
+      text.textContent = resumo;
+    }
+
+    if (advance && status !== "quantidade_insuficiente") {
+      const next = nextPending(card);
+      if (next) setActive(next);
+    }
+  };
+
+  cards.forEach((card) => {
+    card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card));
+    card.querySelectorAll("input[type='radio']").forEach((input) => {
+      input.addEventListener("change", () => refreshCard(card, true));
+    });
+    card.querySelectorAll("[data-qtd-rapida]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = card.querySelector("[data-qtd-input]");
+        if (input) input.value = button.dataset.qtdRapida || "";
+        card.querySelectorAll("[data-qtd-rapida]").forEach((item) => item.classList.remove("is-selected"));
+        button.classList.add("is-selected");
+        refreshCard(card);
+        const next = nextPending(card);
+        if (next) setActive(next);
+      });
+    });
+    card.querySelectorAll("[data-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = card.querySelector("[data-qtd-input]");
+        if (!input) return;
+        const step = Number(button.dataset.step || 0);
+        input.value = formatQtd(clampInsuficiente(card, Number(input.value || 0) + step));
+        refreshCard(card);
+      });
+    });
+    card.querySelector("[data-qtd-input]")?.addEventListener("input", () => refreshCard(card));
+    refreshCard(card);
+  });
+
+  setActive(cards.find((card) => card.classList.contains("is-pending")) || cards[0]);
+})();
+</script>
 {% endblock %}
