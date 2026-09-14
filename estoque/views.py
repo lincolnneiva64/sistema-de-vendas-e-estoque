@@ -20440,6 +20440,77 @@ def _preparar_item_checklist_separacao(item):
     return item
 
 
+def _payload_item_checklist_separacao(item):
+    item = _preparar_item_checklist_separacao(item)
+    return {
+        "id": item.id,
+        "status": item.status,
+        "status_texto": item.get_status_display(),
+        "quantidade_solicitada": item.quantidade_solicitada_formatada,
+        "quantidade_separada": item.quantidade_separada_formatada,
+        "quantidade_faltante": item.quantidade_faltante_formatada,
+        "resultado_classe": item.resultado_classe,
+        "resultado_icone": item.resultado_icone,
+        "resultado_texto": item.resultado_texto,
+        "conferido": item.conferido,
+    }
+
+
+def _resumo_checklist_separacao(separacao):
+    itens = list(separacao.itens.all())
+    total_pendentes = sum(1 for item in itens if item.status == SeparacaoVendaItem.STATUS_PENDENTE)
+    total_conferidos = len(itens) - total_pendentes
+    return {
+        "total_itens": len(itens),
+        "total_conferidos": total_conferidos,
+        "total_pendentes": total_pendentes,
+        "concluida": bool(itens) and total_pendentes == 0,
+    }
+
+
+@require_POST
+def separacao_venda_item_salvar(request, pk, item_id):
+    separacao = get_object_or_404(
+        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel"),
+        pk=pk,
+    )
+    divergencias = divergencias_separacao_venda(separacao)
+    if divergencias:
+        return JsonResponse({
+            "sucesso": False,
+            "mensagem": "A venda foi alterada apos o envio para separacao. Atualize/reenvie a separacao antes de processar.",
+            "divergencias": divergencias,
+        }, status=409)
+
+    with transaction.atomic():
+        separacao = SeparacaoVenda.objects.select_for_update().get(pk=separacao.pk)
+        item = get_object_or_404(
+            SeparacaoVendaItem.objects.select_for_update(),
+            pk=item_id,
+            separacao=separacao,
+        )
+        status, quantidade_separada, erro = _validar_item_checklist_separacao(item, request.POST)
+        if status == SeparacaoVendaItem.STATUS_PENDENTE:
+            erro = erro or "Escolha OK, Nao encontrado ou Quantidade insuficiente para salvar o item."
+        if erro:
+            return JsonResponse({"sucesso": False, "mensagem": erro}, status=400)
+
+        item.status = status
+        item.quantidade_separada = quantidade_separada
+        item.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        recalcular_status_separacao(separacao, request.user)
+        separacao.refresh_from_db()
+        resumo = _resumo_checklist_separacao(separacao)
+
+    return JsonResponse({
+        "sucesso": True,
+        "item": _payload_item_checklist_separacao(item),
+        "separacao_status": separacao.status,
+        "separacao_status_texto": separacao.get_status_display(),
+        **resumo,
+    })
+
+
 def separacao_venda_detalhe(request, pk):
     separacao = get_object_or_404(
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
@@ -20486,6 +20557,7 @@ def separacao_venda_detalhe(request, pk):
                         "venda": separacao.venda,
                         "itens": itens,
                         "divergencias": divergencias,
+                        "checklist_resumo": _resumo_checklist_separacao(separacao),
                     },
                     status=200,
                 )
@@ -20516,6 +20588,7 @@ def separacao_venda_detalhe(request, pk):
             "venda": separacao.venda,
             "itens": itens,
             "divergencias": divergencias,
+            "checklist_resumo": _resumo_checklist_separacao(separacao),
         },
     )
 

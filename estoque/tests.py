@@ -29660,6 +29660,17 @@ class SeparacaoVendaFase1Tests(TestCase):
                 dados[f"quantidade_separada_{item.id}"] = quantidades[item.item_venda_id]
         return self.client.post(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), dados, secure=True)
 
+    def _post_item_checklist(self, separacao, item, status, quantidade=None):
+        dados = {f"status_{item.id}": status}
+        if quantidade is not None:
+            dados[f"quantidade_separada_{item.id}"] = quantidade
+        return self.client.post(
+            reverse("estoque:separacao_venda_item_salvar", args=[separacao.id, item.id]),
+            dados,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
     def _estado_itens_venda(self):
         return list(
             ItemVenda.objects.filter(venda=self.venda)
@@ -30052,6 +30063,24 @@ class SeparacaoVendaFase1Tests(TestCase):
             self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
             self.assertEqual(item.quantidade_separada, item.quantidade_solicitada)
 
+    def test_autosave_item_ok_salva_imediatamente(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+
+        resposta = self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta.json()
+        self.assertTrue(dados["sucesso"])
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, item.quantidade_solicitada)
+        self.assertEqual(dados["total_pendentes"], 1)
+        self.assertFalse(dados["concluida"])
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_EM_SEPARACAO)
+
     def test_item_nao_encontrado_deixa_com_pendencia(self):
         self._enviar()
         separacao = self._separacao()
@@ -30066,6 +30095,21 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
         self.assertEqual(item.quantidade_separada, Decimal("0.000"))
+
+    def test_autosave_item_nao_encontrado_salva_imediatamente(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+
+        resposta = self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+        self.assertEqual(item.quantidade_separada, Decimal("0.000"))
+        self.assertIn("Nao encontrado", dados["item"]["resultado_texto"])
+        self.assertEqual(dados["total_pendentes"], 1)
 
     def test_quantidade_insuficiente_deixa_com_pendencia(self):
         self._enviar()
@@ -30085,6 +30129,26 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
         self.assertEqual(item.quantidade_separada, Decimal("1.000"))
+
+    def test_autosave_quantidade_insuficiente_valida_salva_imediatamente(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "1,000",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
+        self.assertEqual(item.quantidade_separada, Decimal("1.000"))
+        self.assertIn("Quantidade insuficiente", dados["item"]["resultado_texto"])
+        self.assertEqual(dados["total_pendentes"], 1)
 
     def test_quantidade_insuficiente_rejeita_zero(self):
         self._enviar()
@@ -30166,6 +30230,55 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
         self.assertEqual(item.quantidade_separada, Decimal("0.000"))
 
+    def test_autosave_item_conferido_pode_ser_corrigido_depois(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+
+        primeira = self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_CONFERIDO)
+        segunda = self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+
+        self.assertEqual(primeira.status_code, 200)
+        self.assertEqual(segunda.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+        self.assertEqual(item.quantidade_separada, Decimal("0.000"))
+
+    def test_autosave_ultimo_item_indica_conferencia_concluida(self):
+        self._enviar()
+        separacao = self._separacao()
+        item_a = separacao.itens.get(item_venda=self.item_a)
+        item_b = separacao.itens.get(item_venda=self.item_b)
+        self._post_item_checklist(separacao, item_a, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        resposta = self._post_item_checklist(separacao, item_b, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["concluida"])
+        self.assertEqual(dados["total_pendentes"], 0)
+        self.assertEqual(dados["separacao_status"], SeparacaoVenda.STATUS_SEPARADA)
+
+    def test_autosave_ultimo_item_com_pendencia_indica_concluida_com_pendencia(self):
+        self._enviar()
+        separacao = self._separacao()
+        item_a = separacao.itens.get(item_venda=self.item_a)
+        item_b = separacao.itens.get(item_venda=self.item_b)
+        self._post_item_checklist(separacao, item_a, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item_b,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "1,000",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        dados = resposta.json()
+        self.assertTrue(dados["concluida"])
+        self.assertEqual(dados["total_pendentes"], 0)
+        self.assertEqual(dados["separacao_status"], SeparacaoVenda.STATUS_COM_PENDENCIA)
+
     def test_checklist_publico_nao_exibe_pendente_quantidade_ou_observacao_como_inputs_normais(self):
         self._enviar()
         separacao = self._separacao()
@@ -30177,6 +30290,9 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertNotContains(resposta, ">Quantidade separada<")
         self.assertNotContains(resposta, ">Observacao<")
         self.assertContains(resposta, "Quanto foi encontrado?")
+        self.assertContains(resposta, "data-save-url=")
+        self.assertContains(resposta, "Conferencia dos itens concluida")
+        self.assertContains(resposta, "CONCLUIR SEPARACAO")
 
     def test_processamento_parcial_deixa_em_separacao(self):
         self._enviar()

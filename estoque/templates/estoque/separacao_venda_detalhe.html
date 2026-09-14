@@ -41,6 +41,8 @@
   .sep-insuf { display: none; margin-top: 9px; padding: 10px; border-radius: 12px; border: 1px dashed #fdba74; background: #fff7ed; }
   .sep-insuf.is-visible { display: grid; gap: 8px; }
   .sep-insuf-title { margin: 0; color: #9a3412; font-size: 0.82rem; font-weight: 950; text-transform: uppercase; }
+  .sep-save-state { min-height: 18px; margin: 8px 0 0; color: #1d4ed8; font-size: 0.82rem; font-weight: 900; }
+  .sep-save-state.is-error { color: #b91c1c; }
   .sep-quick { display: flex; flex-wrap: wrap; gap: 7px; }
   .sep-quick-btn, .sep-step-btn { min-width: 46px; min-height: 42px; border: 1px solid #fed7aa; border-radius: 10px; background: #fff; color: #9a3412; font-size: 1rem; font-weight: 950; cursor: pointer; }
   .sep-quick-btn.is-selected { background: #ea580c; color: #fff; border-color: #ea580c; }
@@ -50,6 +52,8 @@
   .sep-btn { min-height: 46px; border: 0; border-radius: 12px; background: #2563eb; color: #fff; font-size: 1rem; font-weight: 950; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; padding: 10px 12px; }
   .sep-btn.secondary { background: #e2e8f0; color: #172033; }
   .sep-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .sep-done-all { display: none; align-items: center; gap: 9px; padding: 12px; border: 1px solid #86efac; border-radius: 14px; background: #dcfce7; color: #166534; font-size: 1rem; font-weight: 950; }
+  .sep-done-all.is-visible { display: flex; }
   @media (min-width: 560px) {
     .sep-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .sep-actions { grid-template-columns: 1fr 1fr 1fr; }
@@ -89,6 +93,8 @@
         <article
           class="sep-card {% if item.conferido %}is-done{% else %}is-pending{% endif %}"
           data-sep-item
+          data-item-id="{{ item.id }}"
+          data-save-url="{% url 'estoque:separacao_venda_item_salvar' separacao.id item.id %}"
           data-status="{{ item.status }}"
           data-solicitada="{{ item.quantidade_solicitada_data }}"
         >
@@ -151,11 +157,16 @@
                 >
               {% endif %}
             </div>
+            <p class="sep-save-state" data-save-state></p>
           </div>
         </article>
       {% endfor %}
+      <div class="sep-done-all {% if checklist_resumo.concluida %}is-visible{% endif %}" id="sepDoneAll">
+        <span>✓</span>
+        <span>Conferencia dos itens concluida</span>
+      </div>
       <div class="sep-actions">
-        <button class="sep-btn" type="submit" {% if divergencias %}disabled{% endif %}>Salvar separacao</button>
+        <button class="sep-btn" type="submit" id="sepSubmitBtn" {% if divergencias %}disabled{% endif %}>{% if checklist_resumo.concluida %}CONCLUIR SEPARACAO{% else %}Salvar separacao{% endif %}</button>
         <a class="sep-btn secondary" href="{% url 'estoque:separacao_vendas_fila' %}">Voltar para fila</a>
         <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
       </div>
@@ -166,6 +177,10 @@
 (() => {
   const cards = Array.from(document.querySelectorAll("[data-sep-item]"));
   if (!cards.length) return;
+  const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+  const submitBtn = document.getElementById("sepSubmitBtn");
+  const doneAll = document.getElementById("sepDoneAll");
+  const confirmDelay = 900;
 
   const formatQtd = (value) => {
     const number = Number(value || 0);
@@ -184,6 +199,13 @@
 
   const setActive = (card) => {
     cards.forEach((item) => item.classList.toggle("is-active", item === card));
+  };
+
+  const updateCompletion = () => {
+    const concluded = cards.every((card) => card.classList.contains("is-done"));
+    if (doneAll) doneAll.classList.toggle("is-visible", concluded);
+    if (submitBtn) submitBtn.textContent = concluded ? "CONCLUIR SEPARACAO" : "Salvar separacao";
+    return concluded;
   };
 
   const nextPending = (afterCard) => {
@@ -247,12 +269,100 @@
       const next = nextPending(card);
       if (next) setActive(next);
     }
+    updateCompletion();
+  };
+
+  const applySavedItem = (card, data) => {
+    if (!data || !data.item) return;
+    const item = data.item;
+    const input = card.querySelector("[data-qtd-input]");
+    const radio = card.querySelector(`input[type='radio'][value='${item.status}']`);
+    if (radio) radio.checked = true;
+    if (input) input.value = item.quantidade_separada || "";
+    card.dataset.status = item.status;
+    const icon = card.querySelector("[data-resultado-icone]");
+    const text = card.querySelector("[data-resultado-texto]");
+    if (icon) {
+      icon.className = `sep-icon ${item.resultado_classe}`;
+      icon.textContent = item.resultado_icone || "";
+    }
+    if (text) {
+      text.className = `sep-result ${item.resultado_classe}`;
+      text.textContent = item.resultado_texto || "";
+    }
+    card.classList.toggle("is-done", Boolean(item.conferido));
+    card.classList.toggle("is-pending", !item.conferido);
+    updateCompletion();
+  };
+
+  const saveItem = async (card, {advance = true} = {}) => {
+    const checked = card.querySelector("input[type='radio']:checked");
+    const state = card.querySelector("[data-save-state]");
+    if (!checked || checked.value === "pendente") return false;
+    const input = card.querySelector("[data-qtd-input]");
+    if (checked.value === "quantidade_insuficiente") {
+      if (!input || !input.value) {
+        if (state) {
+          state.textContent = "Informe a quantidade encontrada.";
+          state.classList.add("is-error");
+        }
+        return false;
+      }
+      input.value = formatQtd(clampInsuficiente(card, input.value));
+    }
+
+    const body = new URLSearchParams();
+    body.set(checked.name, checked.value);
+    if (input && input.value) body.set(input.name, input.value);
+    if (state) {
+      state.textContent = "Salvando...";
+      state.classList.remove("is-error");
+    }
+
+    try {
+      const response = await fetch(card.dataset.saveUrl, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": csrfInput ? csrfInput.value : "",
+          "X-Requested-With": "XMLHttpRequest",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.sucesso) {
+        throw new Error(data.mensagem || "Nao foi possivel salvar o item.");
+      }
+      applySavedItem(card, data);
+      if (state) state.textContent = "Registrado.";
+      window.setTimeout(() => {
+        const next = nextPending(card);
+        if (advance && next) {
+          setActive(next);
+        } else if (!next) {
+          setActive(null);
+          updateCompletion();
+        }
+        if (state) state.textContent = "";
+      }, confirmDelay);
+      return true;
+    } catch (error) {
+      if (state) {
+        state.textContent = error.message;
+        state.classList.add("is-error");
+      }
+      setActive(card);
+      return false;
+    }
   };
 
   cards.forEach((card) => {
     card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card));
     card.querySelectorAll("input[type='radio']").forEach((input) => {
-      input.addEventListener("change", () => refreshCard(card, true));
+      input.addEventListener("change", () => {
+        refreshCard(card);
+        if (input.value !== "quantidade_insuficiente") saveItem(card);
+      });
     });
     card.querySelectorAll("[data-qtd-rapida]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -261,8 +371,7 @@
         card.querySelectorAll("[data-qtd-rapida]").forEach((item) => item.classList.remove("is-selected"));
         button.classList.add("is-selected");
         refreshCard(card);
-        const next = nextPending(card);
-        if (next) setActive(next);
+        saveItem(card);
       });
     });
     card.querySelectorAll("[data-step]").forEach((button) => {
@@ -272,13 +381,16 @@
         const step = Number(button.dataset.step || 0);
         input.value = formatQtd(clampInsuficiente(card, Number(input.value || 0) + step));
         refreshCard(card);
+        saveItem(card, {advance: false});
       });
     });
     card.querySelector("[data-qtd-input]")?.addEventListener("input", () => refreshCard(card));
+    card.querySelector("[data-qtd-input]")?.addEventListener("change", () => saveItem(card));
     refreshCard(card);
   });
 
   setActive(cards.find((card) => card.classList.contains("is-pending")) || cards[0]);
+  updateCompletion();
 })();
 </script>
 {% endblock %}
