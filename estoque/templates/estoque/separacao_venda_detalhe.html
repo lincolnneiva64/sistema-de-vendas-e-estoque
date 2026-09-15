@@ -331,7 +331,7 @@
       const quantidade = input && input.value ? clampInsuficiente(card, input.value) : 0;
       const diferenca = quantidade - solicitada;
       classe = "ok";
-      icone = "âœ“";
+      icone = "✓";
       resumo = quantidade > 0
         ? `Peso separado - ${formatQtd(quantidade)} de ${formatQtd(solicitada)} - diferenca ${diferenca > 0 ? "+" : ""}${formatQtd(diferenca)}`
         : "Peso separado";
