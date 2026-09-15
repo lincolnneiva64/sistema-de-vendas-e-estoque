@@ -2040,22 +2040,32 @@ def _operacao_recebimento_desfeita(operacao):
     return bool((getattr(operacao, "comprovante_dados", None) or {}).get("desfeito"))
 
 
-def _payload_aplicacao_recebimento_cliente(recebimento):
+def _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir=None):
     venda_id = ""
     if getattr(recebimento, "conta_id", None):
         venda_id = getattr(recebimento.conta, "venda_id", "") or ""
+    valor = (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+    saldo_restante = None
+    if saldo_distribuir is not None:
+        saldo_restante = max(
+            (saldo_distribuir - valor).quantize(Decimal("0.01")),
+            Decimal("0.00"),
+        )
     return {
         "conta_id": recebimento.conta_id,
         "venda_id": venda_id,
-        "valor": (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01")),
+        "valor": valor,
+        "resta_distribuir": saldo_restante,
     }
 
 
 def _payload_operacao_recebimento_cliente(operacao):
-    aplicacoes = [
-        _payload_aplicacao_recebimento_cliente(recebimento)
-        for recebimento in operacao.recebimentos.all()
-    ]
+    saldo_distribuir = (operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01"))
+    aplicacoes = []
+    for recebimento in operacao.recebimentos.all():
+        aplicacao = _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir)
+        aplicacoes.append(aplicacao)
+        saldo_distribuir = aplicacao["resta_distribuir"] or Decimal("0.00")
     return {
         "id": operacao.id,
         "tipo": "operacao",
@@ -2070,6 +2080,7 @@ def _payload_operacao_recebimento_cliente(operacao):
         "venda_id": "",
         "observacao": "",
         "aplicacoes": aplicacoes,
+        "credito_gerado": (operacao.credito_gerado or Decimal("0.00")).quantize(Decimal("0.01")),
     }
 
 
@@ -2088,6 +2099,7 @@ def _payload_recebimento_legado_cliente(recebimento):
         "venda_id": recebimento.conta.venda_id if recebimento.conta_id else "",
         "observacao": recebimento.observacao,
         "aplicacoes": [],
+        "credito_gerado": Decimal("0.00"),
     }
     if recebimento.conta_id:
         payload["aplicacoes"].append(_payload_aplicacao_recebimento_cliente(recebimento))
@@ -2103,7 +2115,7 @@ def _pagamentos_recentes_cliente(cliente_id, limite=10):
                 queryset=(
                     RecebimentoContaReceber.objects
                     .select_related("conta")
-                    .order_by("id")
+                    .order_by("criado_em", "id")
                 ),
             )
         )
