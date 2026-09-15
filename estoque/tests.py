@@ -31189,6 +31189,119 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertIn("Peso separado", dados["item"]["resultado_texto"])
         self.assertNotIn("faltam", dados["item"]["resultado_texto"])
 
+    def test_peso_separado_kg_14_300_para_14_000_permite_concluir(self):
+        produto = Produto.objects.create(
+            nome="Frango Congelado 1/20Kg",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg 14 Acima")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta_item = self._post_item_checklist(separacao, item, "peso_separado", "14,300")
+        resposta_concluir = self.client.post(
+            reverse("estoque:separacao_venda_detalhe", args=[separacao.id]),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_item.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta_item.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("14.300"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(dados["item"]["quantidade_diferenca"], "+0.3")
+        self.assertIn("Peso separado - 14.3 de 14", dados["item"]["resultado_texto"])
+        self.assertEqual(resposta_concluir.status_code, 302)
+        self.assertEqual(resposta_concluir.url, reverse("estoque:separacao_vendas_fila"))
+
+    def test_peso_separado_kg_13_700_para_14_000_permite_concluir(self):
+        produto = Produto.objects.create(
+            nome="Coxa Sobrecoxa Kg Separacao",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg 14 Abaixo")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta_item = self._post_item_checklist(separacao, item, "peso_separado", "13,700")
+        resposta_concluir = self.client.post(
+            reverse("estoque:separacao_venda_detalhe", args=[separacao.id]),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_item.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta_item.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("13.700"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(dados["item"]["quantidade_diferenca"], "-0.3")
+        self.assertEqual(resposta_concluir.status_code, 302)
+        self.assertEqual(resposta_concluir.url, reverse("estoque:separacao_vendas_fila"))
+
+    def test_peso_separado_kg_14_000_para_14_000_e_valido(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Separacao Igual",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg 14 Igual")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta_item = self._post_item_checklist(separacao, item, "peso_separado", "14,000")
+
+        self.assertEqual(resposta_item.status_code, 200)
+        item.refresh_from_db()
+        separacao.refresh_from_db()
+        dados = resposta_item.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("14.000"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(dados["item"]["status_input"], SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertIn("OK - 14 de 14", dados["item"]["resultado_texto"])
+
+    def test_checklist_kg_confirmado_nao_arma_validacao_html_de_revisao_no_submit(self):
+        produto = Produto.objects.create(
+            nome="Frango Kg Confirmado Interface",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg Interface")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+        self._post_item_checklist(separacao, item, "peso_separado", "14,300")
+
+        resposta = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'data-status="conferido"')
+        self.assertContains(resposta, 'value="peso_separado" checked')
+        self.assertContains(resposta, 'value="14.300"')
+        self.assertContains(resposta, "const itemJaConfirmado = card.dataset.status === \"conferido\";")
+        self.assertContains(resposta, "!itemJaConfirmado")
+        self.assertContains(resposta, "Conferencia dos itens concluida")
     def test_checklist_kg_exibe_peso_separado_sem_limite_superior_artificial(self):
         produto = Produto.objects.create(
             nome="Produto Kg Checklist Separacao",

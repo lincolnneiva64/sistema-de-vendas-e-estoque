@@ -223,7 +223,12 @@
   const syncQuantidadeValidation = (card) => {
     const input = card.querySelector("[data-qtd-input]");
     if (!input) return;
-    const deveValidar = card.classList.contains("is-active") && statusUsaQuantidade(statusSelecionado(card));
+    const itemJaConfirmado = card.dataset.status === "conferido";
+    const deveValidar = (
+      !itemJaConfirmado
+      && card.classList.contains("is-active")
+      && statusUsaQuantidade(statusSelecionado(card))
+    );
     input.required = deveValidar;
     if (!deveValidar) {
       input.removeAttribute("min");
