@@ -11943,7 +11943,10 @@ def _quantidade_sugerida_ajuste_separacao_valida(item_separacao, quantidade):
     quantidade = Decimal(quantidade or 0).quantize(Decimal("0.001"))
     if quantidade <= Decimal("0.000"):
         return False
-    if quantidade >= Decimal(item_separacao.quantidade_solicitada or 0).quantize(Decimal("0.001")):
+    if (
+        not item_separacao_registra_peso_real(item_separacao)
+        and quantidade >= Decimal(item_separacao.quantidade_solicitada or 0).quantize(Decimal("0.001"))
+    ):
         return False
     if not _quantidade_item_separacao_valida_para_unidade(item_separacao, quantidade):
         return False
@@ -11954,13 +11957,28 @@ def _montar_payload_ajuste_separacao_venda(separacao):
     itens = (
         separacao.itens
         .select_related("item_venda", "item_venda__produto")
-        .filter(status__in=STATUS_AJUSTE_SEPARACAO_VENDA)
         .order_by("item_venda_id")
     )
     itens_payload = []
     for item in itens:
         item_venda = item.item_venda
         quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
+        quantidade_separada_item = (
+            Decimal(item.quantidade_separada or 0).quantize(Decimal("0.001"))
+            if item.quantidade_separada is not None
+            else None
+        )
+        quantidade_atual_venda = Decimal(
+            getattr(item_venda, "quantidade", quantidade_solicitada) or 0
+        ).quantize(Decimal("0.001"))
+        ajuste_peso_real = (
+            item_separacao_registra_peso_real(item)
+            and item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+            and quantidade_separada_item is not None
+            and quantidade_separada_item != quantidade_atual_venda
+        )
+        if item.status not in STATUS_AJUSTE_SEPARACAO_VENDA and not ajuste_peso_real:
+            continue
         quantidade_original = Decimal(getattr(item_venda, "quantidade", quantidade_solicitada) or 0).quantize(Decimal("0.001"))
         quantidade_separada = (
             Decimal(item.quantidade_separada or 0).quantize(Decimal("0.001"))
@@ -11975,7 +11993,7 @@ def _montar_payload_ajuste_separacao_venda(separacao):
         if item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
             tipo_sugestao = "remover_item"
             sugestao = "Remover item"
-        elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+        elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE or ajuste_peso_real:
             if _quantidade_sugerida_ajuste_separacao_valida(item, quantidade_separada):
                 tipo_sugestao = "alterar_quantidade"
                 quantidade_sugerida = _formatar_decimal_payload_separacao(quantidade_separada)
@@ -20471,6 +20489,18 @@ def _montar_grupos_rota_separacao(separacoes):
         ]
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
+        separacao.tem_ajuste_nota = any(
+            item_separacao_tem_pendencia(item)
+            or (
+                item_separacao_registra_peso_real(item)
+                and item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+                and item.quantidade_separada is not None
+                and item.item_venda is not None
+                and Decimal(item.quantidade_separada).quantize(Decimal("0.001"))
+                != Decimal(item.item_venda.quantidade or 0).quantize(Decimal("0.001"))
+            )
+            for item in itens
+        )
 
         localidade = _localidade_operacional_cliente(separacao.venda.cliente)
         chave = ("localidade", localidade.lower()) if localidade else ("sem_rota", "")

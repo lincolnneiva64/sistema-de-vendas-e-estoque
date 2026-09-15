@@ -192,7 +192,19 @@ def divergencias_separacao_venda(separacao):
             divergencias.append(
                 f"Unidade alterada em {nome_atual}: {item_sep.unidade_snapshot or '-'} -> {unidade_atual or '-'}."
             )
-        if quantidade_atual != quantidade_snapshot:
+        quantidade_peso_real = (
+            Decimal(item_sep.quantidade_separada or "0").quantize(Decimal("0.001"))
+            if item_sep.quantidade_separada is not None
+            else None
+        )
+        peso_real_reconciliado = (
+            item_separacao_registra_peso_real(item_sep)
+            and item_sep.status == SeparacaoVendaItem.STATUS_CONFERIDO
+            and quantidade_peso_real is not None
+            and quantidade_atual == quantidade_peso_real
+        )
+
+        if quantidade_atual != quantidade_snapshot and not peso_real_reconciliado:
             divergencias.append(
                 f"Quantidade alterada em {nome_atual}: {quantidade_snapshot} -> {quantidade_atual}."
             )
