@@ -445,6 +445,9 @@
     border-radius: 999px; background: #eef6ff; color: #1e3a8a;
     padding: 2px 7px; font-weight: 800;
   }
+  .rc-historico-aplicacoes { display: grid; gap: 2px; margin-top: 5px; padding-left: 8px; }
+  .rc-historico-aplicacao { color: #64748b; font-size: 0.72rem; font-weight: 750; }
+  .rc-historico-legado { background: #f8fafc; color: #475569; }
   .rc-historico-obs { margin-top: 6px; color: #64748b; }
   .rc-historico-vazio { margin: 0; color: #64748b; font-size: 0.8rem; font-weight: 750; }
   @media (max-width: 880px) {
@@ -1638,11 +1641,21 @@
                   <div class="rc-historico-meta">
                     <span class="rc-historico-data">{{ pagamento.data_recebimento_label|default:pagamento.data_recebimento }}</span>
                     <span class="rc-historico-pill">{{ pagamento.forma_pagamento|default:"Forma nao informada" }}</span>
-                    {% if pagamento.conta_id %}
-                      <span class="rc-historico-pill">Conta #{{ pagamento.conta_id }}{% if pagamento.venda_id %} / Venda #{{ pagamento.venda_id }}{% endif %}</span>
+                    {% if pagamento.tipo == "legado" %}
+                      <span class="rc-historico-pill rc-historico-legado">Legado</span>
                     {% endif %}
                     <span class="rc-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
                   </div>
+                  {% if pagamento.aplicacoes %}
+                    <div class="rc-historico-aplicacoes">
+                      {% for aplicacao in pagamento.aplicacoes %}
+                        <div class="rc-historico-aplicacao">
+                          Conta #{{ aplicacao.conta_id }}{% if aplicacao.venda_id %} / Venda #{{ aplicacao.venda_id }}{% endif %}
+                          - abatido R$ {{ aplicacao.valor|floatformat:2 }}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
                   {% if pagamento.observacao %}
                     <div class="rc-historico-obs">{{ pagamento.observacao }}</div>
                   {% endif %}
@@ -2855,4 +2868,3 @@
 </script>
 
 {% endblock %}
-

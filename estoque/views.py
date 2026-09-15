@@ -2040,6 +2040,116 @@ def _operacao_recebimento_desfeita(operacao):
     return bool((getattr(operacao, "comprovante_dados", None) or {}).get("desfeito"))
 
 
+def _payload_aplicacao_recebimento_cliente(recebimento):
+    venda_id = ""
+    if getattr(recebimento, "conta_id", None):
+        venda_id = getattr(recebimento.conta, "venda_id", "") or ""
+    return {
+        "conta_id": recebimento.conta_id,
+        "venda_id": venda_id,
+        "valor": (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01")),
+    }
+
+
+def _payload_operacao_recebimento_cliente(operacao):
+    aplicacoes = [
+        _payload_aplicacao_recebimento_cliente(recebimento)
+        for recebimento in operacao.recebimentos.all()
+    ]
+    return {
+        "id": operacao.id,
+        "tipo": "operacao",
+        "criado_em": operacao.criado_em,
+        "criado_em_data": timezone.localtime(operacao.criado_em).date().isoformat(),
+        "data_recebimento": operacao.data_recebimento.isoformat() if operacao.data_recebimento else "",
+        "data_recebimento_label": operacao.data_recebimento.strftime("%d/%m/%Y") if operacao.data_recebimento else "",
+        "valor": (operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01")),
+        "valor_numero": float(operacao.valor_recebido or Decimal("0.00")),
+        "forma_pagamento": operacao.forma_pagamento,
+        "conta_id": "",
+        "venda_id": "",
+        "observacao": "",
+        "aplicacoes": aplicacoes,
+    }
+
+
+def _payload_recebimento_legado_cliente(recebimento):
+    payload = {
+        "id": f"legado-{recebimento.id}",
+        "tipo": "legado",
+        "criado_em": recebimento.criado_em,
+        "criado_em_data": timezone.localtime(recebimento.criado_em).date().isoformat(),
+        "data_recebimento": recebimento.data_recebimento.isoformat() if recebimento.data_recebimento else "",
+        "data_recebimento_label": recebimento.data_recebimento.strftime("%d/%m/%Y") if recebimento.data_recebimento else "",
+        "valor": (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01")),
+        "valor_numero": float(recebimento.valor or Decimal("0.00")),
+        "forma_pagamento": recebimento.forma_pagamento,
+        "conta_id": recebimento.conta_id,
+        "venda_id": recebimento.conta.venda_id if recebimento.conta_id else "",
+        "observacao": recebimento.observacao,
+        "aplicacoes": [],
+    }
+    if recebimento.conta_id:
+        payload["aplicacoes"].append(_payload_aplicacao_recebimento_cliente(recebimento))
+    return payload
+
+
+def _pagamentos_recentes_cliente(cliente_id, limite=10):
+    operacoes = (
+        OperacaoRecebimentoCliente.objects
+        .prefetch_related(
+            Prefetch(
+                "recebimentos",
+                queryset=(
+                    RecebimentoContaReceber.objects
+                    .select_related("conta")
+                    .order_by("id")
+                ),
+            )
+        )
+        .filter(cliente_id=cliente_id)
+        .order_by("-criado_em", "-id")[:50]
+    )
+    historico = [
+        _payload_operacao_recebimento_cliente(operacao)
+        for operacao in operacoes
+        if not _operacao_recebimento_desfeita(operacao)
+    ]
+    recebimentos_legados = (
+        RecebimentoContaReceber.objects
+        .select_related("conta")
+        .filter(conta__cliente_id=cliente_id, operacao__isnull=True)
+        .order_by("-criado_em", "-id")[:50]
+    )
+    historico.extend(
+        _payload_recebimento_legado_cliente(recebimento)
+        for recebimento in recebimentos_legados
+    )
+    historico.sort(key=lambda item: (item["criado_em"], str(item["id"])), reverse=True)
+    return historico[:limite]
+
+
+def _pagamentos_hoje_preview_cliente(cliente_id, hoje):
+    valores = [
+        float((operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01")))
+        for operacao in (
+            OperacaoRecebimentoCliente.objects
+            .filter(cliente_id=cliente_id, criado_em__date=hoje)
+            .order_by("-criado_em", "-id")
+        )
+        if not _operacao_recebimento_desfeita(operacao)
+    ]
+    valores.extend(
+        float((recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01")))
+        for recebimento in (
+            RecebimentoContaReceber.objects
+            .filter(conta__cliente_id=cliente_id, operacao__isnull=True, criado_em__date=hoje)
+            .order_by("-criado_em", "-id")
+        )
+    )
+    return valores
+
+
 def _descricao_movimento_despesa_diaria(despesa, incluir_id=True):
     sufixo_id = f" #{despesa.pk}" if incluir_id and getattr(despesa, "pk", None) else ""
     descricao = f"Despesa diaria{sufixo_id}: {despesa.get_categoria_display()}"
@@ -14062,50 +14172,8 @@ def receber_cliente(request, cliente_id):
                 Decimal("0.00"),
             ),
         })
-    pagamentos_hoje_preview = [
-        float(_valor_total_recebimento_cliente(recebimento))
-        for recebimento in RecebimentoContaReceber.objects.filter(
-            conta__cliente_id=cliente.id,
-            criado_em__date=hoje,
-        )
-        .values(
-            "valor",
-            "observacao",
-        )
-    ]
-    recebimentos_recentes = (
-        RecebimentoContaReceber.objects.filter(conta__cliente_id=cliente.id)
-        .values(
-            "id",
-            "conta_id",
-            "data_recebimento",
-            "valor",
-            "forma_pagamento",
-            "observacao",
-            "criado_em",
-            "conta__venda_id",
-        )
-        .order_by("-criado_em", "-id")[:10]
-    )
-    pagamentos_recentes = []
-    for recebimento in recebimentos_recentes:
-        valor_total_recebido = _valor_total_recebimento_cliente(recebimento)
-        pagamentos_recentes.append(
-            {
-                "id": recebimento["id"],
-                "criado_em": recebimento["criado_em"],
-                "criado_em_data": timezone.localtime(recebimento["criado_em"]).date().isoformat(),
-                "data_recebimento": recebimento["data_recebimento"].isoformat() if recebimento["data_recebimento"] else "",
-                "data_recebimento_label": recebimento["data_recebimento"].strftime("%d/%m/%Y") if recebimento["data_recebimento"] else "",
-                "valor": valor_total_recebido,
-                "valor_numero": float(valor_total_recebido or Decimal("0.00")),
-                "valor_aplicado": recebimento["valor"],
-                "forma_pagamento": recebimento["forma_pagamento"],
-                "conta_id": recebimento["conta_id"],
-                "venda_id": recebimento["conta__venda_id"] if recebimento["conta_id"] else "",
-                "observacao": recebimento["observacao"],
-            }
-        )
+    pagamentos_hoje_preview = _pagamentos_hoje_preview_cliente(cliente.id, hoje)
+    pagamentos_recentes = _pagamentos_recentes_cliente(cliente.id)
 
     if request.method == "POST":
         valores = {

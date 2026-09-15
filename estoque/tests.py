@@ -19990,8 +19990,9 @@ class PixRecebidoTests(TestCase):
         valor="100.00",
         forma_pagamento="PIX",
         data_recebimento=None,
+        criado_em=None,
     ):
-        return OperacaoRecebimentoCliente.objects.create(
+        operacao = OperacaoRecebimentoCliente.objects.create(
             cliente=cliente,
             cliente_nome_snapshot=cliente.nome,
             valor_recebido=Decimal(valor),
@@ -20004,6 +20005,10 @@ class PixRecebidoTests(TestCase):
             rota_snapshot=rota,
             status_recibo=status,
         )
+        if criado_em:
+            OperacaoRecebimentoCliente.objects.filter(pk=operacao.pk).update(criado_em=criado_em)
+            operacao.refresh_from_db()
+        return operacao
 
     def _criar_despesa_dinheiro_rota(
         self,
@@ -20238,6 +20243,67 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.context["pagamentos_hoje_preview"], [75.0])
         self.assertContains(resposta, "pagamentosHojeCliente")
         self.assertContains(resposta, "75.0")
+    def test_receber_cliente_operacao_distribuida_aparece_uma_vez_com_aplicacoes(self):
+        cliente = Cliente.objects.create(nome="Cliente Operacao Historico", ativo=True)
+        self._criar_conta_receber_pix(cliente, "900.00")
+        conta_um = self._criar_conta_receber_pix(cliente, "373.71")
+        conta_dois = self._criar_conta_receber_pix(cliente, "102.20")
+        conta_tres = self._criar_conta_receber_pix(cliente, "24.09")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, valor="500.00")
+        for conta, valor in (
+            (conta_um, "373.71"),
+            (conta_dois, "102.20"),
+            (conta_tres, "24.09"),
+        ):
+            RecebimentoContaReceber.objects.create(
+                conta=conta,
+                operacao=operacao,
+                data_recebimento=operacao.data_recebimento,
+                valor=Decimal(valor),
+                forma_pagamento="PIX",
+                observacao="Distribuicao da operacao.",
+            )
+
+        resposta = self.client.get(reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        historico = resposta.context["pagamentos_recentes"]
+        self.assertEqual(len(historico), 1)
+        self.assertEqual(historico[0]["tipo"], "operacao")
+        self.assertEqual(historico[0]["id"], operacao.id)
+        self.assertEqual(historico[0]["valor"], Decimal("500.00"))
+        self.assertEqual([item["valor"] for item in historico[0]["aplicacoes"]], [
+            Decimal("373.71"),
+            Decimal("102.20"),
+            Decimal("24.09"),
+        ])
+        self.assertEqual(resposta.context["pagamentos_hoje_preview"], [500.0])
+        self.assertContains(resposta, f"Conta #{conta_um.id}")
+        self.assertContains(resposta, f"Conta #{conta_dois.id}")
+        self.assertContains(resposta, f"Conta #{conta_tres.id}")
+        self.assertContains(resposta, "abatido R$")
+
+    def test_receber_cliente_duplicidade_usa_operacoes_reais_sem_duplicar_baixas(self):
+        cliente = Cliente.objects.create(nome="Cliente Duplicidade Operacao", ativo=True)
+        self._criar_conta_receber_pix(cliente, "900.00")
+        primeira = self._criar_operacao_recebimento_cliente(cliente, valor="500.00")
+        segunda = self._criar_operacao_recebimento_cliente(cliente, valor="500.00")
+        for operacao in (primeira, segunda):
+            for valor in ("200.00", "250.00", "50.00"):
+                conta = self._criar_conta_receber_pix(cliente, valor)
+                RecebimentoContaReceber.objects.create(
+                    conta=conta,
+                    operacao=operacao,
+                    data_recebimento=operacao.data_recebimento,
+                    valor=Decimal(valor),
+                    forma_pagamento="PIX",
+                )
+
+        resposta = self.client.get(reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["pagamentos_hoje_preview"], [500.0, 500.0])
+        self.assertEqual(len(resposta.context["pagamentos_recentes"]), 2)
 
     def test_receber_cliente_historico_lista_dez_mais_recentes_sem_limite_de_72_horas(self):
         cliente = Cliente.objects.create(nome="Cliente Historico Dez", ativo=True)
@@ -20284,11 +20350,61 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(len(historico), 10)
         self.assertEqual([item["valor"] for item in historico[:9]], valores_recentes)
         self.assertEqual(historico[-1]["valor"], Decimal("88.00"))
-        self.assertEqual(historico[-1]["id"], pagamento_antigo_no_topo.id)
-        self.assertNotIn(pagamento_antigo_excedente.id, [item["id"] for item in historico])
+        self.assertEqual(historico[-1]["id"], f"legado-{pagamento_antigo_no_topo.id}")
+        self.assertNotIn(f"legado-{pagamento_antigo_excedente.id}", [item["id"] for item in historico])
         self.assertNotIn(Decimal("777.00"), [item["valor"] for item in historico])
         self.assertContains(resposta, "Últimos pagamentos registrados para este cliente.")
         self.assertNotContains(resposta, "777,00")
+    def test_receber_cliente_historico_mistura_operacoes_e_legado_sem_duplicar_baixa_vinculada(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Misto", ativo=True)
+        outro_cliente = Cliente.objects.create(nome="Cliente Historico Fora", ativo=True)
+        agora = timezone.now()
+        self._criar_conta_receber_pix(cliente, "900.00")
+        operacoes = []
+        for indice in range(9):
+            operacao = self._criar_operacao_recebimento_cliente(
+                cliente,
+                valor=str(Decimal("20.00") + Decimal(indice)),
+                criado_em=agora - timedelta(minutes=indice),
+            )
+            conta = self._criar_conta_receber_pix(cliente, "100.00")
+            RecebimentoContaReceber.objects.create(
+                conta=conta,
+                operacao=operacao,
+                data_recebimento=operacao.data_recebimento,
+                valor=operacao.valor_recebido,
+                forma_pagamento="PIX",
+            )
+            operacoes.append(operacao)
+        legado = self._criar_recebimento_historico_cliente(
+            cliente,
+            "88.00",
+            criado_em=agora - timedelta(days=5),
+            data_recebimento=timezone.localdate() - timedelta(days=5),
+        )
+        excedente = self._criar_operacao_recebimento_cliente(
+            cliente,
+            valor="99.00",
+            criado_em=agora - timedelta(days=6),
+            data_recebimento=timezone.localdate() - timedelta(days=6),
+        )
+        self._criar_operacao_recebimento_cliente(
+            outro_cliente,
+            valor="777.00",
+            criado_em=agora + timedelta(minutes=1),
+        )
+
+        resposta = self.client.get(reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        historico = resposta.context["pagamentos_recentes"]
+        self.assertEqual(len(historico), 10)
+        self.assertEqual([item["id"] for item in historico[:9]], [operacao.id for operacao in operacoes])
+        self.assertEqual(historico[-1]["id"], f"legado-{legado.id}")
+        self.assertEqual(historico[-1]["tipo"], "legado")
+        self.assertNotIn(excedente.id, [item["id"] for item in historico])
+        self.assertNotIn(Decimal("777.00"), [item["valor"] for item in historico])
+        self.assertEqual(sum(len(item["aplicacoes"]) for item in historico[:9]), 9)
 
     def test_receber_cliente_sem_historico_continua_renderizando_tela(self):
         cliente = Cliente.objects.create(nome="Cliente Sem Historico", ativo=True)
