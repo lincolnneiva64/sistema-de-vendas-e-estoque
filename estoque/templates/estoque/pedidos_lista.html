@@ -550,6 +550,18 @@
         .link-pedido:hover {
             background: #bbf7d0;
         }
+
+        .form-encerrar-pendencia-lista {
+            display: inline-flex;
+            margin-left: 6px;
+        }
+
+        .btn-encerrar-pendencia-lista {
+            border: 1px solid #92400e;
+            color: #92400e;
+            cursor: pointer;
+            font: inherit;
+        }
         
         .sem-pedidos {
             text-align: center;
@@ -611,7 +623,7 @@
         }
 
         .col-acoes {
-            width: 90px;
+            width: 180px;
         }
 
         .tabela th:last-child {
@@ -1069,7 +1081,7 @@
                     <div>
                         <label for="status">Status:</label>
                         <select name="status" id="status">
-                            <option value="">Todos</option>
+                            <option value="">Operacionais</option>
                             {% for value, label in status_choices %}
                                 <option value="{{ value }}" {% if status_filtro == value %}selected{% endif %}>
                                     {{ label }}
@@ -1192,7 +1204,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="col-status" data-label="Status">
-                                    <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% else %}convertido{% endif %}">
+                                    <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% elif pedido.status == 'encerrado' %}cancelado{% else %}convertido{% endif %}">
                                         {{ pedido.get_status_display }}
                                     </span>
                                 </td>
@@ -1207,6 +1219,13 @@
                                 <td class="pedido-operador col-operador" data-label="Operador">{{ pedido.operador|default:"Sem operador" }}</td>
                                 <td class="col-acoes" data-label="Acao">
                                     <a href="{% url 'estoque:pedido_detalhe' pedido.id %}" class="link-pedido">Ver</a>
+                                    {% if pedido.status == 'parcial' and pedido.quantidade_pendente %}
+                                        <form method="post" action="{% url 'estoque:pedido_encerrar_pendencia' pedido.id %}" class="form-encerrar-pendencia-lista" onsubmit="return confirm('Encerrar a pendencia restante do pedido #{{ pedido.id }}?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="link-pedido btn-encerrar-pendencia-lista">Encerrar</button>
+                                        </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}

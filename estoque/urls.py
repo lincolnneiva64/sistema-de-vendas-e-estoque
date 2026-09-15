@@ -224,5 +224,6 @@ urlpatterns = [
     path("pedidos/criar/", views.pedido_criar, name="pedido_criar"),
     path("pedidos/<int:pk>/editar/", views.pedido_editar, name="pedido_editar"),
     path("pedidos/<int:pk>/cancelar/", views.pedido_cancelar, name="pedido_cancelar"),
+    path("pedidos/<int:pk>/encerrar-pendencia/", views.pedido_encerrar_pendencia, name="pedido_encerrar_pendencia"),
     path("pedidos/<int:pk>/", views.pedido_detalhe, name="pedido_detalhe"),
 ]

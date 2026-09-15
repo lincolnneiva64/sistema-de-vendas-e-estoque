@@ -266,6 +266,13 @@
             display: inline-flex;
         }
 
+        .form-encerrar-pendencia {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         .btn-cancelar-pedido {
             background-color: #dc2626;
             color: white;
@@ -273,6 +280,15 @@
 
         .btn-cancelar-pedido:hover {
             background-color: #b91c1c;
+        }
+
+        .btn-encerrar-pendencia {
+            background-color: #92400e;
+            color: white;
+        }
+
+        .btn-encerrar-pendencia:hover {
+            background-color: #78350f;
         }
         
         .aviso {
@@ -371,6 +387,10 @@
 
             .btn,
             .form-cancelar-pedido {
+                width: 100%;
+            }
+
+            .form-encerrar-pendencia {
                 width: 100%;
             }
 
@@ -474,7 +494,7 @@
         <div class="header">
             <h1>Pedido #{{ pedido.id }}</h1>
             <span class="header-badge">
-                <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% else %}convertido{% endif %}">
+                <span class="status-badge status-{% if pedido.status == 'aberto' %}aberto{% elif pedido.status == 'cancelado' %}cancelado{% elif pedido.status == 'parcial' %}parcial{% elif pedido.status == 'encerrado' %}cancelado{% else %}convertido{% endif %}">
                     {{ pedido.get_status_display }}
                 </span>
             </span>
@@ -509,6 +529,15 @@
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
                 </form>
             {% endif %}
+            {% if pode_encerrar_pendencia %}
+                <form method="post" action="{% url 'estoque:pedido_encerrar_pendencia' pedido.id %}" class="form-encerrar-pendencia" onsubmit="return confirm('Encerrar a pendencia restante deste pedido? O historico sera preservado.');">
+                    {% csrf_token %}
+                    {% if voltar_proxima_cobranca_url %}
+                        <input type="hidden" name="next" value="{{ voltar_proxima_cobranca_url }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-encerrar-pendencia">Encerrar Pend&ecirc;ncia</button>
+                </form>
+            {% endif %}
         </div>
         
         <div class="aviso">
@@ -534,6 +563,12 @@
         {% if pedido_cancelado %}
             <div class="aviso">
                 <strong>Pedido cancelado com sucesso. Hist&oacute;rico preservado.</strong>
+            </div>
+        {% endif %}
+
+        {% if pendencia_encerrada %}
+            <div class="aviso">
+                <strong>Pend&ecirc;ncia encerrada com hist&oacute;rico preservado.</strong>
             </div>
         {% endif %}
 
@@ -678,6 +713,34 @@
                 </div>
             </div>
         </div>
+
+        {% if pendencias_encerradas %}
+            <div class="card">
+                <div class="card-titulo">Pend&ecirc;ncias Encerradas</div>
+                <table class="tabela">
+                    <thead>
+                        <tr>
+                            <th>Produto</th>
+                            <th>Quantidade</th>
+                            <th>Unidade</th>
+                            <th>Total</th>
+                            <th>Data</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pendencia in pendencias_encerradas %}
+                            <tr>
+                                <td data-label="Produto">{{ pendencia.produto_nome }}</td>
+                                <td data-label="Quantidade">{{ pendencia.quantidade_formatada }}</td>
+                                <td data-label="Unidade">{{ pendencia.unidade|default:"-" }}</td>
+                                <td data-label="Total">R$ {{ pendencia.valor_total|floatformat:"2" }}</td>
+                                <td data-label="Data">{{ pendencia.criado_em|date:"d/m/Y H:i" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
         
         <div class="acoes">
             <a href="{% url 'estoque:pedidos' %}" class="btn btn-voltar">Voltar para Consulta de Pedidos</a>
@@ -706,6 +769,15 @@
                         <input type="hidden" name="next" value="{{ voltar_proxima_cobranca_url }}">
                     {% endif %}
                     <button type="submit" class="btn btn-cancelar-pedido">Cancelar Pedido</button>
+                </form>
+            {% endif %}
+            {% if pode_encerrar_pendencia %}
+                <form method="post" action="{% url 'estoque:pedido_encerrar_pendencia' pedido.id %}" class="form-encerrar-pendencia" onsubmit="return confirm('Encerrar a pendencia restante deste pedido? O historico sera preservado.');">
+                    {% csrf_token %}
+                    {% if voltar_proxima_cobranca_url %}
+                        <input type="hidden" name="next" value="{{ voltar_proxima_cobranca_url }}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-encerrar-pendencia">Encerrar Pend&ecirc;ncia</button>
                 </form>
             {% endif %}
         </div>

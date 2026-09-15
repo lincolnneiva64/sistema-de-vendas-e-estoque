@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -5788,6 +5788,39 @@ def _quantidades_vendidas_por_produto_em_unidade_base(produto_ids, data_inicial,
         for produto_id, quantidade in totais.items()
     }
 
+
+FATOR_RESERVA_SUGESTAO_COMPRA = Decimal("1.20")
+
+
+def _sugestao_compra_fornecedor_quantidade(
+    estoque_atual,
+    estoque_minimo,
+    quantidade_vendida,
+    quantidade_pedidos_abertos,
+):
+    estoque_atual = Decimal(estoque_atual or 0)
+    estoque_minimo = Decimal(estoque_minimo or 0)
+    quantidade_vendida = Decimal(quantidade_vendida or 0)
+    quantidade_pedidos_abertos = Decimal(quantidade_pedidos_abertos or 0)
+    consumo_reserva = quantidade_vendida * FATOR_RESERVA_SUGESTAO_COMPRA
+
+    if quantidade_pedidos_abertos <= Decimal("0.000"):
+        if quantidade_vendida <= Decimal("0.000"):
+            return False, Decimal("0.000")
+        if estoque_atual > consumo_reserva:
+            return False, Decimal("0.000")
+
+    necessidade_pedidos = max(Decimal("0.000"), quantidade_pedidos_abertos - estoque_atual)
+    estoque_apos_pedidos = max(Decimal("0.000"), estoque_atual - quantidade_pedidos_abertos)
+    reserva_desejada = max(estoque_minimo, consumo_reserva)
+    sugestao = (
+        necessidade_pedidos
+        + max(Decimal("0.000"), reserva_desejada - estoque_apos_pedidos)
+    ).quantize(Decimal("0.001"))
+
+    return True, sugestao
+
+
 def sugestao_compra_fornecedor(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
     fornecedores_payload = [{"id": item.id, "nome": item.nome} for item in fornecedores]
@@ -5881,15 +5914,14 @@ def sugestao_compra_fornecedor(request):
             estoque_minimo = Decimal(produto.estoque_minimo or 0)
             quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
             quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto.get(produto.id, Decimal("0.000")) or 0)
-            estoque_previsto = estoque_atual - quantidade_vendida - quantidade_pedidos_abertos
-            limite_reposicao = estoque_minimo * Decimal("1.20")
-            if estoque_previsto > limite_reposicao:
+            incluir_produto, sugestao = _sugestao_compra_fornecedor_quantidade(
+                estoque_atual,
+                estoque_minimo,
+                quantidade_vendida,
+                quantidade_pedidos_abertos,
+            )
+            if not incluir_produto:
                 continue
-
-            sugestao = max(
-                Decimal("0.000"),
-                estoque_minimo - estoque_previsto,
-            ).quantize(Decimal("0.001"))
             if sugestao <= Decimal("0.000"):
                 continue
 
@@ -5923,10 +5955,12 @@ def sugestao_compra_fornecedor(request):
             estoque_minimo = Decimal(produto.estoque_minimo or 0)
             quantidade_vendida = Decimal(vendidos_por_produto.get(produto.id, Decimal("0.000")) or 0)
             quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto.get(produto.id, Decimal("0.000")) or 0)
-            sugestao = max(
-                Decimal("0.000"),
-                estoque_minimo - estoque_atual + quantidade_vendida + quantidade_pedidos_abertos,
-            ).quantize(Decimal("0.001"))
+            _incluir_produto, sugestao = _sugestao_compra_fornecedor_quantidade(
+                estoque_atual,
+                estoque_minimo,
+                quantidade_vendida,
+                quantidade_pedidos_abertos,
+            )
             fator_conversao = Decimal(produto.fator_conversao or 1)
             if fator_conversao <= 0:
                 fator_conversao = Decimal("1")
@@ -8286,6 +8320,21 @@ def compras_lista_fornecedor_editar(request, pk):
         )
         payload_produto["quantidade_pedidos_abertos"] = _lista_fornecedor_fmt_qtd(
             Decimal(pedidos_abertos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
+        )
+        estoque_atual = Decimal(produto.quantidade or 0)
+        estoque_minimo = Decimal(produto.estoque_minimo or 0)
+        quantidade_vendida = Decimal(vendidos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
+        quantidade_pedidos_abertos = Decimal(pedidos_abertos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
+        _incluir_produto, sugestao = _sugestao_compra_fornecedor_quantidade(
+            estoque_atual,
+            estoque_minimo,
+            quantidade_vendida,
+            quantidade_pedidos_abertos,
+        )
+        preco_compra = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
+        payload_produto["sugestao"] = _lista_fornecedor_fmt_qtd(sugestao)
+        payload_produto["total_sugerido"] = _lista_fornecedor_fmt_moeda(
+            (sugestao * preco_compra).quantize(Decimal("0.01"))
         )
         produtos_manual.append(payload_produto)
 
@@ -22342,12 +22391,32 @@ def pedidos(request):
     """Listar pedidos com filtros básicos."""
     from .models import Pedido
 
-    pedidos_lista = Pedido.objects.select_related("cliente").order_by("-id")
+    pedidos_lista = (
+        Pedido.objects.select_related("cliente")
+        .annotate(
+            quantidade_pendente=Coalesce(
+                Sum(
+                    "itens__quantidade",
+                    filter=Q(itens__quantidade__gt=Decimal("0.000")),
+                ),
+                Value(Decimal("0.000")),
+                output_field=DecimalField(max_digits=12, decimal_places=3),
+            )
+        )
+        .order_by("-id")
+    )
 
     # Filtro por status
     status = request.GET.get("status", "")
     if status:
         pedidos_lista = pedidos_lista.filter(status=status)
+        if status == Pedido.STATUS_PARCIAL:
+            pedidos_lista = pedidos_lista.filter(quantidade_pendente__gt=Decimal("0.000"))
+    else:
+        pedidos_lista = pedidos_lista.filter(
+            Q(status=Pedido.STATUS_ABERTO)
+            | Q(status=Pedido.STATUS_PARCIAL, quantidade_pendente__gt=Decimal("0.000"))
+        )
 
     # Filtro por cliente
     cliente_id = request.GET.get("cliente_id", "")
@@ -22394,6 +22463,7 @@ def pedidos(request):
         "localidade_filtro": localidade,
         "data_inicio": data_inicio,
         "data_fim": data_fim,
+        "filtro_operacional": not status,
     })
 
 
@@ -22959,6 +23029,57 @@ def pedido_cancelar(request, pk):
     return redirect(_url_detalhe_pedido_fluxo(pedido.id, pedido_cancelado=1))
 
 
+@require_POST
+def pedido_encerrar_pendencia(request, pk):
+    """Encerrar o saldo pendente de um pedido parcial preservando auditoria."""
+    from .models import Pedido
+
+    pedido_next_url = _url_next_segura_request(request)
+
+    with transaction.atomic():
+        pedido = get_object_or_404(Pedido.objects.select_for_update(), pk=pk)
+        if pedido.status != Pedido.STATUS_PARCIAL:
+            messages.warning(request, "Apenas pedidos parciais com saldo pendente podem ter a pendencia encerrada.")
+            return redirect(_url_detalhe_pedido_fluxo(pedido.pk, next_url=pedido_next_url))
+
+        itens_pendentes = list(
+            ItemPedido.objects.select_for_update()
+            .filter(pedido=pedido, quantidade__gt=Decimal("0.000"))
+            .order_by("id")
+        )
+        if not itens_pendentes:
+            messages.warning(request, "Este pedido parcial nao possui saldo pendente para encerrar.")
+            return redirect(_url_detalhe_pedido_fluxo(pedido.pk, next_url=pedido_next_url))
+
+        PendenciaPedidoEncerrada.objects.bulk_create([
+            PendenciaPedidoEncerrada(
+                pedido=pedido,
+                item_pedido=item,
+                produto=item.produto,
+                produto_nome=item.produto.nome if item.produto else "Produto nao identificado",
+                quantidade=Decimal(item.quantidade or 0).quantize(Decimal("0.001")),
+                unidade=item.unidade or "",
+                preco_unitario=Decimal(item.preco_unitario or 0).quantize(Decimal("0.01")),
+                valor_total=Decimal(item.valor_total or 0).quantize(Decimal("0.01")),
+            )
+            for item in itens_pendentes
+        ])
+
+        for item in itens_pendentes:
+            item.quantidade = Decimal("0.000")
+            item.valor_total = Decimal("0.00")
+            item.save(update_fields=["quantidade", "valor_total"])
+
+        pedido.total = Decimal("0.00")
+        pedido.status = Pedido.STATUS_ENCERRADO
+        pedido.save(update_fields=["total", "status", "atualizado_em"])
+
+    messages.success(request, f"Pendencia do Pedido #{pedido.id} encerrada com historico preservado.")
+    if pedido_next_url:
+        return redirect(pedido_next_url)
+    return redirect(_url_detalhe_pedido_fluxo(pedido.id, pendencia_encerrada=1))
+
+
 def _itens_pendentes_exibicao_pedido_parcial(pedido, itens_pedido):
     itens_positivos = [item for item in itens_pedido if item.quantidade > 0]
     total_positivo = sum((item.valor_total for item in itens_positivos), Decimal("0.00"))
@@ -23052,6 +23173,10 @@ def pedido_detalhe(request, pk):
 
     for item in itens_exibidos:
         item.quantidade_formatada = _formatar_decimal_pedido(item.quantidade)
+    pendencias_encerradas = list(pedido.pendencias_encerradas.select_related("produto").all())
+    for pendencia in pendencias_encerradas:
+        pendencia.quantidade_formatada = _formatar_decimal_pedido(pendencia.quantidade)
+    tem_saldo_pendente = any(Decimal(item.quantidade or 0) > Decimal("0.000") for item in itens_exibidos)
 
     voltar_proxima_cobranca_url = (
         _url_adicionar_query_params(pedido_next_url, {"pedido_id": pedido.id})
@@ -23074,8 +23199,11 @@ def pedido_detalhe(request, pk):
         "rotulo_total": rotulo_total,
         "pode_editar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
         "pode_cancelar_pedido": pedido.status in [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL],
+        "pode_encerrar_pendencia": pedido.status == Pedido.STATUS_PARCIAL and tem_saldo_pendente,
+        "pendencias_encerradas": pendencias_encerradas,
         "pedido_editado": request.GET.get("pedido_editado") == "1",
         "pedido_cancelado": request.GET.get("pedido_cancelado") == "1",
+        "pendencia_encerrada": request.GET.get("pendencia_encerrada") == "1",
         "pedido_salvo": request.GET.get("pedido_salvo") == "1",
         "pedido_next_url": pedido_next_url,
         "voltar_proxima_cobranca_url": voltar_proxima_cobranca_url,

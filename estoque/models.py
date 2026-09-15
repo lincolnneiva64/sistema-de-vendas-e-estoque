@@ -1144,11 +1144,13 @@ class Pedido(models.Model):
     STATUS_ABERTO = "aberto"
     STATUS_CANCELADO = "cancelado"
     STATUS_PARCIAL = "parcial"
+    STATUS_ENCERRADO = "encerrado"
     STATUS_CONVERTIDO_EM_VENDA = "convertido_em_venda"
     STATUS_CHOICES = [
         (STATUS_ABERTO, "Aberto"),
         (STATUS_CANCELADO, "Cancelado"),
         (STATUS_PARCIAL, "Parcial"),
+        (STATUS_ENCERRADO, "Encerrado"),
         (STATUS_CONVERTIDO_EM_VENDA, "Convertido em venda"),
     ]
 
@@ -1203,6 +1205,41 @@ class ItemPedido(models.Model):
     def __str__(self):
         nome_produto = self.produto.nome if self.produto else "Produto nao identificado"
         return f"{nome_produto} - Pedido #{self.pedido_id}"
+
+
+class PendenciaPedidoEncerrada(models.Model):
+    pedido = models.ForeignKey(
+        Pedido,
+        on_delete=models.CASCADE,
+        related_name="pendencias_encerradas",
+    )
+    item_pedido = models.ForeignKey(
+        ItemPedido,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pendencias_encerradas",
+    )
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pendencias_pedido_encerradas",
+    )
+    produto_nome = models.CharField(max_length=120)
+    quantidade = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=20, blank=True)
+    preco_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    valor_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    motivo = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-criado_em", "-id"]
+
+    def __str__(self):
+        return f"Pendencia encerrada - Pedido #{self.pedido_id} - {self.produto_nome}"
 
 
 class Fornecedor(models.Model):

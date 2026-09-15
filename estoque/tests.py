@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -11766,15 +11766,24 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Sugestao")
         self.url = reverse("estoque:sugestao_compra_fornecedor")
+        self.cliente = Cliente.objects.create(nome="Cliente Sugestao", ativo=True)
 
-    def criar_produto(self, nome, quantidade, estoque_minimo):
+    def criar_produto(self, nome, quantidade, estoque_minimo, **kwargs):
+        dados = {
+            "preco_compra": Decimal("10.00"),
+            "preco_vista": Decimal("15.00"),
+            "preco_prazo": Decimal("16.00"),
+            "quantidade": Decimal(str(quantidade)),
+            "estoque_minimo": Decimal(str(estoque_minimo)),
+            "unidade_compra": "UN",
+            "unidade_venda_1": "UN",
+            "ativo": True,
+            "excluido": False,
+        }
+        dados.update(kwargs)
         produto = Produto.objects.create(
             nome=nome,
-            preco_compra=Decimal("10.00"),
-            preco_vista=Decimal("15.00"),
-            preco_prazo=Decimal("16.00"),
-            quantidade=Decimal(str(quantidade)),
-            estoque_minimo=Decimal(str(estoque_minimo)),
+            **dados,
         )
         ProdutoFornecedor.objects.create(
             fornecedor=self.fornecedor,
@@ -11783,12 +11792,51 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
         )
         return produto
 
+    def criar_venda(self, produto, quantidade, unidade="UN"):
+        venda = Venda.objects.create(
+            cliente=self.cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Teste",
+            total=Decimal("10.00"),
+        )
+        return ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal(str(quantidade)),
+            unidade=unidade,
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+
+    def criar_pedido_aberto(self, produto, quantidade, unidade="UN"):
+        pedido = Pedido.objects.create(
+            cliente=self.cliente,
+            data_pedido=timezone.localdate(),
+            status=Pedido.STATUS_PARCIAL,
+            total=Decimal("10.00"),
+        )
+        return ItemPedido.objects.create(
+            pedido=pedido,
+            produto=produto,
+            quantidade=Decimal(str(quantidade)),
+            unidade=unidade,
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+
     def produtos_da_lista_inicial(self, resposta):
         return {linha["produto"] for linha in resposta.context["linhas"]}
 
-    def test_produto_com_estoque_maior_ou_igual_ao_minimo_e_sugestao_zero_nao_aparece(self):
-        produto_sem_necessidade = self.criar_produto("Cafe Estoque Ok", "14.000", "12.000")
-        produto_com_necessidade = self.criar_produto("Cafe Comprar", "8.000", "12.000")
+    def linha_por_produto(self, resposta, produto):
+        for linha in resposta.context["linhas"]:
+            if linha["produto"] == produto:
+                return linha
+        return None
+
+    def test_produto_sem_venda_e_sem_pedido_nao_aparece_mesmo_abaixo_do_minimo(self):
+        produto = self.criar_produto("Frisco Sem Demanda", "0.000", "4.000")
 
         resposta = self.client.get(
             self.url,
@@ -11796,24 +11844,89 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
             secure=True,
         )
 
-        produtos = self.produtos_da_lista_inicial(resposta)
-        self.assertIn(produto_com_necessidade, produtos)
-        self.assertNotIn(produto_sem_necessidade, produtos)
-        self.assertEqual(resposta.context["total_produtos_vinculados"], 2)
-        self.assertEqual(resposta.context["total_produtos_sugeridos"], 1)
-
-    def test_geracao_nao_traz_produtos_apenas_por_estarem_vinculados_ao_fornecedor(self):
-        produto_sem_necessidade = self.criar_produto("Produto Apenas Vinculado", "17.000", "15.000")
-
-        resposta = self.client.get(
-            self.url,
-            {"fornecedor": str(self.fornecedor.id)},
-            secure=True,
-        )
-
-        self.assertNotIn(produto_sem_necessidade, self.produtos_da_lista_inicial(resposta))
+        self.assertNotIn(produto, self.produtos_da_lista_inicial(resposta))
         self.assertEqual(resposta.context["total_produtos_vinculados"], 1)
         self.assertEqual(resposta.context["total_produtos_sugeridos"], 0)
+
+    def test_produto_com_pedido_aberto_aparece_e_sugere_pedido_mais_reserva(self):
+        produto = self.criar_produto("Amac Downy Pedido", "0.000", "6.000")
+        self.criar_pedido_aberto(produto, "6.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        linha = self.linha_por_produto(resposta, produto)
+        self.assertIsNotNone(linha)
+        self.assertEqual(linha["sugestao"], Decimal("12.000"))
+
+    def test_produto_com_estoque_maior_que_consumo_com_folga_nao_aparece(self):
+        produto = self.criar_produto("Achocolatado Pirakids", "15.000", "40.000")
+        self.criar_venda(produto, "12.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        self.assertNotIn(produto, self.produtos_da_lista_inicial(resposta))
+
+    def test_produto_com_estoque_menor_que_consumo_com_folga_sugere_ate_meta(self):
+        produto = self.criar_produto("Oleo Sugestao", "1.650", "3.000")
+        self.criar_venda(produto, "1.800")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        linha = self.linha_por_produto(resposta, produto)
+        self.assertIsNotNone(linha)
+        self.assertEqual(linha["sugestao"], Decimal("1.350"))
+
+    def test_vendas_fracionadas_continuam_normalizadas_para_unidade_base(self):
+        produto = self.criar_produto(
+            "Farinha 1/30Kg",
+            "0.000",
+            "4.000",
+            unidade_compra="SC",
+            unidade_venda_1="SC",
+            unidade_venda_2="KG",
+            fator_conversao=Decimal("30.00"),
+            vende_fracionado=True,
+        )
+        self.criar_venda(produto, "0.500", "SC")
+        self.criar_venda(produto, "1.000", "SC")
+        self.criar_venda(produto, "3.000", "KG")
+        self.criar_venda(produto, "2.000", "KG")
+        self.criar_venda(produto, "15.000", "KG")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        linha = self.linha_por_produto(resposta, produto)
+        self.assertIsNotNone(linha)
+        self.assertEqual(linha["quantidade_vendida"], Decimal("2.167"))
+        self.assertNotEqual(linha["quantidade_vendida"], Decimal("6.500"))
+
+    def test_produto_inativo_nao_aparece_em_nova_sugestao(self):
+        produto = self.criar_produto("Produto Inativo Sugestao", "0.000", "4.000", ativo=False)
+        self.criar_venda(produto, "10.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        self.assertNotIn(produto, self.produtos_da_lista_inicial(resposta))
 
 
 class CorrecaoItensCompraTests(TestCase):
@@ -24611,6 +24724,16 @@ class PedidoTests(TestCase):
             secure=True,
         )
 
+    def _post_encerrar_pendencia(self, pedido, next_url=""):
+        dados = {}
+        if next_url:
+            dados["next"] = next_url
+        return self.client.post(
+            reverse("estoque:pedido_encerrar_pendencia", args=[pedido.id]),
+            data=dados,
+            secure=True,
+        )
+
     def _post_criar_pedido(self, proxima_acao="", operador="Operador Pedido", cliente=None, next_url="", itens=None):
         cliente = cliente or self.cliente
         if itens is None:
@@ -25649,12 +25772,12 @@ class PedidoTests(TestCase):
         self.assertContains(resposta_detalhe, "Itens do Pedido")
         self.assertNotContains(resposta_detalhe, "Itens pendentes")
 
-        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), {"status": Pedido.STATUS_CONVERTIDO_EM_VENDA}, secure=True)
         self.assertContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
         self.assertContains(resposta_lista, "Convertido em venda")
 
-        resposta_abertos = self.client.get(reverse("estoque:pedidos"), {"status": Pedido.STATUS_ABERTO}, secure=True)
-        self.assertNotContains(resposta_abertos, reverse("estoque:pedido_detalhe", args=[pedido.id]))
+        resposta_operacional = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertNotContains(resposta_operacional, reverse("estoque:pedido_detalhe", args=[pedido.id]))
 
     def test_gravar_venda_de_pedido_com_item_zerado_grava_disponiveis_e_deixa_pendente(self):
         from .models import Pedido, ItemPedido
@@ -25795,6 +25918,114 @@ class PedidoTests(TestCase):
         self.assertContains(resposta_detalhe, 'data-label="Quantidade">1</td>')
         self.assertNotContains(resposta_detalhe, "1.000")
         self.assertContains(resposta_detalhe, "R$ 100.00")
+
+    def test_pedido_parcial_com_saldo_aparece_na_fila_e_influencia_sugestao(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Pedido Pendente")
+        ProdutoFornecedor.objects.create(fornecedor=fornecedor, produto=self.produto, ativo=True)
+        self.produto.quantidade = Decimal("0.000")
+        self.produto.estoque_minimo = 0
+        self.produto.save(update_fields=["quantidade", "estoque_minimo"])
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("6.000"), total=Decimal("600.00"))
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.save(update_fields=["status", "atualizado_em"])
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
+        self.assertContains(resposta_lista, "Encerrar")
+        self.assertContains(resposta_lista, reverse("estoque:pedido_encerrar_pendencia", args=[pedido.id]))
+
+        resposta_sugestao = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {"fornecedor": fornecedor.id},
+            secure=True,
+        )
+        linha = resposta_sugestao.context["linhas"][0]
+        self.assertEqual(linha["produto"], self.produto)
+        self.assertEqual(linha["quantidade_pedidos_abertos"], Decimal("6.000"))
+
+    def test_pedido_parcial_com_itens_zerados_nao_aparece_como_pendencia(self):
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("0.000"), total=Decimal("0.00"))
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.save(update_fields=["status", "atualizado_em"])
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertNotContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
+        self.assertNotContains(resposta_lista, reverse("estoque:pedido_encerrar_pendencia", args=[pedido.id]))
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Nenhum item pendente neste pedido.")
+        self.assertNotContains(resposta_detalhe, "Encerrar Pend")
+
+    def test_encerrar_pendencia_preserva_historico_e_remove_demanda_da_compra(self):
+        fornecedor = Fornecedor.objects.create(nome="Fornecedor Encerrar Pendencia")
+        ProdutoFornecedor.objects.create(fornecedor=fornecedor, produto=self.produto, ativo=True)
+        self.produto.quantidade = Decimal("0.000")
+        self.produto.estoque_minimo = 0
+        self.produto.save(update_fields=["quantidade", "estoque_minimo"])
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("6.000"), total=Decimal("600.00"))
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self._post_encerrar_pendencia(pedido)
+
+        self.assertEqual(resposta.status_code, 302)
+        pedido.refresh_from_db()
+        item = pedido.itens.get()
+        self.assertEqual(pedido.status, Pedido.STATUS_ENCERRADO)
+        self.assertEqual(pedido.total, Decimal("0.00"))
+        self.assertEqual(item.quantidade, Decimal("0.000"))
+        self.assertEqual(item.valor_total, Decimal("0.00"))
+        pendencia = PendenciaPedidoEncerrada.objects.get(pedido=pedido)
+        self.assertEqual(pendencia.produto, self.produto)
+        self.assertEqual(pendencia.quantidade, Decimal("6.000"))
+        self.assertEqual(pendencia.valor_total, Decimal("600.00"))
+        self.assertEqual(pendencia.motivo, "")
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+        self.assertNotContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
+
+        resposta_historico = self.client.get(
+            reverse("estoque:pedidos"),
+            {"status": Pedido.STATUS_ENCERRADO},
+            secure=True,
+        )
+        self.assertContains(resposta_historico, reverse("estoque:pedido_detalhe", args=[pedido.id]))
+        self.assertContains(resposta_historico, "Encerrado")
+
+        resposta_sugestao = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {"fornecedor": fornecedor.id},
+            secure=True,
+        )
+        self.assertEqual(resposta_sugestao.context["linhas"], [])
+
+        resposta_detalhe = self.client.get(reverse("estoque:pedido_detalhe", args=[pedido.id]), secure=True)
+        self.assertContains(resposta_detalhe, "Pend&ecirc;ncias Encerradas")
+        self.assertContains(resposta_detalhe, "Encerrado")
+        self.assertNotContains(resposta_detalhe, "Motivo do encerramento")
+
+    def test_encerrar_pendencia_funciona_diretamente_da_consulta(self):
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("4.000"), total=Decimal("400.00"))
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.save(update_fields=["status", "atualizado_em"])
+        next_url = reverse("estoque:pedidos")
+
+        resposta = self._post_encerrar_pendencia(pedido, next_url=next_url)
+
+        self.assertRedirects(resposta, next_url, fetch_redirect_response=False)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.status, Pedido.STATUS_ENCERRADO)
+        self.assertEqual(PendenciaPedidoEncerrada.objects.filter(pedido=pedido).count(), 1)
+
+    def test_pedido_antigo_mas_pendente_continua_na_fila(self):
+        pedido = self._criar_pedido_com_item(quantidade=Decimal("3.000"), total=Decimal("300.00"))
+        pedido.status = Pedido.STATUS_PARCIAL
+        pedido.data_pedido = timezone.localdate() - timedelta(days=10)
+        pedido.save(update_fields=["status", "data_pedido", "atualizado_em"])
+
+        resposta_lista = self.client.get(reverse("estoque:pedidos"), secure=True)
+
+        self.assertContains(resposta_lista, reverse("estoque:pedido_detalhe", args=[pedido.id]))
 
     def test_venda_de_pedido_parcial_exibe_aviso_na_nota_e_whatsapp(self):
         from .models import Pedido
