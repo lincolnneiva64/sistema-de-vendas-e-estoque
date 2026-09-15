@@ -162,6 +162,9 @@
                     {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}
                   >
                   <button class="sep-step-btn" type="button" data-step="{{ item.quantidade_passo_data }}">+</button>
+                  {% if item.registra_peso_real %}
+                    <button class="sep-step-btn sep-peso-ok" type="button" data-peso-ok>OK</button>
+                  {% endif %}
                 </div>
               {% endif %}
               {% if item.valores_rapidos %}
@@ -484,7 +487,16 @@
       });
     });
     card.querySelector("[data-qtd-input]")?.addEventListener("input", () => refreshCard(card));
-    card.querySelector("[data-qtd-input]")?.addEventListener("change", () => saveItem(card));
+    const qtdInput = card.querySelector("[data-qtd-input]");
+    qtdInput?.addEventListener("change", () => {
+      if (!card.querySelector("[data-peso-ok]")) saveItem(card);
+    });
+    card.querySelector("[data-peso-ok]")?.addEventListener("click", () => {
+      if (!qtdInput) return;
+      refreshCard(card);
+      qtdInput.blur();
+      saveItem(card, {advance: true});
+    });
     refreshCard(card);
   });
 
