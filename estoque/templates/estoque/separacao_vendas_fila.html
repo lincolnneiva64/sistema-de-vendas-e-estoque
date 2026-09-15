@@ -23,6 +23,7 @@
   .sep-list { display: grid; gap: 8px; padding: 10px; }
   .sep-card { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 12px; }
   .sep-card.com_pendencia { border-color: #f97316; background: #fff7ed; box-shadow: inset 4px 0 0 #ea580c; }
+  .sep-card.tem-ajuste-nota { border-color: #f59e0b; background: #fffbeb; box-shadow: inset 4px 0 0 #f59e0b; }
   .sep-card.tem-divergencia { border-color: #dc2626; }
   .sep-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   .sep-main { min-width: 0; }
@@ -138,7 +139,7 @@
 
           <div class="sep-list">
             {% for separacao in grupo.separacoes %}
-              <article class="sep-card {{ separacao.status }}{% if separacao.tem_divergencia_fila %} tem-divergencia{% endif %}">
+              <article class="sep-card {{ separacao.status }}{% if separacao.tem_ajuste_nota %} tem-ajuste-nota{% endif %}{% if separacao.tem_divergencia_fila %} tem-divergencia{% endif %}">
                 <div class="sep-card-top">
                   <div class="sep-main">
                     <div class="sep-line">
@@ -156,6 +157,10 @@
 
                 {% if separacao.tem_divergencia_fila %}
                   <div class="sep-alert">VENDA ALTERADA - REVISAO NECESSARIA</div>
+                {% endif %}
+
+                {% if separacao.tem_ajuste_nota and not separacao.itens_com_pendencia %}
+                  <div class="sep-alert">AJUSTE DA NOTA PENDENTE - SEPARACAO FISICA CONCLUIDA</div>
                 {% endif %}
 
                 {% if separacao.itens_com_pendencia %}

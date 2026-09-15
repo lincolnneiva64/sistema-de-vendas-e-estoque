@@ -30791,6 +30791,98 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "next=/separacao-vendas/")
         self.assertContains(resposta, "Editar nota")
 
+    def test_fila_mostra_editar_nota_para_kg_separado_diferente_da_nota_sem_pendencia_fisica(self):
+        produto = Produto.objects.create(
+            nome="Frango Congelado 1/20Kg Fila",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg Fila")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta_item = self._post_item_checklist(separacao, item, "peso_separado", "14,300")
+        separacao = (
+            SeparacaoVenda.objects
+            .select_related("venda", "venda__cliente")
+            .prefetch_related("itens__item_venda__produto", "venda__itens__produto")
+            .get(pk=separacao.pk)
+        )
+        grupos = views._montar_grupos_rota_separacao([separacao])
+
+        self.assertEqual(resposta_item.status_code, 200)
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(separacao.total_itens, 1)
+        self.assertEqual(separacao.total_conferidos, 1)
+        self.assertEqual(separacao.total_pendentes, 0)
+        self.assertEqual(separacao.total_pendencias, 0)
+        self.assertTrue(separacao.tem_ajuste_nota)
+        self.assertEqual(grupos[0]["total_separadas"], 1)
+        self.assertFalse(separacao.tem_divergencia_fila)
+
+        resposta_fila = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+        self.assertContains(resposta_fila, "Cliente Kg Fila")
+        self.assertContains(resposta_fila, "1</strong> OK")
+        self.assertContains(resposta_fila, "0</strong> pendentes")
+        self.assertContains(resposta_fila, "AJUSTE DA NOTA PENDENTE")
+        self.assertContains(resposta_fila, "Editar nota")
+        self.assertContains(resposta_fila, f"ajuste_separacao={separacao.id}")
+
+        resposta_edicao = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}",
+            secure=True,
+        )
+        ajuste = resposta_edicao.context["venda_edicao"]["ajuste_separacao"]
+        self.assertEqual(ajuste["itens"][0]["quantidade_original"], "14.000")
+        self.assertEqual(ajuste["itens"][0]["quantidade_separada"], "14.300")
+        self.assertEqual(ajuste["itens"][0]["quantidade_sugerida"], "14.300")
+
+    def test_fila_remove_editar_nota_apos_reconciliar_kg_com_peso_real(self):
+        produto = Produto.objects.create(
+            nome="Frango Congelado 1/20Kg Reconciliado",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg Reconciliado")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+        self._post_item_checklist(separacao, item, "peso_separado", "14,300")
+        item_venda = venda.itens.get()
+        item_venda.quantidade = Decimal("14.300")
+        item_venda.valor_total = Decimal("143.00")
+        item_venda.save(update_fields=["quantidade", "valor_total"])
+        venda.total = Decimal("143.00")
+        venda.save(update_fields=["total"])
+
+        separacao = (
+            SeparacaoVenda.objects
+            .select_related("venda", "venda__cliente")
+            .prefetch_related("itens__item_venda__produto", "venda__itens__produto")
+            .get(pk=separacao.pk)
+        )
+        views._montar_grupos_rota_separacao([separacao])
+
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(separacao.total_pendentes, 0)
+        self.assertEqual(separacao.total_pendencias, 0)
+        self.assertFalse(separacao.tem_ajuste_nota)
+        self.assertFalse(separacao.tem_divergencia_fila)
+        self.assertEqual(views._montar_payload_ajuste_separacao_venda(separacao), None)
+
+        resposta_fila = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+        self.assertContains(resposta_fila, "Cliente Kg Reconciliado")
+        self.assertNotContains(resposta_fila, "AJUSTE DA NOTA PENDENTE")
+        self.assertNotContains(resposta_fila, f"ajuste_separacao={separacao.id}")
+        self.assertNotContains(resposta_fila, "Editar nota")
+
     def test_fila_mostra_editar_nota_apenas_quando_ha_pendencia(self):
         self._enviar()
         separacao = self._separacao()

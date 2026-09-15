@@ -12060,6 +12060,10 @@ def _montar_payload_ajuste_separacao_venda(separacao):
     }
 
 
+def _separacao_tem_ajuste_nota(separacao):
+    return _montar_payload_ajuste_separacao_venda(separacao) is not None
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()
@@ -20519,18 +20523,7 @@ def _montar_grupos_rota_separacao(separacoes):
         ]
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
-        separacao.tem_ajuste_nota = any(
-            item_separacao_tem_pendencia(item)
-            or (
-                item_separacao_registra_peso_real(item)
-                and item.status == SeparacaoVendaItem.STATUS_CONFERIDO
-                and item.quantidade_separada is not None
-                and item.item_venda is not None
-                and Decimal(item.quantidade_separada).quantize(Decimal("0.001"))
-                != Decimal(item.item_venda.quantidade or 0).quantize(Decimal("0.001"))
-            )
-            for item in itens
-        )
+        separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
 
         localidade = _localidade_operacional_cliente(separacao.venda.cliente)
         chave = ("localidade", localidade.lower()) if localidade else ("sem_rota", "")
