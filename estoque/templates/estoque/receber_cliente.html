@@ -1641,17 +1641,16 @@
                   <div class="rc-historico-meta">
                     <span class="rc-historico-data">{{ pagamento.data_recebimento_label|default:pagamento.data_recebimento }}</span>
                     <span class="rc-historico-pill">{{ pagamento.forma_pagamento|default:"Forma nao informada" }}</span>
+                    <span class="rc-historico-valor">Recebido R$ {{ pagamento.valor|floatformat:2 }}</span>
                     {% if pagamento.tipo == "legado" %}
                       <span class="rc-historico-pill rc-historico-legado">Legado</span>
                     {% endif %}
-                    <span class="rc-historico-valor">Recebido R$ {{ pagamento.valor|floatformat:2 }}</span>
                   </div>
                   {% if pagamento.aplicacoes %}
                     <div class="rc-historico-aplicacoes">
                       {% for aplicacao in pagamento.aplicacoes %}
                         <div class="rc-historico-aplicacao">
-                          Conta #{{ aplicacao.conta_id }}{% if aplicacao.venda_id %} / Venda #{{ aplicacao.venda_id }}{% endif %}
-                          - abatido R$ {{ aplicacao.valor|floatformat:2 }}{% if aplicacao.resta_distribuir != None %} -> resta R$ {{ aplicacao.resta_distribuir|floatformat:2 }}{% endif %}
+                          Conta #{{ aplicacao.conta_id }}{% if aplicacao.venda_id %} / Venda #{{ aplicacao.venda_id }}{% endif %}{% if aplicacao.saldo_antes_distribuir != None and aplicacao.resta_distribuir != None %} - R$ {{ aplicacao.saldo_antes_distribuir|floatformat:2 }} - R$ {{ aplicacao.valor|floatformat:2 }} = resta R$ {{ aplicacao.resta_distribuir|floatformat:2 }}{% else %} - abatido R$ {{ aplicacao.valor|floatformat:2 }}{% endif %}
                         </div>
                       {% endfor %}
                     </div>

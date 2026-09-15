@@ -2045,6 +2045,7 @@ def _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir=None):
     if getattr(recebimento, "conta_id", None):
         venda_id = getattr(recebimento.conta, "venda_id", "") or ""
     valor = (recebimento.valor or Decimal("0.00")).quantize(Decimal("0.01"))
+    saldo_antes = saldo_distribuir.quantize(Decimal("0.01")) if saldo_distribuir is not None else None
     saldo_restante = None
     if saldo_distribuir is not None:
         saldo_restante = max(
@@ -2055,6 +2056,7 @@ def _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir=None):
         "conta_id": recebimento.conta_id,
         "venda_id": venda_id,
         "valor": valor,
+        "saldo_antes_distribuir": saldo_antes,
         "resta_distribuir": saldo_restante,
     }
 

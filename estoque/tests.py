@@ -20279,6 +20279,11 @@ class PixRecebidoTests(TestCase):
             Decimal("102.20"),
             Decimal("24.09"),
         ])
+        self.assertEqual([item["saldo_antes_distribuir"] for item in historico[0]["aplicacoes"]], [
+            Decimal("500.00"),
+            Decimal("126.29"),
+            Decimal("24.09"),
+        ])
         self.assertEqual([item["resta_distribuir"] for item in historico[0]["aplicacoes"]], [
             Decimal("126.29"),
             Decimal("24.09"),
@@ -20289,10 +20294,42 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, f"Conta #{conta_um.id}")
         self.assertContains(resposta, f"Conta #{conta_dois.id}")
         self.assertContains(resposta, f"Conta #{conta_tres.id}")
-        self.assertContains(resposta, "abatido R$")
-        self.assertContains(resposta, "resta R$")
+        self.assertContains(resposta, "R$ 500.00 - R$ 373.71 = resta R$ 126.29")
+        self.assertContains(resposta, "R$ 126.29 - R$ 102.20 = resta R$ 24.09")
+        self.assertContains(resposta, "R$ 24.09 - R$ 24.09 = resta R$ 0.00")
         self.assertEqual(list(ContaReceber.objects.order_by("id").values_list("id", "valor_em_aberto", "status")), saldos_antes)
         self.assertEqual(list(RecebimentoContaReceber.objects.order_by("id").values_list("id", "valor", "operacao_id")), recebimentos_antes)
+
+    def test_receber_cliente_historico_operacao_mostra_conta_matematica_do_valor_recebido(self):
+        cliente = Cliente.objects.create(nome="Cliente Historico Conta Matematica", ativo=True)
+        self._criar_conta_receber_pix(cliente, "900.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, valor="300.00", forma_pagamento="Dinheiro")
+        for valor in ("157.15", "104.00", "38.85"):
+            RecebimentoContaReceber.objects.create(
+                conta=self._criar_conta_receber_pix(cliente, valor),
+                operacao=operacao,
+                data_recebimento=operacao.data_recebimento,
+                valor=Decimal(valor),
+                forma_pagamento="Dinheiro",
+            )
+
+        resposta = self.client.get(reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}), secure=True)
+
+        aplicacoes = resposta.context["pagamentos_recentes"][0]["aplicacoes"]
+        self.assertEqual([item["saldo_antes_distribuir"] for item in aplicacoes], [
+            Decimal("300.00"),
+            Decimal("142.85"),
+            Decimal("38.85"),
+        ])
+        self.assertEqual([item["resta_distribuir"] for item in aplicacoes], [
+            Decimal("142.85"),
+            Decimal("38.85"),
+            Decimal("0.00"),
+        ])
+        self.assertContains(resposta, "Recebido R$ 300.00")
+        self.assertContains(resposta, "R$ 300.00 - R$ 157.15 = resta R$ 142.85")
+        self.assertContains(resposta, "R$ 142.85 - R$ 104.00 = resta R$ 38.85")
+        self.assertContains(resposta, "R$ 38.85 - R$ 38.85 = resta R$ 0.00")
 
     def test_receber_cliente_historico_tres_aplicacoes_calcula_saldo_acumulado(self):
         cliente = Cliente.objects.create(nome="Cliente Saldo Distribuicao", ativo=True)
@@ -20314,6 +20351,11 @@ class PixRecebidoTests(TestCase):
         self.assertEqual([item["valor"] for item in aplicacoes], [
             Decimal("200.00"),
             Decimal("250.00"),
+            Decimal("50.00"),
+        ])
+        self.assertEqual([item["saldo_antes_distribuir"] for item in aplicacoes], [
+            Decimal("500.00"),
+            Decimal("300.00"),
             Decimal("50.00"),
         ])
         self.assertEqual([item["resta_distribuir"] for item in aplicacoes], [
@@ -20360,10 +20402,16 @@ class PixRecebidoTests(TestCase):
             Decimal("678.50"),
             Decimal("300.00"),
         ])
+        self.assertEqual([item["saldo_antes_distribuir"] for item in aplicacoes[:2]], [
+            Decimal("1000.00"),
+            Decimal("678.50"),
+        ])
         self.assertEqual([item["resta_distribuir"] for item in aplicacoes[:2]], [
             Decimal("678.50"),
             Decimal("0.00"),
         ])
+        self.assertContains(resposta, "R$ 1000.00 - R$ 321.50 = resta R$ 678.50")
+        self.assertContains(resposta, "R$ 678.50 - R$ 678.50 = resta R$ 0.00")
 
     def test_receber_cliente_historico_credito_gerado_preserva_sobra_da_operacao(self):
         cliente = Cliente.objects.create(nome="Cliente Historico Credito", ativo=True)
@@ -20386,6 +20434,7 @@ class PixRecebidoTests(TestCase):
         historico = resposta.context["pagamentos_recentes"][0]
         self.assertEqual(historico["valor"], Decimal("550.00"))
         self.assertEqual(historico["credito_gerado"], Decimal("50.00"))
+        self.assertEqual(historico["aplicacoes"][-1]["saldo_antes_distribuir"], Decimal("100.00"))
         self.assertEqual(historico["aplicacoes"][-1]["resta_distribuir"], Decimal("50.00"))
         self.assertContains(resposta, "Credito gerado: R$")
 
@@ -20399,6 +20448,7 @@ class PixRecebidoTests(TestCase):
         historico = resposta.context["pagamentos_recentes"]
         self.assertEqual(historico[0]["id"], f"legado-{legado.id}")
         self.assertEqual(historico[0]["tipo"], "legado")
+        self.assertEqual(historico[0]["aplicacoes"][0]["saldo_antes_distribuir"], None)
         self.assertEqual(historico[0]["aplicacoes"][0]["resta_distribuir"], None)
 
     def test_receber_cliente_duplicidade_usa_operacoes_reais_sem_duplicar_baixas(self):
