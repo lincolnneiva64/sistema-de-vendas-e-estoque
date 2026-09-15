@@ -30625,6 +30625,8 @@ class SeparacaoVendaFase1Tests(TestCase):
         separacao = SeparacaoVenda.objects.get(venda=venda)
         item = separacao.itens.get()
 
+        mensagem_esperada = "Quantidade inválida para este produto. Confira a quantidade separada antes de continuar."
+
         for quantidade in ("0,001", "0,999"):
             resposta = self._post_item_checklist(
                 separacao,
@@ -30634,7 +30636,7 @@ class SeparacaoVendaFase1Tests(TestCase):
             )
 
             self.assertEqual(resposta.status_code, 400)
-            self.assertIn("numero inteiro", resposta.json()["mensagem"])
+            self.assertEqual(resposta.json()["mensagem"], mensagem_esperada)
             item.refresh_from_db()
             self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
             self.assertIsNone(item.quantidade_separada)
@@ -30714,10 +30716,52 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 400)
-        self.assertIn("incompativel com a unidade", resposta.json()["mensagem"])
+        self.assertEqual(
+            resposta.json()["mensagem"],
+            "Quantidade inválida para este produto. Confira a quantidade separada antes de continuar.",
+        )
         item.refresh_from_db()
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
         self.assertIsNone(item.quantidade_separada)
+
+    def test_quantidade_insuficiente_embalagem_com_fator_aceita_fracao_equivalente(self):
+        produto = Produto.objects.create(
+            nome="Produto PCT Separacao Meio Pacote",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="PCT",
+            unidade_venda_1="PCT",
+            unidade_venda_2="UN",
+            vende_fracionado=True,
+            fator_conversao=Decimal("6.00"),
+            preco_vista_fracionado=Decimal("1.00"),
+            preco_prazo_fracionado=Decimal("1.00"),
+        )
+        venda = self._criar_venda_com_item(
+            produto,
+            "1.000",
+            unidade="PCT",
+            cliente_nome="Cliente Produto PCT Meio",
+        )
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.select_related("item_venda__produto").get()
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "0,500",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
+        self.assertEqual(item.quantidade_separada, Decimal("0.500"))
+        self.assertEqual(dados["item"]["quantidade_faltante"], "0.5")
 
     def test_peso_separado_kg_acima_do_solicitado_e_valido_sem_pendencia(self):
         produto = Produto.objects.create(
@@ -30835,6 +30879,27 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         item.refresh_from_db()
         self.assertEqual(item.quantidade_separada, Decimal("0.761"))
+
+    def test_peso_separado_kg_aceita_zero_zero_zero_um(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Um Grama Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "1.000", unidade="KG", cliente_nome="Cliente Kg Um Grama")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item = separacao.itens.get()
+
+        resposta = self._post_item_checklist(separacao, item, "peso_separado", "0,001")
+
+        self.assertEqual(resposta.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item.quantidade_separada, Decimal("0.001"))
 
     def test_nao_encontrado_em_kg_continua_gerando_pendencia(self):
         produto = Produto.objects.create(

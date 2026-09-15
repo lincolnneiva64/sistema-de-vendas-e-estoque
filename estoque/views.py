@@ -20535,6 +20535,9 @@ def venda_enviar_separacao(request, pk):
 
 
 def _validar_item_checklist_separacao(item, post_data):
+    mensagem_quantidade_invalida = (
+        "Quantidade inválida para este produto. Confira a quantidade separada antes de continuar."
+    )
     status = post_data.get(f"status_{item.id}") or SeparacaoVendaItem.STATUS_PENDENTE
     status_peso_separado = "peso_separado"
     status_validos = {
@@ -20574,17 +20577,7 @@ def _validar_item_checklist_separacao(item, post_data):
                 f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser menor que a solicitada.",
             )
         if not _quantidade_item_separacao_valida_para_unidade(item, quantidade_separada):
-            if not _item_separacao_permite_quantidade_fracionada(item):
-                return (
-                    status,
-                    None,
-                    f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser informada em numero inteiro.",
-                )
-            return (
-                status,
-                None,
-                f"A quantidade encontrada de {item.produto_nome_snapshot} e incompativel com a unidade informada.",
-            )
+            return status, None, mensagem_quantidade_invalida
         return status, quantidade_separada, ""
 
     return SeparacaoVendaItem.STATUS_PENDENTE, None, ""
