@@ -1684,74 +1684,88 @@ td:first-child {
 
 .ajuste-separacao-painel {
     display: grid;
-    gap: 8px;
-    margin: 8px 0 10px;
-    padding: 10px;
+    gap: 0;
+    margin: 2px 0 4px;
+    padding: 2px 4px 3px;
     border: 1px solid #f97316;
-    border-radius: 8px;
+    border-radius: 4px;
     background: #fff7ed;
     color: #7c2d12;
 }
 
 .ajuste-separacao-titulo {
     margin: 0;
-    font-size: 13px;
+    font-size: 10px;
     font-weight: 900;
-    line-height: 1.15;
+    line-height: 16px;
+    min-height: 16px;
 }
 
 .ajuste-separacao-lista {
     display: grid;
-    gap: 7px;
+    border-top: 1px solid #fed7aa;
+    border-bottom: 1px solid #fed7aa;
+    background: #ffffff;
+    overflow: hidden;
 }
 
 .ajuste-separacao-item {
+    box-sizing: border-box;
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) auto;
-    gap: 8px;
+    grid-template-columns: minmax(160px, 1fr) max-content max-content max-content max-content max-content max-content;
+    column-gap: 5px;
     align-items: center;
-    padding: 8px;
-    border: 1px solid #fed7aa;
-    border-radius: 8px;
-    background: #ffffff;
+}
+
+.ajuste-separacao-item {
+    min-height: 24px;
+    padding: 0 4px;
+    border-top: 1px solid #ffedd5;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.ajuste-separacao-item:first-child {
+    border-top: 0;
 }
 
 .ajuste-separacao-produto {
     font-weight: 900;
     color: #111827;
-    overflow-wrap: anywhere;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.ajuste-separacao-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px 9px;
-    margin-top: 4px;
+.ajuste-separacao-celula {
     color: #7c2d12;
-    font-size: 12px;
     font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ajuste-separacao-sugestao {
-    margin-top: 4px;
     color: #9a3412;
-    font-size: 12px;
     font-weight: 900;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .ajuste-separacao-aplicada {
-    border-color: #86efac;
     background: #f0fdf4;
 }
 
 .ajuste-separacao-aplicar {
-    min-height: 30px;
-    padding: 4px 9px;
-    border-radius: 7px;
+    min-height: 18px;
+    padding: 0 5px;
+    border-radius: 4px;
     border: 1px solid #f97316;
     background: #ea580c;
     color: #fff;
-    font-size: 12px;
+    font-size: 9px;
     font-weight: 900;
     cursor: pointer;
 }
@@ -1785,10 +1799,28 @@ td:first-child {
     }
 
     .ajuste-separacao-item {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px 8px;
+        padding: 7px;
+        min-height: 0;
+        font-size: 11px;
+        line-height: 1.15;
+    }
+
+    .ajuste-separacao-produto,
+    .ajuste-separacao-sugestao {
+        grid-column: 1 / -1;
+        white-space: normal;
+    }
+
+    .ajuste-separacao-celula::before {
+        content: attr(data-label) ": ";
+        color: #9a3412;
+        font-weight: 900;
     }
 
     .ajuste-separacao-aplicar {
+        grid-column: 1 / -1;
         width: 100%;
     }
 }
@@ -1865,22 +1897,18 @@ td:first-child {
                             data-sugestao-tipo="{{ item.tipo_sugestao }}"
                             data-quantidade-sugerida="{{ item.quantidade_sugerida }}"
                         >
-                            <div>
-                                <div class="ajuste-separacao-produto">{{ item.produto }}</div>
-                                <div class="ajuste-separacao-meta">
-                                    <span>{{ item.status_texto }}</span>
-                                    <span>Solicitado: {{ item.quantidade_solicitada_formatada }} {{ item.unidade }}</span>
-                                    <span>Separado: {{ item.quantidade_separada_formatada }} {{ item.unidade }}</span>
-                                    <span>Diferença: {{ item.diferenca_formatada }} {{ item.unidade }}</span>
-                                </div>
-                                <div class="ajuste-separacao-sugestao">{{ item.sugestao }}</div>
-                            </div>
+                            <div class="ajuste-separacao-produto">{{ item.produto }}</div>
+                            <div class="ajuste-separacao-celula" data-label="Problema">{% if item.status == "quantidade_insuficiente" %}Qtd insuf.{% else %}{{ item.status_texto }}{% endif %}</div>
+                            <div class="ajuste-separacao-celula" data-label="Ped.">Ped. {{ item.quantidade_solicitada_formatada }} {{ item.unidade }}</div>
+                            <div class="ajuste-separacao-celula" data-label="Sep.">Sep. {{ item.quantidade_separada_formatada }} {{ item.unidade }}</div>
+                            <div class="ajuste-separacao-celula" data-label="Dif.">Dif. {{ item.diferenca_formatada }} {{ item.unidade }}</div>
+                            <div class="ajuste-separacao-sugestao">{% if item.tipo_sugestao == "remover_item" %}Remover{% elif item.tipo_sugestao == "alterar_quantidade" %}Ajustar{% else %}Revisar{% endif %}</div>
                             <button
                                 type="button"
                                 class="ajuste-separacao-aplicar"
                                 data-aplicar-ajuste-separacao
                                 {% if item.tipo_sugestao == "revisar_manual" %}disabled{% endif %}
-                            >Aplicar sugestão</button>
+                            >Aplicar</button>
                         </article>
                     {% endfor %}
                 </div>
