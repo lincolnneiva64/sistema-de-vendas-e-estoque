@@ -138,44 +138,27 @@
             </div>
             <div class="sep-insuf {% if item.status == 'quantidade_insuficiente' or item.status_input == 'peso_separado' %}is-visible{% endif %}" data-insuficiente-box>
               <p class="sep-insuf-title">{% if item.registra_peso_real %}Peso separado{% else %}Quanto foi encontrado?{% endif %}</p>
-              {% if item.valores_rapidos %}
-                <div class="sep-quick">
-                  {% for opcao in item.valores_rapidos %}
-                    <button class="sep-quick-btn {% if item.quantidade_separada_formatada == opcao.rotulo %}is-selected{% endif %}" type="button" data-qtd-rapida="{{ opcao.valor }}">{{ opcao.rotulo }}</button>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <div class="sep-stepper">
-                  <button class="sep-step-btn" type="button" data-step="-{{ item.quantidade_passo_data }}">-</button>
-                  <input
-                    class="sep-step-input"
-                    type="number"
-                    inputmode="decimal"
-                    step="{{ item.quantidade_passo_data }}"
-                    min="{{ item.quantidade_minima_data }}"
-                    {% if item.quantidade_maxima_data %}
-                    max="{{ item.quantidade_maxima_data }}"
-                    {% endif %}
-                    name="quantidade_separada_{{ item.id }}"
-                    value="{{ item.quantidade_separada_data }}"
-                    data-qtd-input
-                    {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}
-                  >
-                  <button class="sep-step-btn" type="button" data-step="{{ item.quantidade_passo_data }}">+</button>
-                  {% if item.registra_peso_real %}
-                    <button class="sep-step-btn sep-peso-ok" type="button" data-peso-ok>OK</button>
-                  {% endif %}
-                </div>
-              {% endif %}
-              {% if item.valores_rapidos %}
+              <div class="sep-stepper">
+                <button class="sep-step-btn" type="button" data-step="-{{ item.quantidade_passo_data }}">-</button>
                 <input
-                  type="hidden"
+                  class="sep-step-input"
+                  type="number"
+                  inputmode="{% if item.registra_peso_real %}decimal{% else %}numeric{% endif %}"
+                  step="{{ item.quantidade_passo_data }}"
+                  min="{{ item.quantidade_minima_data }}"
+                  {% if item.quantidade_maxima_data %}
+                  max="{{ item.quantidade_maxima_data }}"
+                  {% endif %}
                   name="quantidade_separada_{{ item.id }}"
                   value="{{ item.quantidade_separada_data }}"
                   data-qtd-input
                   {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}
                 >
-              {% endif %}
+                <button class="sep-step-btn" type="button" data-step="{{ item.quantidade_passo_data }}">+</button>
+                {% if item.registra_peso_real %}
+                  <button class="sep-step-btn sep-peso-ok" type="button" data-peso-ok>OK</button>
+                {% endif %}
+              </div>
             </div>
             <p class="sep-save-state" data-save-state></p>
           </div>
