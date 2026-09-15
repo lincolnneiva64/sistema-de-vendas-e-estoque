@@ -14062,54 +14062,50 @@ def receber_cliente(request, cliente_id):
                 Decimal("0.00"),
             ),
         })
-    pagamentos_hoje_preview = []
-    pagamentos_recentes = []
-    carregar_historico_recebimento = (
-        request.method == "POST"
-        or bool(feedback_recebimento)
-        or bool(pix_recebido_escolhido)
-        or request.GET.get("historico") == "1"
-    )
-
-    if carregar_historico_recebimento:
-        pagamentos_hoje_preview = [
-            float(valor or Decimal("0.00"))
-            for valor in RecebimentoContaReceber.objects.filter(
-                conta__cliente_id=cliente.id,
-                criado_em__date=hoje,
-            ).values_list("valor", flat=True)
-        ]
-        limite_recente = timezone.now() - timedelta(hours=72)
-        recebimentos_recentes = (
-            RecebimentoContaReceber.objects.filter(conta__cliente_id=cliente.id, criado_em__gte=limite_recente)
-            .values(
-                "id",
-                "conta_id",
-                "data_recebimento",
-                "valor",
-                "forma_pagamento",
-                "observacao",
-                "criado_em",
-                "conta__venda_id",
-            )
-            .order_by("-criado_em", "-id")[:8]
+    pagamentos_hoje_preview = [
+        float(_valor_total_recebimento_cliente(recebimento))
+        for recebimento in RecebimentoContaReceber.objects.filter(
+            conta__cliente_id=cliente.id,
+            criado_em__date=hoje,
         )
-        for recebimento in recebimentos_recentes:
-            valor_total_recebido = _valor_total_recebimento_cliente(recebimento)
-            pagamentos_recentes.append(
-                {
-                    "criado_em": recebimento["criado_em"],
-                    "criado_em_data": timezone.localtime(recebimento["criado_em"]).date().isoformat(),
-                    "data_recebimento": recebimento["data_recebimento"].isoformat() if recebimento["data_recebimento"] else "",
-                    "valor": valor_total_recebido,
-                    "valor_numero": float(valor_total_recebido or Decimal("0.00")),
-                    "valor_aplicado": recebimento["valor"],
-                    "forma_pagamento": recebimento["forma_pagamento"],
-                    "conta_id": recebimento["conta_id"],
-                    "venda_id": recebimento["conta__venda_id"] if recebimento["conta_id"] else "",
-                    "observacao": recebimento["observacao"],
-                }
-            )
+        .values(
+            "valor",
+            "observacao",
+        )
+    ]
+    recebimentos_recentes = (
+        RecebimentoContaReceber.objects.filter(conta__cliente_id=cliente.id)
+        .values(
+            "id",
+            "conta_id",
+            "data_recebimento",
+            "valor",
+            "forma_pagamento",
+            "observacao",
+            "criado_em",
+            "conta__venda_id",
+        )
+        .order_by("-criado_em", "-id")[:10]
+    )
+    pagamentos_recentes = []
+    for recebimento in recebimentos_recentes:
+        valor_total_recebido = _valor_total_recebimento_cliente(recebimento)
+        pagamentos_recentes.append(
+            {
+                "id": recebimento["id"],
+                "criado_em": recebimento["criado_em"],
+                "criado_em_data": timezone.localtime(recebimento["criado_em"]).date().isoformat(),
+                "data_recebimento": recebimento["data_recebimento"].isoformat() if recebimento["data_recebimento"] else "",
+                "data_recebimento_label": recebimento["data_recebimento"].strftime("%d/%m/%Y") if recebimento["data_recebimento"] else "",
+                "valor": valor_total_recebido,
+                "valor_numero": float(valor_total_recebido or Decimal("0.00")),
+                "valor_aplicado": recebimento["valor"],
+                "forma_pagamento": recebimento["forma_pagamento"],
+                "conta_id": recebimento["conta_id"],
+                "venda_id": recebimento["conta__venda_id"] if recebimento["conta_id"] else "",
+                "observacao": recebimento["observacao"],
+            }
+        )
 
     if request.method == "POST":
         valores = {
