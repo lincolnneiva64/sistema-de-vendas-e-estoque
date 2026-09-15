@@ -20654,7 +20654,7 @@ def _validar_item_checklist_separacao(item, post_data):
                 None,
                 f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser menor que a solicitada.",
             )
-        if not _quantidade_item_separacao_valida_para_unidade(item, quantidade_separada):
+        if not _quantidade_item_checklist_separacao_valida(item, quantidade_separada):
             return status, None, mensagem_quantidade_invalida
         return status, quantidade_separada, ""
 
@@ -20689,8 +20689,39 @@ def _quantidade_item_separacao_valida_para_unidade(item, quantidade):
     return _quantidade_valida_para_produto_unidade(produto, unidade, quantidade)
 
 
+def _quantidade_item_checklist_separacao_valida(item, quantidade):
+    unidade = _normalizar_unidade_estoque(getattr(item, "unidade_snapshot", ""))
+    if unidade in {"UN", "PC"}:
+        quantidade_decimal = Decimal(quantidade or 0).quantize(Decimal("0.001"))
+        return quantidade_decimal == quantidade_decimal.to_integral_value()
+    return _quantidade_item_separacao_valida_para_unidade(item, quantidade)
+
+
 def _passo_quantidade_separacao(item):
-    return Decimal("0.001") if _item_separacao_permite_quantidade_fracionada(item) else Decimal("1.000")
+    unidade = _normalizar_unidade_estoque(getattr(item, "unidade_snapshot", ""))
+    if unidade in {"UN", "PC"}:
+        return Decimal("1.000")
+    if unidade in UNIDADES_MEDIDA_CONTINUA:
+        return Decimal("0.001")
+
+    for milesimos in range(1, 1001):
+        passo = Decimal(milesimos).scaleb(-3).quantize(Decimal("0.001"))
+        if _quantidade_item_separacao_valida_para_unidade(item, passo):
+            return passo
+    return Decimal("1.000")
+
+
+def _quantidade_insuficiente_separacao_permitida(item, quantidade_minima, quantidade_maxima):
+    if item.registra_peso_real:
+        return True
+    if quantidade_maxima < quantidade_minima:
+        return False
+    quantidade = quantidade_minima
+    while quantidade <= quantidade_maxima:
+        if _quantidade_item_checklist_separacao_valida(item, quantidade):
+            return True
+        quantidade = (quantidade + quantidade_minima).quantize(Decimal("0.001"))
+    return False
 
 
 def _formatar_diferenca_quantidade(valor):
@@ -20735,8 +20766,10 @@ def _preparar_item_checklist_separacao(item):
     item.quantidade_passo_data = f"{passo_quantidade:f}"
     item.quantidade_minima_data = f"{quantidade_minima:f}"
     item.quantidade_maxima_data = f"{quantidade_maxima:f}" if quantidade_maxima is not None else ""
-    item.quantidade_insuficiente_permitida = (
-        True if item.registra_peso_real else quantidade_maxima >= quantidade_minima
+    item.quantidade_insuficiente_permitida = _quantidade_insuficiente_separacao_permitida(
+        item,
+        quantidade_minima,
+        quantidade_maxima or Decimal("0.000"),
     )
     item.permite_quantidade_acima = item.registra_peso_real
     item.modo_peso_separado = (

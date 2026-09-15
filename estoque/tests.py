@@ -31006,7 +31006,7 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         mensagem_esperada = "Quantidade inválida para este produto. Confira a quantidade separada antes de continuar."
 
-        for quantidade in ("0,001", "0,999"):
+        for quantidade in ("0,001", "0,004", "0,999"):
             resposta = self._post_item_checklist(
                 separacao,
                 item,
@@ -31020,7 +31020,7 @@ class SeparacaoVendaFase1Tests(TestCase):
             self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
             self.assertIsNone(item.quantidade_separada)
 
-    def test_quantidade_insuficiente_fracionada_continua_permitida_para_unidade_fracionada(self):
+    def test_checklist_unidade_menor_un_usa_passo_inteiro_e_rejeita_fracao_fisica(self):
         produto = Produto.objects.create(
             nome="Produto Fracionado Separacao",
             quantidade=Decimal("20.000"),
@@ -31036,7 +31036,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
         venda = self._criar_venda_com_item(
             produto,
-            "1.000",
+            "2.000",
             unidade="UN",
             cliente_nome="Cliente Produto Fracionado",
         )
@@ -31045,7 +31045,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         item = separacao.itens.select_related("item_venda__produto").get()
 
         views._preparar_item_checklist_separacao(item)
-        resposta = self._post_item_checklist(
+        resposta_fracionada = self._post_item_checklist(
             separacao,
             item,
             SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
@@ -31053,14 +31053,32 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
 
         self.assertTrue(item.quantidade_insuficiente_permitida)
-        self.assertEqual(item.quantidade_passo_data, "0.001")
-        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(item.quantidade_passo_data, "1.000")
+        self.assertEqual(item.quantidade_minima_data, "1.000")
+        self.assertEqual(item.quantidade_maxima_data, "1.000")
+        resposta_tela = self.client.get(reverse("estoque:separacao_venda_detalhe", args=[separacao.id]), secure=True)
+        self.assertContains(resposta_tela, 'data-passo="1.000"')
+        self.assertNotContains(resposta_tela, 'data-passo="0.001"')
+        self.assertEqual(resposta_fracionada.status_code, 400)
+        self.assertIn("Confira a quantidade separada antes de continuar", resposta_fracionada.json()["mensagem"])
         item.refresh_from_db()
-        dados = resposta.json()
+        self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self.assertIsNone(item.quantidade_separada)
+
+        resposta_inteira = self._post_item_checklist(
+            separacao,
+            item,
+            SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE,
+            "1,000",
+        )
+
+        self.assertEqual(resposta_inteira.status_code, 200)
+        item.refresh_from_db()
+        dados = resposta_inteira.json()
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
-        self.assertEqual(item.quantidade_separada, Decimal("0.500"))
-        self.assertEqual(dados["item"]["quantidade_faltante"], "0.5")
-        self.assertIn("faltam 0.5", dados["item"]["resultado_texto"])
+        self.assertEqual(item.quantidade_separada, Decimal("1.000"))
+        self.assertEqual(dados["item"]["quantidade_faltante"], "1")
+        self.assertIn("faltam 1", dados["item"]["resultado_texto"])
 
     def test_quantidade_insuficiente_embalagem_com_fator_rejeita_fracao_incompativel(self):
         produto = Produto.objects.create(
@@ -31128,6 +31146,8 @@ class SeparacaoVendaFase1Tests(TestCase):
         separacao = SeparacaoVenda.objects.get(venda=venda)
         item = separacao.itens.select_related("item_venda__produto").get()
 
+        views._preparar_item_checklist_separacao(item)
+        self.assertEqual(item.quantidade_passo_data, "0.500")
         resposta = self._post_item_checklist(
             separacao,
             item,
@@ -31347,7 +31367,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 400)
-        self.assertIn("numero inteiro", resposta.json()["mensagem"])
+        self.assertIn("Confira a quantidade separada antes de continuar", resposta.json()["mensagem"])
         item.refresh_from_db()
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_PENDENTE)
         self.assertIsNone(item.quantidade_separada)
@@ -31506,6 +31526,9 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertNotContains(resposta, "novalidate")
         self.assertContains(resposta, "const syncQuantidadeValidation = (card) =>")
         self.assertContains(resposta, "input.removeAttribute(\"max\")")
+        self.assertContains(resposta, "sepSubmitFeedback")
+        self.assertContains(resposta, "focarItemBloqueado")
+        self.assertContains(resposta, ".sep-btn:active")
 
     def test_concluir_checklist_redireciona_para_fila(self):
         self._enviar()
