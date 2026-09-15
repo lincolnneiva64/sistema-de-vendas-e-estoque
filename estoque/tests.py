@@ -30373,6 +30373,29 @@ class SeparacaoVendaFase1Tests(TestCase):
             .values_list("id", "quantidade", "valor_total")
         )
 
+    def _payload_edicao_venda(self, venda, itens):
+        return {
+            "venda_id": venda.id,
+            "cliente_id": venda.cliente_id,
+            "data_venda": venda.data_venda.isoformat(),
+            "data_vencimento": venda.data_vencimento.isoformat() if venda.data_vencimento else "",
+            "tipo_pagamento": venda.tipo_pagamento,
+            "operador": venda.operador or "Teste",
+            "total": str(venda.total or Decimal("0.00")),
+            "itens": [
+                {
+                    "item_id": item.id,
+                    "produto_id": item.produto_id,
+                    "produto_nome": item.produto.nome if item.produto else "",
+                    "quantidade": str(item.quantidade),
+                    "unidade": item.unidade or "",
+                    "preco_unitario": str(item.preco_unitario),
+                    "subtotal": str(item.valor_total),
+                }
+                for item in itens
+            ],
+        }
+
     def test_enviar_venda_cria_separacao_unica_e_segundo_envio_nao_duplica(self):
         resposta = self._enviar()
         self.assertEqual(resposta.status_code, 200)
@@ -31014,6 +31037,110 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
         self.assertEqual(item.quantidade_separada, Decimal("0.000"))
+
+    def test_edicao_venda_remove_item_pendente_e_recalcula_separacao_para_separada(self):
+        self._enviar()
+        separacao = self._separacao()
+        item_sep_pendente = separacao.itens.get(item_venda=self.item_a)
+        item_sep_pendente.status = SeparacaoVendaItem.STATUS_NAO_ENCONTRADO
+        item_sep_pendente.quantidade_separada = Decimal("0.000")
+        item_sep_pendente.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        item_sep_ok = separacao.itens.get(item_venda=self.item_b)
+        item_sep_ok.status = SeparacaoVendaItem.STATUS_CONFERIDO
+        item_sep_ok.quantidade_separada = item_sep_ok.quantidade_solicitada
+        item_sep_ok.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        separacao.status = SeparacaoVenda.STATUS_COM_PENDENCIA
+        separacao.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self._payload_edicao_venda(self.venda, [self.item_b])),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(separacao.itens.count(), 1)
+        self.assertEqual(separacao.itens.get().status, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+    def test_edicao_venda_remove_item_mas_mantem_com_pendencia_quando_resta_outra_pendencia(self):
+        produto_c = Produto.objects.create(
+            nome="Produto C Separacao Pendente",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="UN",
+        )
+        item_c = ItemVenda.objects.create(
+            venda=self.venda,
+            produto=produto_c,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+        self._enviar()
+        separacao = self._separacao()
+        for item_venda in [self.item_a, self.item_b]:
+            item_sep = separacao.itens.get(item_venda=item_venda)
+            item_sep.status = SeparacaoVendaItem.STATUS_NAO_ENCONTRADO
+            item_sep.quantidade_separada = Decimal("0.000")
+            item_sep.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        item_sep_ok = separacao.itens.get(item_venda=item_c)
+        item_sep_ok.status = SeparacaoVendaItem.STATUS_CONFERIDO
+        item_sep_ok.quantidade_separada = item_sep_ok.quantidade_solicitada
+        item_sep_ok.save(update_fields=["status", "quantidade_separada", "atualizado_em"])
+        separacao.status = SeparacaoVenda.STATUS_COM_PENDENCIA
+        separacao.save(update_fields=["status", "atualizado_em"])
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self._payload_edicao_venda(self.venda, [self.item_b, item_c])),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_COM_PENDENCIA)
+        self.assertEqual(separacao.itens.count(), 2)
+        self.assertTrue(separacao.itens.filter(status=SeparacaoVendaItem.STATUS_NAO_ENCONTRADO).exists())
+
+    def test_edicao_quantidade_reconciliada_recalcula_status_persistido_da_separacao(self):
+        produto = Produto.objects.create(
+            nome="Produto Kg Recalculo Separacao",
+            quantidade=Decimal("30.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "14.000", unidade="KG", cliente_nome="Cliente Kg Recalculo")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item_sep = separacao.itens.get()
+        self._post_item_checklist(separacao, item_sep, "peso_separado", "14,300")
+        separacao.status = SeparacaoVenda.STATUS_COM_PENDENCIA
+        separacao.save(update_fields=["status", "atualizado_em"])
+        item_venda = venda.itens.get()
+
+        resposta = self.client.post(
+            reverse("estoque:venda_editar_quantidade_item", args=[venda.id, item_venda.id]),
+            {"nova_quantidade": "14,300"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        separacao.refresh_from_db()
+        item_venda.refresh_from_db()
+        self.assertEqual(item_venda.quantidade, Decimal("14.300"))
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertEqual(views._montar_payload_ajuste_separacao_venda(separacao), None)
 
     def test_autosave_item_nao_encontrado_salva_imediatamente(self):
         self._enviar()

@@ -12064,6 +12064,14 @@ def _separacao_tem_ajuste_nota(separacao):
     return _montar_payload_ajuste_separacao_venda(separacao) is not None
 
 
+def _recalcular_status_separacao_da_venda(venda, usuario=None):
+    separacao = SeparacaoVenda.objects.filter(venda=venda).first()
+    if not separacao:
+        return None
+    recalcular_status_separacao(separacao, usuario)
+    return separacao
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()
@@ -16708,6 +16716,7 @@ def revisar_remocao_pendencia_da_nota(request, checklist_id):
             novo_total = recalcular_total_venda(venda)
             _anular_venda_sem_itens_por_remocao_pendencia(venda)
             _sincronizar_conta_receber(venda, "pendencia removida da nota")
+            _recalcular_status_separacao_da_venda(venda, request.user)
 
             _registrar_evento_venda(
                 venda,
@@ -18073,6 +18082,7 @@ def gravar_venda(request):
                         venda,
                         "edicao unificada da venda",
                     )
+                _recalcular_status_separacao_da_venda(venda, request.user)
 
         except ValueError as exc:
             return erro_gravar_venda(str(exc))
@@ -19674,6 +19684,7 @@ def venda_editar_quantidade_item(request, pk, item_id):
                 usuario=venda.operador,
             )
             _sincronizar_conta_receber(venda, "quantidade de item alterada")
+            _recalcular_status_separacao_da_venda(venda, request.user)
 
         messages.success(request, f"Quantidade de {produto_nome} atualizada com sucesso.")
         request.session[f"venda_quantidade_alterada_{venda.pk}"] = {
@@ -20065,6 +20076,7 @@ def venda_revisar_remocao_item(request, pk, item_id):
                     usuario=venda.operador,
                 )
             _sincronizar_conta_receber(venda, "item removido da nota")
+            _recalcular_status_separacao_da_venda(venda, request.user)
 
         messages.success(request, f'Item "{produto_nome}" removido da nota com sucesso.')
         request.session[f"venda_item_removido_{venda.pk}"] = {
