@@ -11821,7 +11821,7 @@ def _quantidade_sugerida_ajuste_separacao_valida(item_separacao, quantidade):
         return False
     if quantidade >= Decimal(item_separacao.quantidade_solicitada or 0).quantize(Decimal("0.001")):
         return False
-    if not _item_separacao_permite_quantidade_fracionada(item_separacao) and quantidade != quantidade.to_integral_value():
+    if not _quantidade_item_separacao_valida_para_unidade(item_separacao, quantidade):
         return False
     return True
 
@@ -11856,6 +11856,8 @@ def _montar_payload_ajuste_separacao_venda(separacao):
                 tipo_sugestao = "alterar_quantidade"
                 quantidade_sugerida = _formatar_decimal_payload_separacao(quantidade_separada)
                 sugestao = f"Alterar quantidade para {_formatar_quantidade(quantidade_separada)}"
+            else:
+                sugestao = "Quantidade separada incompativel com a unidade. Revisar manualmente."
 
         itens_payload.append({
             "separacao_item_id": item.id,
@@ -17007,7 +17009,68 @@ def _quantidade_decimal_estoque(quantidade):
     return Decimal(quantidade or "0").quantize(Decimal("0.001"))
 
 
-UNIDADES_ESTOQUE_FRACIONAVEIS = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA", "KG"}
+UNIDADES_MEDIDA_CONTINUA = {"KG"}
+UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA = {"PCT", "PACOTE", "FARDO", "FD", "CX", "CAIXA"}
+UNIDADES_ESTOQUE_FRACIONAVEIS = UNIDADES_MEDIDA_CONTINUA | UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA
+
+
+def _decimal_tres_casas(valor):
+    return Decimal(valor or "0").quantize(Decimal("0.001"))
+
+
+def _produto_tem_conversao_fracionada_confiavel(produto):
+    if not produto or not getattr(produto, "vende_fracionado", False):
+        return False
+    fator = Decimal(getattr(produto, "fator_conversao", 0) or 0)
+    return fator > 0 and bool(_normalizar_unidade_estoque(getattr(produto, "unidade_venda_2", "")))
+
+
+def _quantidade_decimal_corresponde_inteiro(valor):
+    valor_decimal = Decimal(valor or 0).quantize(Decimal("0.001"))
+    return valor_decimal == valor_decimal.to_integral_value()
+
+
+def _quantidade_valida_para_produto_unidade(produto, unidade, quantidade):
+    quantidade_decimal = _decimal_tres_casas(quantidade)
+    if quantidade_decimal == quantidade_decimal.to_integral_value():
+        return True
+
+    unidade_normalizada = _normalizar_unidade_estoque(unidade)
+    if unidade_normalizada in UNIDADES_MEDIDA_CONTINUA:
+        return True
+    if unidade_normalizada == "DZ":
+        return _quantidade_decimal_corresponde_inteiro(quantidade_decimal * Decimal("12"))
+
+    if produto and _produto_tem_conversao_fracionada_confiavel(produto):
+        unidade_base = _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
+        unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
+        fator = Decimal(produto.fator_conversao or 0)
+        if unidade_fracionada and unidade_normalizada == unidade_fracionada:
+            return True
+        if unidade_normalizada == unidade_base and unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+            return _quantidade_decimal_corresponde_inteiro(quantidade_decimal * fator)
+
+    if unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+        return _quantidade_decimal_corresponde_inteiro(quantidade_decimal * Decimal("2"))
+
+    return False
+
+
+def _validar_quantidade_produto_unidade(produto, quantidade, unidade=None):
+    if _quantidade_valida_para_produto_unidade(produto, unidade, quantidade):
+        return
+    unidade_texto = str(unidade or "").strip()
+    unidade_normalizada = _normalizar_unidade_estoque(unidade)
+    unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
+    if unidade_normalizada not in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+        raise ValueError(
+            f"Produto {produto.nome} nao permite venda fracionada. "
+            f"Informe quantidade inteira{unidade_sufixo}."
+        )
+    raise ValueError(
+        f"Produto {produto.nome} nao permite esta quantidade fracionada. "
+        f"Revise a quantidade{unidade_sufixo}."
+    )
 
 
 def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
@@ -17017,13 +17080,11 @@ def _quantidade_estoque_inteira(quantidade, produto_nome, unidade=None):
         unidade_texto = str(unidade or "").strip()
         unidade_normalizada = unidade_texto.upper()
 
-        fracao_valida = unidade_normalizada in UNIDADES_ESTOQUE_FRACIONAVEIS
-
-        if unidade_normalizada == "DZ":
-            quantidade_unidades = quantidade_decimal * Decimal("12")
-            fracao_valida = (
-                quantidade_unidades == quantidade_unidades.to_integral_value()
-            )
+        fracao_valida = unidade_normalizada in UNIDADES_MEDIDA_CONTINUA
+        if unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+            fracao_valida = _quantidade_decimal_corresponde_inteiro(quantidade_decimal * Decimal("2"))
+        elif unidade_normalizada == "DZ":
+            fracao_valida = _quantidade_decimal_corresponde_inteiro(quantidade_decimal * Decimal("12"))
 
         if not fracao_valida:
             unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
@@ -17047,6 +17108,7 @@ def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None):
     unidade_fracionada = produto.unidade_venda_2 or ""
     unidade_fracionada_norm = _normalizar_unidade_estoque(unidade_fracionada)
     fator = Decimal(produto.fator_conversao or 0)
+    _validar_quantidade_produto_unidade(produto, quantidade_decimal, unidade or unidade_base)
 
     if unidade_recebida and unidade_base_norm and unidade_recebida == unidade_base_norm:
         return quantidade_decimal, unidade_base
@@ -20511,11 +20573,17 @@ def _validar_item_checklist_separacao(item, post_data):
                 None,
                 f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser menor que a solicitada.",
             )
-        if not _item_separacao_permite_quantidade_fracionada(item) and quantidade_separada != quantidade_separada.to_integral_value():
+        if not _quantidade_item_separacao_valida_para_unidade(item, quantidade_separada):
+            if not _item_separacao_permite_quantidade_fracionada(item):
+                return (
+                    status,
+                    None,
+                    f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser informada em numero inteiro.",
+                )
             return (
                 status,
                 None,
-                f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser informada em numero inteiro.",
+                f"A quantidade encontrada de {item.produto_nome_snapshot} e incompativel com a unidade informada.",
             )
         return status, quantidade_separada, ""
 
@@ -20526,14 +20594,28 @@ def _item_separacao_permite_quantidade_fracionada(item):
     unidade = _normalizar_unidade_estoque(getattr(item, "unidade_snapshot", ""))
     item_venda = getattr(item, "item_venda", None)
     produto = getattr(item_venda, "produto", None)
-    if produto:
-        unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
-        if produto.vende_fracionado and unidade_fracionada and unidade == unidade_fracionada:
-            return True
     if unidade == "DZ":
         return True
+    if unidade in UNIDADES_MEDIDA_CONTINUA:
+        return True
+    if produto and _produto_tem_conversao_fracionada_confiavel(produto):
+        unidade_base = _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
+        unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
+        if unidade == unidade_fracionada:
+            return True
+        if unidade == unidade_base and unidade in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+            return True
+    if unidade in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+        return True
 
-    return unidade in UNIDADES_ESTOQUE_FRACIONAVEIS
+    return False
+
+
+def _quantidade_item_separacao_valida_para_unidade(item, quantidade):
+    item_venda = getattr(item, "item_venda", None)
+    produto = getattr(item_venda, "produto", None)
+    unidade = getattr(item, "unidade_snapshot", "") or getattr(item_venda, "unidade", "")
+    return _quantidade_valida_para_produto_unidade(produto, unidade, quantidade)
 
 
 def _passo_quantidade_separacao(item):
