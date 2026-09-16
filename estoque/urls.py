@@ -143,6 +143,11 @@ urlpatterns = [
         name="receber_cliente_desfazer_recebimento",
     ),
     path(
+        "receber-cliente/recebimentos-rota/operacao/<int:operacao_id>/corrigir/",
+        views.receber_cliente_corrigir_recebimento,
+        name="receber_cliente_corrigir_recebimento",
+    ),
+    path(
         "receber-cliente/recebimentos-rota/conferencia/",
         views.conferencia_recebimentos_rota,
         name="conferencia_recebimentos_rota",

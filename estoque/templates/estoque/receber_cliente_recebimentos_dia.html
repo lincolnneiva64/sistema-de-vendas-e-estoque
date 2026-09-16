@@ -173,10 +173,23 @@
       font-size: .82rem;
       font-weight: 800;
     }
+    .rcd-actions {
+      grid-column: 2 / 4;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      padding-top: 10px;
+      border-top: 1px solid #e5eaf1;
+    }
     .rcd-undo-form {
-      margin-top: 8px;
+      margin: 0;
     }
     .rcd-undo-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-height: 32px;
       border: 1px solid #fecaca;
       border-radius: 8px;
@@ -188,9 +201,17 @@
       font-weight: 900;
       cursor: pointer;
       white-space: nowrap;
+      text-decoration: none;
     }
     .rcd-undo-btn:hover,
     .rcd-undo-btn:focus { background: #fee2e2; }
+    .rcd-undo-btn.edit {
+      border-color: #99f6e4;
+      background: #f0fdfa;
+      color: #115e59;
+    }
+    .rcd-undo-btn.edit:hover,
+    .rcd-undo-btn.edit:focus { background: #ccfbf1; }
     .rcd-empty {
       padding: 18px;
       color: var(--rc-muted);
@@ -209,7 +230,12 @@
       }
       .rcd-amount { text-align: left; }
       .rcd-btn { width: 100%; }
+      .rcd-actions {
+        grid-column: 1;
+        justify-content: stretch;
+      }
       .rcd-undo-btn { width: 100%; }
+      .rcd-undo-form { width: 100%; }
     }
     @media (max-width: 460px) {
       .rcd-summary { grid-template-columns: 1fr; }
@@ -284,6 +310,15 @@
                 <span>{{ item.usuario|default:"Usuario nao informado" }}</span>
                 {% if item.rota_snapshot %}<span>Rota: {{ item.rota_snapshot }}</span>{% endif %}
               </div>
+            </div>
+            <div class="rcd-amount">
+              {{ item.valor_recebido_formatado }}
+              {% if item.credito_gerado > 0 %}
+                <span class="rcd-credit">Credito gerado: {{ item.credito_gerado_formatado }}</span>
+              {% endif %}
+            </div>
+            <div class="rcd-actions" aria-label="Acoes do recebimento">
+              <a class="rcd-undo-btn edit" href="{{ item.corrigir_url }}?next={{ request.get_full_path|urlencode }}">Corrigir recebimento</a>
               <form
                 method="post"
                 action="{{ item.desfazer_url }}"
@@ -304,12 +339,6 @@
                   data-forma="{{ item.forma_pagamento }}"
                 >Desfazer recebimento</button>
               </form>
-            </div>
-            <div class="rcd-amount">
-              {{ item.valor_recebido_formatado }}
-              {% if item.credito_gerado > 0 %}
-                <span class="rcd-credit">Credito gerado: {{ item.credito_gerado_formatado }}</span>
-              {% endif %}
             </div>
           </article>
         {% empty %}

@@ -774,10 +774,25 @@ def _valor_total_recebimento_cliente(recebimento):
         return valor_recebimento.quantize(Decimal("0.01"))
 
 
-def _contas_receber_abertas_cliente_qs(cliente_id, hoje, bloquear=False):
+def _contas_receber_abertas_cliente_qs(
+    cliente_id,
+    hoje,
+    bloquear=False,
+    somente_contas_ate_referencia=False,
+    contas_ids_adicionais=None,
+):
     qs = ContaReceber.objects
     if bloquear:
         qs = qs.select_for_update()
+    if somente_contas_ate_referencia:
+        criterio_data = Q(data_emissao__lte=hoje) & (
+            Q(data_vencimento__isnull=True) | Q(data_vencimento__lte=hoje)
+        )
+        contas_ids_adicionais = [conta_id for conta_id in (contas_ids_adicionais or []) if conta_id]
+        if contas_ids_adicionais:
+            qs = qs.filter(criterio_data | Q(id__in=contas_ids_adicionais))
+        else:
+            qs = qs.filter(criterio_data)
     return (
         qs.filter(
             cliente_id=cliente_id,
@@ -2038,8 +2053,237 @@ def _registrar_movimento_recebimento_cliente(cliente, valor_recebido, data_receb
     return movimento
 
 
+def _formas_recebimento_cliente():
+    return (
+        "Dinheiro",
+        "PIX",
+        "Cartao de debito",
+        "Cartao de credito",
+        "Transferencia",
+        "Outro",
+    )
+
+
+def _criar_operacao_recebimento_cliente(
+    cliente,
+    valor_recebido,
+    data_recebimento,
+    forma_pagamento,
+    destino_diferenca="troco",
+    rota_snapshot="",
+    usuario=None,
+    hoje_referencia=None,
+    somente_contas_ate_referencia=False,
+    contas_ids_adicionais=None,
+):
+    hoje_referencia = hoje_referencia or timezone.localdate()
+    valor_recebido = _financeiro_dinheiro(valor_recebido).quantize(Decimal("0.01"))
+    if valor_recebido <= Decimal("0.00"):
+        raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
+
+    with transaction.atomic():
+        contas_atualizadas = list(
+            _contas_receber_abertas_cliente_qs(
+                cliente.id,
+                hoje_referencia,
+                bloquear=True,
+                somente_contas_ate_referencia=somente_contas_ate_referencia,
+                contas_ids_adicionais=contas_ids_adicionais,
+            )
+        )
+        if not contas_atualizadas:
+            raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
+
+        restante = valor_recebido
+        distribuicao = []
+        for conta_atual in contas_atualizadas:
+            if restante <= Decimal("0.00"):
+                break
+            saldo_conta = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+            valor_aplicar = min(restante, saldo_conta).quantize(Decimal("0.01"))
+            if valor_aplicar <= Decimal("0.00"):
+                continue
+            distribuicao.append([conta_atual, valor_aplicar, Decimal("0.00")])
+            restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
+
+        if not distribuicao:
+            raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
+
+        sobra = max(restante, Decimal("0.00")).quantize(Decimal("0.01"))
+        if sobra > Decimal("0.00"):
+            distribuicao[-1][2] = sobra
+
+        valor_aplicado_total = Decimal("0.00")
+        credito_gerado_total = Decimal("0.00")
+        contas_afetadas = 0
+        contas_atualizadas_ids = []
+        contas_atualizadas_feedback = {}
+        contas_confirmacao_whatsapp = []
+        saldo_anterior_operacao = sum(
+            (
+                (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                for conta_atual in contas_atualizadas
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        valor_aplicado_operacao = sum(
+            (valor_aplicar for _, valor_aplicar, _ in distribuicao),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        saldo_atual_operacao = max(
+            (saldo_anterior_operacao - valor_aplicado_operacao).quantize(Decimal("0.01")),
+            Decimal("0.00"),
+        )
+        operacao_recebimento = OperacaoRecebimentoCliente.objects.create(
+            cliente=cliente,
+            cliente_nome_snapshot=cliente.nome,
+            valor_recebido=valor_recebido,
+            valor_aplicado=valor_aplicado_operacao,
+            credito_gerado=Decimal("0.00"),
+            saldo_anterior=saldo_anterior_operacao,
+            saldo_atual=saldo_atual_operacao,
+            data_recebimento=data_recebimento,
+            forma_pagamento=forma_pagamento,
+            rota_snapshot=rota_snapshot,
+            criado_por=usuario if getattr(usuario, "is_authenticated", False) else None,
+        )
+        for conta_atual, valor_aplicar, sobra_conta in distribuicao:
+            valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
+            observacao = (
+                "Recebimento geral do cliente. "
+                f"Total recebido: {_formatar_moeda(valor_recebido)}. "
+                f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
+            )
+            resultado_recebimento = _aplicar_recebimento_conta(
+                conta_atual,
+                data_recebimento,
+                valor_entregue_conta,
+                forma_pagamento,
+                observacao,
+                destino_diferenca,
+                operacao=operacao_recebimento,
+            )
+            valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
+            credito_gerado_total = (
+                credito_gerado_total + resultado_recebimento["credito_gerado"]
+            ).quantize(Decimal("0.01"))
+            contas_afetadas += 1
+            contas_atualizadas_ids.append(conta_atual.id)
+            contas_atualizadas_feedback[str(conta_atual.id)] = {
+                "valor_aplicado": _formatar_moeda(valor_aplicar),
+                "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
+                "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+            }
+            contas_confirmacao_whatsapp.append({
+                "conta_id": conta_atual.id,
+                "venda_id": conta_atual.venda_id,
+                "data_nota": conta_atual.data_emissao.strftime("%d/%m/%Y") if conta_atual.data_emissao else "",
+                "saldo_antes": (valor_aplicar + resultado_recebimento["saldo_restante"]).quantize(Decimal("0.01")),
+                "nota_inteira_antes": abs(
+                    (
+                        (valor_aplicar + resultado_recebimento["saldo_restante"])
+                        - (conta_atual.valor_original or Decimal("0.00"))
+                    ).quantize(Decimal("0.01"))
+                ) <= Decimal("0.01"),
+                "valor_aplicado": valor_aplicar,
+                "saldo_restante": resultado_recebimento["saldo_restante"],
+                "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
+            })
+
+        _registrar_movimento_recebimento_cliente(
+            cliente,
+            valor_recebido,
+            data_recebimento,
+            forma_pagamento,
+            operacao=operacao_recebimento,
+        )
+        if credito_gerado_total != operacao_recebimento.credito_gerado:
+            operacao_recebimento.credito_gerado = credito_gerado_total
+            operacao_recebimento.save(update_fields=["credito_gerado", "atualizado_em"])
+
+        saldo_atual_confirmacao = max(
+            (saldo_anterior_operacao - valor_aplicado_total).quantize(Decimal("0.01")),
+            Decimal("0.00"),
+        )
+        prazo_cliente = cliente.prazo_padrao_dias or 0
+        contas_abertas_confirmacao = []
+        contas_abertas_atuais = (
+            ContaReceber.objects.filter(
+                cliente_id=cliente.id,
+                status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
+                valor_em_aberto__gt=Decimal("0.00"),
+            )
+            .only("id", "venda_id", "data_emissao", "valor_original", "valor_em_aberto")
+            .order_by("data_emissao", "id")
+        )
+        for conta_aberta in contas_abertas_atuais:
+            data_nota = conta_aberta.data_emissao
+            dias_aberto = max((hoje_referencia - data_nota).days, 0) if data_nota else 0
+            contas_abertas_confirmacao.append({
+                "conta_id": conta_aberta.id,
+                "venda_id": conta_aberta.venda_id,
+                "data_nota": data_nota.strftime("%d/%m/%Y") if data_nota else "",
+                "saldo_atual": (conta_aberta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01")),
+                "dias_aberto": dias_aberto,
+                "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
+            })
+        dados_confirmacao_whatsapp = {
+            "cliente_nome": cliente.nome,
+            "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
+            "saldo_anterior": saldo_anterior_operacao,
+            "valor_pago": valor_recebido,
+            "forma_pagamento": forma_pagamento,
+            "contas": contas_confirmacao_whatsapp,
+            "contas_abertas": contas_abertas_confirmacao,
+            "saldo_atual": saldo_atual_confirmacao,
+            "credito_gerado": credito_gerado_total,
+        }
+        comprovante_dados = _serializar_dados_comprovante_recebimento(
+            cliente,
+            dados_confirmacao_whatsapp,
+        )
+        dados_operacao_existentes = dict(operacao_recebimento.comprovante_dados or {})
+        movimento_financeiro_id = dados_operacao_existentes.get("movimento_financeiro_id")
+        comprovante_dados["operacao_id"] = operacao_recebimento.id
+        if movimento_financeiro_id:
+            comprovante_dados["movimento_financeiro_id"] = movimento_financeiro_id
+        operacao_recebimento.comprovante_dados = comprovante_dados
+        operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
+
+        return {
+            "operacao": operacao_recebimento,
+            "valor_aplicado_total": valor_aplicado_total,
+            "credito_gerado_total": credito_gerado_total,
+            "contas_afetadas": contas_afetadas,
+            "contas_atualizadas_ids": contas_atualizadas_ids,
+            "contas_atualizadas_feedback": contas_atualizadas_feedback,
+            "dados_confirmacao_whatsapp": dados_confirmacao_whatsapp,
+            "comprovante_dados": comprovante_dados,
+            "saldo_anterior": saldo_anterior_operacao,
+            "saldo_atual": saldo_atual_confirmacao,
+        }
+
+
 def _operacao_recebimento_desfeita(operacao):
     return bool((getattr(operacao, "comprovante_dados", None) or {}).get("desfeito"))
+
+
+def _destino_diferenca_operacao_recebimento(operacao):
+    if (operacao.credito_gerado or Decimal("0.00")).quantize(Decimal("0.01")) > Decimal("0.00"):
+        return "credito"
+
+    recebimentos = getattr(operacao, "_recebimentos_para_destino_diferenca", None)
+    if recebimentos is None:
+        recebimentos = list(
+            RecebimentoContaReceber.objects.filter(operacao=operacao).only("observacao")
+        )
+    for recebimento in recebimentos:
+        observacao = recebimento.observacao or ""
+        if "Credito gerado para o cliente:" in observacao:
+            return "credito"
+        if "Troco devolvido:" in observacao:
+            return "troco"
+    return ""
 
 
 def _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir=None):
@@ -14095,14 +14339,7 @@ def receber_cliente_escolher(request):
         .order_by("cliente__nome")
     )
 
-    formas_pagamento = (
-        "Dinheiro",
-        "PIX",
-        "Cartao de debito",
-        "Cartao de credito",
-        "Transferencia",
-        "Outro",
-    )
+    formas_pagamento = _formas_recebimento_cliente()
     valores = {
         "data_recebimento": hoje.isoformat(),
         "valor": "",
@@ -14364,110 +14601,26 @@ def receber_cliente(request, cliente_id):
                     else:
                         if excedente_confirmacao > Decimal("0.00"):
                             valores["destino_diferenca"] = "credito"
-                        operacao_recebimento = None
                         try:
                             with transaction.atomic():
-                                contas_atualizadas = list(
-                                    _contas_receber_abertas_cliente_qs(cliente.id, hoje, bloquear=True)
-                                )
-                                if not contas_atualizadas:
-                                    raise RecebimentoContaErro("Nao ha contas abertas para receber deste cliente.")
-
-                                restante = valor_recebido
-                                distribuicao = []
-                                for conta_atual in contas_atualizadas:
-                                    if restante <= Decimal("0.00"):
-                                        break
-                                    saldo_conta = (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                                    valor_aplicar = min(restante, saldo_conta).quantize(Decimal("0.01"))
-                                    if valor_aplicar <= Decimal("0.00"):
-                                        continue
-                                    distribuicao.append([conta_atual, valor_aplicar, Decimal("0.00")])
-                                    restante = (restante - valor_aplicar).quantize(Decimal("0.01"))
-
-                                if not distribuicao:
-                                    raise RecebimentoContaErro("Informe um valor recebido maior que zero.")
-
-                                sobra = max(restante, Decimal("0.00")).quantize(Decimal("0.01"))
-                                if sobra > Decimal("0.00"):
-                                    distribuicao[-1][2] = sobra
-
-                                valor_aplicado_total = Decimal("0.00")
-                                credito_gerado_total = Decimal("0.00")
-                                contas_afetadas = 0
-                                contas_atualizadas_ids = []
-                                contas_atualizadas_feedback = {}
-                                contas_confirmacao_whatsapp = []
-                                saldo_anterior_operacao = sum(
-                                    (
-                                        (conta_atual.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                                        for conta_atual in contas_atualizadas
-                                    ),
-                                    Decimal("0.00"),
-                                ).quantize(Decimal("0.01"))
-                                valor_aplicado_operacao = sum(
-                                    (valor_aplicar for _, valor_aplicar, _ in distribuicao),
-                                    Decimal("0.00"),
-                                ).quantize(Decimal("0.01"))
-                                saldo_atual_operacao = max(
-                                    (saldo_anterior_operacao - valor_aplicado_operacao).quantize(Decimal("0.01")),
-                                    Decimal("0.00"),
-                                )
-                                operacao_recebimento = OperacaoRecebimentoCliente.objects.create(
-                                    cliente=cliente,
-                                    cliente_nome_snapshot=cliente.nome,
-                                    valor_recebido=valor_recebido,
-                                    valor_aplicado=valor_aplicado_operacao,
-                                    credito_gerado=Decimal("0.00"),
-                                    saldo_anterior=saldo_anterior_operacao,
-                                    saldo_atual=saldo_atual_operacao,
-                                    data_recebimento=data_recebimento,
-                                    forma_pagamento=valores["forma_pagamento"],
+                                resultado_operacao = _criar_operacao_recebimento_cliente(
+                                    cliente,
+                                    valor_recebido,
+                                    data_recebimento,
+                                    valores["forma_pagamento"],
+                                    destino_diferenca=valores["destino_diferenca"],
                                     rota_snapshot=rota_filtro,
-                                    criado_por=request.user if request.user.is_authenticated else None,
+                                    usuario=request.user,
+                                    hoje_referencia=hoje,
                                 )
-                                for conta_atual, valor_aplicar, sobra_conta in distribuicao:
-                                    valor_entregue_conta = (valor_aplicar + sobra_conta).quantize(Decimal("0.01"))
-                                    observacao = (
-                                        "Recebimento geral do cliente. "
-                                        f"Total recebido: {_formatar_moeda(valor_recebido)}. "
-                                        f"Aplicado nesta conta: {_formatar_moeda(valor_aplicar)}."
-                                    )
-                                    resultado_recebimento = _aplicar_recebimento_conta(
-                                        conta_atual,
-                                        data_recebimento,
-                                        valor_entregue_conta,
-                                        valores["forma_pagamento"],
-                                        observacao,
-                                        valores["destino_diferenca"],
-                                        operacao=operacao_recebimento,
-                                    )
-                                    valor_aplicado_total = (valor_aplicado_total + valor_aplicar).quantize(Decimal("0.01"))
-                                    credito_gerado_total = (
-                                        credito_gerado_total + resultado_recebimento["credito_gerado"]
-                                    ).quantize(Decimal("0.01"))
-                                    contas_afetadas += 1
-                                    contas_atualizadas_ids.append(conta_atual.id)
-                                    contas_atualizadas_feedback[str(conta_atual.id)] = {
-                                        "valor_aplicado": _formatar_moeda(valor_aplicar),
-                                        "saldo_restante": _formatar_moeda(resultado_recebimento["saldo_restante"]),
-                                        "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
-                                    }
-                                    contas_confirmacao_whatsapp.append({
-                                        "conta_id": conta_atual.id,
-                                        "venda_id": conta_atual.venda_id,
-                                        "data_nota": conta_atual.data_emissao.strftime("%d/%m/%Y") if conta_atual.data_emissao else "",
-                                        "saldo_antes": (valor_aplicar + resultado_recebimento["saldo_restante"]).quantize(Decimal("0.01")),
-                                        "nota_inteira_antes": abs(
-                                            (
-                                                (valor_aplicar + resultado_recebimento["saldo_restante"])
-                                                - (conta_atual.valor_original or Decimal("0.00"))
-                                            ).quantize(Decimal("0.01"))
-                                        ) <= Decimal("0.01"),
-                                        "valor_aplicado": valor_aplicar,
-                                        "saldo_restante": resultado_recebimento["saldo_restante"],
-                                        "quitada": resultado_recebimento["saldo_restante"] <= Decimal("0.00"),
-                                    })
+                                operacao_recebimento = resultado_operacao["operacao"]
+                                valor_aplicado_total = resultado_operacao["valor_aplicado_total"]
+                                credito_gerado_total = resultado_operacao["credito_gerado_total"]
+                                contas_afetadas = resultado_operacao["contas_afetadas"]
+                                contas_atualizadas_ids = resultado_operacao["contas_atualizadas_ids"]
+                                contas_atualizadas_feedback = resultado_operacao["contas_atualizadas_feedback"]
+                                dados_confirmacao_whatsapp = resultado_operacao["dados_confirmacao_whatsapp"]
+                                comprovante_dados = resultado_operacao["comprovante_dados"]
                                 pix_baixado = None
                                 duplicados_marcados = 0
                                 if pix_recebido_id:
@@ -14476,16 +14629,6 @@ def receber_cliente(request, cliente_id):
                                         contas_atualizadas_ids,
                                         valor_recebido,
                                     )
-                                _registrar_movimento_recebimento_cliente(
-                                    cliente,
-                                    valor_recebido,
-                                    data_recebimento,
-                                    valores["forma_pagamento"],
-                                    operacao=operacao_recebimento,
-                                )
-                                if credito_gerado_total != operacao_recebimento.credito_gerado:
-                                    operacao_recebimento.credito_gerado = credito_gerado_total
-                                    operacao_recebimento.save(update_fields=["credito_gerado", "atualizado_em"])
                         except RecebimentoContaErro as exc:
                             messages.warning(request, str(exc))
                         else:
@@ -14494,56 +14637,8 @@ def receber_cliente(request, cliente_id):
                                     request,
                                     f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
                                 )
-                            saldo_atual_confirmacao = max(
-                                (total_em_aberto - valor_aplicado_total).quantize(Decimal("0.01")),
-                                Decimal("0.00"),
-                            )
-                            prazo_cliente = cliente.prazo_padrao_dias or 0
-                            contas_abertas_confirmacao = []
-                            contas_abertas_atuais = (
-                                ContaReceber.objects.filter(
-                                    cliente_id=cliente.id,
-                                    status__in=[ContaReceber.STATUS_ABERTA, ContaReceber.STATUS_PARCIAL],
-                                    valor_em_aberto__gt=Decimal("0.00"),
-                                )
-                                .only("id", "venda_id", "data_emissao", "valor_original", "valor_em_aberto")
-                                .order_by("data_emissao", "id")
-                            )
-                            for conta_aberta in contas_abertas_atuais:
-                                data_nota = conta_aberta.data_emissao
-                                dias_aberto = max((hoje - data_nota).days, 0) if data_nota else 0
-                                contas_abertas_confirmacao.append({
-                                    "conta_id": conta_aberta.id,
-                                    "venda_id": conta_aberta.venda_id,
-                                    "data_nota": data_nota.strftime("%d/%m/%Y") if data_nota else "",
-                                    "saldo_atual": (conta_aberta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01")),
-                                    "dias_aberto": dias_aberto,
-                                    "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
-                                })
-                            dados_confirmacao_whatsapp = {
-                                "cliente_nome": cliente.nome,
-                                "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
-                                "saldo_anterior": total_em_aberto,
-                                "valor_pago": valor_recebido,
-                                "forma_pagamento": valores["forma_pagamento"],
-                                "contas": contas_confirmacao_whatsapp,
-                                "contas_abertas": contas_abertas_confirmacao,
-                                "saldo_atual": saldo_atual_confirmacao,
-                                "credito_gerado": credito_gerado_total,
-                            }
+                            saldo_atual_confirmacao = resultado_operacao["saldo_atual"]
                             comprovante_token = uuid4().hex
-                            comprovante_dados = _serializar_dados_comprovante_recebimento(
-                                cliente,
-                                dados_confirmacao_whatsapp,
-                            )
-                            if operacao_recebimento:
-                                dados_operacao_existentes = dict(operacao_recebimento.comprovante_dados or {})
-                                movimento_financeiro_id = dados_operacao_existentes.get("movimento_financeiro_id")
-                                comprovante_dados["operacao_id"] = operacao_recebimento.id
-                                if movimento_financeiro_id:
-                                    comprovante_dados["movimento_financeiro_id"] = movimento_financeiro_id
-                                operacao_recebimento.comprovante_dados = comprovante_dados
-                                operacao_recebimento.save(update_fields=["comprovante_dados", "atualizado_em"])
                             comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
                             comprovantes_sessao[comprovante_token] = comprovante_dados
                             if len(comprovantes_sessao) > 8:
@@ -14672,6 +14767,55 @@ def _dados_comprovante_operacao_recebimento(operacao):
     dados.setdefault("contas", [])
     dados.setdefault("contas_abertas", [])
     return dados
+
+
+def _resumo_financeiro_correcao_recebimento(operacao, valor_correto=None, destino_diferenca=""):
+    dados = _dados_comprovante_operacao_recebimento(operacao)
+    saldo_anterior = _decimal_comprovante(dados.get("saldo_anterior") or operacao.saldo_anterior)
+    valor_original = _decimal_comprovante(dados.get("valor_pago") or operacao.valor_recebido)
+    saldo_apos_original = _decimal_comprovante(dados.get("saldo_atual") or operacao.saldo_atual)
+    valor_correto = _decimal_comprovante(valor_correto if valor_correto is not None else valor_original)
+    valor_aplicado_previsto = min(valor_correto, saldo_anterior).quantize(Decimal("0.01"))
+    saldo_apos_correcao = max(
+        (saldo_anterior - valor_aplicado_previsto).quantize(Decimal("0.01")),
+        Decimal("0.00"),
+    )
+    excedente = max((valor_correto - saldo_anterior).quantize(Decimal("0.01")), Decimal("0.00"))
+    destino = destino_diferenca if destino_diferenca in {"troco", "credito"} else _destino_diferenca_operacao_recebimento(operacao)
+
+    contas = []
+    for conta in dados.get("contas") or []:
+        saldo_antes = _decimal_comprovante(conta.get("saldo_antes"))
+        valor_aplicado = _decimal_comprovante(conta.get("valor_aplicado"))
+        saldo_restante = _decimal_comprovante(conta.get("saldo_restante"))
+        contas.append({
+            "conta_id": conta.get("conta_id") or conta.get("id") or "",
+            "venda_id": conta.get("venda_id") or "",
+            "saldo_antes_formatado": _formatar_moeda(saldo_antes),
+            "valor_aplicado_formatado": _formatar_moeda(valor_aplicado),
+            "saldo_restante_formatado": _formatar_moeda(saldo_restante),
+        })
+
+    return {
+        "saldo_anterior": saldo_anterior,
+        "valor_original": valor_original,
+        "saldo_apos_original": saldo_apos_original,
+        "valor_correto": valor_correto,
+        "valor_aplicado_previsto": valor_aplicado_previsto,
+        "saldo_apos_correcao": saldo_apos_correcao,
+        "excedente": excedente,
+        "destino_diferenca": destino,
+        "saldo_anterior_formatado": _formatar_moeda(saldo_anterior),
+        "valor_original_formatado": _formatar_moeda(valor_original),
+        "saldo_apos_original_formatado": _formatar_moeda(saldo_apos_original),
+        "valor_correto_formatado": _formatar_moeda(valor_correto),
+        "valor_aplicado_previsto_formatado": _formatar_moeda(valor_aplicado_previsto),
+        "saldo_apos_correcao_formatado": _formatar_moeda(saldo_apos_correcao),
+        "excedente_formatado": _formatar_moeda(excedente),
+        "saldo_anterior_centavos": int((saldo_anterior * 100).quantize(Decimal("1"))),
+        "contas": contas,
+        "tem_multiplas_contas": len(contas) > 1,
+    }
 
 
 @ensure_csrf_cookie
@@ -15122,15 +15266,23 @@ def _movimento_recebimento_cliente_correspondente(operacao):
     return None
 
 def _rota_bloqueada_para_desfazer_recebimento(operacao):
-    rota = (operacao.rota_snapshot or "").strip()
-    if not rota and operacao.cliente:
-        rota = (operacao.cliente.bairro or "").strip()
+    return _rota_bloqueada_para_recebimento(
+        operacao.cliente,
+        operacao.rota_snapshot,
+        operacao.data_recebimento,
+    )
+
+
+def _rota_bloqueada_para_recebimento(cliente, rota_snapshot, data_recebimento):
+    rota = (rota_snapshot or "").strip()
+    if not rota and cliente:
+        rota = (cliente.bairro or "").strip()
     if not rota:
         return None
     aliases = _aliases_rota_cliente(rota) or [rota]
     return (
         FechamentoRotaRecebimento.objects
-        .filter(rota__in=aliases, data_referencia=operacao.data_recebimento)
+        .filter(rota__in=aliases, data_referencia=data_recebimento)
         .first()
     )
 
@@ -15346,6 +15498,10 @@ def _item_historico_recebimento_operacao(item, operacao_atual_id=None):
         "atual": item.pk == operacao_atual_id,
         "desfazer_url": reverse(
             "estoque:receber_cliente_desfazer_recebimento",
+            kwargs={"operacao_id": item.id},
+        ),
+        "corrigir_url": reverse(
+            "estoque:receber_cliente_corrigir_recebimento",
             kwargs={"operacao_id": item.id},
         ),
     }
@@ -15757,6 +15913,206 @@ def receber_cliente_desfazer_recebimento(request, operacao_id):
         )
 
     return redirect(retorno_url)
+
+
+@ensure_csrf_cookie
+def receber_cliente_corrigir_recebimento(request, operacao_id):
+    retorno_url = _url_next_segura_request(request) or reverse("estoque:receber_cliente_escolher")
+    operacao = get_object_or_404(
+        OperacaoRecebimentoCliente.objects.select_related("cliente"),
+        pk=operacao_id,
+    )
+    if not operacao.cliente_id:
+        messages.warning(request, "Recebimento sem cliente vinculado nao pode ser corrigido por este fluxo.")
+        return redirect(retorno_url)
+
+    formas_pagamento = _formas_recebimento_cliente()
+    valores = {
+        "valor": str((operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01"))).replace(".", ","),
+        "data_recebimento": operacao.data_recebimento.isoformat() if operacao.data_recebimento else "",
+        "forma_pagamento": operacao.forma_pagamento,
+        "destino_diferenca": "",
+        "motivo": "",
+    }
+    valor_correto_previa = operacao.valor_recebido or Decimal("0.00")
+
+    if request.method == "POST":
+        valores = {
+            "valor": request.POST.get("valor", "").strip(),
+            "data_recebimento": request.POST.get("data_recebimento", "").strip(),
+            "forma_pagamento": request.POST.get("forma_pagamento", "").strip(),
+            "destino_diferenca": request.POST.get("destino_diferenca", "").strip(),
+            "motivo": request.POST.get("motivo", "").strip(),
+        }
+        data_correta = parse_date(valores["data_recebimento"])
+        if not valores["motivo"]:
+            messages.warning(request, "Informe o motivo da correcao.")
+        elif not data_correta:
+            messages.warning(request, "Informe uma data de recebimento valida.")
+        elif valores["forma_pagamento"] not in formas_pagamento:
+            messages.warning(request, "Selecione uma forma de pagamento.")
+        else:
+            try:
+                valor_correto = _decimal_do_front(valores["valor"] or "0", "0.01")
+            except ValueError as exc:
+                messages.warning(request, str(exc))
+            else:
+                valor_correto_previa = valor_correto
+                if valor_correto <= Decimal("0.00"):
+                    messages.warning(request, "Informe um valor correto maior que zero.")
+                else:
+                    try:
+                        with transaction.atomic():
+                            operacao_original = (
+                                OperacaoRecebimentoCliente.objects
+                                .select_for_update()
+                                .get(pk=operacao_id)
+                            )
+                            if _operacao_recebimento_desfeita(operacao_original):
+                                raise DesfazerRecebimentoErro("Este recebimento ja foi desfeito.")
+
+                            recebimentos_originais = list(
+                                RecebimentoContaReceber.objects
+                                .select_for_update()
+                                .filter(operacao=operacao_original)
+                                .only("observacao", "conta_id")
+                            )
+                            operacao_original._recebimentos_para_destino_diferenca = recebimentos_originais
+                            destino_original = _destino_diferenca_operacao_recebimento(operacao_original)
+                            contas_originais_ids = [
+                                recebimento.conta_id
+                                for recebimento in recebimentos_originais
+                                if recebimento.conta_id
+                            ]
+
+                            fechamento_destino = _rota_bloqueada_para_recebimento(
+                                operacao_original.cliente,
+                                operacao_original.rota_snapshot,
+                                data_correta,
+                            )
+                            if fechamento_destino:
+                                raise DesfazerRecebimentoErro(
+                                    "A rota/data correta ja foi conferida. Reabra a conferencia antes de corrigir recebimentos."
+                                )
+
+                            original_resumo = {
+                                "operacao_id": operacao_original.id,
+                                "valor_recebido": str(operacao_original.valor_recebido),
+                                "valor_aplicado": str(operacao_original.valor_aplicado),
+                                "credito_gerado": str(operacao_original.credito_gerado),
+                                "saldo_anterior": str(operacao_original.saldo_anterior),
+                                "saldo_atual": str(operacao_original.saldo_atual),
+                                "data_recebimento": (
+                                    operacao_original.data_recebimento.isoformat()
+                                    if operacao_original.data_recebimento
+                                    else ""
+                                ),
+                                "forma_pagamento": operacao_original.forma_pagamento,
+                                "rota_snapshot": operacao_original.rota_snapshot,
+                                "destino_diferenca": destino_original,
+                            }
+                            _desfazer_operacao_recebimento_cliente(
+                                operacao_original.id,
+                                request.user if getattr(request.user, "is_authenticated", False) else None,
+                            )
+                            operacao_original.refresh_from_db()
+                            contas_referencia = list(
+                                _contas_receber_abertas_cliente_qs(
+                                    operacao_original.cliente_id,
+                                    data_correta,
+                                    bloquear=True,
+                                    somente_contas_ate_referencia=True,
+                                    contas_ids_adicionais=contas_originais_ids,
+                                )
+                            )
+                            saldo_referencia = sum(
+                                (
+                                    (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                    for conta in contas_referencia
+                                ),
+                                Decimal("0.00"),
+                            ).quantize(Decimal("0.01"))
+                            excedente_referencia = (valor_correto - saldo_referencia).quantize(Decimal("0.01"))
+                            destino_diferenca = destino_original or "troco"
+                            if excedente_referencia > Decimal("0.00"):
+                                if destino_original:
+                                    destino_diferenca = destino_original
+                                elif valores["destino_diferenca"] in {"troco", "credito"}:
+                                    destino_diferenca = valores["destino_diferenca"]
+                                else:
+                                    raise RecebimentoContaErro(
+                                        "O valor correto fica maior que o saldo aberto na data corrigida. "
+                                        "Escolha explicitamente se a diferenca foi troco devolvido ou credito para o cliente."
+                                    )
+                            resultado_novo = _criar_operacao_recebimento_cliente(
+                                operacao_original.cliente,
+                                valor_correto,
+                                data_correta,
+                                valores["forma_pagamento"],
+                                destino_diferenca=destino_diferenca,
+                                rota_snapshot=operacao_original.rota_snapshot,
+                                usuario=request.user,
+                                hoje_referencia=data_correta,
+                                somente_contas_ate_referencia=True,
+                                contas_ids_adicionais=contas_originais_ids,
+                            )
+                            operacao_nova = resultado_novo["operacao"]
+
+                            dados_original = dict(operacao_original.comprovante_dados or {})
+                            dados_original["corrigida"] = True
+                            dados_original["corrigida_por_operacao_id"] = operacao_nova.id
+                            dados_original["motivo_correcao"] = valores["motivo"]
+                            dados_original["correcao_valores"] = {
+                                "valor_correto": str(valor_correto),
+                                "data_correta": data_correta.isoformat(),
+                                "forma_pagamento_correta": valores["forma_pagamento"],
+                            }
+                            operacao_original.comprovante_dados = dados_original
+                            operacao_original.motivo_dispensa = (
+                                f"Recebimento corrigido. Motivo: {valores['motivo']}"
+                            )
+                            operacao_original.save(update_fields=[
+                                "comprovante_dados",
+                                "motivo_dispensa",
+                                "atualizado_em",
+                            ])
+
+                            dados_novo = dict(operacao_nova.comprovante_dados or {})
+                            dados_novo["correcao_de_operacao_id"] = operacao_original.id
+                            dados_novo["motivo_correcao"] = valores["motivo"]
+                            dados_novo["operacao_original"] = original_resumo
+                            operacao_nova.comprovante_dados = dados_novo
+                            operacao_nova.save(update_fields=["comprovante_dados", "atualizado_em"])
+                    except (DesfazerRecebimentoErro, RecebimentoContaErro) as exc:
+                        messages.warning(request, str(exc))
+                    else:
+                        messages.success(
+                            request,
+                            (
+                                f"Recebimento #{operacao_id} corrigido. "
+                                f"Novo recebimento #{operacao_nova.id} registrado."
+                            ),
+                        )
+                        return redirect(retorno_url)
+
+    resumo_correcao = _resumo_financeiro_correcao_recebimento(
+        operacao,
+        valor_correto=valor_correto_previa,
+        destino_diferenca=valores.get("destino_diferenca", ""),
+    )
+
+    return render(
+        request,
+        "estoque/receber_cliente_corrigir_recebimento.html",
+        {
+            "operacao": operacao,
+            "cliente": operacao.cliente,
+            "valores": valores,
+            "resumo_correcao": resumo_correcao,
+            "formas_pagamento": formas_pagamento,
+            "retorno_url": retorno_url,
+        },
+    )
 
 
 @ensure_csrf_cookie

@@ -318,6 +318,17 @@
       font-weight: 700;
     }
 
+    .rcr-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #e5eaf1;
+    }
+
     .rcr-value-line {
       min-width: 190px;
     }
@@ -357,11 +368,13 @@
     }
 
     .rcr-undo-form {
-      margin-top: 10px;
-      padding-left: 84px;
+      margin: 0;
     }
 
     .rcr-undo-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       min-height: 34px;
       border: 1px solid #fecaca;
       border-radius: 8px;
@@ -372,11 +385,24 @@
       font-size: .85rem;
       font-weight: 900;
       cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
     }
 
     .rcr-undo-btn:hover,
     .rcr-undo-btn:focus {
       background: #fee2e2;
+    }
+
+    .rcr-undo-btn.edit {
+      border-color: #99f6e4;
+      background: #f0fdfa;
+      color: #115e59;
+    }
+
+    .rcr-undo-btn.edit:hover,
+    .rcr-undo-btn.edit:focus {
+      background: #ccfbf1;
     }
 
     @media (max-width: 720px) {
@@ -416,10 +442,13 @@
       .rcr-row-credit {
         padding-left: 72px;
       }
-      .rcr-undo-form {
-        padding-left: 72px;
+      .rcr-actions {
+        justify-content: stretch;
       }
       .rcr-undo-btn {
+        width: 100%;
+      }
+      .rcr-undo-form {
         width: 100%;
       }
     }
@@ -570,12 +599,20 @@
                 {% else %}
                   <span>Recibo {{ item.status_recibo|lower }}</span>
                 {% endif %}
+                <span>&middot;</span>
+                <span>{{ item.usuario|default:"Usuario nao informado" }}</span>
+                {% if item.rota_snapshot %}
+                  <span>&middot;</span>
+                  <span>Rota: {{ item.rota_snapshot }}</span>
+                {% endif %}
               </div>
               {% if item.credito_gerado > 0 %}
                 <div class="rcr-row-credit">
                   <span class="rcr-value-line rcr-highlight credito">Crédito gerado: {{ item.credito_gerado_formatado }}</span>
                 </div>
               {% endif %}
+              <div class="rcr-actions" aria-label="Acoes do recebimento">
+              <a class="rcr-undo-btn edit" href="{{ item.corrigir_url }}?next={{ request.get_full_path|urlencode }}">Corrigir recebimento</a>
               <form
                 method="post"
                 action="{{ item.desfazer_url }}"
@@ -596,6 +633,7 @@
                   data-forma="{{ item.forma_pagamento }}"
                 >Desfazer recebimento</button>
               </form>
+              </div>
             </article>
           {% endfor %}
         </section>

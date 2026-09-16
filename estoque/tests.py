@@ -20511,6 +20511,7 @@ class PixRecebidoTests(TestCase):
         follow=False,
         confirmar_credito="",
         forma_pagamento="PIX",
+        data_recebimento=None,
     ):
         url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id})
         parametros = {}
@@ -20523,7 +20524,7 @@ class PixRecebidoTests(TestCase):
         return self.client.post(
             url,
             {
-                "data_recebimento": timezone.localdate().isoformat(),
+                "data_recebimento": (data_recebimento or timezone.localdate()).isoformat(),
                 "valor": valor,
                 "forma_pagamento": forma_pagamento,
                 "destino_diferenca": destino_diferenca,
@@ -20609,6 +20610,12 @@ class PixRecebidoTests(TestCase):
             kwargs={"operacao_id": operacao.id},
         )
 
+    def _url_corrigir_recebimento(self, operacao):
+        return reverse(
+            "estoque:receber_cliente_corrigir_recebimento",
+            kwargs={"operacao_id": operacao.id},
+        )
+
     def _criar_recebimento_historico_cliente(
         self,
         cliente,
@@ -20637,6 +20644,34 @@ class PixRecebidoTests(TestCase):
             {"confirmacao_desfazer": "DESFAZER", "next": next_url},
             secure=True,
             follow=True,
+        )
+
+    def _post_corrigir_recebimento(
+        self,
+        operacao,
+        valor,
+        data_recebimento=None,
+        forma_pagamento="Dinheiro",
+        motivo="Lancamento incorreto.",
+        next_url=None,
+        follow=True,
+        destino_diferenca="",
+    ):
+        next_url = next_url or reverse("estoque:receber_cliente_escolher")
+        dados = {
+            "valor": valor,
+            "data_recebimento": (data_recebimento or operacao.data_recebimento).isoformat(),
+            "forma_pagamento": forma_pagamento,
+            "motivo": motivo,
+            "next": next_url,
+        }
+        if destino_diferenca:
+            dados["destino_diferenca"] = destino_diferenca
+        return self.client.post(
+            self._url_corrigir_recebimento(operacao),
+            dados,
+            secure=True,
+            follow=follow,
         )
 
     def _criar_recebimento_legado_para_desfazer(
@@ -23602,6 +23637,343 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, f'action="{self._url_desfazer_recebimento(operacao)}"')
         self.assertContains(resposta, f'data-operacao-id="{operacao.id}"')
         self.assertContains(resposta, 'name="confirmacao_desfazer" value="DESFAZER"')
+
+    def test_recebimentos_rota_mostra_botao_corrigir_com_id_da_operacao(self):
+        cliente = Cliente.objects.create(nome="Cliente Botao Corrige", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "55.00")
+        self._post_receber_cliente(cliente, "55,00", rota="Jardim")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertContains(resposta, "Corrigir recebimento")
+        self.assertContains(resposta, self._url_corrigir_recebimento(operacao))
+
+    def test_corrigir_recebimento_de_528_para_3025_restaura_reaplica_e_audita(self):
+        data_recebimento = date(2026, 9, 13)
+        cliente = Cliente.objects.create(nome="Ivanildo Patricio Jr", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "528.35")
+        self._post_receber_cliente(
+            cliente,
+            "528,35",
+            rota="Jardim",
+            forma_pagamento="Dinheiro",
+            data_recebimento=data_recebimento,
+        )
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self._post_corrigir_recebimento(
+            operacao_original,
+            "30,25",
+            data_recebimento=data_recebimento,
+            forma_pagamento="Dinheiro",
+            motivo="Valor lancado incorretamente.",
+        )
+
+        self.assertContains(resposta, "corrigido")
+        operacao_original.refresh_from_db()
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_original.pk).get()
+        conta.refresh_from_db()
+        self.assertTrue(operacao_original.comprovante_dados["desfeito"])
+        self.assertTrue(operacao_original.comprovante_dados["corrigida"])
+        self.assertEqual(operacao_original.comprovante_dados["corrigida_por_operacao_id"], operacao_nova.id)
+        self.assertEqual(operacao_nova.comprovante_dados["correcao_de_operacao_id"], operacao_original.id)
+        self.assertEqual(operacao_nova.valor_recebido, Decimal("30.25"))
+        self.assertEqual(operacao_nova.valor_aplicado, Decimal("30.25"))
+        self.assertEqual(operacao_nova.data_recebimento, data_recebimento)
+        self.assertEqual(operacao_nova.forma_pagamento, "Dinheiro")
+        self.assertEqual(conta.valor_em_aberto, Decimal("498.10"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_PARCIAL)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.get().operacao, operacao_nova)
+        movimentos = MovimentoFinanceiro.objects.order_by("id")
+        self.assertEqual([movimento.valor for movimento in movimentos], [
+            Decimal("528.35"),
+            Decimal("528.35"),
+            Decimal("30.25"),
+        ])
+        self.assertEqual([movimento.origem for movimento in movimentos], [
+            "recebimento_cliente",
+            "recebimento_cliente_estorno",
+            "recebimento_cliente",
+        ])
+        self.assertEqual(views._saldo_conta_financeira(views._conta_financeira_padrao("caixa")), Decimal("30.25"))
+
+    def test_corrigir_recebimento_mostra_situacao_historica_e_contas_do_comprovante(self):
+        cliente = Cliente.objects.create(nome="Cliente Previa Correcao", bairro="Jardim", ativo=True)
+        conta_um = self._criar_conta_receber_pix(cliente, "10.00")
+        conta_dois = self._criar_conta_receber_pix(cliente, "16.00")
+        self._post_receber_cliente(cliente, "16,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self.client.get(self._url_corrigir_recebimento(operacao), secure=True)
+        resumo = views._resumo_financeiro_correcao_recebimento(
+            operacao,
+            valor_correto=Decimal("10.00"),
+            destino_diferenca="troco",
+        )
+
+        self.assertContains(resposta, "Situacao financeira antes deste recebimento")
+        self.assertContains(resposta, "Saldo devedor antes")
+        self.assertContains(resposta, "R$ 26,00")
+        self.assertContains(resposta, "Recebimento registrado")
+        self.assertContains(resposta, "R$ 16,00")
+        self.assertContains(resposta, "Saldo apos aquele recebimento")
+        self.assertContains(resposta, "R$ 10,00")
+        self.assertContains(resposta, "Contas envolvidas no recebimento original")
+        self.assertContains(resposta, f"Conta #{conta_um.id}")
+        self.assertContains(resposta, f"Conta #{conta_dois.id}")
+        self.assertContains(resposta, 'data-saldo-anterior-centavos="2600"')
+        self.assertEqual(resumo["saldo_apos_correcao"], Decimal("16.00"))
+
+    def test_recebimentos_dia_e_rota_separam_acoes_em_area_propria(self):
+        cliente = Cliente.objects.create(nome="Cliente Acoes Historico", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "55.00")
+        self._post_receber_cliente(cliente, "55,00", rota="Jardim")
+
+        resposta_dia = self.client.get(reverse("estoque:receber_cliente_recebimentos_dia"), secure=True)
+        resposta_rota = self.client.get(self._url_recebimentos_rota("Jardim"), secure=True)
+
+        self.assertContains(resposta_dia, 'class="rcd-actions"')
+        self.assertContains(resposta_dia, 'class="rcd-undo-btn edit"')
+        self.assertContains(resposta_rota, 'class="rcr-actions"')
+        self.assertContains(resposta_rota, 'class="rcr-undo-btn edit"')
+
+    def test_corrigir_recebimento_preserva_troco_original_sem_gerar_credito(self):
+        data_recebimento = timezone.localdate()
+        cliente = Cliente.objects.create(nome="Cliente Corrige Troco", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        resultado_original = views._criar_operacao_recebimento_cliente(
+            cliente,
+            Decimal("120.00"),
+            data_recebimento,
+            "Dinheiro",
+            destino_diferenca="troco",
+            rota_snapshot="Jardim",
+            hoje_referencia=data_recebimento,
+        )
+        operacao_original = resultado_original["operacao"]
+
+        resposta = self._post_corrigir_recebimento(
+            operacao_original,
+            "130,00",
+            data_recebimento=data_recebimento,
+            forma_pagamento="Dinheiro",
+        )
+
+        self.assertContains(resposta, "corrigido")
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_original.pk).get()
+        recebimento_novo = RecebimentoContaReceber.objects.get(operacao=operacao_nova)
+        conta.refresh_from_db()
+        self.assertEqual(operacao_nova.valor_recebido, Decimal("130.00"))
+        self.assertEqual(operacao_nova.valor_aplicado, Decimal("100.00"))
+        self.assertEqual(operacao_nova.credito_gerado, Decimal("0.00"))
+        self.assertIn("Troco devolvido: R$ 30,00", recebimento_novo.observacao)
+        self.assertEqual(CreditoCliente.objects.filter(cliente=cliente).count(), 0)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+
+    def test_corrigir_recebimento_com_sobra_ambigua_exige_escolha_explicita(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Sobra Ambigua", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self._post_corrigir_recebimento(operacao, "130,00", forma_pagamento="Dinheiro")
+
+        self.assertContains(resposta, "Escolha explicitamente")
+        operacao.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(operacao.comprovante_dados.get("desfeito"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(CreditoCliente.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_corrigir_recebimento_retroativo_nao_abate_conta_posterior_a_data_corrigida(self):
+        data_recebimento = date(2026, 9, 13)
+        data_posterior = date(2026, 9, 14)
+        cliente = Cliente.objects.create(nome="Cliente Corrige Data Historica", bairro="Jardim", ativo=True)
+        conta_historica = self._criar_conta_receber_pix(cliente, "100.00")
+        ContaReceber.objects.filter(pk=conta_historica.pk).update(
+            data_emissao=data_recebimento,
+            data_vencimento=data_recebimento,
+        )
+        conta_historica.refresh_from_db()
+        self._post_receber_cliente(
+            cliente,
+            "80,00",
+            rota="Jardim",
+            forma_pagamento="Dinheiro",
+            data_recebimento=data_recebimento,
+        )
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+        conta_posterior = self._criar_conta_receber_pix(cliente, "50.00")
+        ContaReceber.objects.filter(pk=conta_posterior.pk).update(
+            data_emissao=data_posterior,
+            data_vencimento=data_posterior,
+        )
+        conta_posterior.refresh_from_db()
+
+        resposta = self._post_corrigir_recebimento(
+            operacao_original,
+            "120,00",
+            data_recebimento=data_recebimento,
+            forma_pagamento="Dinheiro",
+            destino_diferenca="troco",
+        )
+
+        self.assertContains(resposta, "corrigido")
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_original.pk).get()
+        conta_historica.refresh_from_db()
+        conta_posterior.refresh_from_db()
+        recebimento_novo = RecebimentoContaReceber.objects.get(operacao=operacao_nova)
+        self.assertEqual(recebimento_novo.conta, conta_historica)
+        self.assertEqual(recebimento_novo.valor, Decimal("100.00"))
+        self.assertIn("Troco devolvido: R$ 20,00", recebimento_novo.observacao)
+        self.assertEqual(conta_historica.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta_posterior.valor_em_aberto, Decimal("50.00"))
+        self.assertFalse(RecebimentoContaReceber.objects.filter(operacao=operacao_nova, conta=conta_posterior).exists())
+
+    def test_corrigir_recebimento_somente_data_usa_data_nova_na_operacao_e_movimento(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Data", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        data_original = date(2026, 9, 13)
+        data_nova = date(2026, 9, 14)
+        self._post_receber_cliente(cliente, "40,00", rota="Jardim", forma_pagamento="Dinheiro", data_recebimento=data_original)
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_corrigir_recebimento(operacao_original, "40,00", data_recebimento=data_nova, forma_pagamento="Dinheiro")
+
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_original.pk).get()
+        movimento_novo = MovimentoFinanceiro.objects.filter(origem="recebimento_cliente").order_by("id").last()
+        movimento_estorno = MovimentoFinanceiro.objects.get(origem="recebimento_cliente_estorno")
+        self.assertEqual(operacao_nova.data_recebimento, data_nova)
+        self.assertEqual(RecebimentoContaReceber.objects.get(operacao=operacao_nova).data_recebimento, data_nova)
+        self.assertEqual(movimento_novo.data, data_nova)
+        self.assertEqual(movimento_estorno.data, data_original)
+
+    def test_corrigir_recebimento_somente_forma_usa_conta_financeira_nova(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Forma", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "40,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_corrigir_recebimento(operacao_original, "40,00", forma_pagamento="PIX")
+
+        operacao_nova = OperacaoRecebimentoCliente.objects.exclude(pk=operacao_original.pk).get()
+        movimento_novo = MovimentoFinanceiro.objects.filter(origem="recebimento_cliente").order_by("id").last()
+        self.assertEqual(operacao_nova.forma_pagamento, "PIX")
+        self.assertEqual(RecebimentoContaReceber.objects.get(operacao=operacao_nova).forma_pagamento, "PIX")
+        self.assertEqual(movimento_novo.conta, views._conta_financeira_padrao("banco"))
+
+    def test_corrigir_recebimento_exige_motivo_sem_alterar_financeiro(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Motivo", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "40,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self._post_corrigir_recebimento(operacao, "30,00", motivo="")
+
+        self.assertContains(resposta, "Informe o motivo da correcao.")
+        operacao.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(operacao.comprovante_dados.get("desfeito"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("60.00"))
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 1)
+
+    def test_corrigir_recebimento_ja_desfeito_nao_cria_novo_recebimento(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Ja Desfeito", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "40,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        self._post_desfazer_recebimento(operacao, self._url_recebimentos_rota("Jardim"))
+
+        resposta = self._post_corrigir_recebimento(operacao, "30,00")
+
+        self.assertContains(resposta, "Este recebimento ja foi desfeito.")
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+
+    def test_corrigir_recebimento_dupla_submissao_nao_gera_duas_operacoes_novas(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Duplo", bairro="Jardim", ativo=True)
+        self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        self._post_corrigir_recebimento(operacao, "30,00")
+        resposta = self._post_corrigir_recebimento(operacao, "30,00")
+
+        self.assertContains(resposta, "Este recebimento ja foi desfeito.")
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 2)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente").count(), 2)
+
+    def test_corrigir_recebimento_rota_origem_conferida_bloqueia_sem_alterar(self):
+        data_recebimento = date(2026, 9, 13)
+        cliente = Cliente.objects.create(nome="Cliente Corrige Origem Conferida", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim", forma_pagamento="Dinheiro", data_recebimento=data_recebimento)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=data_recebimento,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("80.00"),
+            total_conferido=Decimal("80.00"),
+        )
+
+        resposta = self._post_corrigir_recebimento(operacao, "30,00", data_recebimento=data_recebimento)
+
+        self.assertContains(resposta, "rota/data")
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_corrigir_recebimento_rota_destino_conferida_bloqueia_sem_alterar(self):
+        data_original = date(2026, 9, 13)
+        data_nova = date(2026, 9, 14)
+        cliente = Cliente.objects.create(nome="Cliente Corrige Destino Conferido", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim", forma_pagamento="Dinheiro", data_recebimento=data_original)
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        FechamentoRotaRecebimento.objects.create(
+            rota="Jardim",
+            data_referencia=data_nova,
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+            total_sistema=Decimal("0.00"),
+            total_conferido=Decimal("0.00"),
+        )
+
+        resposta = self._post_corrigir_recebimento(operacao, "30,00", data_recebimento=data_nova)
+
+        self.assertContains(resposta, "rota/data correta ja foi conferida")
+        conta.refresh_from_db()
+        operacao.refresh_from_db()
+        self.assertFalse(operacao.comprovante_dados.get("desfeito"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="recebimento_cliente_estorno").count(), 0)
+
+    def test_corrigir_recebimento_falha_ao_recriar_faz_rollback_total(self):
+        cliente = Cliente.objects.create(nome="Cliente Corrige Rollback", bairro="Jardim", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        self._post_receber_cliente(cliente, "80,00", rota="Jardim", forma_pagamento="Dinheiro")
+        operacao = OperacaoRecebimentoCliente.objects.get()
+        recebimento_id = RecebimentoContaReceber.objects.get().id
+
+        with patch("estoque.views._criar_operacao_recebimento_cliente", side_effect=views.RecebimentoContaErro("falha simulada")):
+            resposta = self._post_corrigir_recebimento(operacao, "30,00")
+
+        self.assertContains(resposta, "falha simulada")
+        operacao.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(operacao.comprovante_dados.get("desfeito"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("20.00"))
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento_id, operacao=operacao).exists())
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 1)
 
     def test_receber_cliente_confirmado_resume_contas_abertas_em_details(self):
         cliente = Cliente.objects.create(nome="Cliente Details Contas", ativo=True)

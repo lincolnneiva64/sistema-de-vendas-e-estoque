@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Corrigir recebimento</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f4f6; color: #111827; }
+    .page { max-width: 860px; margin: 0 auto; padding: 28px 16px; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }
+    h1 { margin: 0 0 6px; font-size: 1.35rem; }
+    .muted { margin: 0 0 18px; color: #64748b; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+    .item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; background: #f8fafc; }
+    .item span { display: block; color: #64748b; font-size: .75rem; font-weight: 800; margin-bottom: 4px; }
+    .item strong { display: block; font-size: .95rem; }
+    .section-title { margin: 18px 0 10px; color: #334155; font-size: .95rem; font-weight: 900; }
+    .flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .flow-card { border: 1px solid #dbe4ef; border-radius: 8px; padding: 12px; background: #f8fafc; }
+    .flow-card.preview { border-color: #99f6e4; background: #f0fdfa; }
+    .flow-label { display: block; color: #64748b; font-size: .76rem; font-weight: 900; text-transform: uppercase; }
+    .flow-value { display: block; margin-top: 6px; color: #0f172a; font-size: 1.15rem; font-weight: 900; }
+    .flow-card.preview .flow-value { color: #115e59; }
+    .flow-note { margin: 4px 0 0; color: #64748b; font-size: .82rem; font-weight: 700; }
+    .accounts { display: grid; gap: 8px; margin-bottom: 18px; }
+    .account-row { display: grid; grid-template-columns: minmax(90px, 1fr) repeat(3, minmax(0, 1fr)); gap: 8px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; background: #fff; }
+    .account-id { font-weight: 900; color: #0f172a; }
+    .account-id small { display: block; margin-top: 3px; color: #64748b; font-size: .78rem; }
+    .account-metric span { display: block; color: #64748b; font-size: .72rem; font-weight: 900; text-transform: uppercase; }
+    .account-metric strong { display: block; margin-top: 3px; font-size: .9rem; }
+    form { display: grid; gap: 12px; }
+    label { display: grid; gap: 5px; font-weight: 800; color: #374151; }
+    input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; font: inherit; }
+    textarea { min-height: 90px; resize: vertical; }
+    .radio-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .radio-card { display: flex; align-items: center; gap: 8px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; font-weight: 800; }
+    .radio-card input { width: auto; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+    .btn { border: 0; border-radius: 6px; padding: 10px 14px; font-weight: 900; cursor: pointer; text-decoration: none; }
+    .btn.primary { background: #0f766e; color: #fff; }
+    .btn.secondary { background: #e5e7eb; color: #111827; }
+    .messages { display: grid; gap: 8px; margin-bottom: 14px; }
+    .message { border-radius: 6px; padding: 10px 12px; background: #fef3c7; color: #92400e; font-weight: 800; }
+    @media (max-width: 760px) {
+      .grid,
+      .flow,
+      .account-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="panel">
+      <h1>Corrigir recebimento</h1>
+      <p class="muted">Recebimento #{{ operacao.id }} - {{ cliente.nome }}</p>
+
+      {% if messages %}
+        <div class="messages">
+          {% for message in messages %}
+            <div class="message">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="grid" aria-label="Dados atuais do recebimento">
+        <div class="item">
+          <span>Valor atual</span>
+          <strong>{{ resumo_correcao.valor_original_formatado }}</strong>
+        </div>
+        <div class="item">
+          <span>Data atual</span>
+          <strong>{{ operacao.data_recebimento|date:"d/m/Y" }}</strong>
+        </div>
+        <div class="item">
+          <span>Forma atual</span>
+          <strong>{{ operacao.forma_pagamento }}</strong>
+        </div>
+      </div>
+
+      <h2 class="section-title">Situacao financeira antes deste recebimento</h2>
+      <div class="flow" aria-label="Resumo financeiro original">
+        <div class="flow-card">
+          <span class="flow-label">Saldo devedor antes</span>
+          <strong class="flow-value">{{ resumo_correcao.saldo_anterior_formatado }}</strong>
+        </div>
+        <div class="flow-card">
+          <span class="flow-label">Recebimento registrado</span>
+          <strong class="flow-value">{{ resumo_correcao.valor_original_formatado }}</strong>
+        </div>
+        <div class="flow-card">
+          <span class="flow-label">Saldo apos aquele recebimento</span>
+          <strong class="flow-value">{{ resumo_correcao.saldo_apos_original_formatado }}</strong>
+        </div>
+      </div>
+
+      <h2 class="section-title">Previa da correcao</h2>
+      <div class="flow" aria-label="Previa do resultado da correcao">
+        <div class="flow-card preview">
+          <span class="flow-label">Valor correto</span>
+          <strong class="flow-value" id="previewValorCorreto">{{ resumo_correcao.valor_correto_formatado }}</strong>
+        </div>
+        <div class="flow-card preview">
+          <span class="flow-label">Saldo devedor apos correcao</span>
+          <strong class="flow-value" id="previewSaldoCorrecao">{{ resumo_correcao.saldo_apos_correcao_formatado }}</strong>
+        </div>
+        <div class="flow-card preview">
+          <span class="flow-label">Sobra prevista</span>
+          <strong class="flow-value" id="previewExcedenteCorrecao">{{ resumo_correcao.excedente_formatado }}</strong>
+          <p class="flow-note" id="previewDestinoCorrecao">
+            {% if resumo_correcao.excedente > 0 and resumo_correcao.destino_diferenca == "credito" %}
+              Como credito para o cliente.
+            {% elif resumo_correcao.excedente > 0 and resumo_correcao.destino_diferenca == "troco" %}
+              Como troco devolvido.
+            {% elif resumo_correcao.excedente > 0 %}
+              Escolha troco ou credito antes de confirmar.
+            {% else %}
+              Sem sobra prevista.
+            {% endif %}
+          </p>
+        </div>
+      </div>
+
+      {% if resumo_correcao.contas %}
+        <h2 class="section-title">Contas envolvidas no recebimento original</h2>
+        <div class="accounts" aria-label="Contas envolvidas no recebimento original">
+          {% for conta in resumo_correcao.contas %}
+            <div class="account-row">
+              <div class="account-id">
+                Conta #{{ conta.conta_id|default:"-" }}
+                {% if conta.venda_id %}<small>Venda #{{ conta.venda_id }}</small>{% endif %}
+              </div>
+              <div class="account-metric">
+                <span>Saldo antes</span>
+                <strong>{{ conta.saldo_antes_formatado }}</strong>
+              </div>
+              <div class="account-metric">
+                <span>Valor abatido</span>
+                <strong>{{ conta.valor_aplicado_formatado }}</strong>
+              </div>
+              <div class="account-metric">
+                <span>Saldo que ficou</span>
+                <strong>{{ conta.saldo_restante_formatado }}</strong>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ retorno_url }}">
+        <label>
+          Valor correto
+          <input
+            id="valorCorreto"
+            name="valor"
+            inputmode="decimal"
+            value="{{ valores.valor }}"
+            data-saldo-anterior-centavos="{{ resumo_correcao.saldo_anterior_centavos }}"
+            required
+          >
+        </label>
+        <label>
+          Data correta
+          <input type="date" name="data_recebimento" value="{{ valores.data_recebimento }}" required>
+        </label>
+        <label>
+          Forma de pagamento correta
+          <select name="forma_pagamento" required>
+            {% for forma in formas_pagamento %}
+              <option value="{{ forma }}"{% if valores.forma_pagamento == forma %} selected{% endif %}>{{ forma }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Diferenca se sobrar valor
+          <div class="radio-row">
+            <span class="radio-card">
+              <input type="radio" name="destino_diferenca" value="troco"{% if valores.destino_diferenca == "troco" %} checked{% endif %}>
+              Troco devolvido
+            </span>
+            <span class="radio-card">
+              <input type="radio" name="destino_diferenca" value="credito"{% if valores.destino_diferenca == "credito" %} checked{% endif %}>
+              Credito para o cliente
+            </span>
+          </div>
+        </label>
+        <label>
+          Motivo da correcao
+          <textarea name="motivo" required>{{ valores.motivo }}</textarea>
+        </label>
+        <div class="actions">
+          <a class="btn secondary" href="{{ retorno_url }}">Voltar</a>
+          <button class="btn primary" type="submit">Confirmar correcao</button>
+        </div>
+      </form>
+    </section>
+  </main>
+  <script>
+    (function() {
+      const inputValor = document.getElementById("valorCorreto");
+      const previewValor = document.getElementById("previewValorCorreto");
+      const previewSaldo = document.getElementById("previewSaldoCorrecao");
+      const previewExcedente = document.getElementById("previewExcedenteCorrecao");
+      const previewDestino = document.getElementById("previewDestinoCorrecao");
+      if (!inputValor || !previewValor || !previewSaldo || !previewExcedente || !previewDestino) return;
+
+      const saldoAnteriorCentavos = Number(inputValor.dataset.saldoAnteriorCentavos || "0");
+      const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+      function valorParaCentavos(texto) {
+        const limpo = String(texto || "").replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+        const numero = Number(limpo);
+        if (!Number.isFinite(numero)) return 0;
+        return Math.max(Math.round(numero * 100), 0);
+      }
+
+      function destinoSelecionado() {
+        const marcado = document.querySelector('input[name="destino_diferenca"]:checked');
+        return marcado ? marcado.value : "";
+      }
+
+      function atualizarPrevia() {
+        const valorCentavos = valorParaCentavos(inputValor.value);
+        const saldoCentavos = Math.max(saldoAnteriorCentavos - Math.min(valorCentavos, saldoAnteriorCentavos), 0);
+        const excedenteCentavos = Math.max(valorCentavos - saldoAnteriorCentavos, 0);
+        previewValor.textContent = moeda.format(valorCentavos / 100);
+        previewSaldo.textContent = moeda.format(saldoCentavos / 100);
+        previewExcedente.textContent = moeda.format(excedenteCentavos / 100);
+        if (excedenteCentavos <= 0) {
+          previewDestino.textContent = "Sem sobra prevista.";
+          return;
+        }
+        previewDestino.textContent = destinoSelecionado() === "credito"
+          ? "Como credito para o cliente."
+          : "Como troco devolvido.";
+      }
+
+      inputValor.addEventListener("input", atualizarPrevia);
+      document.querySelectorAll('input[name="destino_diferenca"]').forEach((radio) => {
+        radio.addEventListener("change", atualizarPrevia);
+      });
+      atualizarPrevia();
+    })();
+  </script>
+</body>
+</html>
