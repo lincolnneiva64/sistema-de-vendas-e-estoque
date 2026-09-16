@@ -20966,6 +20966,25 @@ class PixRecebidoTests(TestCase):
                 kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
             ),
         )
+        self.assertContains(resposta, "Para enviar o recibo: compartilhe ou abra o card")
+        self.assertContains(resposta, "Compartilhar card")
+        self.assertContains(resposta, "Abrir card para enviar")
+        self.assertContains(resposta, "data-compartilhar-recibo-card")
+        self.assertContains(
+            resposta,
+            'data-card-url="{}"'.format(
+                reverse(
+                    "estoque:receber_cliente_operacao_recibo_card_imagem",
+                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+                )
+            ),
+        )
+        self.assertContains(resposta, "navigator.share")
+        self.assertContains(resposta, "navigator.canShare")
+        self.assertContains(resposta, 'new File([blob], "recibo-pagamento.png", { type: "image/png" })')
+        self.assertContains(resposta, "await fetch(cardUrl")
+        self.assertContains(resposta, "await navigator.share(payload);")
+        self.assertContains(resposta, "Este navegador nao conseguiu compartilhar a imagem automaticamente.")
         self.assertContains(resposta, "Enviar WhatsApp")
         self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
 
@@ -21001,6 +21020,68 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn("Contas que ainda faltam pagar", mensagem)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+
+    def test_recibos_pendentes_card_visual_reabre_recibo_sem_alterar_operacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Recibo Visual Pendente",
+            whatsapp="(85) 95555-3333",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, valor="100.00")
+        operacao.comprovante_dados = {
+            "cliente_id": cliente.id,
+            "cliente_nome": cliente.nome,
+            "data_recebimento": operacao.data_recebimento.strftime("%d/%m/%Y"),
+            "saldo_anterior": "100.00",
+            "valor_pago": "100.00",
+            "forma_pagamento": "PIX",
+            "saldo_atual": "0.00",
+            "credito_gerado": "0.00",
+            "contas": [
+                {
+                    "conta_id": conta.id,
+                    "venda_id": conta.venda_id,
+                    "data_nota": conta.data_emissao.strftime("%d/%m/%Y"),
+                    "saldo_antes": "100.00",
+                    "valor_aplicado": "100.00",
+                    "saldo_restante": "0.00",
+                    "quitada": True,
+                }
+            ],
+            "contas_abertas": [],
+        }
+        operacao.save(update_fields=["comprovante_dados"])
+        conta_estado_antes = list(ContaReceber.objects.values_list("id", "valor_em_aberto", "status"))
+        recebimentos_antes = RecebimentoContaReceber.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        operacoes_antes = OperacaoRecebimentoCliente.objects.count()
+        url_card = reverse(
+            "estoque:receber_cliente_operacao_recibo_card_imagem",
+            kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
+        )
+
+        pagina = self.client.get(self._url_recibos_pendentes(), secure=True)
+        resposta_card = self.client.get(url_card, secure=True)
+
+        self.assertEqual(resposta_card.status_code, 200)
+        self.assertEqual(resposta_card["Content-Type"], "image/png")
+        imagem = Image.open(io.BytesIO(resposta_card.content))
+        self.assertEqual(imagem.width, 480)
+        self.assertGreater(imagem.height, imagem.width)
+        self.assertContains(pagina, f'data-operacao-id="{operacao.id}"')
+        self.assertContains(pagina, f'data-card-url="{url_card}"')
+        self.assertContains(pagina, cliente.nome)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
+        self.assertIsNone(operacao.recibo_confirmado_em)
+        self.assertEqual(OperacaoRecebimentoCliente.objects.count(), operacoes_antes)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), recebimentos_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        self.assertEqual(
+            list(ContaReceber.objects.values_list("id", "valor_em_aberto", "status")),
+            conta_estado_antes,
+        )
 
     def test_recibos_pendentes_confirmar_usa_endpoint_existente_e_template_remove_card(self):
         cliente = Cliente.objects.create(nome="Cliente Recibo Confirmar Lista", ativo=True)

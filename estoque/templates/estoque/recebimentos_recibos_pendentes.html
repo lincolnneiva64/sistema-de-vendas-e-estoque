@@ -159,6 +159,18 @@
   .recibo-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
   .recibo-btn.confirmar { border-color: #2563eb; background: #1d4ed8; color: #fff; }
   .recibo-btn:disabled { opacity: 0.72; cursor: default; }
+  .recibo-orientacao {
+    flex-basis: 100%;
+    margin: 0;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #1e3a8a;
+    padding: 7px 9px;
+    font-size: 0.79rem;
+    font-weight: 850;
+    line-height: 1.28;
+  }
   .recibo-feedback {
     margin: 8px 0 0;
     color: #166534;
@@ -254,11 +266,19 @@
           </div>
 
           <div class="recibo-actions">
+            <p class="recibo-orientacao">Para enviar o recibo: compartilhe ou abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
             {% if pendencia.recebimento_url %}
               <a class="recibo-btn" href="{{ pendencia.recebimento_url }}">Abrir recebimento</a>
             {% endif %}
             {% if pendencia.recibo_card_url %}
-              <a class="recibo-btn" href="{{ pendencia.recibo_card_url }}" target="_blank" rel="noopener">Abrir card</a>
+              <button
+                type="button"
+                class="recibo-btn"
+                data-compartilhar-recibo-card
+                data-card-url="{{ pendencia.recibo_card_url }}"
+                data-share-text="{{ pendencia.whatsapp_confirmacao.mensagem }}"
+              >Compartilhar card</button>
+              <a class="recibo-btn" href="{{ pendencia.recibo_card_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
             {% endif %}
             {% if pendencia.whatsapp_confirmacao.tem_whatsapp %}
               <a
@@ -356,7 +376,58 @@
     }
   }
 
+  async function compartilharCard(botao) {
+    const card = botao.closest("[data-recibo-card]");
+    const cardUrl = botao.dataset.cardUrl;
+    const texto = botao.dataset.shareText || "Segue seu comprovante de pagamento.";
+    if (!cardUrl || botao.disabled) return;
+
+    if (!navigator.share || !navigator.canShare) {
+      feedback(card, "Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Preparando...";
+    feedback(card, "", false);
+    try {
+      const resposta = await fetch(cardUrl, { credentials: "same-origin" });
+      if (!resposta.ok) {
+        throw new Error("Nao foi possivel carregar o card do recibo.");
+      }
+      const blob = await resposta.blob();
+      const arquivo = new File([blob], "recibo-pagamento.png", { type: "image/png" });
+      const payload = {
+        files: [arquivo],
+        title: "Comprovante de pagamento",
+        text: texto
+      };
+      if (!navigator.canShare(payload)) {
+        feedback(card, "Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
+        return;
+      }
+      await navigator.share(payload);
+      feedback(card, "Depois de enviar o card no WhatsApp, confirme o envio.", false);
+    } catch (erro) {
+      if (erro && erro.name === "AbortError") {
+        feedback(card, "Compartilhamento cancelado.", false);
+      } else {
+        feedback(card, erro.message || "Nao foi possivel compartilhar o card automaticamente. Abra o card e envie a imagem manualmente.", true);
+      }
+    } finally {
+      botao.disabled = false;
+      botao.textContent = "Compartilhar card";
+    }
+  }
+
   document.addEventListener("click", function (event) {
+    const compartilharBtn = event.target.closest("[data-compartilhar-recibo-card]");
+    if (compartilharBtn) {
+      event.preventDefault();
+      compartilharCard(compartilharBtn);
+      return;
+    }
+
     const confirmarBtn = event.target.closest("[data-confirmar-recibo-url]");
     if (confirmarBtn) {
       event.preventDefault();
