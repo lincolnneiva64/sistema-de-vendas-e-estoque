@@ -7668,6 +7668,90 @@ class ProdutosIncompletosTests(TestCase):
         self.assertEqual(self.produto.preco_prazo, Decimal("4.99"))
 
 
+class ProdutoNomeDuplicadoFormTests(TestCase):
+    def setUp(self):
+        Categoria.objects.get_or_create(nome="Bebidas", defaults={"ativa": True})
+        Unidade.objects.get_or_create(sigla="UN", defaults={"nome": "Unidade", "ativa": True})
+
+    def _criar_produto(self, nome, **kwargs):
+        dados = {
+            "categoria": "Bebidas",
+            "preco_compra": Decimal("10.00"),
+            "preco_vista": Decimal("15.00"),
+            "preco_prazo": Decimal("16.00"),
+            "quantidade": Decimal("10.000"),
+            "estoque_minimo": 1,
+            "unidade_compra": "UN",
+        }
+        dados.update(kwargs)
+        return Produto.objects.create(nome=nome, **dados)
+
+    def _dados_form(self, nome, **kwargs):
+        dados = {
+            "nome": nome,
+            "codigo": "",
+            "categoria": "Bebidas",
+            "preco_compra": "10.00",
+            "unidade_compra": "UN",
+            "fator_conversao": "",
+            "preco_compra_fracionado": "",
+            "unidade_venda_1": "UN",
+            "preco_vista": "15.00",
+            "unidade_venda_2": "",
+            "preco_prazo": "16.00",
+            "vende_fracionado": "False",
+            "descricao_conversao": "",
+            "quantidade": "10.000",
+            "estoque_minimo": "1",
+            "fornecedor": "",
+            "percentual_vista_fracionado": "",
+            "preco_vista_fracionado": "",
+            "percentual_prazo_fracionado": "",
+            "preco_prazo_fracionado": "",
+        }
+        dados.update(kwargs)
+        return dados
+
+    def test_editar_mantendo_mesmo_nome_e_permitido(self):
+        produto = self._criar_produto("Produto Nome Unico")
+
+        form = ProdutoForm(self._dados_form("Produto Nome Unico"), instance=produto)
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_editar_preco_e_estoque_sem_mudar_nome_e_permitido(self):
+        produto = self._criar_produto("Produto Altera Valores")
+
+        form = ProdutoForm(
+            self._dados_form(
+                "Produto Altera Valores",
+                preco_vista="17.50",
+                preco_prazo="18.90",
+                quantidade="22.500",
+            ),
+            instance=produto,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_editar_para_nome_de_outro_produto_e_bloqueado(self):
+        produto = self._criar_produto("Produto Original")
+        self._criar_produto("Produto Ja Existente")
+
+        form = ProdutoForm(self._dados_form("Produto Ja Existente"), instance=produto)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("existe um produto com esse nome", str(form.errors["nome"]))
+
+    def test_criar_produto_com_nome_existente_e_bloqueado(self):
+        self._criar_produto("Produto Cadastrado")
+
+        form = ProdutoForm(self._dados_form("Produto Cadastrado"))
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("existe um produto com esse nome", str(form.errors["nome"]))
+
+
 class UnificarPolpaAcerolaTests(TestCase):
     def setUp(self):
         self.assai = Fornecedor.objects.create(nome="Assai Br", nome_fantasia="Assai")
