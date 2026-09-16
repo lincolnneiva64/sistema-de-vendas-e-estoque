@@ -20957,8 +20957,10 @@ def _preparar_item_checklist_separacao(item):
     item.quantidade_diferenca_formatada = _formatar_diferenca_quantidade(quantidade_diferenca)
 
     item.valores_rapidos = []
+    unidade_checklist = _normalizar_unidade_estoque(item.unidade_snapshot)
     if (
         not item.registra_peso_real
+        and unidade_checklist not in {"UN", "PC"}
         and passo_quantidade == Decimal("1.000")
         and quantidade_solicitada == quantidade_solicitada.to_integral_value()
         and Decimal("1.000") < quantidade_solicitada <= Decimal("10.000")
