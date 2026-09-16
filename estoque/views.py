@@ -3680,9 +3680,6 @@ def emprestimos_rapidos(request):
                     previsao_devolucao=previsao_devolucao,
                     conta_saida=conta_saida,
                     observacao=observacao,
-                paga_com_dinheiro_rota=paga_com_dinheiro_rota,
-                rota_recebimento=rota_recebimento,
-                data_rota_recebimento=data_rota_recebimento,
                     operador=operador,
                 )
                 MovimentoFinanceiro.objects.create(
@@ -4190,6 +4187,9 @@ def despesas_diarias(request):
                 forma_pagamento=forma_pagamento,
                 operador=operador,
                 observacao=observacao,
+                paga_com_dinheiro_rota=paga_com_dinheiro_rota,
+                rota_recebimento=rota_recebimento,
+                data_rota_recebimento=data_rota_recebimento,
             )
             _registrar_movimento_despesa_diaria(despesa, conta_saida)
         messages.success(request, "Despesa salva com sucesso.")
@@ -15257,6 +15257,17 @@ def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
 def _resumo_fechamento_rota(fechamento):
     if not fechamento:
         return None
+    diferenca_absoluta = abs((fechamento.diferenca or Decimal("0.00")).quantize(Decimal("0.01")))
+    valor_regularizado = Decimal("0.00")
+    saldo_pendente = diferenca_absoluta
+    if diferenca_absoluta <= Decimal("0.00"):
+        situacao_texto = "Conferido sem diferença"
+    elif valor_regularizado <= Decimal("0.00"):
+        situacao_texto = "Diferença pendente de apuração"
+    elif saldo_pendente > Decimal("0.00"):
+        situacao_texto = "Diferença parcialmente regularizada"
+    else:
+        situacao_texto = "Diferença regularizada"
     usuario = fechamento.usuario or fechamento.criado_por
     return {
         "obj": fechamento,
@@ -15264,7 +15275,12 @@ def _resumo_fechamento_rota(fechamento):
         "finalizado_em": timezone.localtime(fechamento.created_at) if fechamento.created_at else None,
         "valor_esperado_formatado": _formatar_moeda(fechamento.total_sistema),
         "valor_contado_formatado": _formatar_moeda(fechamento.total_conferido),
-        "diferenca_formatada": _formatar_moeda(abs(fechamento.diferenca or Decimal("0.00"))),
+        "diferenca_formatada": _formatar_moeda(diferenca_absoluta),
+        "diferenca_original_formatada": _formatar_moeda(diferenca_absoluta),
+        "valor_regularizado_formatado": _formatar_moeda(valor_regularizado),
+        "saldo_pendente_formatado": _formatar_moeda(saldo_pendente),
+        "tem_diferenca": diferenca_absoluta > Decimal("0.00"),
+        "situacao_texto": situacao_texto,
         "metodo_texto": fechamento.get_metodo_conferencia_display(),
         "observacao": fechamento.observacao or "",
         "composicao": fechamento.composicao_cedulas or {},
@@ -15513,6 +15529,8 @@ def _centavos_para_decimal(centavos):
 
 def _total_cedulas_conferencia_post(post_data):
     denominacoes = _denominacoes_conferencia()
+    if not any(campo in post_data for campo in denominacoes):
+        raise ValueError("A contagem por cédulas não chegou ao servidor. Revise as quantidades e finalize novamente.")
     total_centavos = 0
     for campo, item in denominacoes.items():
         texto = str(post_data.get(campo, "0") or "0").strip()
@@ -15778,48 +15796,45 @@ def conferencia_recebimentos_rota(request):
                 return redirect(request.get_full_path())
             total_sistema = (total_dinheiro - despesas_rota_total_confirmado).quantize(Decimal("0.01"))
             diferenca = (total_conferido - total_sistema).quantize(Decimal("0.01"))
-            if diferenca != Decimal("0.00") and not observacao_inicial:
-                messages.warning(request, "Informe uma observa??o para finalizar com falta ou sobra.")
-            else:
-                usuario = request.user if getattr(request.user, "is_authenticated", False) else None
-                composicao_cedulas = (
-                    _composicao_cedulas_post(request.POST)
-                    if metodo_selecionado == FechamentoRotaRecebimento.METODO_CEDULAS
-                    else {}
-                )
-                try:
-                    with transaction.atomic():
-                        if FechamentoRotaRecebimento.objects.select_for_update().filter(
-                            rota=rota_filtro,
-                            data_referencia=data_referencia,
-                        ).exists():
-                            messages.warning(request, "Esta confer?ncia j? foi finalizada e n?o pode ser alterada.")
-                            return redirect(request.get_full_path())
-                        fechamento = FechamentoRotaRecebimento.objects.create(
-                            rota=rota_filtro,
-                            data_referencia=data_referencia,
-                            usuario=usuario,
-                            criado_por=usuario,
-                            metodo_conferencia=metodo_selecionado,
-                            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
-                            total_sistema=total_sistema,
-                            total_conferido=total_conferido,
-                            diferenca=diferenca,
-                            observacao=observacao_inicial,
-                            composicao_cedulas=composicao_cedulas,
+            usuario = request.user if getattr(request.user, "is_authenticated", False) else None
+            composicao_cedulas = (
+                _composicao_cedulas_post(request.POST)
+                if metodo_selecionado == FechamentoRotaRecebimento.METODO_CEDULAS
+                else {}
+            )
+            try:
+                with transaction.atomic():
+                    if FechamentoRotaRecebimento.objects.select_for_update().filter(
+                        rota=rota_filtro,
+                        data_referencia=data_referencia,
+                    ).exists():
+                        messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
+                        return redirect(request.get_full_path())
+                    fechamento = FechamentoRotaRecebimento.objects.create(
+                        rota=rota_filtro,
+                        data_referencia=data_referencia,
+                        usuario=usuario,
+                        criado_por=usuario,
+                        metodo_conferencia=metodo_selecionado,
+                        status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+                        total_sistema=total_sistema,
+                        total_conferido=total_conferido,
+                        diferenca=diferenca,
+                        observacao=observacao_inicial,
+                        composicao_cedulas=composicao_cedulas,
+                    )
+                    for despesa in despesas_confirmadas:
+                        DespesaRotaConferencia.objects.create(
+                            fechamento=fechamento,
+                            despesa=despesa,
+                            valor_justificado=(despesa.valor or Decimal("0.00")).quantize(Decimal("0.01")),
+                            confirmado_por=usuario,
                         )
-                        for despesa in despesas_confirmadas:
-                            DespesaRotaConferencia.objects.create(
-                                fechamento=fechamento,
-                                despesa=despesa,
-                                valor_justificado=(despesa.valor or Decimal("0.00")).quantize(Decimal("0.01")),
-                                confirmado_por=usuario,
-                            )
-                except IntegrityError:
-                    messages.warning(request, "Esta confer?ncia j? foi finalizada e n?o pode ser alterada.")
-                    return redirect(request.get_full_path())
-                messages.success(request, "Confer?ncia finalizada com sucesso.")
+            except IntegrityError:
+                messages.warning(request, "Esta conferência já foi finalizada e não pode ser alterada.")
                 return redirect(request.get_full_path())
+            messages.success(request, "Conferência finalizada com sucesso.")
+            return redirect(request.get_full_path())
 
     dinheiro_fisico_esperado = (
         (resumo["total_dinheiro"] or Decimal("0.00")).quantize(Decimal("0.01"))

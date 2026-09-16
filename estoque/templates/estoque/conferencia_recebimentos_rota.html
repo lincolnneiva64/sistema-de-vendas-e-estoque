@@ -539,8 +539,20 @@
             <strong class="conf-readonly-value">{{ fechamento_resumo.valor_contado_formatado }}</strong>
           </div>
           <div class="conf-readonly-item">
-            <span class="conf-label">Diferença</span>
-            <strong class="conf-readonly-value">{{ fechamento_resumo.diferenca_formatada }}</strong>
+            <span class="conf-label">Diferença original</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.diferenca_original_formatada }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Valor já regularizado</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.valor_regularizado_formatado }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Saldo pendente de apuração</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.saldo_pendente_formatado }}</strong>
+          </div>
+          <div class="conf-readonly-item">
+            <span class="conf-label">Status</span>
+            <strong class="conf-readonly-value">{{ fechamento_resumo.situacao_texto }}</strong>
           </div>
           <div class="conf-readonly-item">
             <span class="conf-label">Método</span>
@@ -555,7 +567,7 @@
             <strong class="conf-readonly-value">{{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</strong>
           </div>
           <div class="conf-readonly-item">
-            <span class="conf-label">Observação</span>
+            <span class="conf-label">Observação inicial / informação para apuração</span>
             <strong class="conf-readonly-value">{{ fechamento_resumo.observacao|default:"-" }}</strong>
           </div>
         </div>
@@ -591,6 +603,31 @@
 
         <div class="conf-tool-row">
           <button type="button" id="abrirCalculadoraConferencia" class="conf-calc-open">🧮 Calculadora</button>
+        </div>
+
+        <div class="conf-composition">
+          <h3 class="conf-money-title">Despesas pagas com dinheiro da rota</h3>
+          {% if despesas_rota %}
+            <ul class="conf-composition-list">
+              {% for despesa in despesas_rota %}
+                <li>
+                  <label>
+                    <input
+                      type="checkbox"
+                      name="despesas_rota_confirmadas"
+                      value="{{ despesa.id }}"
+                      class="conf-route-expense"
+                      data-valor-centavos="{{ despesa.valor_centavos }}"
+                      {% if despesa.id in despesas_rota_confirmadas_ids %}checked{% endif %}
+                    >
+                    {{ despesa.rotulo_conferencia }} - {{ despesa.valor_formatado }}
+                  </label>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="conf-compare-status">Nenhuma despesa marcada para esta rota/data.</p>
+          {% endif %}
         </div>
 
         <div id="painelContagemCedulas" {% if metodo_selecionado == "direta" %}hidden{% endif %}>
@@ -695,7 +732,7 @@
           </div>
 
           <div id="campoObservacaoDiferenca" class="conf-observation" hidden>
-            <label for="observacaoConferencia">Observação da diferença</label>
+            <label for="observacaoConferencia">Observação inicial / informação para apuração</label>
             <textarea id="observacaoConferencia" name="observacao_conferencia" rows="3">{{ observacao_inicial }}</textarea>
           </div>
 
@@ -816,7 +853,6 @@
       }, 0);
     }
 
-
     function totalDespesasSelecionadasCentavos() {
       return despesasRotaInputs.reduce((soma, input) => {
         if (!input.checked) return soma;
@@ -886,12 +922,12 @@
       } else if (diferenca < 0) {
         resumoComparacaoEl.classList.add("falta");
         if (observacaoWrapperEl) observacaoWrapperEl.hidden = false;
-        if (observacaoEl) observacaoEl.required = true;
+        if (observacaoEl) observacaoEl.required = false;
         statusEl.textContent = "Falta de " + formatarMoeda(diferencaAbsoluta) + ".";
       } else {
         resumoComparacaoEl.classList.add("sobra");
         if (observacaoWrapperEl) observacaoWrapperEl.hidden = false;
-        if (observacaoEl) observacaoEl.required = true;
+        if (observacaoEl) observacaoEl.required = false;
         statusEl.textContent = "Sobra de " + formatarMoeda(diferencaAbsoluta) + ".";
       }
     }
