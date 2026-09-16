@@ -17,7 +17,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -10906,6 +10906,45 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             "${historicoMobileProdutoHtml(produto)}",
         )
+
+    def test_edicao_lista_com_item_orfao_nao_quebra_get(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("40.00"),
+        )
+        produto_id_orfao = 999999
+        with connection.constraint_checks_disabled():
+            item = ItemListaCompraFornecedor.objects.create(
+                lista=lista,
+                produto_id=produto_id_orfao,
+                estoque_atual=Decimal("5.000"),
+                estoque_minimo=Decimal("1.000"),
+                quantidade_final=Decimal("4.000"),
+                unidade="UN",
+                preco_compra=Decimal("10.00"),
+                preco_unitario=Decimal("10.00"),
+                total=Decimal("40.00"),
+            )
+
+        try:
+            resposta = self.client.get(
+                reverse(
+                    "estoque:compras_lista_fornecedor_editar",
+                    kwargs={"pk": lista.pk},
+                ),
+                secure=True,
+            )
+        finally:
+            with connection.constraint_checks_disabled():
+                ItemListaCompraFornecedor.objects.filter(pk=item.pk).delete()
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Produto nao identificado")
+        self.assertContains(resposta, "4,000")
+        self.assertContains(resposta, "40,00")
 
     def test_edicao_manual_produto_novo_salva_historico_correto_e_nao_herda_sem_historico(self):
         fornecedor_compra = Fornecedor.objects.create(

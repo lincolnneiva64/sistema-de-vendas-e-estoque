@@ -16,6 +16,7 @@ from io import BytesIO
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from datetime import date, timedelta
+from types import SimpleNamespace
 import time
 
 from django.conf import settings
@@ -8084,6 +8085,25 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
     }
 
 
+def _produto_item_lista_fornecedor_para_edicao(item):
+    if item.produto:
+        return item.produto
+
+    return SimpleNamespace(
+        id=item.produto_id,
+        nome="Produto nao identificado",
+        quantidade=item.estoque_atual,
+        estoque=None,
+        estoque_minimo=item.estoque_minimo,
+        unidade="",
+        unidade_compra=item.unidade or "",
+        unidade_venda_1=item.unidade or "",
+        unidade_venda_2="",
+        fator_conversao=Decimal("1"),
+        preco_compra=item.preco_compra,
+    )
+
+
 def compras_lista_fornecedor_editar(request, pk):
     lista = get_object_or_404(
         ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto"),
@@ -8259,7 +8279,7 @@ def compras_lista_fornecedor_editar(request, pk):
         if not item.produto_id:
             continue
 
-        produto = item.produto
+        produto = _produto_item_lista_fornecedor_para_edicao(item)
         fator = (
             getattr(produto, "fator_conversao", None)
             or getattr(produto, "quantidade_por_unidade", None)
@@ -8304,7 +8324,11 @@ def compras_lista_fornecedor_editar(request, pk):
             )
 
     produtos_sugestao = [
-        _lista_fornecedor_produto_payload(item.produto, fornecedor_id=fornecedor_id, item=item)
+        _lista_fornecedor_produto_payload(
+            _produto_item_lista_fornecedor_para_edicao(item),
+            fornecedor_id=fornecedor_id,
+            item=item,
+        )
         for item in itens
         if item.produto_id
     ]
