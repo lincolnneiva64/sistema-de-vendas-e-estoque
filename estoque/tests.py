@@ -20930,6 +20930,104 @@ class PixRecebidoTests(TestCase):
         self.assertNotContains(resposta, "Cliente Recibo Dispensado")
         self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
 
+    def test_recibos_pendentes_padrao_usa_hoje_e_totais_filtrados(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        cliente_hoje = Cliente.objects.create(nome="Cliente Recibo Hoje", ativo=True)
+        cliente_antigo = Cliente.objects.create(nome="Cliente Recibo Antigo", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, valor="80.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_antigo, valor="50.00", data_recebimento=ontem)
+
+        resposta = self.client.get(self._url_recibos_pendentes(), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Cliente Recibo Hoje")
+        self.assertNotContains(resposta, "Cliente Recibo Antigo")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 80,00</strong>')
+        self.assertContains(resposta, 'data-total-pendente-centavos="8000"')
+        self.assertContains(resposta, '<option value="hoje" selected>Hoje</option>', html=True)
+
+    def test_recibos_pendentes_filtro_ontem(self):
+        hoje = timezone.localdate()
+        ontem = hoje - timedelta(days=1)
+        cliente_hoje = Cliente.objects.create(nome="Cliente Filtro Hoje", ativo=True)
+        cliente_ontem = Cliente.objects.create(nome="Cliente Filtro Ontem", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, valor="80.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_ontem, valor="55.00", data_recebimento=ontem)
+
+        resposta = self.client.get(self._url_recibos_pendentes(), {"periodo": "ontem"}, secure=True)
+
+        self.assertContains(resposta, "Cliente Filtro Ontem")
+        self.assertNotContains(resposta, "Cliente Filtro Hoje")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 55,00</strong>')
+
+    def test_recibos_pendentes_filtro_ultimos_sete_dias(self):
+        hoje = timezone.localdate()
+        cliente_hoje = Cliente.objects.create(nome="Cliente Sete Hoje", ativo=True)
+        cliente_seis = Cliente.objects.create(nome="Cliente Sete Seis", ativo=True)
+        cliente_oito = Cliente.objects.create(nome="Cliente Sete Oito", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, valor="80.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_seis, valor="40.00", data_recebimento=hoje - timedelta(days=6))
+        self._criar_operacao_recebimento_cliente(cliente_oito, valor="20.00", data_recebimento=hoje - timedelta(days=8))
+
+        resposta = self.client.get(self._url_recibos_pendentes(), {"periodo": "7dias"}, secure=True)
+
+        self.assertContains(resposta, "Cliente Sete Hoje")
+        self.assertContains(resposta, "Cliente Sete Seis")
+        self.assertNotContains(resposta, "Cliente Sete Oito")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">2</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 120,00</strong>')
+
+    def test_recibos_pendentes_filtro_todos(self):
+        hoje = timezone.localdate()
+        cliente_hoje = Cliente.objects.create(nome="Cliente Todos Hoje", ativo=True)
+        cliente_antigo = Cliente.objects.create(nome="Cliente Todos Antigo", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_hoje, valor="80.00", data_recebimento=hoje)
+        self._criar_operacao_recebimento_cliente(cliente_antigo, valor="25.00", data_recebimento=hoje - timedelta(days=20))
+
+        resposta = self.client.get(self._url_recibos_pendentes(), {"periodo": "todos"}, secure=True)
+
+        self.assertContains(resposta, "Cliente Todos Hoje")
+        self.assertContains(resposta, "Cliente Todos Antigo")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">2</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 105,00</strong>')
+
+    def test_recibos_pendentes_filtro_intervalo_datas(self):
+        hoje = timezone.localdate()
+        cliente_dentro = Cliente.objects.create(nome="Cliente Intervalo Dentro", ativo=True)
+        cliente_fora = Cliente.objects.create(nome="Cliente Intervalo Fora", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_dentro, valor="35.00", data_recebimento=hoje - timedelta(days=3))
+        self._criar_operacao_recebimento_cliente(cliente_fora, valor="90.00", data_recebimento=hoje)
+
+        resposta = self.client.get(
+            self._url_recibos_pendentes(),
+            {
+                "data_inicio": (hoje - timedelta(days=4)).isoformat(),
+                "data_fim": (hoje - timedelta(days=2)).isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Cliente Intervalo Dentro")
+        self.assertNotContains(resposta, "Cliente Intervalo Fora")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 35,00</strong>')
+
+    def test_recibos_pendentes_filtro_cliente_parcial(self):
+        cliente_alvo = Cliente.objects.create(nome="Maria Antonia Alves", ativo=True)
+        cliente_outro = Cliente.objects.create(nome="Jose Siqueira", ativo=True)
+        self._criar_operacao_recebimento_cliente(cliente_alvo, valor="60.00")
+        self._criar_operacao_recebimento_cliente(cliente_outro, valor="45.00")
+
+        resposta = self.client.get(self._url_recibos_pendentes(), {"cliente": "anto"}, secure=True)
+
+        self.assertContains(resposta, "Maria Antonia Alves")
+        self.assertNotContains(resposta, "Jose Siqueira")
+        self.assertContains(resposta, 'id="recibosPendentesQtd">1</strong>')
+        self.assertContains(resposta, 'id="recibosPendentesTotal">R$ 60,00</strong>')
+
     def test_recibos_pendentes_mostra_dados_e_acoes_da_operacao(self):
         cliente = Cliente.objects.create(
             nome="Cliente Recibo Acao",
@@ -20966,25 +21064,12 @@ class PixRecebidoTests(TestCase):
                 kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
             ),
         )
-        self.assertContains(resposta, "Para enviar o recibo: compartilhe ou abra o card")
-        self.assertContains(resposta, "Compartilhar card")
-        self.assertContains(resposta, "Abrir card para enviar")
-        self.assertContains(resposta, "data-compartilhar-recibo-card")
-        self.assertContains(
-            resposta,
-            'data-card-url="{}"'.format(
-                reverse(
-                    "estoque:receber_cliente_operacao_recibo_card_imagem",
-                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
-                )
-            ),
-        )
-        self.assertContains(resposta, "navigator.share")
-        self.assertContains(resposta, "navigator.canShare")
-        self.assertContains(resposta, 'new File([blob], "recibo-pagamento.png", { type: "image/png" })')
-        self.assertContains(resposta, "await fetch(cardUrl")
-        self.assertContains(resposta, "await navigator.share(payload);")
-        self.assertContains(resposta, "Este navegador nao conseguiu compartilhar a imagem automaticamente.")
+        self.assertContains(resposta, "Abrir card")
+        self.assertNotContains(resposta, "Compartilhar card")
+        self.assertNotContains(resposta, "Abrir card para enviar")
+        self.assertNotContains(resposta, "data-compartilhar-recibo-card")
+        self.assertNotContains(resposta, "navigator.share")
+        self.assertNotContains(resposta, "navigator.canShare")
         self.assertContains(resposta, "Enviar WhatsApp")
         self.assertContains(resposta, f'data-confirmar-recibo-url="{self._url_confirmar_recibo(cliente, operacao)}"')
 
@@ -21070,7 +21155,9 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(imagem.width, 480)
         self.assertGreater(imagem.height, imagem.width)
         self.assertContains(pagina, f'data-operacao-id="{operacao.id}"')
-        self.assertContains(pagina, f'data-card-url="{url_card}"')
+        self.assertContains(pagina, f'href="{url_card}"')
+        self.assertNotContains(pagina, "Compartilhar card")
+        self.assertNotContains(pagina, "navigator.share")
         self.assertContains(pagina, cliente.nome)
         operacao.refresh_from_db()
         self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
@@ -21092,6 +21179,9 @@ class PixRecebidoTests(TestCase):
 
         self.assertContains(pagina, "card.remove()")
         self.assertContains(pagina, "atualizarQuantidade(-1)")
+        self.assertContains(pagina, "atualizarTotal(valorCentavos)")
+        self.assertContains(pagina, 'botao.textContent = "Enviado ✓";')
+        self.assertContains(pagina, 'data-total-pendente-centavos="10000"')
         self.assertEqual(resposta.status_code, 200)
         self.assertTrue(resposta.json()["ok"])
         operacao.refresh_from_db()
@@ -21099,6 +21189,44 @@ class PixRecebidoTests(TestCase):
         pagina_atualizada = self.client.get(self._url_recibos_pendentes(), secure=True)
         self.assertNotContains(pagina_atualizada, "Cliente Recibo Confirmar Lista")
         self.assertContains(pagina_atualizada, "Nenhum recibo pendente.")
+
+    def test_confirmar_recibo_pendente_nao_altera_financeiro_do_recebimento(self):
+        cliente = Cliente.objects.create(nome="Cliente Recibo Sem Efeito Financeiro", ativo=True)
+        conta = self._criar_conta_receber_pix(cliente, "100.00")
+        operacao = self._criar_operacao_recebimento_cliente(cliente, valor="100.00")
+        recebimento = RecebimentoContaReceber.objects.create(
+            conta=conta,
+            operacao=operacao,
+            data_recebimento=operacao.data_recebimento,
+            valor=Decimal("100.00"),
+            forma_pagamento="PIX",
+            observacao="Recebimento ja registrado.",
+        )
+        movimento = MovimentoFinanceiro.objects.create(
+            conta=views._conta_financeira_por_forma_pagamento("PIX"),
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=Decimal("100.00"),
+            data=operacao.data_recebimento,
+            descricao=f"Recebimento de cliente: {cliente.nome} - operacao #{operacao.id}",
+            origem="recebimento_cliente",
+        )
+        conta_estado = list(ContaReceber.objects.values_list("id", "valor_em_aberto", "status"))
+        recebimento_estado = list(RecebimentoContaReceber.objects.values_list("id", "valor", "operacao_id"))
+        movimento_estado = list(MovimentoFinanceiro.objects.values_list("id", "valor", "tipo", "origem"))
+
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, OperacaoRecebimentoCliente.STATUS_RECIBO_ENVIADO)
+        self.assertEqual(ContaReceber.objects.count(), 1)
+        self.assertEqual(RecebimentoContaReceber.objects.count(), 1)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 1)
+        self.assertEqual(list(ContaReceber.objects.values_list("id", "valor_em_aberto", "status")), conta_estado)
+        self.assertEqual(list(RecebimentoContaReceber.objects.values_list("id", "valor", "operacao_id")), recebimento_estado)
+        self.assertEqual(list(MovimentoFinanceiro.objects.values_list("id", "valor", "tipo", "origem")), movimento_estado)
+        self.assertTrue(RecebimentoContaReceber.objects.filter(pk=recebimento.pk).exists())
+        self.assertTrue(MovimentoFinanceiro.objects.filter(pk=movimento.pk).exists())
 
     def test_recibos_pendentes_estado_vazio(self):
         resposta = self.client.get(self._url_recibos_pendentes(), secure=True)

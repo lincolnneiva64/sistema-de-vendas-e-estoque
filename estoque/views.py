@@ -14652,12 +14652,48 @@ def _dados_comprovante_operacao_recebimento(operacao):
 
 @ensure_csrf_cookie
 def recebimentos_recibos_pendentes(request):
+    hoje = timezone.localdate()
+    periodo = (request.GET.get("periodo") or "hoje").strip().lower()
+    cliente_busca = (request.GET.get("cliente") or "").strip()
+    data_inicio_texto = (request.GET.get("data_inicio") or "").strip()
+    data_fim_texto = (request.GET.get("data_fim") or "").strip()
+    data_inicio = parse_date(data_inicio_texto) if data_inicio_texto else None
+    data_fim = parse_date(data_fim_texto) if data_fim_texto else None
+
+    if data_inicio or data_fim:
+        periodo = "personalizado"
+    elif periodo == "ontem":
+        data_inicio = hoje - timedelta(days=1)
+        data_fim = data_inicio
+    elif periodo == "7dias":
+        data_inicio = hoje - timedelta(days=6)
+        data_fim = hoje
+    elif periodo == "todos":
+        data_inicio = None
+        data_fim = None
+    else:
+        periodo = "hoje"
+        data_inicio = hoje
+        data_fim = hoje
+
+    if data_inicio and data_fim and data_inicio > data_fim:
+        data_inicio, data_fim = data_fim, data_inicio
+
     operacoes_qs = (
         OperacaoRecebimentoCliente.objects
         .select_related("cliente", "criado_por", "recibo_confirmado_por")
         .filter(status_recibo=OperacaoRecebimentoCliente.STATUS_RECIBO_PENDENTE)
-        .order_by("-criado_em", "-id")
     )
+    if data_inicio:
+        operacoes_qs = operacoes_qs.filter(data_recebimento__gte=data_inicio)
+    if data_fim:
+        operacoes_qs = operacoes_qs.filter(data_recebimento__lte=data_fim)
+    if cliente_busca:
+        operacoes_qs = operacoes_qs.filter(
+            Q(cliente_nome_snapshot__icontains=cliente_busca)
+            | Q(cliente__nome__icontains=cliente_busca)
+        )
+    operacoes_qs = operacoes_qs.order_by("-criado_em", "-id")
     operacoes = [operacao for operacao in operacoes_qs if not _operacao_recebimento_desfeita(operacao)]
     pendencias = []
     total_recebido = sum((operacao.valor_recebido for operacao in operacoes), Decimal("0.00"))
@@ -14679,6 +14715,7 @@ def recebimentos_recibos_pendentes(request):
             "cliente": cliente,
             "cliente_nome": operacao.cliente_nome_snapshot or (cliente.nome if cliente else "Cliente nao informado"),
             "valor_recebido_formatado": _formatar_moeda(operacao.valor_recebido),
+            "valor_recebido_centavos": int(((operacao.valor_recebido or Decimal("0.00")) * 100).quantize(Decimal("1"))),
             "saldo_atual_formatado": _formatar_moeda(operacao.saldo_atual),
             "contas_abatidas_qtd": len(contas_abatidas),
             "whatsapp_confirmacao": whatsapp_confirmacao,
@@ -14703,8 +14740,16 @@ def recebimentos_recibos_pendentes(request):
             "pendencias": pendencias,
             "pendencias_qtd": len(pendencias),
             "total_recebido_pendente": _formatar_moeda(total_recebido),
+            "total_recebido_pendente_centavos": int((total_recebido * 100).quantize(Decimal("1"))),
+            "filtros": {
+                "periodo": periodo,
+                "cliente": cliente_busca,
+                "data_inicio": data_inicio.isoformat() if data_inicio else "",
+                "data_fim": data_fim.isoformat() if data_fim else "",
+            },
             "receber_cliente_url": reverse("estoque:receber_cliente_escolher"),
             "home_url": reverse("estoque:home"),
+            "limpar_filtros_url": reverse("estoque:recebimentos_recibos_pendentes"),
         },
     )
 

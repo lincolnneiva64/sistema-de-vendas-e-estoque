@@ -64,6 +64,46 @@
     display: grid;
     gap: 9px;
   }
+  .recibos-filtros {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 9px;
+  }
+  .recibos-filtros-linha {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .recibos-filtros label {
+    display: grid;
+    gap: 3px;
+    color: #475569;
+    font-size: 0.68rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+  .recibos-filtros input,
+  .recibos-filtros select {
+    min-height: 36px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #111827;
+    padding: 7px 9px;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 800;
+    text-transform: none;
+  }
+  .recibos-filtros-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
   .recibo-card {
     border: 1px solid #e2e8f0;
     border-left: 6px solid #f59e0b;
@@ -159,18 +199,6 @@
   .recibo-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
   .recibo-btn.confirmar { border-color: #2563eb; background: #1d4ed8; color: #fff; }
   .recibo-btn:disabled { opacity: 0.72; cursor: default; }
-  .recibo-orientacao {
-    flex-basis: 100%;
-    margin: 0;
-    border: 1px solid #bfdbfe;
-    border-radius: 8px;
-    background: #eff6ff;
-    color: #1e3a8a;
-    padding: 7px 9px;
-    font-size: 0.79rem;
-    font-weight: 850;
-    line-height: 1.28;
-  }
   .recibo-feedback {
     margin: 8px 0 0;
     color: #166534;
@@ -198,6 +226,7 @@
   @media (max-width: 760px) {
     .recibos-page { padding: 8px; }
     .recibos-resumo,
+    .recibos-filtros-linha,
     .recibo-meta {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -207,9 +236,18 @@
     }
     .recibo-btn { width: 100%; }
   }
+  @media (max-width: 520px) {
+    .recibos-filtros-linha {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 
-<main class="recibos-page" data-pendencias-count="{{ pendencias_qtd }}">
+<main
+  class="recibos-page"
+  data-pendencias-count="{{ pendencias_qtd }}"
+  data-total-pendente-centavos="{{ total_recebido_pendente_centavos }}"
+>
   <div class="recibos-shell">
     <header class="recibos-topo">
       <h1 class="recibos-title">Recibos pendentes</h1>
@@ -221,9 +259,38 @@
         </div>
         <div class="recibos-kpi">
           <span>Total recebido pendente</span>
-          <strong>{{ total_recebido_pendente }}</strong>
+          <strong id="recibosPendentesTotal">{{ total_recebido_pendente }}</strong>
         </div>
       </div>
+      <form class="recibos-filtros" method="get" action="">
+        <div class="recibos-filtros-linha">
+          <label>
+            Periodo
+            <select name="periodo">
+              <option value="hoje" {% if filtros.periodo == "hoje" %}selected{% endif %}>Hoje</option>
+              <option value="ontem" {% if filtros.periodo == "ontem" %}selected{% endif %}>Ontem</option>
+              <option value="7dias" {% if filtros.periodo == "7dias" %}selected{% endif %}>Ultimos 7 dias</option>
+              <option value="todos" {% if filtros.periodo == "todos" %}selected{% endif %}>Todos</option>
+            </select>
+          </label>
+          <label>
+            Data inicial
+            <input type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+          </label>
+          <label>
+            Data final
+            <input type="date" name="data_fim" value="{{ filtros.data_fim }}">
+          </label>
+          <label>
+            Cliente
+            <input type="search" name="cliente" value="{{ filtros.cliente }}" placeholder="Nome do cliente">
+          </label>
+        </div>
+        <div class="recibos-filtros-acoes">
+          <button class="recibo-btn confirmar" type="submit">Filtrar</button>
+          <a class="recibo-btn" href="{{ limpar_filtros_url }}">Limpar filtros</a>
+        </div>
+      </form>
     </header>
 
     <section class="recibos-lista" id="recibosPendentesLista" aria-label="Recibos pendentes">
@@ -233,6 +300,7 @@
           data-recibo-card
           data-operacao-id="{{ pendencia.operacao.id }}"
           data-status-recibo="{{ pendencia.operacao.status_recibo }}"
+          data-valor-recebido-centavos="{{ pendencia.valor_recebido_centavos }}"
         >
           <div class="recibo-head">
             <div>
@@ -266,19 +334,11 @@
           </div>
 
           <div class="recibo-actions">
-            <p class="recibo-orientacao">Para enviar o recibo: compartilhe ou abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
             {% if pendencia.recebimento_url %}
               <a class="recibo-btn" href="{{ pendencia.recebimento_url }}">Abrir recebimento</a>
             {% endif %}
             {% if pendencia.recibo_card_url %}
-              <button
-                type="button"
-                class="recibo-btn"
-                data-compartilhar-recibo-card
-                data-card-url="{{ pendencia.recibo_card_url }}"
-                data-share-text="{{ pendencia.whatsapp_confirmacao.mensagem }}"
-              >Compartilhar card</button>
-              <a class="recibo-btn" href="{{ pendencia.recibo_card_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
+              <a class="recibo-btn" href="{{ pendencia.recibo_card_url }}" target="_blank" rel="noopener">Abrir card</a>
             {% endif %}
             {% if pendencia.whatsapp_confirmacao.tem_whatsapp %}
               <a
@@ -316,6 +376,7 @@
 (function () {
   const page = document.querySelector(".recibos-page");
   const qtdEl = document.getElementById("recibosPendentesQtd");
+  const totalEl = document.getElementById("recibosPendentesTotal");
   const emptyEl = document.getElementById("recibosPendentesVazio");
 
   function csrfToken() {
@@ -330,6 +391,18 @@
     if (page) page.dataset.pendenciasCount = String(proximo);
     if (qtdEl) qtdEl.textContent = String(proximo);
     if (emptyEl) emptyEl.hidden = proximo !== 0;
+  }
+
+  function formatarMoedaCentavos(centavos) {
+    const valor = (Math.max(Number(centavos) || 0, 0) / 100);
+    return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function atualizarTotal(centavosRemover) {
+    const atual = Number(page?.dataset.totalPendenteCentavos || "0") || 0;
+    const proximo = Math.max(atual - (Number(centavosRemover) || 0), 0);
+    if (page) page.dataset.totalPendenteCentavos = String(proximo);
+    if (totalEl) totalEl.textContent = formatarMoedaCentavos(proximo);
   }
 
   function feedback(card, texto, erro) {
@@ -364,10 +437,14 @@
       }
       card.classList.add("confirmado");
       card.dataset.statusRecibo = dados.status_recibo || "enviado";
+      botao.textContent = "Enviado ✓";
+      botao.disabled = true;
       feedback(card, dados.mensagem || "Recibo confirmado como enviado.", false);
       window.setTimeout(function () {
+        const valorCentavos = Number(card.dataset.valorRecebidoCentavos || "0") || 0;
         card.remove();
         atualizarQuantidade(-1);
+        atualizarTotal(valorCentavos);
       }, 450);
     } catch (erro) {
       botao.disabled = false;
@@ -376,58 +453,7 @@
     }
   }
 
-  async function compartilharCard(botao) {
-    const card = botao.closest("[data-recibo-card]");
-    const cardUrl = botao.dataset.cardUrl;
-    const texto = botao.dataset.shareText || "Segue seu comprovante de pagamento.";
-    if (!cardUrl || botao.disabled) return;
-
-    if (!navigator.share || !navigator.canShare) {
-      feedback(card, "Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
-      return;
-    }
-
-    botao.disabled = true;
-    botao.textContent = "Preparando...";
-    feedback(card, "", false);
-    try {
-      const resposta = await fetch(cardUrl, { credentials: "same-origin" });
-      if (!resposta.ok) {
-        throw new Error("Nao foi possivel carregar o card do recibo.");
-      }
-      const blob = await resposta.blob();
-      const arquivo = new File([blob], "recibo-pagamento.png", { type: "image/png" });
-      const payload = {
-        files: [arquivo],
-        title: "Comprovante de pagamento",
-        text: texto
-      };
-      if (!navigator.canShare(payload)) {
-        feedback(card, "Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
-        return;
-      }
-      await navigator.share(payload);
-      feedback(card, "Depois de enviar o card no WhatsApp, confirme o envio.", false);
-    } catch (erro) {
-      if (erro && erro.name === "AbortError") {
-        feedback(card, "Compartilhamento cancelado.", false);
-      } else {
-        feedback(card, erro.message || "Nao foi possivel compartilhar o card automaticamente. Abra o card e envie a imagem manualmente.", true);
-      }
-    } finally {
-      botao.disabled = false;
-      botao.textContent = "Compartilhar card";
-    }
-  }
-
   document.addEventListener("click", function (event) {
-    const compartilharBtn = event.target.closest("[data-compartilhar-recibo-card]");
-    if (compartilharBtn) {
-      event.preventDefault();
-      compartilharCard(compartilharBtn);
-      return;
-    }
-
     const confirmarBtn = event.target.closest("[data-confirmar-recibo-url]");
     if (confirmarBtn) {
       event.preventDefault();
