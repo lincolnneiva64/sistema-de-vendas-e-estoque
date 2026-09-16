@@ -31583,6 +31583,150 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "Cliente Separacao")
         self.assertNotContains(resposta, "Cliente Data Invalida Ontem")
 
+    def test_outras_vendas_exibe_venda_do_dia_sem_separacao(self):
+        self._enviar()
+        venda = self._criar_venda_para_separacao("Cliente Outra Venda Dia")
+        venda.whatsapp_status = Venda.WHATSAPP_ABERTO
+        venda.save(update_fields=["whatsapp_status", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda.data_venda.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Outras vendas (1)")
+        self.assertContains(resposta, f"Nota #{venda.id}")
+        self.assertContains(resposta, "Cliente Outra Venda Dia")
+        self.assertContains(resposta, "WhatsApp aberto - aguardando confirmacao")
+
+    def test_outras_vendas_nao_exibe_venda_com_separacao(self):
+        self._enviar()
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": self.venda.data_venda.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Outras vendas (0)")
+        self.assertNotContains(resposta, "Cliente Separacao")
+
+    def test_outras_vendas_nao_exibe_venda_cancelada(self):
+        self._enviar()
+        venda_cancelada = self._criar_venda_para_separacao("Cliente Outra Venda Cancelada")
+        venda_cancelada.cancelada = True
+        venda_cancelada.save(update_fields=["cancelada", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda_cancelada.data_venda.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Outras vendas (0)")
+        self.assertNotContains(resposta, "Cliente Outra Venda Cancelada")
+
+    def test_outras_vendas_nao_exibe_venda_de_outra_data(self):
+        self._enviar()
+        hoje = date(2026, 9, 14)
+        venda_ontem = self._criar_venda_para_separacao("Cliente Outra Venda Ontem")
+        venda_ontem.data_venda = hoje - timedelta(days=1)
+        venda_ontem.save(update_fields=["data_venda", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": hoje.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Outras vendas (0)")
+        self.assertNotContains(resposta, "Cliente Outra Venda Ontem")
+
+    def test_venda_enviada_para_separacao_sai_de_outras_vendas(self):
+        self._enviar()
+        venda = self._criar_venda_para_separacao("Cliente Enviar Outras Vendas")
+        retorno = f"{reverse('estoque:separacao_vendas_fila')}?data={venda.data_venda.isoformat()}&aba=outras"
+
+        resposta = self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[venda.id]),
+            {"next": retorno},
+            secure=True,
+            follow=True,
+        )
+
+        self.assertRedirects(resposta, f"https://testserver{retorno}")
+        self.assertTrue(SeparacaoVenda.objects.filter(venda=venda).exists())
+        self.assertContains(resposta, "Outras vendas (0)")
+        self.assertNotContains(resposta, "Cliente Enviar Outras Vendas")
+
+    def test_fila_separacao_continua_exibindo_separacoes_com_abas(self):
+        self._enviar()
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": self.venda.data_venda.isoformat(), "aba": "separacao"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Separacao (1)")
+        self.assertContains(resposta, "Outras vendas (0)")
+        self.assertContains(resposta, f"Nota #{self.venda.id}")
+        self.assertContains(resposta, "Cliente Separacao")
+        self.assertContains(resposta, "Abrir checklist")
+
+    def test_nao_ha_duplicidade_entre_separacao_e_outras_vendas(self):
+        venda_outra = self._criar_venda_para_separacao("Cliente Somente Outras")
+        self._enviar()
+
+        resposta_separacao = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": self.venda.data_venda.isoformat(), "aba": "separacao"},
+            secure=True,
+        )
+        resposta_outras = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda_outra.data_venda.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta_separacao, "Cliente Separacao")
+        self.assertNotContains(resposta_separacao, "Cliente Somente Outras")
+        self.assertContains(resposta_outras, "Cliente Somente Outras")
+        self.assertNotContains(resposta_outras, "Cliente Separacao")
+
+    def test_outras_vendas_respeita_filtro_por_data(self):
+        hoje = date(2026, 9, 14)
+        ontem = hoje - timedelta(days=1)
+        venda_hoje = self._criar_venda_para_separacao("Cliente Outras Hoje")
+        venda_ontem = self._criar_venda_para_separacao("Cliente Outras Ontem")
+        venda_hoje.data_venda = hoje
+        venda_ontem.data_venda = ontem
+        venda_hoje.save(update_fields=["data_venda", "atualizado_em"])
+        venda_ontem.save(update_fields=["data_venda", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": ontem.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Cliente Outras Ontem")
+        self.assertNotContains(resposta, "Cliente Outras Hoje")
+        self.assertContains(resposta, "Outras vendas (1)")
+
+    def test_fila_exibe_edicao_normal_separada_da_edicao_de_ajuste(self):
+        self._enviar()
+        separacao = self._separacao()
+        self._marcar_separacao_status(separacao, SeparacaoVenda.STATUS_ENVIADA)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, f"/vendas/?editar={self.venda.id}&next=")
+        self.assertContains(resposta, "Editar venda")
+        self.assertNotContains(resposta, f"ajuste_separacao={separacao.id}")
+        self.assertNotContains(resposta, "Editar nota")
+
     def test_fila_exibe_atalhos_hoje_e_ontem(self):
         hoje = date(2026, 9, 14)
         ontem = hoje - timedelta(days=1)

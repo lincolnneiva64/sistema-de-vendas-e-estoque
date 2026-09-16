@@ -20702,6 +20702,10 @@ def separacao_vendas_fila(request):
         messages.warning(request, "Data invalida. Mostrando as separacoes de hoje.")
         data_referencia = hoje
 
+    aba_ativa = request.GET.get("aba", "separacao")
+    if aba_ativa not in {"separacao", "outras"}:
+        aba_ativa = "separacao"
+
     url_base = reverse("estoque:separacao_vendas_fila")
     separacoes = list(
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
@@ -20713,17 +20717,35 @@ def separacao_vendas_fila(request):
         .order_by("enviado_em", "id")
     )
     grupos_rota = _montar_grupos_rota_separacao(separacoes)
+    outras_vendas = list(
+        Venda.objects.select_related("cliente")
+        .prefetch_related("eventos")
+        .filter(
+            data_venda=data_referencia,
+            cancelada=False,
+            separacao__isnull=True,
+        )
+        .order_by("id")
+    )
+    for venda in outras_vendas:
+        venda.whatsapp_status_selos = _status_whatsapp_consulta_venda(venda)
 
     return render(
         request,
         "estoque/separacao_vendas_fila.html",
         {
+            "aba_ativa": aba_ativa,
             "grupos_rota": grupos_rota,
             "separacoes": separacoes,
+            "outras_vendas": outras_vendas,
+            "total_separacoes": len(separacoes),
+            "total_outras_vendas": len(outras_vendas),
             "data_referencia": data_referencia,
             "data_referencia_iso": data_referencia.isoformat(),
-            "hoje_url": f"{url_base}?{urlencode({'data': hoje.isoformat()})}",
-            "ontem_url": f"{url_base}?{urlencode({'data': ontem.isoformat()})}",
+            "separacao_url": f"{url_base}?{urlencode({'data': data_referencia.isoformat(), 'aba': 'separacao'})}",
+            "outras_vendas_url": f"{url_base}?{urlencode({'data': data_referencia.isoformat(), 'aba': 'outras'})}",
+            "hoje_url": f"{url_base}?{urlencode({'data': hoje.isoformat(), 'aba': aba_ativa})}",
+            "ontem_url": f"{url_base}?{urlencode({'data': ontem.isoformat(), 'aba': aba_ativa})}",
         },
     )
 
@@ -20784,6 +20806,13 @@ def venda_enviar_separacao(request, pk):
         })
 
     messages.success(request, mensagem)
+    proxima_url = (request.POST.get("next") or request.GET.get("next") or "").strip()
+    if proxima_url and url_has_allowed_host_and_scheme(
+        proxima_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(proxima_url)
     return redirect(detalhe_url)
 
 
