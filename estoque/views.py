@@ -17745,7 +17745,7 @@ def _normalizar_unidade_estoque(unidade):
     return str(unidade or "").strip().upper()
 
 
-def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None):
+def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None, validar_quantidade=True):
     quantidade_decimal = Decimal(quantidade or "0").quantize(Decimal("0.001"))
     unidade_recebida = _normalizar_unidade_estoque(unidade)
     unidade_base = produto.unidade_venda_1 or produto.unidade_compra or ""
@@ -17753,7 +17753,8 @@ def _quantidade_estoque_para_unidade_base(produto, quantidade, unidade=None):
     unidade_fracionada = produto.unidade_venda_2 or ""
     unidade_fracionada_norm = _normalizar_unidade_estoque(unidade_fracionada)
     fator = Decimal(produto.fator_conversao or 0)
-    _validar_quantidade_produto_unidade(produto, quantidade_decimal, unidade or unidade_base)
+    if validar_quantidade:
+        _validar_quantidade_produto_unidade(produto, quantidade_decimal, unidade or unidade_base)
 
     if unidade_recebida and unidade_base_norm and unidade_recebida == unidade_base_norm:
         return quantidade_decimal, unidade_base
@@ -17839,10 +17840,21 @@ def _produtos_estoque_atualizados_payload(produto_ids):
     ]
 
 
-def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
+def _baixar_estoque_produto(
+    produto_id,
+    quantidade,
+    produto_nome=None,
+    unidade=None,
+    validar_quantidade=True,
+):
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
-    quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_base, unidade_base = _quantidade_estoque_para_unidade_base(
+        produto,
+        quantidade,
+        unidade,
+        validar_quantidade=validar_quantidade,
+    )
     quantidade_movimento = (
         quantidade_base
         if produto.vende_fracionado
@@ -17889,10 +17901,21 @@ def _baixar_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=N
     }
 
 
-def _devolver_estoque_produto(produto_id, quantidade, produto_nome=None, unidade=None):
+def _devolver_estoque_produto(
+    produto_id,
+    quantidade,
+    produto_nome=None,
+    unidade=None,
+    validar_quantidade=True,
+):
     produto = Produto.objects.select_for_update().get(pk=produto_id)
     nome = produto_nome or produto.nome
-    quantidade_base, _unidade_base = _quantidade_estoque_para_unidade_base(produto, quantidade, unidade)
+    quantidade_base, _unidade_base = _quantidade_estoque_para_unidade_base(
+        produto,
+        quantidade,
+        unidade,
+        validar_quantidade=validar_quantidade,
+    )
     quantidade_movimento = (
         quantidade_base
         if produto.vende_fracionado
@@ -18355,6 +18378,11 @@ def gravar_venda(request):
                         )
 
                     elif quantidade_nova != quantidade_antiga:
+                        _validar_quantidade_produto_unidade(
+                            produto_novo,
+                            quantidade_nova,
+                            unidade_nova,
+                        )
                         diferenca = (quantidade_nova - quantidade_antiga).quantize(Decimal("0.001"))
 
                         if diferenca > 0:
@@ -18364,6 +18392,7 @@ def gravar_venda(request):
                                 diferenca,
                                 produto_nome_novo,
                                 unidade_nova,
+                                validar_quantidade=False,
                             )
                         else:
                             produtos_estoque_atualizados_ids.add(produto_novo.id)
@@ -18372,6 +18401,7 @@ def gravar_venda(request):
                                 abs(diferenca),
                                 produto_nome_novo,
                                 unidade_nova,
+                                validar_quantidade=False,
                             )
 
                         produto_novo.refresh_from_db(fields=["quantidade"])

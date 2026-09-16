@@ -29037,6 +29037,69 @@ class VendaEdicaoUnificadaTests(TestCase):
             excluido=False,
         )
 
+    def criar_produto_ct_un(self, nome="Produto CT UN", estoque="20.000"):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal(str(estoque)),
+            preco_venda=Decimal("11.50"),
+            preco_compra=Decimal("8.31"),
+            preco_vista=Decimal("11.50"),
+            preco_prazo=Decimal("12.00"),
+            preco_compra_fracionado=Decimal("0.08"),
+            preco_vista_fracionado=Decimal("0.15"),
+            preco_prazo_fracionado=Decimal("0.20"),
+            unidade_compra="CT",
+            unidade_venda_1="CT",
+            unidade_venda_2="UN",
+            fator_conversao=Decimal("100.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+
+    def criar_venda_produto_ct_fracionado(self, quantidade="0.710", estoque_atual="20.000"):
+        cliente = Cliente.objects.create(
+            nome="Cliente Edicao CT Fracionado",
+            ativo=True,
+        )
+        produto = self.criar_produto_ct_un(
+            "Touca Plastica Edicao 1/100Un",
+            estoque=estoque_atual,
+        )
+        quantidade_decimal = Decimal(quantidade)
+        preco = Decimal("11.50")
+        total = (quantidade_decimal * preco).quantize(Decimal("0.01"))
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=70),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=total,
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade_decimal,
+            unidade="CT",
+            preco_unitario=preco,
+            valor_total=total,
+            estoque_antes=quantidade_decimal,
+            estoque_movimentado=quantidade_decimal,
+            estoque_depois=Decimal("0.000"),
+            estoque_unidade_snapshot="CT",
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=total,
+            valor_em_aberto=total,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        return cliente, produto, venda, item
+
     def criar_venda_base(self, quantidade="2.000", preco="10.00", estoque="10.000"):
         cliente = Cliente.objects.create(
             nome="Cliente Edicao Unificada",
@@ -30252,6 +30315,184 @@ class VendaEdicaoUnificadaTests(TestCase):
             EventoVenda.objects.filter(
                 venda=venda,
                 tipo_evento="quantidade_item_alterada",
+            ).exists()
+        )
+
+    def test_edicao_unificada_aumenta_ct_fracionado_movimentando_delta_decimal(self):
+        cliente, produto, venda, item = self.criar_venda_produto_ct_fracionado(
+            quantidade="0.710",
+            estoque_atual="20.000",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="13.000",
+            preco="11.50",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+
+        self.assertEqual(item.quantidade, Decimal("13.000"))
+        self.assertEqual(item.unidade, "CT")
+        self.assertEqual(item.valor_total, Decimal("149.50"))
+        self.assertEqual(venda.total, Decimal("149.50"))
+        self.assertEqual(produto.quantidade, Decimal("7.710"))
+        self.assertEqual(Decimal("20.000") - produto.quantidade, Decimal("12.290"))
+        self.assertEqual(conta.valor_original, Decimal("149.50"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("149.50"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_nova_venda_ct_fracionario_continua_rejeitada(self):
+        produto = self.criar_produto_ct_un("Touca Nova Venda CT Inteiro", estoque="20.000")
+        cliente = Cliente.objects.create(nome="Cliente Nova Venda CT", ativo=True)
+        payload = {
+            "cliente_id": cliente.id,
+            "data_venda": timezone.localdate().isoformat(),
+            "data_vencimento": (timezone.localdate() + timedelta(days=70)).isoformat(),
+            "tipo_pagamento": "A prazo",
+            "operador": "Teste",
+            "itens": [
+                {
+                    "produto_id": produto.id,
+                    "produto_nome": produto.nome,
+                    "quantidade": "12.290",
+                    "unidade": "CT",
+                    "preco_unitario": "11.50",
+                    "valor_total": "141.34",
+                }
+            ],
+        }
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("nao permite venda fracionada", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("20.000"))
+        self.assertFalse(Venda.objects.filter(cliente=cliente).exists())
+
+    def test_edicao_unificada_ct_final_fracionario_continua_rejeitada_e_atomica(self):
+        cliente, produto, venda, item = self.criar_venda_produto_ct_fracionado(
+            quantidade="0.710",
+            estoque_atual="20.000",
+        )
+        conta = ContaReceber.objects.get(venda=venda)
+        estado_inicial = {
+            "produto_quantidade": produto.quantidade,
+            "venda_total": venda.total,
+            "item_quantidade": item.quantidade,
+            "item_valor_total": item.valor_total,
+            "conta_valor_original": conta.valor_original,
+            "conta_valor_em_aberto": conta.valor_em_aberto,
+        }
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="13.290",
+            preco="11.50",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("nao permite venda fracionada", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(produto.quantidade, estado_inicial["produto_quantidade"])
+        self.assertEqual(venda.total, estado_inicial["venda_total"])
+        self.assertEqual(item.quantidade, estado_inicial["item_quantidade"])
+        self.assertEqual(item.valor_total, estado_inicial["item_valor_total"])
+        self.assertEqual(conta.valor_original, estado_inicial["conta_valor_original"])
+        self.assertEqual(conta.valor_em_aberto, estado_inicial["conta_valor_em_aberto"])
+
+    def test_edicao_unificada_reduz_ct_devolvendo_delta_decimal(self):
+        cliente, produto, venda, item = self.criar_venda_produto_ct_fracionado(
+            quantidade="13.000",
+            estoque_atual="7.710",
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="1.000",
+            preco="11.50",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        item.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        self.assertEqual(produto.quantidade, Decimal("19.710"))
+        self.assertEqual(item.quantidade, Decimal("1.000"))
+        self.assertEqual(venda.total, Decimal("11.50"))
+        self.assertEqual(conta.valor_original, Decimal("11.50"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("11.50"))
+
+    def test_edicao_unificada_unidade_fracionada_continua_convertendo(self):
+        cliente, produto_base, venda, item_base = self.criar_venda_base(
+            quantidade="1.000",
+            estoque="9.000",
+        )
+        produto_fracionado = self.criar_produto_ct_un(
+            "Touca Edicao Em UN",
+            estoque="20.000",
+        )
+        payload = self.payload_edicao(venda, item_base, quantidade="1.000", preco="10.00")
+        payload["itens"].append({
+            "produto_id": produto_fracionado.id,
+            "produto_nome": produto_fracionado.nome,
+            "quantidade": "71.000",
+            "unidade": "UN",
+            "preco_unitario": "0.15",
+            "valor_total": "10.65",
+        })
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto_fracionado.refresh_from_db()
+        self.assertEqual(produto_fracionado.quantidade, Decimal("19.290"))
+        self.assertTrue(
+            venda.itens.filter(
+                produto=produto_fracionado,
+                unidade="UN",
+                quantidade=Decimal("71.000"),
+                valor_total=Decimal("10.65"),
             ).exists()
         )
 
