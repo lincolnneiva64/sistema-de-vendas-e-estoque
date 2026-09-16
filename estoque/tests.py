@@ -20755,6 +20755,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(resposta.context["pagamentos_hoje_preview"], [75.0])
         self.assertContains(resposta, "pagamentosHojeCliente")
         self.assertContains(resposta, "75.0")
+
     def test_receber_cliente_operacao_distribuida_aparece_uma_vez_com_aplicacoes(self):
         cliente = Cliente.objects.create(nome="Cliente Operacao Historico", ativo=True)
         self._criar_conta_receber_pix(cliente, "900.00")
@@ -21035,6 +21036,7 @@ class PixRecebidoTests(TestCase):
         self.assertNotIn(Decimal("777.00"), [item["valor"] for item in historico])
         self.assertContains(resposta, "Últimos pagamentos registrados para este cliente.")
         self.assertNotContains(resposta, "777,00")
+
     def test_receber_cliente_historico_mistura_operacoes_e_legado_sem_duplicar_baixa_vinculada(self):
         cliente = Cliente.objects.create(nome="Cliente Historico Misto", ativo=True)
         outro_cliente = Cliente.objects.create(nome="Cliente Historico Fora", ativo=True)
