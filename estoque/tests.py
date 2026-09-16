@@ -24,11 +24,12 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm, ProdutoForm
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, data_pertence_calendario_visita_fornecedor, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
+from .services.unificar_polpa_acerola import unificar_polpa_acerola
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
 
@@ -7665,6 +7666,149 @@ class ProdutosIncompletosTests(TestCase):
         self.assertEqual(self.produto.preco_compra, Decimal("3.33"))
         self.assertEqual(self.produto.preco_vista, Decimal("4.33"))
         self.assertEqual(self.produto.preco_prazo, Decimal("4.99"))
+
+
+class UnificarPolpaAcerolaTests(TestCase):
+    def setUp(self):
+        self.assai = Fornecedor.objects.create(nome="Assai Br", nome_fantasia="Assai")
+        self.nutripolpa = Fornecedor.objects.create(nome="Nutripolpa")
+        self.produto_operacional = Produto.objects.create(
+            id=277,
+            nome="Polpa Acerola 1Kg1",
+            codigo=None,
+            codigo_legado=None,
+            categoria="Frios e Embutidos",
+            preco_compra=Decimal("9.50"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            unidade_compra="KG",
+            fator_conversao=Decimal("0.00"),
+            unidade_venda_2="",
+            quantidade=Decimal("5.000"),
+            estoque_minimo=4,
+            ativo=True,
+            excluido=False,
+            preco_conferido=True,
+        )
+        self.produto_duplicado = Produto.objects.create(
+            id=1028,
+            nome="Polpa Acerola 1Kg",
+            codigo="",
+            codigo_legado="1.13.0065",
+            categoria="Frios e Embutidos",
+            preco_compra=Decimal("9.50"),
+            preco_vista=Decimal("15.00"),
+            preco_prazo=Decimal("16.00"),
+            unidade_compra="PC",
+            fator_conversao=Decimal("1.00"),
+            unidade_venda_2="PC",
+            quantidade=Decimal("0.000"),
+            estoque_minimo=5,
+            ativo=False,
+            excluido=False,
+            revisado_importacao=True,
+            preco_conferido=True,
+        )
+        ProdutoFornecedor.objects.create(
+            produto=self.produto_operacional,
+            fornecedor=self.assai,
+            ativo=True,
+            ultimo_preco_compra=Decimal("10.00"),
+        )
+        ProdutoFornecedor.objects.create(
+            produto=self.produto_duplicado,
+            fornecedor=self.nutripolpa,
+            ativo=True,
+        )
+
+    def _fornecedor_ids_ativos(self, produto):
+        return set(
+            ProdutoFornecedor.objects.filter(produto=produto, ativo=True).values_list(
+                "fornecedor_id", flat=True
+            )
+        )
+
+    def test_unificacao_configura_produto_operacional_e_exclui_duplicado_logicamente(self):
+        unificar_polpa_acerola(aplicar=True)
+
+        self.produto_operacional.refresh_from_db()
+        self.produto_duplicado.refresh_from_db()
+
+        self.assertEqual(self.produto_operacional.nome, "Polpa Acerola 1Kg")
+        self.assertEqual(self.produto_operacional.codigo_legado, "1.13.0065")
+        self.assertEqual(self.produto_operacional.quantidade, Decimal("5.000"))
+        self.assertEqual(self.produto_operacional.preco_compra, Decimal("9.50"))
+        self.assertEqual(self.produto_operacional.preco_vista, Decimal("15.00"))
+        self.assertEqual(self.produto_operacional.preco_prazo, Decimal("16.00"))
+        self.assertEqual(
+            self._fornecedor_ids_ativos(self.produto_operacional),
+            {self.assai.pk, self.nutripolpa.pk},
+        )
+        self.assertTrue(self.produto_duplicado.excluido)
+        self.assertIsNotNone(self.produto_duplicado.excluido_em)
+        self.assertIsNone(self.produto_duplicado.codigo_legado)
+
+    def test_unificacao_faz_nome_parar_de_bloquear_edicao_do_277(self):
+        unificar_polpa_acerola(aplicar=True)
+
+        form = ProdutoForm(
+            {
+                "nome": "Polpa Acerola 1Kg",
+                "codigo": "",
+                "categoria": "Frios e Embutidos",
+                "preco_compra": "9.50",
+                "unidade_compra": "KG",
+                "fator_conversao": "",
+                "preco_compra_fracionado": "",
+                "unidade_venda_1": "KG",
+                "preco_vista": "15.00",
+                "unidade_venda_2": "",
+                "preco_prazo": "16.00",
+                "vende_fracionado": "False",
+                "descricao_conversao": "",
+                "quantidade": "5.000",
+                "estoque_minimo": "4",
+                "fornecedor": "",
+                "percentual_vista_fracionado": "",
+                "preco_vista_fracionado": "",
+                "percentual_prazo_fracionado": "",
+                "preco_prazo_fracionado": "",
+            },
+            instance=self.produto_operacional,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_unificacao_e_idempotente_e_nao_duplica_fornecedor(self):
+        unificar_polpa_acerola(aplicar=True)
+        unificar_polpa_acerola(aplicar=True)
+
+        self.produto_operacional.refresh_from_db()
+        self.produto_duplicado.refresh_from_db()
+
+        self.assertEqual(self.produto_operacional.nome, "Polpa Acerola 1Kg")
+        self.assertEqual(self.produto_operacional.codigo_legado, "1.13.0065")
+        self.assertTrue(self.produto_duplicado.excluido)
+        self.assertEqual(
+            ProdutoFornecedor.objects.filter(
+                produto=self.produto_operacional,
+                fornecedor=self.nutripolpa,
+            ).count(),
+            1,
+        )
+
+    def test_unificacao_nao_altera_vendas_compras_ou_movimentacoes(self):
+        contagens_antes = {
+            "itens_venda": ItemVenda.objects.count(),
+            "itens_compra": ItemCompra.objects.count(),
+            "movimentacoes": MovimentacaoEstoqueManual.objects.count(),
+        }
+
+        unificar_polpa_acerola(aplicar=True)
+
+        self.assertEqual(ItemVenda.objects.count(), contagens_antes["itens_venda"])
+        self.assertEqual(ItemCompra.objects.count(), contagens_antes["itens_compra"])
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), contagens_antes["movimentacoes"])
 
 
 class ProdutoAtivacaoTests(TestCase):
