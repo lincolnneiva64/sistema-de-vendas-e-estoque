@@ -10946,6 +10946,126 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "4,000")
         self.assertContains(resposta, "40,00")
 
+    def test_edicao_lista_identifica_produtos_vinculados_sem_n_mais_um(self):
+        produto_lista = self.criar_produto("Produto Lista Vinculo")
+        produto_vinculado = self.criar_produto("Produto Manual Vinculado")
+        produto_nao_vinculado = self.criar_produto("Produto Manual Nao Vinculado")
+        lista = self.criar_lista_com_item(produto_lista)
+        ProdutoFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            produto=produto_lista,
+            ativo=True,
+        )
+        ProdutoFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            produto=produto_vinculado,
+            ativo=True,
+        )
+
+        consultas_produto_fornecedor = []
+
+        def contar_produto_fornecedor(execute, sql, params, many, context):
+            if "estoque_produtofornecedor" in sql.lower():
+                consultas_produto_fornecedor.append(sql)
+            return execute(sql, params, many, context)
+
+        with connection.execute_wrapper(contar_produto_fornecedor):
+            resposta = self.client.get(
+                reverse(
+                    "estoque:compras_lista_fornecedor_editar",
+                    kwargs={"pk": lista.pk},
+                ),
+                secure=True,
+            )
+
+        self.assertEqual(resposta.status_code, 200)
+        produtos_payload = resposta.context["produtos_manual_payload"]
+        payload_por_id = {item["id"]: item for item in produtos_payload}
+
+        self.assertTrue(payload_por_id[produto_lista.id]["vinculado"])
+        self.assertTrue(payload_por_id[produto_vinculado.id]["vinculado"])
+        self.assertFalse(payload_por_id[produto_nao_vinculado.id]["vinculado"])
+        self.assertEqual(len(consultas_produto_fornecedor), 1)
+        self.assertNotIn("LIMIT 1", consultas_produto_fornecedor[0].upper())
+
+    def test_edicao_lista_orfa_com_otimizacao_de_vinculos_continua_funcionando(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=timezone.localdate(),
+            data_inicio_periodo=timezone.localdate(),
+            data_fim_periodo=timezone.localdate(),
+            total_lista=Decimal("40.00"),
+        )
+        produto_id_orfao = 999998
+        with connection.constraint_checks_disabled():
+            item = ItemListaCompraFornecedor.objects.create(
+                lista=lista,
+                produto_id=produto_id_orfao,
+                estoque_atual=Decimal("5.000"),
+                estoque_minimo=Decimal("1.000"),
+                quantidade_final=Decimal("4.000"),
+                unidade="UN",
+                preco_compra=Decimal("10.00"),
+                preco_unitario=Decimal("10.00"),
+                total=Decimal("40.00"),
+            )
+
+        try:
+            resposta = self.client.get(
+                reverse(
+                    "estoque:compras_lista_fornecedor_editar",
+                    kwargs={"pk": lista.pk},
+                ),
+                secure=True,
+            )
+        finally:
+            with connection.constraint_checks_disabled():
+                ItemListaCompraFornecedor.objects.filter(pk=item.pk).delete()
+
+        self.assertEqual(resposta.status_code, 200)
+        produtos_payload = resposta.context["produtos_manual_payload"]
+        payload_orfao = next(item for item in produtos_payload if item["id"] == produto_id_orfao)
+        self.assertEqual(payload_orfao["nome"], "Produto nao identificado")
+        self.assertFalse(payload_orfao["vinculado"])
+
+    def test_edicao_listas_ids_34_e_43_retorna_200(self):
+        produto_34 = self.criar_produto("Produto Lista 34")
+        produto_43 = self.criar_produto("Produto Lista 43")
+        listas = [
+            (34, produto_34, Decimal("2.000"), Decimal("20.00")),
+            (43, produto_43, Decimal("1.000"), Decimal("10.00")),
+        ]
+        for lista_id, produto, quantidade, total in listas:
+            lista = ListaCompraFornecedor.objects.create(
+                id=lista_id,
+                fornecedor=self.fornecedor,
+                data_lista=timezone.localdate(),
+                data_inicio_periodo=timezone.localdate(),
+                data_fim_periodo=timezone.localdate(),
+                total_lista=total,
+            )
+            ItemListaCompraFornecedor.objects.create(
+                lista=lista,
+                produto=produto,
+                estoque_atual=produto.quantidade,
+                estoque_minimo=Decimal("1.000"),
+                quantidade_final=quantidade,
+                unidade="UN",
+                preco_compra=Decimal("10.00"),
+                preco_unitario=Decimal("10.00"),
+                total=total,
+            )
+
+        for lista_id, _produto, _quantidade, _total in listas:
+            resposta = self.client.get(
+                reverse(
+                    "estoque:compras_lista_fornecedor_editar",
+                    kwargs={"pk": lista_id},
+                ),
+                secure=True,
+            )
+            self.assertEqual(resposta.status_code, 200)
+
     def test_edicao_manual_produto_novo_salva_historico_correto_e_nao_herda_sem_historico(self):
         fornecedor_compra = Fornecedor.objects.create(
             nome="Fornecedor Compra Manual Salvar Edicao"

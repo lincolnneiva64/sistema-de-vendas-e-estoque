@@ -8260,7 +8260,7 @@ def _lista_fornecedor_fmt_moeda(valor):
     return f"{valor:.2f}".replace(".", ",")
 
 
-def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
+def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None, produtos_vinculados_ids=None):
     def dec_attr(nome, padrao="0"):
         return getattr(produto, nome, Decimal(padrao)) or Decimal(padrao)
 
@@ -8280,8 +8280,11 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None):
     preco_compra = getattr(produto, "preco_compra", None) or Decimal("0")
     preco_unitario = (preco_compra / fator).quantize(Decimal("0.01")) if fator else preco_compra
 
-    vinculado = False
-    if fornecedor_id:
+    if produtos_vinculados_ids is not None:
+        vinculado = produto.id in produtos_vinculados_ids
+    else:
+        vinculado = False
+    if fornecedor_id and produtos_vinculados_ids is None:
         try:
             vinculado = ProdutoFornecedor.objects.filter(
                 fornecedor_id=fornecedor_id,
@@ -8498,6 +8501,14 @@ def compras_lista_fornecedor_editar(request, pk):
     produtos_queryset = Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id")
     produtos_queryset_list = list(produtos_queryset)
     produto_ids_edicao = [produto.id for produto in produtos_queryset_list]
+    produtos_vinculados_ids = set()
+    if fornecedor_id:
+        produtos_vinculados_ids = set(
+            ProdutoFornecedor.objects.filter(
+                fornecedor_id=fornecedor_id,
+                ativo=True,
+            ).values_list("produto_id", flat=True)
+        )
 
     vendidos_por_produto_edicao = _quantidades_vendidas_por_produto_em_unidade_base(
         produto_ids_edicao,
@@ -8572,6 +8583,7 @@ def compras_lista_fornecedor_editar(request, pk):
             _produto_item_lista_fornecedor_para_edicao(item),
             fornecedor_id=fornecedor_id,
             item=item,
+            produtos_vinculados_ids=produtos_vinculados_ids,
         )
         for item in itens
         if item.produto_id
@@ -8583,7 +8595,11 @@ def compras_lista_fornecedor_editar(request, pk):
         if produto.id in produtos_ids_lista:
             continue
 
-        payload_produto = _lista_fornecedor_produto_payload(produto, fornecedor_id=fornecedor_id)
+        payload_produto = _lista_fornecedor_produto_payload(
+            produto,
+            fornecedor_id=fornecedor_id,
+            produtos_vinculados_ids=produtos_vinculados_ids,
+        )
         payload_produto["quantidade_vendida"] = _lista_fornecedor_fmt_qtd(
             Decimal(vendidos_por_produto_edicao.get(produto.id, Decimal("0.000")) or 0)
         )
