@@ -43,6 +43,7 @@ from .services.avisos_fornecedores import (
     ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
     ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
     data_ciclo_visita_valida,
+    data_pertence_calendario_visita_fornecedor,
     obter_avisos_visitas_fornecedores,
 )
 from .services.sincronizacao_firebird import (
@@ -5724,7 +5725,7 @@ def _validar_ciclo_visita_para_criacao(fornecedor, fornecedor_ciclo_id, data_vis
         return "Data da visita do fornecedor invalida."
     if fornecedor_ciclo_id != str(fornecedor.id):
         return "A data da visita informada nao pertence ao fornecedor selecionado."
-    if not data_ciclo_visita_valida(fornecedor, data_visita):
+    if not data_pertence_calendario_visita_fornecedor(fornecedor, data_visita):
         return "A data da visita informada nao corresponde a um ciclo valido deste fornecedor."
     return None
 
@@ -5862,7 +5863,7 @@ def sugestao_compra_fornecedor(request):
 
     if fornecedor_id and fornecedor_id.isdigit():
         fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
-        if data_visita_fornecedor and not data_ciclo_visita_valida(fornecedor, data_visita_fornecedor):
+        if data_visita_fornecedor and not data_pertence_calendario_visita_fornecedor(fornecedor, data_visita_fornecedor):
             data_visita_fornecedor = None
             fornecedor_ciclo_id = ""
             messages.error(request, "A data da visita informada nao corresponde a um ciclo valido deste fornecedor.")

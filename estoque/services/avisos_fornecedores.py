@@ -146,6 +146,7 @@ def datas_validas_ciclo_visita_fornecedor(
     fornecedor,
     data_referencia=None,
     resolucoes_por_ciclo=None,
+    exigir_janela_operacional=True,
 ):
     data_hora_referencia = _data_hora_local_referencia(data_referencia)
     data_referencia = data_hora_referencia.date()
@@ -167,11 +168,35 @@ def datas_validas_ciclo_visita_fornecedor(
         if not data_efetiva:
             continue
 
-        dentro_da_janela = _visita_dentro_da_janela_operacional(data_efetiva, data_hora_referencia)
-        if dentro_da_janela and data_efetiva not in datas_efetivas:
+        if exigir_janela_operacional and not _visita_dentro_da_janela_operacional(
+            data_efetiva,
+            data_hora_referencia,
+        ):
+            continue
+
+        if data_efetiva not in datas_efetivas:
             datas_efetivas.append(data_efetiva)
 
     return datas_efetivas
+
+
+def data_pertence_calendario_visita_fornecedor(
+    fornecedor,
+    data_visita,
+    data_referencia=None,
+):
+    if not data_visita or not _configuracao_visita_valida(fornecedor):
+        return False
+
+    if data_referencia is None:
+        data_referencia = timezone.localdate()
+
+    datas_efetivas = datas_validas_ciclo_visita_fornecedor(
+        fornecedor,
+        data_referencia=data_referencia,
+        exigir_janela_operacional=False,
+    )
+    return data_visita in datas_efetivas
 
 
 def data_ciclo_visita_valida(fornecedor, data_visita, data_referencia=None):

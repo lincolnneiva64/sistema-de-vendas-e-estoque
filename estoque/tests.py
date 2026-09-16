@@ -26,7 +26,7 @@ from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
-from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
+from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, data_pertence_calendario_visita_fornecedor, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -9880,15 +9880,19 @@ class ComprasListaFornecedorGravarTests(TestCase):
         payload["dataVisitaFornecedor"] = data_visita.isoformat()
         payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        resposta = self.client.post(
-            reverse("estoque:compras_lista_fornecedor_gravar"),
-            {
-                "lista_payload": json.dumps(payload),
-                "fornecedor_ciclo": str(self.fornecedor.id),
-                "data_visita_fornecedor": data_visita.isoformat(),
-            },
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_visita,
+        ):
+            resposta = self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {
+                    "lista_payload": json.dumps(payload),
+                    "fornecedor_ciclo": str(self.fornecedor.id),
+                    "data_visita_fornecedor": data_visita.isoformat(),
+                },
+                secure=True,
+            )
 
         lista = ListaCompraFornecedor.objects.get()
         self.assertEqual(resposta.status_code, 302)
@@ -9902,15 +9906,19 @@ class ComprasListaFornecedorGravarTests(TestCase):
         payload["dataVisitaFornecedor"] = data_visita.isoformat()
         payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        resposta = self.client.post(
-            reverse("estoque:compras_lista_fornecedor_gravar"),
-            {
-                "lista_payload": json.dumps(payload),
-                "fornecedor_ciclo": str(self.fornecedor.id),
-                "data_visita_fornecedor": data_visita.isoformat(),
-            },
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_visita,
+        ):
+            resposta = self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {
+                    "lista_payload": json.dumps(payload),
+                    "fornecedor_ciclo": str(self.fornecedor.id),
+                    "data_visita_fornecedor": data_visita.isoformat(),
+                },
+                secure=True,
+            )
 
         self.assertEqual(resposta.status_code, 302)
         self.assertIn(f"fornecedor={self.fornecedor.id}", resposta["Location"])
@@ -9926,17 +9934,21 @@ class ComprasListaFornecedorGravarTests(TestCase):
         payload["dataVisitaFornecedor"] = data_visita.isoformat()
         payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        self.client.post(
-            reverse("estoque:compras_lista_fornecedor_gravar"),
-            {
-                "lista_payload": json.dumps(payload),
-                "gerar_compra": "0",
-                "fornecedor_ciclo": str(self.fornecedor.id),
-                "data_visita_fornecedor": data_visita.isoformat(),
-            },
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-            secure=True,
-        )
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_visita,
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {
+                    "lista_payload": json.dumps(payload),
+                    "gerar_compra": "0",
+                    "fornecedor_ciclo": str(self.fornecedor.id),
+                    "data_visita_fornecedor": data_visita.isoformat(),
+                },
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+                secure=True,
+            )
 
         self.assertEqual(ListaCompraFornecedor.objects.get().data_visita_fornecedor, data_visita)
 
@@ -10125,15 +10137,174 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(lista.data_visita_fornecedor, data_visita)
 
-    def test_validacao_do_servico_e_da_view_usa_mesma_regra_de_calendario(self):
-        data_visita = date(2026, 7, 14)
-        self.ativar_frequencia_fornecedor(referencia=data_visita)
+    def test_ciclo_futuro_pode_ser_vinculado_antes_da_janela_do_aviso(self):
+        produto = self.criar_produto("Produto Visita Antecipada")
+        data_visita = date(2026, 9, 16)
+        self.ativar_frequencia_fornecedor(
+            referencia=data_visita,
+            intervalo=14,
+        )
 
-        datas_validas = datas_validas_ciclo_visita_fornecedor(self.fornecedor, data_referencia=date(2026, 7, 15))
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
 
-        self.assertIn(data_visita, datas_validas)
-        self.assertTrue(data_ciclo_visita_valida(self.fornecedor, data_visita, data_referencia=date(2026, 7, 15)))
-        self.assertFalse(data_ciclo_visita_valida(self.fornecedor, date(2026, 7, 15), data_referencia=date(2026, 7, 15)))
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localtime",
+            return_value=timezone.make_aware(
+                datetime.combine(date(2026, 9, 14), time.min)
+            ),
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.data_visita_fornecedor, data_visita)
+
+    def test_preparacao_e_aviso_usam_regras_de_tempo_separadas(self):
+        data_visita = date(2026, 9, 16)
+        data_preparacao = date(2026, 9, 14)
+        self.ativar_frequencia_fornecedor(
+            referencia=data_visita,
+            intervalo=14,
+        )
+
+        self.assertTrue(
+            data_pertence_calendario_visita_fornecedor(
+                self.fornecedor,
+                data_visita,
+                data_referencia=data_preparacao,
+            )
+        )
+        self.assertFalse(
+            data_ciclo_visita_valida(
+                self.fornecedor,
+                data_visita,
+                data_referencia=data_preparacao,
+            )
+        )
+
+    def test_visita_adiada_aceita_data_efetiva_na_preparacao_da_lista(self):
+        produto = self.criar_produto("Produto Visita Adiada")
+        data_original = date(2026, 9, 16)
+        nova_data = date(2026, 9, 20)
+        data_preparacao = date(2026, 9, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_original, intervalo=14)
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data,
+        )
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = nova_data.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_preparacao,
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.data_visita_fornecedor, nova_data)
+
+    def test_data_original_de_visita_adiada_nao_e_aceita_na_preparacao_da_lista(self):
+        produto = self.criar_produto("Produto Data Original Adiada")
+        data_original = date(2026, 9, 16)
+        nova_data = date(2026, 9, 20)
+        data_preparacao = date(2026, 9, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_original, intervalo=14)
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=nova_data,
+        )
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_original.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_preparacao,
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
+
+    def test_adiamentos_sucessivos_aceitam_ultima_data_efetiva_na_preparacao(self):
+        produto = self.criar_produto("Produto Adiamento Sucessivo")
+        data_original = date(2026, 9, 16)
+        primeira_nova_data = date(2026, 9, 18)
+        segunda_nova_data = date(2026, 9, 21)
+        data_preparacao = date(2026, 9, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_original, intervalo=14)
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=data_original,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=primeira_nova_data,
+        )
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=primeira_nova_data,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_ADIADA,
+            nova_data_visita=segunda_nova_data,
+        )
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = segunda_nova_data.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_preparacao,
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
+
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.data_visita_fornecedor, segunda_nova_data)
+
+    def test_ciclo_ignorado_nao_pode_ser_preparado_como_lista_de_visita(self):
+        produto = self.criar_produto("Produto Ciclo Ignorado")
+        data_visita = date(2026, 9, 16)
+        data_preparacao = date(2026, 9, 14)
+        self.ativar_frequencia_fornecedor(referencia=data_visita, intervalo=14)
+        ResolucaoVisitaFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_visita_original=data_visita,
+            tipo_resolucao=ResolucaoVisitaFornecedor.TIPO_IGNORAR_CICLO,
+        )
+        payload = self.payload([self.criar_linha(produto, "2.000")])
+        payload["dataVisitaFornecedor"] = data_visita.isoformat()
+        payload["fornecedorCicloId"] = str(self.fornecedor.id)
+
+        with patch(
+            "estoque.services.avisos_fornecedores.timezone.localdate",
+            return_value=data_preparacao,
+        ):
+            self.client.post(
+                reverse("estoque:compras_lista_fornecedor_gravar"),
+                {"lista_payload": json.dumps(payload)},
+                secure=True,
+            )
+
+        self.assertFalse(ListaCompraFornecedor.objects.exists())
 
     def test_edicao_lista_preserva_periodo_e_datas_salvos(self):
         produto = self.criar_produto("Produto Edicao Periodo")
