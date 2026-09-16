@@ -987,7 +987,7 @@ select {
     color: #7c2d12;
 }
 .venda-gravada-bloco {
-    display: none;
+    display: flex;
     align-items: flex-end;
     gap: 5px;
     margin-left: 0;
@@ -2961,7 +2961,7 @@ td:first-child {
                         {% endfor %}
                     </select>
                 </label>
-                <button type="button" id="btnWhatsappSeparacaoVendaGravada" class="acao-venda-btn secundaria" title="Enviar checklist pelo WhatsApp" hidden>Enviar Zap</button>
+                <button type="button" id="btnWhatsappSeparacaoVendaGravada" class="acao-venda-btn secundaria" title="Enviar checklist pelo WhatsApp" disabled>Enviar Zap</button>
                 <a id="btnFilaDepositoVendaGravada" class="acao-venda-btn secundaria" href="{% url 'estoque:separacao_vendas_fila' %}" title="Abrir fila de separacao">Fila notas</a>
             </div>
         </div>
@@ -3974,11 +3974,11 @@ function atualizarBotoesSeparacaoVendaGravada() {
     const { telefone } = dadosResponsavelSeparacaoSelecionado();
     const podeEnviarWhatsapp = Boolean(vendaGravadaId && telefone);
     if (btnWhatsappSeparacaoVendaGravada) {
-        btnWhatsappSeparacaoVendaGravada.hidden = !podeEnviarWhatsapp;
+        btnWhatsappSeparacaoVendaGravada.hidden = false;
         btnWhatsappSeparacaoVendaGravada.disabled = !podeEnviarWhatsapp;
         btnWhatsappSeparacaoVendaGravada.title = podeEnviarWhatsapp
             ? "Enviar checklist pelo WhatsApp"
-            : "Responsavel sem WhatsApp disponivel";
+            : (!vendaGravadaId ? "Grave uma venda para enviar pelo WhatsApp" : "Responsavel sem WhatsApp disponivel");
     }
     if (btnEnviarSeparacaoVendaGravada) {
         btnEnviarSeparacaoVendaGravada.hidden = Boolean(vendaGravadaSeparacaoUrl);
