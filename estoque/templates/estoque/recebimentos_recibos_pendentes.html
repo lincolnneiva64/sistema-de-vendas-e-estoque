@@ -262,11 +262,11 @@
           <strong id="recibosPendentesTotal">{{ total_recebido_pendente }}</strong>
         </div>
       </div>
-      <form class="recibos-filtros" method="get" action="">
+      <form id="recibosFiltros" class="recibos-filtros" method="get" action="">
         <div class="recibos-filtros-linha">
           <label>
             Periodo
-            <select name="periodo">
+            <select id="recibosPeriodo" name="periodo">
               <option value="hoje" {% if filtros.periodo == "hoje" %}selected{% endif %}>Hoje</option>
               <option value="ontem" {% if filtros.periodo == "ontem" %}selected{% endif %}>Ontem</option>
               <option value="7dias" {% if filtros.periodo == "7dias" %}selected{% endif %}>Ultimos 7 dias</option>
@@ -275,11 +275,11 @@
           </label>
           <label>
             Data inicial
-            <input type="date" name="data_inicio" value="{{ filtros.data_inicio }}">
+            <input type="date" id="recibosDataInicio" name="data_inicio" value="{{ filtros.data_inicio }}">
           </label>
           <label>
             Data final
-            <input type="date" name="data_fim" value="{{ filtros.data_fim }}">
+            <input type="date" id="recibosDataFim" name="data_fim" value="{{ filtros.data_fim }}">
           </label>
           <label>
             Cliente
@@ -378,6 +378,16 @@
   const qtdEl = document.getElementById("recibosPendentesQtd");
   const totalEl = document.getElementById("recibosPendentesTotal");
   const emptyEl = document.getElementById("recibosPendentesVazio");
+  const periodoEl = document.getElementById("recibosPeriodo");
+  const dataInicioEl = document.getElementById("recibosDataInicio");
+  const dataFimEl = document.getElementById("recibosDataFim");
+
+  if (periodoEl && dataInicioEl && dataFimEl) {
+    periodoEl.addEventListener("change", function () {
+      dataInicioEl.value = "";
+      dataFimEl.value = "";
+    });
+  }
 
   function csrfToken() {
     const cookie = document.cookie.split(";").map(function (item) { return item.trim(); })
