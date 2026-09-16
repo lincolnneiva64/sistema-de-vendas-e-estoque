@@ -43,3 +43,13 @@ secrets/
 
 
 pix/
+
+# Artefatos locais de testes e validacoes manuais
+/resultado_testes_*.txt
+/tmp_whatsapp_visual_*/
+
+# Dados e scripts operacionais locais
+/contas_pagar_*.txt
+/pesquisa_*.py
+/extrair_contas_pagar_firebird.sql
+/importar_contas_pagar_virada_notebook_backup.py
