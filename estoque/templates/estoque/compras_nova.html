@@ -5833,7 +5833,7 @@
     compraValorNotaBoleto.value = valorCampoCompraBoletos(valorCentavos);
     if (boletosCompraValoresAutomaticos) {
       const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
-      renderizarBoletosCompra(quantidade, { redistribuir: true });
+      redistribuirValoresBoletosCompra(quantidade);
     }
     atualizarResumoBoletosCompra();
   }
@@ -5936,6 +5936,24 @@
     if (redistribuir) {
       boletosCompraValoresAutomaticos = true;
     }
+  }
+
+  function redistribuirValoresBoletosCompra(quantidade) {
+    if (!compraListaBoletos) return;
+    const linhas = Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]"));
+    if (linhas.length !== quantidade) {
+      renderizarBoletosCompra(quantidade, { redistribuir: true });
+      return;
+    }
+    const valorNota = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
+    const valoresSugeridos = valoresSugeridosBoletosCompra(valorNota, quantidade);
+    linhas.forEach(function(linha, indice) {
+      const valor = linha.querySelector('[name^="compra_parcela_valor_"]');
+      if (!valor) return;
+      valor.value = valorCampoCompraBoletos(valoresSugeridos[indice] || 0);
+      valor.dataset.valorAutomatico = "1";
+    });
+    boletosCompraValoresAutomaticos = true;
   }
 
   function atualizarResumoBoletosCompra() {
@@ -6265,7 +6283,7 @@
       valorNotaBoletoEditadoManualmente = true;
       if (boletosCompraValoresAutomaticos) {
         const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
-        renderizarBoletosCompra(quantidade, { redistribuir: true });
+        redistribuirValoresBoletosCompra(quantidade);
       }
       atualizarResumoBoletosCompra();
     });
