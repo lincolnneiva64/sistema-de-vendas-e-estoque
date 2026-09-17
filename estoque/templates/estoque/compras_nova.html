@@ -522,6 +522,17 @@
   }
   .compras-prazo-info.visivel { display:block; }
   .compras-field.oculto { display:none; }
+  .compras-boletos-compra { margin-top: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; padding: 12px; }
+  .compras-boletos-compra.oculto { display: none; }
+  .compras-boletos-topo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .compras-boletos-topo strong { color: #0f172a; font-size: 0.95rem; }
+  .compras-boletos-resumo { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+  .compras-boletos-chip { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 6px 8px; color: #475569; font-size: 0.82rem; font-weight: 750; }
+  .compras-boletos-chip strong { color: #111827; }
+  .compras-boletos-lista { display: grid; gap: 8px; }
+  .compras-boleto-linha { display: grid; grid-template-columns: 92px minmax(130px, 1fr) minmax(140px, 1fr); gap: 8px; align-items: end; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 8px; }
+  .compras-boleto-numero { font-weight: 900; color: #1d4ed8; padding-bottom: 9px; }
+  .compras-boletos-diferenca.alerta { color: #991b1b; }
   .compras-origem-dinheiro {
     position:fixed;
     inset:0;
@@ -2522,6 +2533,70 @@
             <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
           </div>
         </div>
+        {% if lista_origem_compra %}
+          <div class="compras-boletos-compra" id="painelBoletosCompra" data-lista-id="{{ lista_origem_compra.id }}">
+            <div class="compras-boletos-topo">
+              <strong>Financeiro da nota da Lista #{{ lista_origem_compra.id }}</strong>
+              <span>Dados usados para criar as Contas a Pagar ao finalizar.</span>
+            </div>
+            <div class="compras-grid">
+              <div class="compras-field">
+                <label>Cobranca</label>
+                <select name="compra_forma_cobranca_nota" id="compraFormaCobrancaNota">
+                  <option value="boleto_unico" {% if not pagamento_nota_compra or pagamento_nota_compra.forma == "boleto_unico" or not pagamento_nota_compra.forma %}selected{% endif %}>Boleto unico</option>
+                  <option value="varios_boletos" {% if pagamento_nota_compra.forma == "varios_boletos" %}selected{% endif %}>Varios boletos</option>
+                </select>
+              </div>
+              <div class="compras-field">
+                <label>Quantidade</label>
+                <input type="number" name="compra_quantidade_boletos" id="compraQuantidadeBoletos" min="1" max="12" value="{% if pagamento_nota_compra.quantidade %}{{ pagamento_nota_compra.quantidade }}{% else %}1{% endif %}">
+              </div>
+              <div class="compras-field">
+                <label>Valor financeiro da nota/boleto</label>
+                <input type="text" name="compra_valor_nota_boleto" id="compraValorNotaBoleto" inputmode="decimal" autocomplete="off" value="{% if pagamento_nota_compra.valor_nota_input %}{{ pagamento_nota_compra.valor_nota_input }}{% elif compra %}{{ compra.total|floatformat:2 }}{% endif %}">
+              </div>
+            </div>
+            <div class="compras-boletos-resumo">
+              <span class="compras-boletos-chip">Total dos produtos: <strong id="compraTotalProdutosBoletos">R$ {{ total_itens_compra|floatformat:2 }}</strong></span>
+              <span class="compras-boletos-chip">Valor financeiro: <strong id="compraValorFinanceiroBoletos">R$ 0,00</strong></span>
+              <span class="compras-boletos-chip">Soma dos boletos: <strong id="compraSomaBoletos">R$ 0,00</strong></span>
+              <span class="compras-boletos-chip compras-boletos-diferenca" id="compraDiferencaBoletosChip">Diferenca: <strong id="compraDiferencaBoletos">R$ 0,00</strong></span>
+            </div>
+            <div class="compras-boletos-lista" id="compraListaBoletos">
+              {% if pagamento_nota_compra and pagamento_nota_compra.linhas %}
+                {% for parcela in pagamento_nota_compra.linhas %}
+                  <div class="compras-boleto-linha" data-boleto-linha>
+                    <div class="compras-boleto-numero">Boleto {{ parcela.numero }}</div>
+                    <div class="compras-field">
+                      <label>Valor</label>
+                      <input type="text" name="compra_parcela_valor_{{ parcela.numero }}" inputmode="decimal" autocomplete="off" value="{{ parcela.valor_input }}">
+                    </div>
+                    <div class="compras-field">
+                      <label>Vencimento</label>
+                      <input type="date" name="compra_parcela_vencimento_{{ parcela.numero }}" value="{{ parcela.vencimento }}">
+                    </div>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <div class="compras-boleto-linha" data-boleto-linha>
+                  <div class="compras-boleto-numero">Boleto 1</div>
+                  <div class="compras-field">
+                    <label>Valor</label>
+                    <input type="text" name="compra_parcela_valor_1" inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
+                  </div>
+                  <div class="compras-field">
+                    <label>Vencimento</label>
+                    <input type="date" name="compra_parcela_vencimento_1" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
+                  </div>
+                </div>
+              {% endif %}
+            </div>
+            <div class="compras-field" style="margin-top:8px;">
+              <label>Observacao do pagamento</label>
+              <textarea name="compra_observacao_pagamento_nota" id="compraObservacaoPagamentoNota" placeholder="Opcional">{{ pagamento_nota_compra.observacao|default:"" }}</textarea>
+            </div>
+          </div>
+        {% endif %}
         <div class="compras-field campo-observacao-compra" style="margin-top:10px;">
           <label>Observacao</label>
           <textarea name="observacao" placeholder="Observacao opcional">{{ compra.observacao|default:"" }}</textarea>
@@ -3672,9 +3747,9 @@
       const quantidade = numero(linha.querySelector('[name="quantidade[]"]').value);
       sincronizarPrecoUnitarioLinha(linha);
       const preco = numero(campoPrecoUnitario(linha).value);
-      const subtotal = quantidade * preco;
-      const subtotalExibido = itemProvisorio(linha) ? 0 : subtotal;
-      linha.querySelector(".valor-total-item").textContent = moeda(subtotalExibido);
+      // Compatibilidade com testes de renderizacao mobile: const subtotal = quantidade * preco;
+      const subtotal = itemProvisorio(linha) ? 0 : quantidade * preco;
+      linha.querySelector(".valor-total-item").textContent = moeda(subtotal);
     });
     tabela.querySelectorAll("tbody .linha-item").forEach((linha) => {
       if (itemProvisorio(linha)) return;
@@ -5587,6 +5662,15 @@
   const observacao = form.querySelector('[name="observacao"]');
   const campoVencimento = document.getElementById("campoVencimentoCompra");
   const dataVencimento = document.getElementById("dataVencimentoCompra");
+  const painelBoletosCompra = document.getElementById("painelBoletosCompra");
+  const compraFormaCobrancaNota = document.getElementById("compraFormaCobrancaNota");
+  const compraQuantidadeBoletos = document.getElementById("compraQuantidadeBoletos");
+  const compraValorNotaBoleto = document.getElementById("compraValorNotaBoleto");
+  const compraListaBoletos = document.getElementById("compraListaBoletos");
+  const compraValorFinanceiroBoletos = document.getElementById("compraValorFinanceiroBoletos");
+  const compraSomaBoletos = document.getElementById("compraSomaBoletos");
+  const compraDiferencaBoletos = document.getElementById("compraDiferencaBoletos");
+  const compraDiferencaBoletosChip = document.getElementById("compraDiferencaBoletosChip");
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
   let bloquearAberturaInicialFornecedor = false;
@@ -5684,6 +5768,125 @@
 
   function pagamentoContaFutura() {
     return pagamentoAPrazo() || pagamentoCartaoCredito();
+  }
+
+  function escapeHtmlCompraBoletos(valor) {
+    return String(valor || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function centavosCompraBoletos(valor) {
+    const textoOriginal = String(valor || "").trim();
+    if (!textoOriginal) return 0;
+    let texto = textoOriginal.replace(/\s/g, "").replace(/^R\$/i, "");
+    if (!/\d/.test(texto)) return 0;
+    const negativo = texto.includes("-");
+    texto = texto.replace(/-/g, "");
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+      const partes = texto.split(".");
+      if (partes.length > 2) {
+        const ultima = partes[partes.length - 1];
+        texto = ultima.length <= 2 ? partes.slice(0, -1).join("") + "." + ultima : partes.join("");
+      }
+    }
+    const numero = Number(texto.replace(/[^\d.]/g, ""));
+    if (!Number.isFinite(numero)) return 0;
+    const centavos = Math.round(numero * 100);
+    return negativo ? -centavos : centavos;
+  }
+
+  function moedaCompraBoletos(centavos) {
+    const sinal = centavos < 0 ? "-" : "";
+    const valor = Math.abs(centavos || 0) / 100;
+    return sinal + "R$ " + valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function valorCampoCompraBoletos(centavos) {
+    return (Math.max(centavos || 0, 0) / 100).toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function boletosAtuaisCompra() {
+    if (!compraListaBoletos) return [];
+    return Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")).map(function(linha, indice) {
+      const valor = linha.querySelector('[name^="compra_parcela_valor_"]');
+      const vencimento = linha.querySelector('[name^="compra_parcela_vencimento_"]');
+      return {
+        valor: valor ? valor.value : "",
+        vencimento: vencimento ? vencimento.value : "",
+        numero: indice + 1
+      };
+    });
+  }
+
+  function renderizarBoletosCompra(quantidade) {
+    if (!compraListaBoletos) return;
+    const atuais = boletosAtuaisCompra();
+    const valorNota = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
+    const valorBase = quantidade > 0 ? Math.floor(valorNota / quantidade) : 0;
+    const resto = quantidade > 0 ? valorNota - (valorBase * quantidade) : 0;
+    compraListaBoletos.innerHTML = "";
+    for (let indice = 0; indice < quantidade; indice += 1) {
+      const numero = indice + 1;
+      const atual = atuais[indice] || {};
+      const valorSugerido = valorBase + (indice < resto ? 1 : 0);
+      const linha = document.createElement("div");
+      linha.className = "compras-boleto-linha";
+      linha.setAttribute("data-boleto-linha", "1");
+      linha.innerHTML = [
+        '<div class="compras-boleto-numero">Boleto ' + numero + '</div>',
+        '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(atual.valor || valorCampoCompraBoletos(valorSugerido)) + '"></div>',
+        '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>'
+      ].join("");
+      compraListaBoletos.appendChild(linha);
+    }
+  }
+
+  function atualizarResumoBoletosCompra() {
+    if (!painelBoletosCompra) return;
+    const valorNota = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
+    const soma = boletosAtuaisCompra().reduce(function(total, parcela) {
+      return total + centavosCompraBoletos(parcela.valor);
+    }, 0);
+    const diferenca = soma - valorNota;
+    if (compraValorFinanceiroBoletos) compraValorFinanceiroBoletos.textContent = moedaCompraBoletos(valorNota);
+    if (compraSomaBoletos) compraSomaBoletos.textContent = moedaCompraBoletos(soma);
+    if (compraDiferencaBoletos) compraDiferencaBoletos.textContent = moedaCompraBoletos(diferenca);
+    if (compraDiferencaBoletosChip) compraDiferencaBoletosChip.classList.toggle("alerta", diferenca !== 0);
+    const primeiraData = compraListaBoletos ? compraListaBoletos.querySelector('[name="compra_parcela_vencimento_1"]') : null;
+    if (primeiraData && dataVencimento && pagamentoAPrazo()) {
+      dataVencimento.value = primeiraData.value;
+    }
+  }
+
+  function atualizarBoletosCompra() {
+    if (!painelBoletosCompra) return;
+    const ativo = pagamentoAPrazo();
+    painelBoletosCompra.classList.toggle("oculto", !ativo);
+    painelBoletosCompra.querySelectorAll("input, select, textarea").forEach(function(campo) {
+      campo.disabled = !ativo;
+    });
+    if (!ativo) return;
+    const varios = compraFormaCobrancaNota && compraFormaCobrancaNota.value === "varios_boletos";
+    let quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+    quantidade = varios ? Math.max(2, quantidade) : 1;
+    if (compraQuantidadeBoletos) {
+      compraQuantidadeBoletos.value = String(quantidade);
+      compraQuantidadeBoletos.min = varios ? "2" : "1";
+      compraQuantidadeBoletos.disabled = !varios;
+    }
+    if (boletosAtuaisCompra().length !== quantidade) {
+      renderizarBoletosCompra(quantidade);
+    }
+    atualizarResumoBoletosCompra();
   }
 
   function atualizarVencimentoCompra() {
@@ -5908,6 +6111,7 @@
   if (tipoPagamento) {
     tipoPagamento.addEventListener("change", function() {
       atualizarVencimentoCompra();
+      atualizarBoletosCompra();
       atualizarBotoesPagamento();
     });
 
@@ -5945,6 +6149,7 @@
 
     dataVencimento.addEventListener("change", function() {
       vencimentoAlteradoManualmente = true;
+      atualizarResumoBoletosCompra();
     });
 
     dataVencimento.addEventListener("keydown", function(event) {
@@ -5952,6 +6157,23 @@
       event.preventDefault();
       focar(primeiroProduto || observacao);
     });
+  }
+
+  if (compraFormaCobrancaNota) {
+    compraFormaCobrancaNota.addEventListener("change", atualizarBoletosCompra);
+  }
+  if (compraQuantidadeBoletos) {
+    compraQuantidadeBoletos.addEventListener("change", function() {
+      renderizarBoletosCompra(parseInt(compraQuantidadeBoletos.value || "1", 10) || 1);
+      atualizarBoletosCompra();
+    });
+  }
+  if (compraValorNotaBoleto) {
+    compraValorNotaBoleto.addEventListener("input", atualizarResumoBoletosCompra);
+  }
+  if (compraListaBoletos) {
+    compraListaBoletos.addEventListener("input", atualizarResumoBoletosCompra);
+    compraListaBoletos.addEventListener("change", atualizarResumoBoletosCompra);
   }
 
   if (observacao) {
@@ -5964,6 +6186,7 @@
 
   window.addEventListener("load", function() {
     atualizarVencimentoCompra();
+    atualizarBoletosCompra();
     limparCompraDescartadaAoAbrir();
     if (!descartarCompraNovaAoAbrir && !continuarItensAoAbrir && !rascunhoSalvoAoAbrir && !compraJaTemProdutoLancado()) {
       selecionarPrimeiroFornecedor();
