@@ -32251,6 +32251,19 @@ class SeparacaoVendaFase1Tests(TestCase):
                 quantidades.get(item.item_venda_id),
             )
 
+    def _concluir_separacao(self, separacao=None):
+        separacao = separacao or self._separacao()
+        self._autosalvar_itens(
+            separacao,
+            {
+                item.item_venda_id: SeparacaoVendaItem.STATUS_CONFERIDO
+                for item in separacao.itens.order_by("id")
+            },
+        )
+        self._post_checklist(separacao, {})
+        separacao.refresh_from_db()
+        return separacao
+
     def _estado_itens_venda(self):
         return list(
             ItemVenda.objects.filter(venda=self.venda)
@@ -34039,3 +34052,212 @@ class SeparacaoVendaFase1Tests(TestCase):
         item_sep = separacao.itens.get(item_venda=self.item_a)
         self.assertEqual(separacao.status, SeparacaoVenda.STATUS_ENVIADA)
         self.assertEqual(item_sep.status, SeparacaoVendaItem.STATUS_PENDENTE)
+
+    def test_fila_exibe_separacao_normal_concluida_como_nota_pronta(self):
+        self._enviar()
+        self._concluir_separacao()
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "SEPARACAO CONCLUIDA - NOTA PRONTA PARA ENVIO")
+        self.assertNotContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+
+    def test_alteracao_apos_separacao_concluida_exige_revisao(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+
+        views._recalcular_status_separacao_da_venda(self.venda)
+        separacao.refresh_from_db()
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertTrue(separacao.revisao_pendente)
+        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+        self.assertNotContains(resposta, "NOTA PRONTA PARA ENVIO")
+
+    def test_revisao_da_alteracao_concluida_mostra_nota_pronta_revisada(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        self._enviar()
+        separacao.refresh_from_db()
+        item_alterado = separacao.itens.get(item_venda=self.item_a)
+        self.assertEqual(item_alterado.status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self._concluir_separacao(separacao)
+
+        separacao.refresh_from_db()
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertTrue(separacao.teve_revisao)
+        self.assertContains(resposta, "ALTERACAO REVISADA - NOTA PRONTA PARA ENVIO")
+
+    def test_nova_edicao_depois_da_revisao_reabre_revisao(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        views._recalcular_status_separacao_da_venda(self.venda)
+        self._enviar()
+        self._concluir_separacao(separacao)
+
+        self.item_a.quantidade = Decimal("4.000")
+        self.item_a.valor_total = Decimal("40.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        separacao.refresh_from_db()
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+        self.assertTrue(separacao.revisao_pendente)
+        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+
+    def test_conclusao_antiga_anterior_a_alteracao_nao_satisfaz_revisao(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        finalizado_antes = separacao.finalizado_em
+        self.item_b.quantidade = Decimal("3.000")
+        self.item_b.valor_total = Decimal("22.50")
+        self.item_b.save(update_fields=["quantidade", "valor_total"])
+
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.finalizado_em, finalizado_antes)
+        self.assertTrue(separacao.revisao_pendente)
+        self.assertFalse(separacao.teve_revisao)
+
+    def test_rota_com_todas_notas_prontas_mostra_entregas(self):
+        self.cliente.bairro = "Centro"
+        self.cliente.cidade = "Santa Barbara do Para"
+        self.cliente.save(update_fields=["bairro", "cidade"])
+        segunda = self._criar_venda_para_separacao(
+            "Cliente Rota Pronta",
+            bairro="Centro",
+            cidade="Santa Barbara do Para",
+        )
+        self._enviar()
+        self._enviar(segunda)
+        self._concluir_separacao(self._separacao())
+        self._concluir_separacao(SeparacaoVenda.objects.get(venda=segunda))
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "ROTA CONCLUIDA - TODAS AS NOTAS PRONTAS")
+        self.assertContains(resposta, "ENTREGAS")
+        self.assertContains(resposta, f"{reverse('estoque:entregas_dia')}?data=")
+
+    def test_rota_com_nota_em_revisao_mostra_reaberta_sem_entregas(self):
+        self.cliente.bairro = "Centro"
+        self.cliente.cidade = "Santa Barbara do Para"
+        self.cliente.save(update_fields=["bairro", "cidade"])
+        segunda = self._criar_venda_para_separacao(
+            "Cliente Rota Revisao",
+            bairro="Centro",
+            cidade="Santa Barbara do Para",
+        )
+        self._enviar()
+        self._enviar(segunda)
+        self._concluir_separacao(self._separacao())
+        self._concluir_separacao(SeparacaoVenda.objects.get(venda=segunda))
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+        conteudo = resposta.content.decode()
+        grupo_inicio = conteudo.index("ROTA REABERTA - EXISTE NOTA PARA REVISAO")
+        grupo_fim = conteudo.index("</header>", grupo_inicio)
+
+        self.assertContains(resposta, "ROTA REABERTA - EXISTE NOTA PARA REVISAO")
+        self.assertNotIn("ENTREGAS", conteudo[grupo_inicio:grupo_fim])
+
+    def test_rota_com_nota_enviada_em_separacao_ou_pendencia_nao_fica_concluida(self):
+        vendas = [
+            self._criar_venda_para_separacao("Cliente Rota Enviada", bairro="Marco", cidade="Belem"),
+            self._criar_venda_para_separacao("Cliente Rota Andamento", bairro="Marco", cidade="Belem"),
+            self._criar_venda_para_separacao("Cliente Rota Pendencia", bairro="Marco", cidade="Belem"),
+        ]
+        for venda in vendas:
+            self._enviar(venda)
+        separacoes = [SeparacaoVenda.objects.get(venda=venda) for venda in vendas]
+        item_andamento = separacoes[1].itens.get()
+        self._post_item_checklist(separacoes[1], item_andamento, SeparacaoVendaItem.STATUS_CONFERIDO)
+        item_pendencia = separacoes[2].itens.get()
+        self._post_item_checklist(separacoes[2], item_pendencia, SeparacaoVendaItem.STATUS_NAO_ENCONTRADO)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertNotContains(resposta, "ROTA CONCLUIDA - TODAS AS NOTAS PRONTAS")
+
+    def test_kg_reconciliado_continua_sem_falsa_divergencia_de_revisao(self):
+        produto = Produto.objects.create(
+            nome="Frango Kg Revisao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_compra="KG",
+        )
+        venda = self._criar_venda_com_item(produto, "3.000", unidade="KG", cliente_nome="Cliente Kg Revisao")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+        item_sep = separacao.itens.get()
+        self._post_item_checklist(separacao, item_sep, "peso_separado", "3,200")
+        item_venda = venda.itens.get()
+        item_venda.quantidade = Decimal("3.200")
+        item_venda.valor_total = Decimal("32.00")
+        item_venda.save(update_fields=["quantidade", "valor_total"])
+        venda.total = Decimal("32.00")
+        venda.save(update_fields=["total"])
+
+        views._recalcular_status_separacao_da_venda(venda)
+        separacao.refresh_from_db()
+
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertEqual(views.divergencias_separacao_venda(separacao), [])
+
+    def test_itens_adicionados_removidos_e_quantidade_alterada_entram_no_checklist_de_revisao(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        produto_c = Produto.objects.create(
+            nome="Produto C Revisao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("8.00"),
+            preco_prazo=Decimal("8.00"),
+            unidade_compra="UN",
+        )
+        item_c = ItemVenda.objects.create(
+            venda=self.venda,
+            produto=produto_c,
+            quantidade=Decimal("5.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("40.00"),
+        )
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        self.item_b.delete()
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        self._enviar()
+        separacao.refresh_from_db()
+        itens = {
+            item.item_venda_id: item
+            for item in separacao.itens.order_by("item_venda_id")
+        }
+
+        self.assertEqual(set(itens), {self.item_a.id, item_c.id})
+        self.assertEqual(itens[self.item_a.id].quantidade_solicitada, Decimal("3.000"))
+        self.assertEqual(itens[self.item_a.id].status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self.assertEqual(itens[item_c.id].produto_nome_snapshot, "Produto C Revisao")
+        self.assertEqual(itens[item_c.id].status, SeparacaoVendaItem.STATUS_PENDENTE)

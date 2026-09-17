@@ -37,6 +37,132 @@ def usuario_autenticado_ou_none(usuario):
     return None
 
 
+def _quantidade_item_venda_snapshot(item):
+    return Decimal(item.quantidade or "0").quantize(Decimal("0.001"))
+
+
+def _produto_nome_item_venda(item):
+    return item.produto.nome if item.produto else "Produto nao identificado"
+
+
+def _item_separacao_igual_venda_atual(item_sep, item_venda):
+    return (
+        item_sep.produto_nome_snapshot == _produto_nome_item_venda(item_venda)
+        and (item_sep.unidade_snapshot or "") == (item_venda.unidade or "")
+        and Decimal(item_sep.quantidade_solicitada or "0").quantize(Decimal("0.001"))
+        == _quantidade_item_venda_snapshot(item_venda)
+    )
+
+
+def _resetar_item_separacao_para_reconferencia(item_sep):
+    item_sep.quantidade_separada = None
+    item_sep.status = SeparacaoVendaItem.STATUS_PENDENTE
+    item_sep.observacao = ""
+    item_sep.save(update_fields=["quantidade_separada", "status", "observacao", "atualizado_em"])
+
+
+def marcar_revisao_pendente_se_necessario(separacao):
+    if not separacao or not separacao.finalizado_em:
+        return False
+    if separacao.revisao_pendente:
+        return False
+    if not divergencias_separacao_venda(separacao):
+        return False
+
+    agora = timezone.now()
+    separacao.revisao_pendente = True
+    separacao.revisao_solicitada_em = agora
+    separacao.save(update_fields=["revisao_pendente", "revisao_solicitada_em", "atualizado_em"])
+    return True
+
+
+def atualizar_snapshot_separacao_para_revisao(separacao):
+    with transaction.atomic():
+        separacao = (
+            SeparacaoVenda.objects
+            .select_for_update()
+            .select_related("venda")
+            .get(pk=separacao.pk)
+        )
+        itens_atuais = {
+            item.id: item
+            for item in ItemVenda.objects.select_related("produto")
+            .filter(venda=separacao.venda)
+            .order_by("id")
+        }
+        itens_snapshot = {
+            item.item_venda_id: item
+            for item in SeparacaoVendaItem.objects.select_for_update()
+            .filter(separacao=separacao)
+        }
+
+        removidos = [
+            item_sep.pk
+            for item_id, item_sep in itens_snapshot.items()
+            if item_id not in itens_atuais
+        ]
+        if removidos:
+            SeparacaoVendaItem.objects.filter(pk__in=removidos).delete()
+
+        alterou_checklist = bool(removidos)
+        for item_id, item_venda in itens_atuais.items():
+            item_sep = itens_snapshot.get(item_id)
+            produto_nome = _produto_nome_item_venda(item_venda)
+            unidade = item_venda.unidade or ""
+            quantidade = _quantidade_item_venda_snapshot(item_venda)
+
+            if not item_sep:
+                SeparacaoVendaItem.objects.create(
+                    separacao=separacao,
+                    item_venda=item_venda,
+                    produto_nome_snapshot=produto_nome,
+                    unidade_snapshot=unidade,
+                    quantidade_solicitada=quantidade,
+                )
+                alterou_checklist = True
+                continue
+
+            if _item_separacao_igual_venda_atual(item_sep, item_venda):
+                if removidos and item_sep.status != SeparacaoVendaItem.STATUS_PENDENTE:
+                    _resetar_item_separacao_para_reconferencia(item_sep)
+                    alterou_checklist = True
+                continue
+
+            item_sep.produto_nome_snapshot = produto_nome
+            item_sep.unidade_snapshot = unidade
+            item_sep.quantidade_solicitada = quantidade
+            item_sep.quantidade_separada = None
+            item_sep.status = SeparacaoVendaItem.STATUS_PENDENTE
+            item_sep.observacao = ""
+            item_sep.save(update_fields=[
+                "produto_nome_snapshot",
+                "unidade_snapshot",
+                "quantidade_solicitada",
+                "quantidade_separada",
+                "status",
+                "observacao",
+                "atualizado_em",
+            ])
+            alterou_checklist = True
+
+        campos = []
+        if not separacao.revisao_pendente:
+            separacao.revisao_pendente = True
+            separacao.revisao_solicitada_em = timezone.now()
+            campos.extend(["revisao_pendente", "revisao_solicitada_em"])
+        if alterou_checklist:
+            separacao.finalizado_em = None
+            separacao.separado_por = None
+            campos.extend(["finalizado_em", "separado_por"])
+        if campos:
+            campos.append("atualizado_em")
+            separacao.save(update_fields=list(dict.fromkeys(campos)))
+
+        recalcular_status_separacao(separacao)
+        separacao.refresh_from_db()
+        return separacao
+
+
 def _proximo_numero_sequencial_dia(data_sequencia):
     sequencias = list(
         SeparacaoVenda.objects
@@ -68,6 +194,8 @@ def criar_ou_obter_separacao_venda(venda, usuario=None, responsavel=None):
                         separacao.responsavel = responsavel
                         separacao.save(update_fields=["responsavel", "atualizado_em"])
                         responsavel_atualizado = True
+                    if separacao.revisao_pendente or divergencias_separacao_venda(separacao):
+                        separacao = atualizar_snapshot_separacao_para_revisao(separacao)
                     return separacao, False, responsavel_atualizado
 
                 data_sequencia = timezone.localdate()
@@ -137,6 +265,11 @@ def recalcular_status_separacao(separacao, usuario=None):
         if usuario and not separacao.separado_por_id:
             separacao.separado_por = usuario
             campos.append("separado_por")
+        if novo_status == SeparacaoVenda.STATUS_SEPARADA and separacao.revisao_pendente:
+            separacao.revisao_pendente = False
+            separacao.teve_revisao = True
+            separacao.revisao_concluida_em = agora
+            campos.extend(["revisao_pendente", "teve_revisao", "revisao_concluida_em"])
     elif status_anterior in {SeparacaoVenda.STATUS_SEPARADA, SeparacaoVenda.STATUS_COM_PENDENCIA}:
         separacao.finalizado_em = None
         campos.append("finalizado_em")

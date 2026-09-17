@@ -23,6 +23,10 @@
   .rota-date { margin-top: 3px; font-size: 0.78rem; color: #cbd5e1; font-weight: 800; }
   .rota-summary { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .rota-chip { display: inline-flex; min-height: 28px; align-items: center; border-radius: 999px; background: rgba(255,255,255,0.11); border: 1px solid rgba(255,255,255,0.18); padding: 4px 8px; font-size: 0.76rem; font-weight: 900; white-space: nowrap; }
+  .rota-state { display: inline-flex; min-height: 28px; align-items: center; border-radius: 8px; padding: 4px 8px; font-size: 0.76rem; font-weight: 950; white-space: nowrap; }
+  .rota-state.ok { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .rota-state.reaberta { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .rota-entregas { background: #22c55e; color: #052e16; border-color: #86efac; }
   .sep-list { display: grid; gap: 8px; padding: 10px; }
   .sep-card { border: 1px solid #dbe5f0; border-radius: 8px; background: #fff; padding: 12px; }
   .sep-card.com_pendencia { border-color: #f97316; background: #fff7ed; box-shadow: inset 4px 0 0 #ea580c; }
@@ -40,6 +44,7 @@
   .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
   .sep-status.em_separacao { background: #fef9c3; color: #854d0e; border-color: #fde047; }
   .sep-alert { margin-top: 10px; border-radius: 8px; border: 1px solid #fca5a5; background: #fef2f2; color: #991b1b; padding: 9px 10px; font-size: 0.82rem; font-weight: 900; }
+  .sep-alert.ok { border-color: #86efac; background: #dcfce7; color: #166534; }
   .pend-list { display: grid; gap: 8px; margin-top: 10px; }
   .pend-item { border: 1px solid #fdba74; border-radius: 8px; background: #fff; padding: 9px; }
   .pend-name { font-weight: 950; color: #9a3412; overflow-wrap: anywhere; }
@@ -86,6 +91,7 @@
     .rota-date { margin-top: 1px; font-size: 0.82rem; font-weight: 600; }
     .rota-summary { gap: 5px; }
     .rota-chip { min-height: 24px; padding: 2px 8px; font-size: 0.86rem; font-weight: 700; }
+    .rota-state { min-height: 24px; padding: 2px 8px; font-size: 0.82rem; font-weight: 750; }
     .sep-list { gap: 6px; padding: 8px; }
     .sep-card { display: grid; grid-template-columns: minmax(260px, 1fr) auto auto auto; align-items: center; gap: 8px 10px; padding: 10px 12px; }
     .sep-card-top { display: contents; }
@@ -165,6 +171,12 @@
               {% endif %}
             </div>
             <div class="rota-summary" aria-label="Resumo da rota">
+              {% if grupo.rota_concluida %}
+                <span class="rota-state ok">ROTA CONCLUIDA - TODAS AS NOTAS PRONTAS</span>
+                <a class="rota-chip rota-entregas" href="{{ grupo.entregas_url }}">ENTREGAS</a>
+              {% elif grupo.rota_reaberta_por_revisao %}
+                <span class="rota-state reaberta">ROTA REABERTA - EXISTE NOTA PARA REVISAO</span>
+              {% endif %}
               <span class="rota-chip">{{ grupo.total_notas }} notas</span>
               <span class="rota-chip">{{ grupo.total_separadas }} separadas</span>
               <span class="rota-chip">{{ grupo.total_com_pendencia }} com pendencia</span>
@@ -195,6 +207,8 @@
 
                 {% if separacao.tem_divergencia_fila %}
                   <div class="sep-alert">VENDA ALTERADA - REVISAO NECESSARIA</div>
+                {% elif separacao.nota_pronta_fila %}
+                  <div class="sep-alert ok">{{ separacao.mensagem_pronta_fila }}</div>
                 {% endif %}
 
                 {% if separacao.tem_ajuste_nota and not separacao.itens_com_pendencia %}
@@ -232,6 +246,13 @@
                 <div class="sep-actions">
                   <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
                   <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
+                  {% if separacao.tem_divergencia_fila %}
+                    <form class="sep-inline-form" method="post" action="{% url 'estoque:venda_enviar_separacao' separacao.venda.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <button class="sep-btn warning" type="submit">Atualizar revisao</button>
+                    </form>
+                  {% endif %}
                   <a class="sep-btn" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}&next={{ request.get_full_path|urlencode }}">Editar venda</a>
                   {% if separacao.tem_ajuste_nota or separacao.status == "com_pendencia" %}
                     <a class="sep-btn warning" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}&ajuste_separacao={{ separacao.id }}&next={{ request.get_full_path|urlencode }}">Editar nota</a>

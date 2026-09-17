@@ -61,6 +61,7 @@ from .services.separacao_vendas import (
     divergencias_separacao_venda,
     item_separacao_registra_peso_real,
     item_separacao_tem_pendencia,
+    marcar_revisao_pendente_se_necessario,
     recalcular_status_separacao,
 )
 from .services.precos_antigo_snapshot import (
@@ -12518,6 +12519,7 @@ def _recalcular_status_separacao_da_venda(venda, usuario=None):
     if not separacao:
         return None
     recalcular_status_separacao(separacao, usuario)
+    marcar_revisao_pendente_se_necessario(separacao)
     return separacao
 
 
@@ -21185,8 +21187,26 @@ def _montar_grupos_rota_separacao(separacoes):
             if item_separacao_tem_pendencia(item)
         ]
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
-        separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
+        separacao.tem_revisao_pendente_fila = bool(
+            separacao.revisao_pendente or separacao.divergencias_fila
+        )
+        separacao.tem_divergencia_fila = separacao.tem_revisao_pendente_fila
+        separacao.nota_pronta_fila = (
+            separacao.status == SeparacaoVenda.STATUS_SEPARADA
+            and separacao.total_pendentes == 0
+            and separacao.total_pendencias == 0
+            and not separacao.tem_revisao_pendente_fila
+            and not separacao.tem_ajuste_nota
+        )
+        if separacao.nota_pronta_fila:
+            separacao.mensagem_pronta_fila = (
+                "ALTERACAO REVISADA - NOTA PRONTA PARA ENVIO"
+                if separacao.teve_revisao
+                else "SEPARACAO CONCLUIDA - NOTA PRONTA PARA ENVIO"
+            )
+        else:
+            separacao.mensagem_pronta_fila = ""
 
         localidade = _localidade_operacional_cliente(separacao.venda.cliente)
         chave = ("localidade", localidade.lower()) if localidade else ("sem_rota", "")
@@ -21202,6 +21222,9 @@ def _montar_grupos_rota_separacao(separacoes):
                 "total_com_pendencia": 0,
                 "total_em_separacao": 0,
                 "total_enviadas": 0,
+                "rota_concluida": False,
+                "rota_reaberta_por_revisao": False,
+                "entregas_url": "",
             }
         grupo = grupos[chave]
         grupo["separacoes"].append(separacao)
@@ -21223,6 +21246,14 @@ def _montar_grupos_rota_separacao(separacoes):
                 separacao.enviado_em,
                 separacao.id,
             )
+        )
+        grupo["rota_reaberta_por_revisao"] = any(
+            separacao.tem_revisao_pendente_fila
+            for separacao in grupo["separacoes"]
+        )
+        grupo["rota_concluida"] = (
+            bool(grupo["separacoes"])
+            and all(separacao.nota_pronta_fila for separacao in grupo["separacoes"])
         )
 
     return sorted(
@@ -21258,6 +21289,10 @@ def separacao_vendas_fila(request):
         .order_by("enviado_em", "id")
     )
     grupos_rota = _montar_grupos_rota_separacao(separacoes)
+    entregas_url = f"{reverse('estoque:entregas_dia')}?{urlencode({'data': data_referencia.isoformat()})}"
+    for grupo in grupos_rota:
+        if grupo["rota_concluida"]:
+            grupo["entregas_url"] = entregas_url
     outras_vendas = list(
         Venda.objects.select_related("cliente")
         .prefetch_related("eventos")
@@ -21613,6 +21648,7 @@ def separacao_venda_item_salvar(request, pk, item_id):
     )
     divergencias = divergencias_separacao_venda(separacao)
     if divergencias:
+        marcar_revisao_pendente_se_necessario(separacao)
         return JsonResponse({
             "sucesso": False,
             "mensagem": "A venda foi alterada apos o envio para separacao. Atualize/reenvie a separacao antes de processar.",
@@ -21655,6 +21691,8 @@ def separacao_venda_detalhe(request, pk):
         pk=pk,
     )
     divergencias = divergencias_separacao_venda(separacao)
+    if divergencias:
+        marcar_revisao_pendente_se_necessario(separacao)
 
     if request.method == "POST":
         if divergencias:

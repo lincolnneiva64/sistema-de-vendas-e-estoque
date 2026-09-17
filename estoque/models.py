@@ -565,6 +565,10 @@ class SeparacaoVenda(models.Model):
         null=True,
         related_name="separacoes_venda_realizadas",
     )
+    revisao_pendente = models.BooleanField(default=False)
+    teve_revisao = models.BooleanField(default=False)
+    revisao_solicitada_em = models.DateTimeField(blank=True, null=True)
+    revisao_concluida_em = models.DateTimeField(blank=True, null=True)
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
