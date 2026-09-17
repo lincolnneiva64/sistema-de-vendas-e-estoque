@@ -4058,6 +4058,20 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "document.addEventListener(\"valorCobradoCompraAtualizado\"")
         self.assertContains(resposta, "sincronizarValorFinanceiroComValorCobrado();")
 
+    def test_compra_gerada_pela_lista_js_enter_navega_campos_financeiros_da_nota(self):
+        lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
+        _, compra = self._gerar_compra_da_lista(lista)
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, "function campoEditavelVisivelCompra(campo)")
+        self.assertContains(resposta, 'campo.type === "hidden"')
+        self.assertContains(resposta, "function primeiroCampoFinanceiroNotaCompra()")
+        self.assertContains(resposta, "function avancarEnterCampoFinanceiroCompra(event)")
+        self.assertContains(resposta, "proximoCampoEditavelCompra(campo)")
+        self.assertContains(resposta, "painelBoletosCompra.addEventListener(\"keydown\", avancarEnterCampoFinanceiroCompra);")
+        self.assertContains(resposta, "focar(primeiroCampoFinanceiroNotaCompra() || primeiroProduto || observacao);")
+
     def test_compra_gerada_pela_lista_finaliza_aprazo_com_dois_boletos_da_tela(self):
         lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
         _, compra = self._gerar_compra_da_lista(lista)

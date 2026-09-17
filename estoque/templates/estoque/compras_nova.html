@@ -5849,6 +5849,45 @@
     });
   }
 
+  function campoEditavelVisivelCompra(campo) {
+    if (!campo || campo.disabled) return false;
+    if (campo.type === "hidden" || campo.getAttribute("aria-hidden") === "true") return false;
+    if (campo.closest("[hidden], .oculto, .compra-bloco-recolhido")) return false;
+    const estilo = window.getComputedStyle(campo);
+    if (estilo.display === "none" || estilo.visibility === "hidden") return false;
+    return campo.getClientRects().length > 0;
+  }
+
+  function camposEditaveisVisiveisCompra() {
+    return Array.from(form.querySelectorAll("input, select, textarea"))
+      .filter(campoEditavelVisivelCompra);
+  }
+
+  function proximoCampoEditavelCompra(campoAtual) {
+    const campos = camposEditaveisVisiveisCompra();
+    const indice = campos.indexOf(campoAtual);
+    if (indice < 0) return null;
+    return campos[indice + 1] || null;
+  }
+
+  function primeiroCampoFinanceiroNotaCompra() {
+    if (!painelBoletosCompra || painelBoletosCompra.classList.contains("oculto")) return null;
+    return camposEditaveisVisiveisCompra().find(function(campo) {
+      return painelBoletosCompra.contains(campo);
+    }) || null;
+  }
+
+  function avancarEnterCampoFinanceiroCompra(event) {
+    if (event.key !== "Enter" || event.defaultPrevented) return;
+    const campo = event.target.closest("input, select, textarea");
+    if (!campo || !painelBoletosCompra || !painelBoletosCompra.contains(campo)) return;
+    event.preventDefault();
+    const proximo = proximoCampoEditavelCompra(campo);
+    if (proximo) {
+      focar(proximo);
+    }
+  }
+
   function boletosAtuaisCompra() {
     if (!compraListaBoletos) return [];
     return Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")).map(function(linha, indice) {
@@ -6171,7 +6210,7 @@
       if (pagamentoContaFutura()) {
         focar(dataVencimento);
       } else {
-        focar(primeiroProduto || observacao);
+        focar(primeiroCampoFinanceiroNotaCompra() || primeiroProduto || observacao);
       }
     });
   }
@@ -6185,7 +6224,7 @@
         if (pagamentoContaFutura()) {
           focar(dataVencimento);
         } else {
-          focar(primeiroProduto || observacao);
+          focar(primeiroCampoFinanceiroNotaCompra() || primeiroProduto || observacao);
         }
       });
     });
@@ -6204,7 +6243,7 @@
     dataVencimento.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
-      focar(primeiroProduto || observacao);
+      focar(primeiroCampoFinanceiroNotaCompra() || primeiroProduto || observacao);
     });
   }
 
@@ -6240,6 +6279,9 @@
       marcarValoresBoletosComoManuais(event);
       atualizarResumoBoletosCompra();
     });
+  }
+  if (painelBoletosCompra) {
+    painelBoletosCompra.addEventListener("keydown", avancarEnterCampoFinanceiroCompra);
   }
   document.addEventListener("valorCobradoCompraAtualizado", function(event) {
     sincronizarValorFinanceiroComValorCobrado(event.detail ? event.detail.centavos : null);
