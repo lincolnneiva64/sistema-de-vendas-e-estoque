@@ -1996,7 +1996,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual(self.produto.quantidade, estoque_antes)
         self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
 
-    def test_detalhe_compra_com_multiplas_contas_exibe_parcelas_e_bloqueia_correcao_financeira(self):
+    def test_detalhe_compra_com_multiplas_contas_exibe_parcelas_e_permite_correcao_financeira(self):
         _, compra = self._criar_compra_lista_parcelada(
             ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
             [
@@ -2015,13 +2015,13 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(detalhe, "2/3")
         self.assertContains(detalhe, "3/3")
 
-        correcao = self.client.get(
-            reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": compra.pk}),
-            follow=True,
-            secure=True,
-        )
-        mensagens = [str(mensagem) for mensagem in get_messages(correcao.wsgi_request)]
-        self.assertTrue(any("multiplas Contas a Pagar" in mensagem for mensagem in mensagens))
+        self.assertContains(detalhe, reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": compra.pk}))
+
+        correcao = self.client.get(reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": compra.pk}), secure=True)
+        self.assertContains(correcao, "Boletos da compra")
+        self.assertContains(correcao, "1/3")
+        self.assertContains(correcao, "2/3")
+        self.assertContains(correcao, "3/3")
 
     def test_baixa_de_uma_parcela_preserva_juros_e_nao_altera_demais_parcelas(self):
         _, compra = self._criar_compra_lista_parcelada(
@@ -13170,6 +13170,73 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertEqual(self.item.valor_total, Decimal("433.60"))
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
 
+    def criar_compra_multiplos_boletos_finalizada(self):
+        self.conta.delete()
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=date(2026, 9, 17),
+            data_inicio_periodo=date(2026, 9, 17),
+            data_fim_periodo=date(2026, 9, 17),
+            valor_nota_boleto=Decimal("1178.21"),
+            forma_cobranca_nota=ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+        )
+        self.compra.lista_fornecedor = lista
+        self.compra.data_compra = date(2026, 9, 17)
+        self.compra.data_vencimento = date(2026, 10, 7)
+        self.compra.total_produtos = Decimal("1178.00")
+        self.compra.ajuste_total = Decimal("0.21")
+        self.compra.total = Decimal("1178.21")
+        self.compra.save(update_fields=["lista_fornecedor", "data_compra", "data_vencimento", "total_produtos", "ajuste_total", "total", "atualizado_em"])
+        self.item.preco_unitario = Decimal("589.00")
+        self.item.valor_total = Decimal("1178.00")
+        self.item.save(update_fields=["preco_unitario", "valor_total"])
+        parcela_1 = ParcelaNotaListaCompraFornecedor.objects.create(
+            lista=lista,
+            numero=1,
+            valor=Decimal("589.11"),
+            data_vencimento=date(2026, 10, 7),
+        )
+        parcela_2 = ParcelaNotaListaCompraFornecedor.objects.create(
+            lista=lista,
+            numero=2,
+            valor=Decimal("589.10"),
+            data_vencimento=date(2026, 9, 14),
+        )
+        conta_1 = ContaPagar.objects.create(
+            compra=self.compra,
+            fornecedor=self.fornecedor,
+            data_emissao=date(2026, 9, 17),
+            data_vencimento=date(2026, 10, 7),
+            valor_original=Decimal("589.11"),
+            valor_em_aberto=Decimal("589.11"),
+            numero_parcela=1,
+            total_parcelas=2,
+            status=ContaPagar.STATUS_ABERTA,
+        )
+        conta_2 = ContaPagar.objects.create(
+            compra=self.compra,
+            fornecedor=self.fornecedor,
+            data_emissao=date(2026, 9, 17),
+            data_vencimento=date(2026, 9, 14),
+            valor_original=Decimal("589.10"),
+            valor_em_aberto=Decimal("589.10"),
+            numero_parcela=2,
+            total_parcelas=2,
+            status=ContaPagar.STATUS_ABERTA,
+        )
+        return lista, (parcela_1, parcela_2), (conta_1, conta_2)
+
+    def dados_correcao_parcelas(self, parcelas, contas, **alteracoes):
+        dados = {"confirmar": "1", "confirmacao_visual": "1"}
+        for parcela, conta in zip(parcelas, contas):
+            numero = conta.numero_parcela
+            dados[f"conta_pagar_id_{numero}"] = str(conta.id)
+            dados[f"parcela_nota_id_{numero}"] = str(parcela.id)
+            dados[f"parcela_valor_{numero}"] = f"{conta.valor_original:.2f}".replace(".", ",")
+            dados[f"parcela_vencimento_{numero}"] = conta.data_vencimento.isoformat()
+        dados.update(alteracoes)
+        return dados
+
     def test_sem_pagamento_ajusta_original_e_aberto(self):
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
         self.assertContains(detalhe, "Esta compra foi corrigida e o financeiro ainda está diferente.")
@@ -13389,6 +13456,165 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assertEqual(self.conta.status, ContaPagar.STATUS_PARCIAL)
         self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
         self.assertContains(resposta, "diferenca deixada em aberto")
+
+    def test_multiplos_boletos_corrige_vencimento_preservando_ids_e_valores(self):
+        lista, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        segunda_id = contas[1].id
+
+        resposta = self.client.post(
+            self.url,
+            self.dados_correcao_parcelas(
+                parcelas,
+                contas,
+                parcela_vencimento_2="2026-10-14",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        parcelas[1].refresh_from_db()
+        conta_2 = ContaPagar.objects.get(pk=segunda_id)
+        self.assertContains(resposta, "Parcelas financeiras da compra corrigidas com sucesso.")
+        self.assertEqual(conta_2.id, segunda_id)
+        self.assertEqual(conta_2.data_vencimento, date(2026, 10, 14))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 10, 14))
+        self.assertEqual(conta_2.valor_original, Decimal("589.10"))
+        self.assertEqual(conta_2.valor_em_aberto, Decimal("589.10"))
+        self.assertEqual(conta_2.status, ContaPagar.STATUS_ABERTA)
+        self.assertEqual(PagamentoContaPagar.objects.filter(conta=conta_2).count(), 0)
+        lista.refresh_from_db()
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1178.21"))
+
+    def test_multiplos_boletos_parcela_paga_permite_somente_corrigir_vencimento(self):
+        _, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        conta_2 = contas[1]
+        pagamento = PagamentoContaPagar.objects.create(
+            conta=conta_2,
+            data_pagamento=date(2026, 9, 20),
+            valor=Decimal("100.00"),
+            forma_pagamento="Pix",
+        )
+        conta_2.valor_em_aberto = Decimal("489.10")
+        conta_2.status = ContaPagar.STATUS_PARCIAL
+        conta_2.save(update_fields=["valor_em_aberto", "status"])
+
+        resposta = self.client.post(
+            self.url,
+            self.dados_correcao_parcelas(
+                parcelas,
+                [contas[0], conta_2],
+                parcela_vencimento_2="2026-10-14",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        conta_2.refresh_from_db()
+        parcelas[1].refresh_from_db()
+        pagamento.refresh_from_db()
+        self.assertContains(resposta, "Parcelas financeiras da compra corrigidas com sucesso.")
+        self.assertEqual(conta_2.data_vencimento, date(2026, 10, 14))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 10, 14))
+        self.assertEqual(conta_2.valor_original, Decimal("589.10"))
+        self.assertEqual(conta_2.valor_em_aberto, Decimal("489.10"))
+        self.assertEqual(conta_2.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(pagamento.valor, Decimal("100.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+    def test_multiplos_boletos_bloqueia_alterar_valor_de_parcela_com_pagamento(self):
+        _, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        conta_2 = contas[1]
+        PagamentoContaPagar.objects.create(
+            conta=conta_2,
+            data_pagamento=date(2026, 9, 20),
+            valor=Decimal("100.00"),
+            forma_pagamento="Pix",
+        )
+        conta_2.valor_em_aberto = Decimal("489.10")
+        conta_2.status = ContaPagar.STATUS_PARCIAL
+        conta_2.save(update_fields=["valor_em_aberto", "status"])
+
+        resposta = self.client.post(
+            self.url,
+            self.dados_correcao_parcelas(
+                parcelas,
+                [contas[0], conta_2],
+                parcela_valor_1="589,10",
+                parcela_valor_2="589,11",
+                parcela_vencimento_2="2026-10-14",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        conta_2.refresh_from_db()
+        parcelas[1].refresh_from_db()
+        self.assertContains(resposta, "Valor bloqueado")
+        self.assertEqual(conta_2.valor_original, Decimal("589.10"))
+        self.assertEqual(conta_2.valor_em_aberto, Decimal("489.10"))
+        self.assertEqual(conta_2.data_vencimento, date(2026, 9, 14))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 9, 14))
+
+    def test_multiplos_boletos_falha_nao_deixa_parcela_e_conta_divergentes(self):
+        _, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        contas[1].status = ContaPagar.STATUS_CANCELADA
+        contas[1].save(update_fields=["status"])
+
+        resposta = self.client.post(
+            self.url,
+            self.dados_correcao_parcelas(
+                parcelas,
+                contas,
+                parcela_vencimento_1="2026-10-08",
+                parcela_vencimento_2="2026-10-14",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+        parcelas[0].refresh_from_db()
+        parcelas[1].refresh_from_db()
+        self.assertContains(resposta, "cancelada")
+        self.assertEqual(contas[0].data_vencimento, date(2026, 10, 7))
+        self.assertEqual(parcelas[0].data_vencimento, date(2026, 10, 7))
+        self.assertEqual(contas[1].data_vencimento, date(2026, 9, 14))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 9, 14))
+
+    def test_multiplos_boletos_permite_alterar_valor_de_parcela_aberta_sem_pagamento(self):
+        _, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+
+        resposta = self.client.post(
+            self.url,
+            self.dados_correcao_parcelas(
+                parcelas,
+                contas,
+                parcela_valor_1="589,10",
+                parcela_valor_2="589,11",
+            ),
+            follow=True,
+            secure=True,
+        )
+
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+        parcelas[0].refresh_from_db()
+        parcelas[1].refresh_from_db()
+        self.assertContains(resposta, "Parcelas financeiras da compra corrigidas com sucesso.")
+        self.assertEqual(contas[0].valor_original, Decimal("589.10"))
+        self.assertEqual(contas[0].valor_em_aberto, Decimal("589.10"))
+        self.assertEqual(parcelas[0].valor, Decimal("589.10"))
+        self.assertEqual(contas[1].valor_original, Decimal("589.11"))
+        self.assertEqual(contas[1].valor_em_aberto, Decimal("589.11"))
+        self.assertEqual(parcelas[1].valor, Decimal("589.11"))
+
+    def test_boleto_unico_continua_usando_fluxo_de_correcao_existente(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, "Confer")
+        self.assertContains(resposta, "Corrigir financeiro")
+        self.assertNotContains(resposta, "Boletos da compra")
 
     def test_compra_a_vista_nao_pode_usar_esta_etapa(self):
         self.compra.tipo_pagamento = "avista"

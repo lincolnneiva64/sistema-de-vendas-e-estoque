@@ -840,6 +840,9 @@
         <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
         <div><strong>Emissão</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
       </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+        <a class="nota-compra-btn primario" href="{% url 'estoque:compra_corrigir_financeiro' compra.id %}">Corrigir financeiro</a>
+      </div>
       <table class="nota-compra-tabela" style="margin-top:14px;">
         <thead>
           <tr>

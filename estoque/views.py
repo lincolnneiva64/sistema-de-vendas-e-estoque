@@ -9888,6 +9888,178 @@ def _resumo_correcao_financeira_compra(compra, conta_pagar):
     }
 
 
+def _conta_pagar_valor_editavel(conta):
+    if conta.status == ContaPagar.STATUS_CANCELADA:
+        return False, "Parcela cancelada nao pode ser alterada por este fluxo."
+    if conta.pagamentos.exists():
+        return False, "Valor bloqueado: esta parcela ja possui pagamento."
+    valor_original = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
+    valor_em_aberto = _financeiro_dinheiro(conta.valor_em_aberto).quantize(Decimal("0.01"))
+    if conta.status != ContaPagar.STATUS_ABERTA or valor_em_aberto != valor_original:
+        return False, "Valor bloqueado: esta parcela ja possui saldo movimentado."
+    return True, ""
+
+
+def _contexto_correcao_parcelas_compra(compra, contas_pagar=None):
+    contas_pagar = contas_pagar if contas_pagar is not None else _contas_pagar_da_compra(compra)
+    lista = getattr(compra, "lista_fornecedor", None)
+    if not lista or lista.forma_cobranca_nota not in {
+        ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
+        ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+    }:
+        return None
+
+    parcelas = list(lista.parcelas_nota.order_by("numero", "id"))
+    parcelas_por_numero = {parcela.numero: parcela for parcela in parcelas}
+    linhas = []
+    total_contas = sum((_financeiro_dinheiro(conta.valor_original) for conta in contas_pagar), Decimal("0.00")).quantize(Decimal("0.01"))
+    for indice, conta in enumerate(contas_pagar, start=1):
+        numero = conta.numero_parcela or indice
+        parcela = parcelas_por_numero.get(numero)
+        valor_editavel, motivo_bloqueio_valor = _conta_pagar_valor_editavel(conta)
+        data_editavel = conta.status != ContaPagar.STATUS_CANCELADA
+        total_pago = _total_pago_conta_pagar(conta).quantize(Decimal("0.01"))
+        valor = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
+        linhas.append({
+            "numero": numero,
+            "rotulo": f"{numero}/{conta.total_parcelas or len(contas_pagar)}",
+            "conta": conta,
+            "parcela": parcela,
+            "valor": valor,
+            "valor_input": f"{valor:.2f}".replace(".", ","),
+            "vencimento": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
+            "valor_editavel": valor_editavel,
+            "data_editavel": data_editavel,
+            "motivo_bloqueio_valor": motivo_bloqueio_valor,
+            "total_pago": total_pago,
+            "status": conta.get_status_display(),
+        })
+    valor_financeiro = _financeiro_dinheiro(lista.valor_nota_boleto if lista.valor_nota_boleto is not None else compra.total).quantize(Decimal("0.01"))
+    return {
+        "lista": lista,
+        "forma": lista.forma_cobranca_nota,
+        "valor_financeiro": valor_financeiro,
+        "valor_financeiro_input": f"{valor_financeiro:.2f}".replace(".", ","),
+        "quantidade": len(contas_pagar),
+        "linhas": linhas,
+        "total_contas": total_contas,
+        "diferenca": (total_contas - valor_financeiro).quantize(Decimal("0.01")),
+    }
+
+
+def _corrigir_parcelas_financeiras_compra(request, compra):
+    if request.POST.get("confirmar") != "1":
+        raise ValueError("Confirme a correcao das parcelas antes de continuar.")
+
+    contas = list(
+        ContaPagar.objects
+        .select_for_update()
+        .filter(compra=compra)
+        .prefetch_related("pagamentos")
+        .order_by("numero_parcela", "data_vencimento", "id")
+    )
+    if len(contas) <= 1:
+        raise ValueError("Esta correcao por parcelas exige multiplas Contas a Pagar.")
+
+    lista_id = getattr(compra, "lista_fornecedor_id", None)
+    if not lista_id:
+        raise ValueError("Esta compra nao possui lista de fornecedor vinculada para sincronizar as parcelas.")
+    lista = ListaCompraFornecedor.objects.select_for_update().get(pk=lista_id)
+    parcelas = list(
+        ParcelaNotaListaCompraFornecedor.objects
+        .select_for_update()
+        .filter(lista=lista)
+        .order_by("numero", "id")
+    )
+    parcelas_por_numero = {parcela.numero: parcela for parcela in parcelas}
+    contas_por_numero = {conta.numero_parcela or indice: conta for indice, conta in enumerate(contas, start=1)}
+    if len(parcelas_por_numero) != len(contas_por_numero):
+        raise ValueError("As parcelas da lista e as Contas a Pagar estao divergentes. Recarregue a compra antes de corrigir.")
+
+    novos_dados = []
+    for numero, conta in contas_por_numero.items():
+        parcela = parcelas_por_numero.get(numero)
+        if not parcela:
+            raise ValueError(f"Parcela {numero} nao encontrada na lista de fornecedor.")
+        if str(request.POST.get(f"conta_pagar_id_{numero}") or "") != str(conta.id):
+            raise ValueError("As Contas a Pagar mudaram. Recarregue a pagina antes de corrigir.")
+        if str(request.POST.get(f"parcela_nota_id_{numero}") or "") != str(parcela.id):
+            raise ValueError("As parcelas da lista mudaram. Recarregue a pagina antes de corrigir.")
+
+        valor = _valor_monetario_obrigatorio_lista_fornecedor(request.POST.get(f"parcela_valor_{numero}"))
+        if valor <= Decimal("0.00"):
+            raise ValueError(f"Informe valor maior que zero para a parcela {numero}.")
+        vencimento_texto = (request.POST.get(f"parcela_vencimento_{numero}") or "").strip()
+        vencimento = parse_date(vencimento_texto) if vencimento_texto else None
+        if not vencimento:
+            raise ValueError(f"Informe a data de vencimento da parcela {numero}.")
+
+        valor_atual = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
+        data_atual = conta.data_vencimento
+        valor_mudou = valor != valor_atual
+        data_mudou = vencimento != data_atual
+        if conta.status == ContaPagar.STATUS_CANCELADA and (valor_mudou or data_mudou):
+            raise ValueError(f"Parcela {numero} esta cancelada e nao pode ser alterada.")
+        valor_editavel, motivo_bloqueio_valor = _conta_pagar_valor_editavel(conta)
+        if valor_mudou and not valor_editavel:
+            raise ValueError(f"Parcela {numero}: {motivo_bloqueio_valor}")
+
+        novos_dados.append({
+            "numero": numero,
+            "conta": conta,
+            "parcela": parcela,
+            "valor": valor,
+            "vencimento": vencimento,
+            "valor_mudou": valor_mudou,
+            "data_mudou": data_mudou,
+            "valor_anterior": valor_atual,
+            "data_anterior": data_atual,
+        })
+
+    total_parcelas = sum((item["valor"] for item in novos_dados), Decimal("0.00")).quantize(Decimal("0.01"))
+    valor_financeiro = _financeiro_dinheiro(lista.valor_nota_boleto if lista.valor_nota_boleto is not None else compra.total).quantize(Decimal("0.01"))
+    if total_parcelas != valor_financeiro:
+        raise ValueError("A soma das parcelas precisa bater com o valor financeiro da compra.")
+
+    alteracoes = []
+    for item in novos_dados:
+        conta = item["conta"]
+        parcela = item["parcela"]
+        campos_conta = []
+        campos_parcela = []
+        if item["data_mudou"]:
+            conta.data_vencimento = item["vencimento"]
+            parcela.data_vencimento = item["vencimento"]
+            campos_conta.append("data_vencimento")
+            campos_parcela.append("data_vencimento")
+            alteracoes.append(
+                f"parcela {item['numero']} vencimento {item['data_anterior'].strftime('%d/%m/%Y') if item['data_anterior'] else '-'} -> {item['vencimento'].strftime('%d/%m/%Y')}"
+            )
+        if item["valor_mudou"]:
+            conta.valor_original = item["valor"]
+            conta.valor_em_aberto = item["valor"]
+            parcela.valor = item["valor"]
+            campos_conta.extend(["valor_original", "valor_em_aberto"])
+            campos_parcela.append("valor")
+            alteracoes.append(
+                f"parcela {item['numero']} valor {_financeiro_moeda_br(item['valor_anterior'])} -> {_financeiro_moeda_br(item['valor'])}"
+            )
+        if campos_conta:
+            campos_conta.append("atualizado_em")
+            conta.save(update_fields=campos_conta)
+        if campos_parcela:
+            campos_parcela.append("atualizado_em")
+            parcela.save(update_fields=campos_parcela)
+
+    if alteracoes:
+        operador = (compra.operador or "Operador nao informado").strip()
+        _registrar_observacao_compra(
+            compra,
+            "Correcao financeira de parcelas por "
+            f"{operador}: " + "; ".join(alteracoes) + ". Caixa/Banco nao alterado.",
+        )
+    return bool(alteracoes)
+
 
 def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_financeiro_correcao=''):
     novo_pagamento = str(novo_pagamento or "").strip()
@@ -10277,20 +10449,30 @@ def compra_corrigir_financeiro(request, pk):
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
     contas_pagar = _contas_pagar_da_compra(compra)
-    if len(contas_pagar) > 1:
-        messages.error(
-            request,
-            "Esta compra possui multiplas Contas a Pagar. Corrija ou baixe cada parcela individualmente.",
-        )
-        return redirect("estoque:compras_detalhe", pk=compra.pk)
+    correcao_parcelas = _contexto_correcao_parcelas_compra(compra, contas_pagar) if len(contas_pagar) > 1 else None
 
     conta_pagar = contas_pagar[0] if contas_pagar else None
-    if not conta_pagar:
+    if not conta_pagar and not correcao_parcelas:
         messages.error(request, "Esta compra nao possui Conta a Pagar vinculada.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
-    resumo = _resumo_correcao_financeira_compra(compra, conta_pagar)
+    resumo = _resumo_correcao_financeira_compra(compra, conta_pagar) if conta_pagar else None
     if request.method == "POST":
+        if correcao_parcelas:
+            try:
+                with transaction.atomic():
+                    compra_bloqueada = Compra.objects.select_for_update().get(pk=compra.pk)
+                    alterou = _corrigir_parcelas_financeiras_compra(request, compra_bloqueada)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+                return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+
+            if alterou:
+                messages.success(request, "Parcelas financeiras da compra corrigidas com sucesso. Caixa/Banco nao foi alterado.")
+            else:
+                messages.success(request, "Nenhuma alteracao financeira foi encontrada nas parcelas.")
+            return redirect("estoque:compras_detalhe", pk=compra.pk)
+
         if request.POST.get("confirmar") != "1":
             messages.error(request, "Confirme o ajuste financeiro antes de continuar.")
             return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
@@ -10525,6 +10707,7 @@ def compra_corrigir_financeiro(request, pk):
             "compra": compra,
             "conta_pagar": conta_pagar,
             "resumo": resumo,
+            "correcao_parcelas": correcao_parcelas,
             "contas_financeiras": _contas_financeiras_com_saldo(),
         },
     )

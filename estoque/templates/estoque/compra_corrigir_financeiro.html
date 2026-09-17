@@ -18,7 +18,14 @@
   .cf-btn { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 12px; border:1px solid #7ea6d9; border-radius:8px; background:#dbeafe; color:#164173; text-decoration:none; font-weight:900; cursor:pointer; }
   .cf-btn.primario { border-color:#2563eb; background:#2563eb; color:#fff; }
   .cf-confirmacao { display:flex; align-items:flex-start; gap:8px; margin:0 12px 12px; color:#334155; font-weight:800; }
-  @media(max-width:640px) { .cf-topo{flex-direction:column}.cf-grid{grid-template-columns:1fr}.cf-acoes,.cf-btn{width:100%} }
+  .cf-parcelas { width:100%; border-collapse:collapse; margin:0; }
+  .cf-parcelas th, .cf-parcelas td { padding:9px 10px; border-bottom:1px solid #edf1f6; text-align:left; vertical-align:top; }
+  .cf-parcelas th { background:#f8fafc; color:#475569; font-size:.72rem; font-weight:950; text-transform:uppercase; }
+  .cf-parcelas input { width:100%; min-height:36px; border:1px solid #cbd5e1; border-radius:8px; padding:7px 9px; font-weight:850; color:#172033; }
+  .cf-parcelas input[readonly] { background:#f1f5f9; color:#64748b; }
+  .cf-motivo { display:block; margin-top:4px; color:#92400e; font-size:.78rem; font-weight:800; }
+  .cf-status { color:#64748b; font-weight:850; white-space:nowrap; }
+  @media(max-width:640px) { .cf-topo{flex-direction:column}.cf-grid{grid-template-columns:1fr}.cf-acoes,.cf-btn{width:100%}.cf-parcelas{display:block; overflow-x:auto; white-space:nowrap} }
 </style>
 
 <div class="cf-wrap">
@@ -28,6 +35,56 @@
   </div>
 
   {% if messages %}{% for message in messages %}<div class="cf-aviso">{{ message }}</div>{% endfor %}{% endif %}
+  {% if correcao_parcelas %}
+    <section class="cf-card">
+      <h2>Boletos da compra</h2>
+      <div class="cf-grid">
+        <div class="cf-valor"><span>Forma</span><strong>{% if correcao_parcelas.forma == "varios_boletos" %}Varios boletos{% else %}Boleto unico{% endif %}</strong></div>
+        <div class="cf-valor"><span>Quantidade</span><strong>{{ correcao_parcelas.quantidade }}</strong></div>
+        <div class="cf-valor"><span>Valor financeiro</span><strong>R$ {{ correcao_parcelas.valor_financeiro|floatformat:2 }}</strong></div>
+      </div>
+      <div class="cf-aviso">Corrija os boletos existentes sem alterar a quantidade de parcelas. Datas podem ser corrigidas mesmo com pagamento; valores pagos ou movimentados ficam protegidos.</div>
+      <form method="post" id="formCorrigirFinanceiroCompra">
+        {% csrf_token %}
+        <input type="hidden" name="confirmar" value="1">
+        <table class="cf-parcelas">
+          <thead>
+            <tr>
+              <th>Parcela</th>
+              <th>Status</th>
+              <th>Valor</th>
+              <th>Vencimento</th>
+              <th>Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in correcao_parcelas.linhas %}
+              <tr>
+                <td><strong>{{ linha.rotulo }}</strong></td>
+                <td class="cf-status">{{ linha.status }}</td>
+                <td>
+                  <input type="hidden" name="conta_pagar_id_{{ linha.numero }}" value="{{ linha.conta.id }}">
+                  <input type="hidden" name="parcela_nota_id_{{ linha.numero }}" value="{{ linha.parcela.id }}">
+                  <input type="text" name="parcela_valor_{{ linha.numero }}" value="{{ linha.valor_input }}" inputmode="decimal" {% if not linha.valor_editavel %}readonly{% endif %}>
+                  {% if linha.motivo_bloqueio_valor %}<span class="cf-motivo">{{ linha.motivo_bloqueio_valor }}</span>{% endif %}
+                </td>
+                <td>
+                  <input type="date" name="parcela_vencimento_{{ linha.numero }}" value="{{ linha.vencimento }}" {% if not linha.data_editavel %}readonly{% endif %}>
+                  {% if not linha.data_editavel %}<span class="cf-motivo">Parcela cancelada nao pode ser alterada.</span>{% endif %}
+                </td>
+                <td>R$ {{ linha.total_pago|floatformat:2 }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <label class="cf-confirmacao" style="margin-top:12px;"><input type="checkbox" name="confirmacao_visual" value="1" required> Confirmo que estou corrigindo somente boletos existentes desta compra.</label>
+        <div class="cf-acoes">
+          <a class="cf-btn" href="{% url 'estoque:compras_detalhe' compra.id %}">Cancelar</a>
+          <button class="cf-btn primario" type="submit" id="btnCorrigirFinanceiroCompra">Salvar correcao financeira</button>
+        </div>
+      </form>
+    </section>
+  {% else %}
   <section class="cf-card">
     <h2>Conferência</h2>
     <div class="cf-grid">
@@ -120,6 +177,7 @@
       <div class="cf-aviso">A Conta a Pagar já está de acordo com o total da compra.</div>
     {% endif %}
   </section>
+  {% endif %}
 </div>
 <script>
 document.getElementById("formCorrigirFinanceiroCompra")?.addEventListener("submit", function(e) {
