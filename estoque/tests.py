@@ -14795,6 +14795,47 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(Venda.objects.count(), 0)
         self.assertEqual(ItemVenda.objects.count(), 0)
 
+    def test_gravar_venda_unidade_mil_aceita_quantidade_decimal(self):
+        produto = self._produto_teste("Sacola MIL Decimal", quantidade=Decimal("5.000"))
+        produto.unidade_compra = "MIL"
+        produto.unidade_venda_1 = "MIL"
+        produto.vende_fracionado = False
+        produto.preco_compra = Decimal("70.00")
+        produto.preco_vista = Decimal("96.00")
+        produto.preco_prazo = Decimal("98.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "vende_fracionado",
+            "preco_compra",
+            "preco_vista",
+            "preco_prazo",
+        ])
+
+        for quantidade in ("0.5", "1", "1.5"):
+            with self.subTest(quantidade=quantidade):
+                produto.quantidade = Decimal("5.000")
+                produto.save(update_fields=["quantidade"])
+                Venda.objects.all().delete()
+
+                resposta = self._post_gravar_venda(
+                    produto,
+                    quantidade=quantidade,
+                    unidade="MIL",
+                    preco="98.00",
+                )
+
+                self.assertEqual(resposta.status_code, 200)
+                self.assertTrue(resposta.json()["sucesso"])
+                item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+                self.assertEqual(item.quantidade, Decimal(quantidade).quantize(Decimal("0.001")))
+                self.assertEqual(item.unidade, "MIL")
+                produto.refresh_from_db()
+                self.assertEqual(
+                    produto.quantidade,
+                    (Decimal("5.000") - Decimal(quantidade)).quantize(Decimal("0.001")),
+                )
+
     def test_quantidade_fracionada_central_valida_kg_embalagem_com_fator_e_unidade_menor(self):
         produto_kg = self._produto_teste("Produto KG Miligrama", quantidade=Decimal("5.000"))
         produto_kg.unidade_compra = "KG"
@@ -14836,6 +14877,32 @@ class PixRecebidoTests(TestCase):
         self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_cx, "CX", Decimal("0.250")))
         self.assertFalse(views._quantidade_valida_para_produto_unidade(produto_cx, "CX", Decimal("0.001")))
         self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_cx, "UN", Decimal("0.001")))
+
+        produto_mil = self._produto_teste("Produto MIL Decimal", quantidade=Decimal("5.000"))
+        produto_mil.unidade_compra = "MIL"
+        produto_mil.unidade_venda_1 = "MIL"
+        produto_mil.unidade_venda_2 = "CT"
+        produto_mil.vende_fracionado = True
+        produto_mil.fator_conversao = Decimal("10.00")
+        produto_mil.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "unidade_venda_2",
+            "vende_fracionado",
+            "fator_conversao",
+        ])
+        self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_mil, "MIL", Decimal("0.500")))
+        self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_mil, "MIL", Decimal("1.000")))
+        self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_mil, "MIL", Decimal("1.500")))
+        self.assertTrue(views._quantidade_valida_para_produto_unidade(produto_mil, "CT", Decimal("0.001")))
+        self.assertEqual(
+            views._quantidade_estoque_para_unidade_base(produto_mil, Decimal("1.500"), "MIL"),
+            (Decimal("1.500"), "MIL"),
+        )
+        self.assertEqual(
+            views._quantidade_estoque_para_unidade_base(produto_mil, Decimal("5.000"), "CT"),
+            (Decimal("0.500"), "MIL"),
+        )
 
     def test_gravar_venda_embalagem_com_fator_rejeita_fracao_incompativel(self):
         produto = self._produto_teste("Produto PCT Venda Fator", quantidade=Decimal("10.000"))
@@ -31627,6 +31694,68 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(venda.total, Decimal("40.00"))
         self.assertEqual(conta.valor_original, Decimal("40.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("40.00"))
+
+    def test_edicao_unificada_inclui_item_mil_decimal_sem_rejeitar_fracionamento(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="2.000",
+            preco="10.00",
+            estoque="8.000",
+        )
+        sacola = Produto.objects.create(
+            nome="Sacola 8Kg 38/48Cm 10/1Ct Teste",
+            quantidade=Decimal("2.300"),
+            preco_venda=Decimal("98.00"),
+            preco_compra=Decimal("73.44"),
+            preco_vista=Decimal("96.00"),
+            preco_prazo=Decimal("98.00"),
+            preco_vista_fracionado=Decimal("10.00"),
+            preco_prazo_fracionado=Decimal("10.50"),
+            preco_compra_fracionado=Decimal("7.34"),
+            unidade_compra="MIL",
+            unidade_venda_1="MIL",
+            unidade_venda_2="CT",
+            fator_conversao=Decimal("10.00"),
+            vende_fracionado=True,
+            ativo=True,
+            excluido=False,
+        )
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="10.00",
+        )
+        payload["itens"].append({
+            "item_id": "",
+            "produto_id": sacola.id,
+            "produto_nome": sacola.nome,
+            "quantidade": "1.5",
+            "unidade": "MIL",
+            "preco_unitario": "98.00",
+            "valor_total": "147.00",
+        })
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+        venda.refresh_from_db()
+        sacola.refresh_from_db()
+        item_sacola = venda.itens.get(produto=sacola)
+        conta = ContaReceber.objects.get(venda=venda)
+        self.assertEqual(item_sacola.quantidade, Decimal("1.500"))
+        self.assertEqual(item_sacola.unidade, "MIL")
+        self.assertEqual(item_sacola.estoque_movimentado, Decimal("1.500"))
+        self.assertEqual(item_sacola.estoque_unidade_snapshot, "MIL")
+        self.assertEqual(sacola.quantidade, Decimal("0.800"))
+        self.assertEqual(venda.total, Decimal("167.00"))
+        self.assertEqual(conta.valor_original, Decimal("167.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("167.00"))
 
     def test_edicao_unificada_remove_item_devolve_estoque_e_atualiza_conta(self):
         cliente, produto, venda, item = self.criar_venda_base(
