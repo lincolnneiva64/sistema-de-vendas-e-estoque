@@ -6338,6 +6338,8 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
 
     const dadosVenda = dadosVendaConfirmados || coletarDadosVenda();
+    let vendaSalvaComSucesso = false;
+    const textoBotaoPadrao = vendaEdicaoVenda?.id ? "Salvar Alterações" : "Gravar Venda";
 
     if (!dadosVenda.itens.length) {
         mostrarToastVenda("Inclua pelo menos 1 item antes de gravar a venda.");
@@ -6376,26 +6378,27 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 
         vendaGravadaId = retorno.venda_id;
         vendaGravadaUrl = retorno.visualizar_url || "";
+        vendaSalvaComSucesso = true;
         atualizarEstoquesProdutosVenda(retorno.produtos_estoque_atualizados);
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
         if (vendaEdicaoVenda?.id && vendaEdicaoRetornoUrl && retorno.visualizar_url) {
+            marcarVendaEdicaoComoSalva();
             window.location.href = retorno.visualizar_url;
             return;
         }
         mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem, retorno.separacao);
         if (vendaEdicaoVenda?.id) {
             limparFechamentoVenda();
+            marcarVendaEdicaoComoSalva();
         } else {
             limparVendaAposGravacao();
         }
     } catch (erro) {
-        mostrarToastVenda("Falha de comunicacao ao gravar a venda.");
+        mostrarToastVenda(erro?.message || "Falha de comunicacao ao gravar a venda.");
     } finally {
-        if (vendaEdicaoVenda?.id && vendaGravadaId) {
-            marcarVendaEdicaoComoSalva();
-        } else {
+        if (!vendaSalvaComSucesso) {
             btnGravarVenda.disabled = false;
-            btnGravarVenda.textContent = vendaEdicaoVenda ? "Salvar Alterações" : "Gravar Venda";
+            btnGravarVenda.textContent = textoBotaoPadrao;
         }
     }
 }

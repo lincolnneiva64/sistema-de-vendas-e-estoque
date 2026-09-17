@@ -29959,6 +29959,79 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertNotIn("clienteSelecionado = clientePreviewFinanceiro;", conteudo)
         self.assertIn("preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);", conteudo)
 
+    def test_tela_vendas_modo_edicao_nao_marca_salva_no_finally_de_erro(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        conteudo = resposta.content.decode()
+        inicio_funcao = conteudo.index("async function gravarVendaAtual")
+        fim_funcao = conteudo.index("[vendaOrigemCaixa, vendaOrigemBanco]", inicio_funcao)
+        corpo_funcao = conteudo[inicio_funcao:fim_funcao]
+        inicio_finally = corpo_funcao.index("} finally {")
+        corpo_finally = corpo_funcao[inicio_finally:]
+
+        self.assertIn("let vendaSalvaComSucesso = false;", corpo_funcao)
+        self.assertIn("vendaSalvaComSucesso = true;", corpo_funcao)
+        self.assertIn("if (!vendaSalvaComSucesso)", corpo_finally)
+        self.assertIn("btnGravarVenda.disabled = false;", corpo_finally)
+        self.assertIn("btnGravarVenda.textContent = textoBotaoPadrao;", corpo_finally)
+        self.assertIn("mostrarToastVenda(", corpo_funcao)
+        self.assertNotIn("marcarVendaEdicaoComoSalva()", corpo_finally)
+        self.assertNotIn("aplicarBloqueioEdicaoVenda(true)", corpo_finally)
+        self.assertNotIn("limparVendaAposGravacao()", corpo_finally)
+
+    def test_tela_vendas_modo_edicao_marca_salva_somente_no_sucesso_real(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?editar={venda.id}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        conteudo = resposta.content.decode()
+        inicio_funcao = conteudo.index("async function gravarVendaAtual")
+        fim_funcao = conteudo.index("[vendaOrigemCaixa, vendaOrigemBanco]", inicio_funcao)
+        corpo_funcao = conteudo[inicio_funcao:fim_funcao]
+
+        self.assertRegex(
+            corpo_funcao,
+            r"vendaSalvaComSucesso = true;[\s\S]*?marcarVendaEdicaoComoSalva\(\);",
+        )
+        self.assertIn("mostrarBlocoVendaGravada(vendaGravadaId, vendaGravadaUrl, retorno.mensagem, retorno.separacao);", corpo_funcao)
+        self.assertIn("limparFechamentoVenda();", corpo_funcao)
+
+    def test_gravar_venda_edicao_rejeitada_registra_diagnostico_sanitizado(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        payload = self.payload_edicao(venda, item, quantidade="2.000", preco="10.00")
+        payload["cliente_id"] = 999999
+        payload["itens"][0]["produto_nome"] = "Produto Nome Sensivel"
+
+        with self.assertLogs("estoque.views", level="WARNING") as logs:
+            resposta = self.client.post(
+                reverse("estoque:gravar_venda"),
+                data=json.dumps(payload),
+                content_type="application/json",
+                secure=True,
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(resposta.status_code, 400)
+        conteudo_logs = "\n".join(logs.output)
+        self.assertIn("gravar_venda retorno 400", conteudo_logs)
+        self.assertIn(f"venda_id={venda.id!r}", conteudo_logs)
+        self.assertIn("itens_qtd=1", conteudo_logs)
+        self.assertIn(f"'produto_id': '{produto.id}'", conteudo_logs)
+        self.assertIn("'quantidade': '2.000'", conteudo_logs)
+        self.assertIn("'unidade': 'UN'", conteudo_logs)
+        self.assertNotIn("Produto Nome Sensivel", conteudo_logs)
+        self.assertNotIn("cliente_id", conteudo_logs)
+
     def test_tela_vendas_nova_venda_em_edicao_ignora_next_da_fila(self):
         cliente, produto, venda, item = self.criar_venda_base()
         retorno = f"{reverse('estoque:separacao_vendas_fila')}?data=2026-09-16&aba=separacao"

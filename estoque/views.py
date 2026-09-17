@@ -18458,21 +18458,28 @@ def gravar_venda(request):
 
     itens = dados.get("itens") or []
 
+    def resumo_itens_diagnostico(itens_payload):
+        resumo = []
+        for item in itens_payload:
+            if not isinstance(item, dict):
+                resumo.append({"item_invalido": type(item).__name__})
+                continue
+            resumo.append({
+                "item_id": str(item.get("item_id") or "").strip(),
+                "produto_id": str(item.get("produto_id") or "").strip(),
+                "quantidade": str(item.get("quantidade") or "").strip(),
+                "unidade": str(item.get("unidade") or "").strip(),
+            })
+        return resumo
+
     def erro_gravar_venda(mensagem, status=400):
-        origem = dados.get("origem_recebimento") or {}
         logger.warning(
-            "gravar_venda retorno %s | motivo=%s | venda_id=%r | tipo_pagamento=%r | "
-            "total=%r | origem_recebimento=%r | valor_caixa=%r | valor_banco=%r | itens_qtd=%s | itens=%r",
+            "gravar_venda retorno %s | motivo=%s | venda_id=%r | itens_qtd=%s | itens_resumo=%r",
             status,
             mensagem,
             dados.get("venda_id"),
-            dados.get("tipo_pagamento"),
-            dados.get("total"),
-            origem,
-            origem.get("caixa"),
-            origem.get("banco"),
             len(itens),
-            itens,
+            resumo_itens_diagnostico(itens),
         )
         return JsonResponse({"sucesso": False, "mensagem": mensagem}, status=status)
 
