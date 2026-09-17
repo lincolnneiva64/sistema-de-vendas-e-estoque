@@ -3780,6 +3780,12 @@
       atualizarResumoOrigemDinheiroCompra();
     }
     atualizarResumoConferenciaNota();
+    document.dispatchEvent(new CustomEvent("valorCobradoCompraAtualizado", {
+      detail: {
+        centavos: valorFinanceiroCentavos,
+        valor: valorCobradoCompra ? valorCobradoCompra.value : moeda(valorFinanceiroCentavos / 100).replace("R$ ", "")
+      }
+    }));
   }
 
   if (valorCobradoCompra) {
@@ -5671,7 +5677,9 @@
   const compraSomaBoletos = document.getElementById("compraSomaBoletos");
   const compraDiferencaBoletos = document.getElementById("compraDiferencaBoletos");
   const compraDiferencaBoletosChip = document.getElementById("compraDiferencaBoletosChip");
+  const valorCobradoCompraBoletos = document.getElementById("valorCobradoCompra");
   let boletosCompraValoresAutomaticos = !(painelBoletosCompra && painelBoletosCompra.dataset.valoresPersonalizados === "1");
+  let valorNotaBoletoEditadoManualmente = false;
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
   let bloquearAberturaInicialFornecedor = false;
@@ -5813,6 +5821,21 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
+  }
+
+  function sincronizarValorFinanceiroComValorCobrado(centavos) {
+    if (!painelBoletosCompra || !compraValorNotaBoleto || valorNotaBoletoEditadoManualmente) return;
+    let valorCentavos = Number.isFinite(Number(centavos)) ? Number(centavos) : null;
+    if (valorCentavos === null && valorCobradoCompraBoletos) {
+      valorCentavos = centavosCompraBoletos(valorCobradoCompraBoletos.value);
+    }
+    if (valorCentavos === null) return;
+    compraValorNotaBoleto.value = valorCampoCompraBoletos(valorCentavos);
+    if (boletosCompraValoresAutomaticos) {
+      const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+      renderizarBoletosCompra(quantidade, { redistribuir: true });
+    }
+    atualizarResumoBoletosCompra();
   }
 
   function valoresSugeridosBoletosCompra(valorNota, quantidade) {
@@ -6200,6 +6223,7 @@
   }
   if (compraValorNotaBoleto) {
     compraValorNotaBoleto.addEventListener("input", function() {
+      valorNotaBoletoEditadoManualmente = true;
       if (boletosCompraValoresAutomaticos) {
         const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
         renderizarBoletosCompra(quantidade, { redistribuir: true });
@@ -6217,6 +6241,9 @@
       atualizarResumoBoletosCompra();
     });
   }
+  document.addEventListener("valorCobradoCompraAtualizado", function(event) {
+    sincronizarValorFinanceiroComValorCobrado(event.detail ? event.detail.centavos : null);
+  });
 
   if (observacao) {
     observacao.addEventListener("keydown", function(event) {
@@ -6228,6 +6255,7 @@
 
   window.addEventListener("load", function() {
     atualizarVencimentoCompra();
+    sincronizarValorFinanceiroComValorCobrado();
     atualizarBoletosCompra();
     limparCompraDescartadaAoAbrir();
     if (!descartarCompraNovaAoAbrir && !continuarItensAoAbrir && !rascunhoSalvoAoAbrir && !compraJaTemProdutoLancado()) {

@@ -4044,6 +4044,20 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "if (boletosCompraValoresAutomaticos) {")
         self.assertContains(resposta, "renderizarBoletosCompra(quantidade, { redistribuir: true });")
 
+    def test_compra_gerada_pela_lista_js_sincroniza_valor_cobrado_com_financeiro_da_nota(self):
+        lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
+        _, compra = self._gerar_compra_da_lista(lista)
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, 'id="valorCobradoCompra"')
+        self.assertContains(resposta, 'id="compraValorNotaBoleto"')
+        self.assertContains(resposta, 'new CustomEvent("valorCobradoCompraAtualizado"')
+        self.assertContains(resposta, "function sincronizarValorFinanceiroComValorCobrado(centavos)")
+        self.assertContains(resposta, "compraValorNotaBoleto.value = valorCampoCompraBoletos(valorCentavos);")
+        self.assertContains(resposta, "document.addEventListener(\"valorCobradoCompraAtualizado\"")
+        self.assertContains(resposta, "sincronizarValorFinanceiroComValorCobrado();")
+
     def test_compra_gerada_pela_lista_finaliza_aprazo_com_dois_boletos_da_tela(self):
         lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
         _, compra = self._gerar_compra_da_lista(lista)
@@ -4083,6 +4097,33 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertEqual([conta.total_parcelas for conta in contas], [2, 2])
         self.assertEqual([conta.valor_original for conta in contas], [Decimal("500.00"), Decimal("678.21")])
         self.assertEqual([conta.data_vencimento.isoformat() for conta in contas], ["2026-07-10", "2026-07-24"])
+
+    def test_compra_gerada_pela_lista_boleto_unico_usa_valor_cobrado_como_valor_financeiro(self):
+        lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
+        _, compra = self._gerar_compra_da_lista(lista)
+        dados = self._dados_finalizacao_compra_lista(
+            compra,
+            tipo_pagamento="aprazo",
+            data_vencimento="2026-07-10",
+            valor_cobrado="1178,21",
+            **{
+                "preco_unitario[]": ["1178,00"],
+                "compra_forma_cobranca_nota": ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
+                "compra_quantidade_boletos": "1",
+            },
+        )
+
+        resposta = self.client.post(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), dados, secure=True)
+
+        compra.refresh_from_db()
+        lista.refresh_from_db()
+        conta = ContaPagar.objects.get(compra=compra)
+        self.assertRedirects(resposta, reverse("estoque:compras_lista"), fetch_redirect_response=False)
+        self.assertEqual(compra.total, Decimal("1178.21"))
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1178.21"))
+        self.assertEqual(lista.forma_cobranca_nota, ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO)
+        self.assertEqual(conta.valor_original, Decimal("1178.21"))
+        self.assertEqual(conta.data_vencimento.isoformat(), "2026-07-10")
 
     def test_compra_gerada_pela_lista_rejeita_varios_boletos_com_soma_diferente_da_nota(self):
         lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
