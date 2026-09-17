@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm, ProdutoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, data_pertence_calendario_visita_fornecedor, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.fornecedor_visitas import calcular_proxima_visita
@@ -1926,6 +1926,139 @@ class FechamentoCompraFinanceiroTests(TestCase):
 
         self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
 
+    def test_lista_boleto_unico_finaliza_criando_uma_conta_pagar_da_parcela(self):
+        vencimento = date(2026, 7, 10)
+        lista, compra = self._criar_compra_lista_parcelada(
+            ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
+            [(vencimento, Decimal("300.00"))],
+            valor_nota=Decimal("300.00"),
+            total_compra=Decimal("300.00"),
+        )
+
+        views._finalizar_compra_com_financeiro(compra)
+
+        compra.refresh_from_db()
+        contas = list(ContaPagar.objects.filter(compra=compra))
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertEqual(compra.lista_fornecedor_id, lista.id)
+        self.assertEqual(len(contas), 1)
+        self.assertEqual(contas[0].valor_original, Decimal("300.00"))
+        self.assertEqual(contas[0].valor_em_aberto, Decimal("300.00"))
+        self.assertEqual(contas[0].data_vencimento, vencimento)
+        self.assertEqual(contas[0].numero_parcela, 1)
+        self.assertEqual(contas[0].total_parcelas, 1)
+
+    def test_lista_varios_boletos_finaliza_criando_contas_pagar_com_valores_diferentes(self):
+        estoque_antes = self.produto.quantidade
+        _, compra = self._criar_compra_lista_parcelada(
+            ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+            [
+                (date(2026, 7, 10), Decimal("400.00")),
+                (date(2026, 7, 17), Decimal("601.37")),
+            ],
+            valor_nota=Decimal("1001.37"),
+            total_compra=Decimal("990.00"),
+        )
+
+        views._finalizar_compra_com_financeiro(compra)
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        contas = list(ContaPagar.objects.filter(compra=compra).order_by("numero_parcela"))
+        self.assertEqual(compra.status, Compra.STATUS_FINALIZADA)
+        self.assertTrue(compra.estoque_entrada_realizada)
+        self.assertEqual(self.produto.quantidade, estoque_antes + Decimal("2.000"))
+        self.assertEqual([conta.numero_parcela for conta in contas], [1, 2])
+        self.assertEqual([conta.total_parcelas for conta in contas], [2, 2])
+        self.assertEqual([conta.valor_original for conta in contas], [Decimal("400.00"), Decimal("601.37")])
+        self.assertEqual(sum((conta.valor_original for conta in contas), Decimal("0.00")), Decimal("1001.37"))
+        self.assertEqual(compra.total, Decimal("990.00"))
+
+    def test_lista_varios_boletos_soma_invalida_nao_finaliza_nem_movimenta_estoque(self):
+        estoque_antes = self.produto.quantidade
+        _, compra = self._criar_compra_lista_parcelada(
+            ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+            [
+                (date(2026, 7, 10), Decimal("400.00")),
+                (date(2026, 7, 17), Decimal("500.00")),
+            ],
+            valor_nota=Decimal("1000.00"),
+            total_compra=Decimal("1000.00"),
+        )
+
+        with self.assertRaisesMessage(ValueError, "soma dos boletos"):
+            views._finalizar_compra_com_financeiro(compra)
+
+        compra.refresh_from_db()
+        self.produto.refresh_from_db()
+        self.assertEqual(compra.status, Compra.STATUS_RASCUNHO)
+        self.assertFalse(compra.estoque_entrada_realizada)
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(ContaPagar.objects.filter(compra=compra).count(), 0)
+
+    def test_detalhe_compra_com_multiplas_contas_exibe_parcelas_e_bloqueia_correcao_financeira(self):
+        _, compra = self._criar_compra_lista_parcelada(
+            ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+            [
+                (date(2026, 7, 10), Decimal("400.00")),
+                (date(2026, 7, 17), Decimal("300.00")),
+                (date(2026, 7, 24), Decimal("300.00")),
+            ],
+            valor_nota=Decimal("1000.00"),
+            total_compra=Decimal("1000.00"),
+        )
+        views._finalizar_compra_com_financeiro(compra)
+
+        detalhe = self.client.get(reverse("estoque:compras_detalhe", kwargs={"pk": compra.pk}), secure=True)
+        self.assertContains(detalhe, "3 parcelas")
+        self.assertContains(detalhe, "1/3")
+        self.assertContains(detalhe, "2/3")
+        self.assertContains(detalhe, "3/3")
+
+        correcao = self.client.get(
+            reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": compra.pk}),
+            follow=True,
+            secure=True,
+        )
+        mensagens = [str(mensagem) for mensagem in get_messages(correcao.wsgi_request)]
+        self.assertTrue(any("multiplas Contas a Pagar" in mensagem for mensagem in mensagens))
+
+    def test_baixa_de_uma_parcela_preserva_juros_e_nao_altera_demais_parcelas(self):
+        _, compra = self._criar_compra_lista_parcelada(
+            ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+            [
+                (date(2026, 7, 10), Decimal("400.00")),
+                (date(2026, 7, 17), Decimal("600.00")),
+            ],
+            valor_nota=Decimal("1000.00"),
+            total_compra=Decimal("1000.00"),
+        )
+        views._finalizar_compra_com_financeiro(compra)
+        primeira, segunda = list(ContaPagar.objects.filter(compra=compra).order_by("numero_parcela"))
+
+        resposta = self.client.post(
+            reverse("estoque:conta_pagar_baixar", kwargs={"pk": primeira.pk}),
+            {
+                "valor_pago": "100,00",
+                "juros_bancarios": "2,50",
+                "data_pagamento": "2026-07-10",
+                "forma_pagamento": "",
+                "observacao": "Baixa parcial",
+            },
+            secure=True,
+        )
+
+        primeira.refresh_from_db()
+        segunda.refresh_from_db()
+        pagamento = primeira.pagamentos.get()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(primeira.valor_em_aberto, Decimal("300.00"))
+        self.assertEqual(primeira.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(pagamento.valor, Decimal("100.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("2.50"))
+        self.assertEqual(segunda.valor_em_aberto, Decimal("600.00"))
+        self.assertEqual(segunda.status, ContaPagar.STATUS_ABERTA)
+
     def test_compra_sem_diferenca_salva_total_produtos_ajuste_zero_e_total_financeiro(self):
         resposta = self.client.post(
             self.url,
@@ -2141,6 +2274,48 @@ class FechamentoCompraFinanceiroTests(TestCase):
             conferido=True,
         )
         return lista
+
+    def _criar_compra_lista_parcelada(
+        self,
+        forma_cobranca,
+        parcelas,
+        valor_nota=Decimal("1000.00"),
+        total_compra=Decimal("1000.00"),
+        quantidade=Decimal("2.000"),
+    ):
+        lista = self._criar_lista_fornecedor_conferida(quantidade=quantidade, total=total_compra)
+        lista.forma_cobranca_nota = forma_cobranca
+        lista.valor_nota_boleto = valor_nota
+        lista.save(update_fields=["forma_cobranca_nota", "valor_nota_boleto", "atualizado_em"])
+        for numero, (vencimento, valor) in enumerate(parcelas, start=1):
+            ParcelaNotaListaCompraFornecedor.objects.create(
+                lista=lista,
+                numero=numero,
+                data_vencimento=vencimento,
+                valor=valor,
+                observacao=f"Boleto {numero}",
+            )
+
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=timezone.localdate(),
+            data_vencimento=parcelas[0][0],
+            tipo_pagamento="aprazo",
+            total=total_compra,
+            total_produtos=total_compra,
+            ajuste_total=Decimal("0.00"),
+            status=Compra.STATUS_RASCUNHO,
+            lista_fornecedor=lista,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto,
+            quantidade=quantidade,
+            unidade="UN",
+            preco_unitario=(total_compra / quantidade).quantize(Decimal("0.01")),
+            valor_total=total_compra,
+        )
+        return lista, compra
 
     def _gerar_compra_da_lista(self, lista):
         resposta = self.client.post(
@@ -3723,7 +3898,7 @@ class FechamentoCompraFinanceiroTests(TestCase):
         movimento = compra.movimentos_financeiros.get()
         self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
         self.assertEqual(movimento.valor, Decimal("100.00"))
-        self.assertFalse(hasattr(compra, "conta_pagar"))
+        self.assertFalse(ContaPagar.objects.filter(compra=compra).exists())
 
     def test_compra_gerada_pela_lista_finalizacao_avista_idempotente_nao_duplica_estoque_ou_movimento(self):
         lista = self._criar_lista_fornecedor_conferida()

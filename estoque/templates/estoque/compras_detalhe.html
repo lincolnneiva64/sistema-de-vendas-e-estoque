@@ -778,6 +778,9 @@
       {% endif %}
       <div class="nota-compra-dados">
         <div><strong>Conta a pagar</strong>{{ conta_pagar.get_status_display }}</div>
+        {% if conta_pagar.numero_parcela and conta_pagar.total_parcelas %}
+          <div><strong>Parcela</strong>{{ conta_pagar.numero_parcela }}/{{ conta_pagar.total_parcelas }}</div>
+        {% endif %}
         <div><strong>Valor original</strong>R$ {{ conta_pagar.valor_original }}</div>
         <div><strong>Valor em aberto</strong>R$ {{ conta_pagar.valor_em_aberto }}</div>
         <div><strong>Vencimento</strong>{{ conta_pagar.data_vencimento|date:"d/m/Y"|default:"-" }}</div>
@@ -830,6 +833,37 @@
           <div style="color:#64748b; font-weight:800; padding:6px 0;">Nenhum pagamento registrado.</div>
         {% endif %}
       </div>
+    {% elif contas_pagar %}
+      <div class="nota-compra-dados">
+        <div><strong>Contas a pagar</strong>{{ contas_pagar|length }} parcelas</div>
+        <div><strong>Situação</strong>{{ situacao_financeira_texto }}</div>
+        <div><strong>Fornecedor</strong>{{ compra.fornecedor.nome|default:"-" }}</div>
+        <div><strong>Emissão</strong>{{ compra.data_compra|date:"d/m/Y" }}</div>
+      </div>
+      <table class="nota-compra-tabela" style="margin-top:14px;">
+        <thead>
+          <tr>
+            <th>Parcela</th>
+            <th>Vencimento</th>
+            <th>Status</th>
+            <th>Valor original</th>
+            <th>Pago</th>
+            <th>Em aberto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for conta in contas_pagar %}
+            <tr>
+              <td>{{ conta.parcela_rotulo }}</td>
+              <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
+              <td>{{ conta.get_status_display }}</td>
+              <td>R$ {{ conta.valor_original|floatformat:2 }}</td>
+              <td>R$ {{ conta.total_pago_detalhe|floatformat:2 }}</td>
+              <td>R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     {% else %}
       <div class="nota-compra-resumo-pagamento">
         <h3>Resumo do pagamento</h3>

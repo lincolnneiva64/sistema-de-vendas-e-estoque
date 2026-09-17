@@ -5097,9 +5097,15 @@ def _decimal_compra(valor, casas=2, padrao="0"):
 
 
 def _conta_pagar_payload(conta):
+    parcela_rotulo = ""
+    if conta.numero_parcela and conta.total_parcelas:
+        parcela_rotulo = f"{conta.numero_parcela}/{conta.total_parcelas}"
     return {
         "id": conta.id,
         "compra_id": conta.compra_id,
+        "numero_parcela": conta.numero_parcela,
+        "total_parcelas": conta.total_parcelas,
+        "parcela_rotulo": parcela_rotulo,
         "documento_legado": conta.documento_legado or "",
         "data_emissao": conta.data_emissao.strftime("%d/%m/%Y") if conta.data_emissao else "",
         "data_vencimento_iso": conta.data_vencimento.isoformat() if conta.data_vencimento else "",
@@ -5880,16 +5886,26 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
     if _compra_pagamento_imediato(compra.tipo_pagamento):
         return "Nota paga", "paga"
 
-    conta_pagar = getattr(compra, "conta_pagar", None)
-    if not conta_pagar:
+    contas_pagar = _contas_pagar_da_compra(compra)
+    if not contas_pagar:
         return "Financeiro não localizado", "alerta"
-    if conta_pagar.status == ContaPagar.STATUS_PAGA or conta_pagar.valor_em_aberto <= Decimal("0.00"):
-        return "Nota paga", "paga"
-    if conta_pagar.status == ContaPagar.STATUS_CANCELADA:
+    contas_ativas = [conta for conta in contas_pagar if conta.status != ContaPagar.STATUS_CANCELADA]
+    if not contas_ativas:
         return "Conta cancelada", "cancelada"
+    if all(conta.status == ContaPagar.STATUS_PAGA or conta.valor_em_aberto <= Decimal("0.00") for conta in contas_ativas):
+        return "Nota paga", "paga"
 
-    parcial = conta_pagar.status == ContaPagar.STATUS_PARCIAL
-    vencimento = conta_pagar.data_vencimento
+    parcial = any(
+        conta.status == ContaPagar.STATUS_PARCIAL
+        or _financeiro_dinheiro(conta.valor_original) > _financeiro_dinheiro(conta.valor_em_aberto)
+        for conta in contas_ativas
+    )
+    vencimentos_abertos = [
+        conta.data_vencimento
+        for conta in contas_ativas
+        if conta.valor_em_aberto > Decimal("0.00") and conta.data_vencimento
+    ]
+    vencimento = min(vencimentos_abertos) if vencimentos_abertos else None
     if not vencimento:
         return ("Parcial" if parcial else "Em aberto"), ("parcial" if parcial else "pendente")
     if vencimento < hoje:
@@ -5899,6 +5915,33 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
     prefixo = "Parcial - vence em" if parcial else "Vence em"
     return f"{prefixo} {vencimento.strftime('%d/%m/%Y')}", ("parcial" if parcial else "pendente")
 
+
+def _contas_pagar_da_compra(compra):
+    if not compra or not compra.pk:
+        return []
+    cache = getattr(compra, "_prefetched_objects_cache", {})
+    if "contas_pagar" in cache:
+        return list(cache["contas_pagar"])
+    return list(
+        ContaPagar.objects
+        .filter(compra=compra)
+        .prefetch_related("pagamentos")
+        .order_by("numero_parcela", "data_vencimento", "id")
+    )
+
+
+def _conta_pagar_unica_da_compra(compra):
+    contas = _contas_pagar_da_compra(compra)
+    if len(contas) == 1:
+        return contas[0]
+    return None
+
+
+def _total_pago_conta_pagar(conta):
+    return sum(
+        (_financeiro_dinheiro(pagamento.valor) for pagamento in conta.pagamentos.all()),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
 
 def _periodo_sugestao_compra(request):
     hoje = timezone.localdate()
@@ -8114,9 +8157,7 @@ def compras_lista_fornecedor_whatsapp_imagem(request, pk):
 def _compra_existente_lista_fornecedor(lista):
     marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
     return (
-        Compra.objects.filter(
-            observacao__icontains=marcador_origem,
-        )
+        Compra.objects.filter(Q(lista_fornecedor=lista) | Q(observacao__icontains=marcador_origem))
         .order_by("-id")
         .first()
     )
@@ -8135,6 +8176,7 @@ def _criar_compra_rascunho_da_lista_fornecedor(lista, request):
     marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
     compra = Compra.objects.create(
         fornecedor=lista.fornecedor,
+        lista_fornecedor=lista,
         data_compra=timezone.localdate(),
         data_vencimento=None,
         tipo_pagamento="",
@@ -8694,7 +8736,7 @@ def compras_lista(request):
     financeiro_filtro = request.GET.get("financeiro", "").strip()
 
     compras = (
-        Compra.objects.select_related("fornecedor", "conta_pagar")
+        Compra.objects.select_related("fornecedor").prefetch_related("contas_pagar")
         .annotate(
             total_itens_calculado=Coalesce(
                 Sum("itens__valor_total"),
@@ -9271,6 +9313,75 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto):
         Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes)
 
 
+def _parcelas_financeiras_compra(compra):
+    lista = getattr(compra, "lista_fornecedor", None)
+    if not lista or lista.forma_cobranca_nota not in {
+        ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
+        ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+    }:
+        valor = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
+        return [{
+            "numero": None,
+            "total": None,
+            "data_vencimento": compra.data_vencimento,
+            "valor": valor,
+            "observacao": compra.observacao or "",
+        }]
+
+    if lista.valor_nota_boleto is None:
+        raise ValueError("Informe o valor da nota/boleto da lista antes de finalizar a compra.")
+
+    parcelas = list(lista.parcelas_nota.order_by("numero", "id"))
+    if lista.forma_cobranca_nota == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO and len(parcelas) != 1:
+        raise ValueError("O boleto unico da lista precisa estar cadastrado antes de finalizar a compra.")
+    if lista.forma_cobranca_nota == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS and len(parcelas) < 2:
+        raise ValueError("Informe pelo menos 2 boletos da lista antes de finalizar a compra.")
+
+    total_parcelas = sum((parcela.valor for parcela in parcelas), Decimal("0.00")).quantize(Decimal("0.01"))
+    valor_nota = _financeiro_dinheiro(lista.valor_nota_boleto).quantize(Decimal("0.01"))
+    if total_parcelas != valor_nota:
+        raise ValueError("A soma dos boletos precisa bater com o valor financeiro da nota.")
+    if any(not parcela.data_vencimento for parcela in parcelas):
+        raise ValueError("Todas as parcelas da nota precisam ter vencimento.")
+
+    quantidade = len(parcelas)
+    return [
+        {
+            "numero": parcela.numero,
+            "total": quantidade,
+            "data_vencimento": parcela.data_vencimento,
+            "valor": _financeiro_dinheiro(parcela.valor).quantize(Decimal("0.01")),
+            "observacao": parcela.observacao or lista.observacao_pagamento_nota or compra.observacao or "",
+        }
+        for parcela in parcelas
+    ]
+
+
+def _criar_contas_pagar_compra(compra):
+    if ContaPagar.objects.filter(compra=compra).exists():
+        return
+    parcelas = _parcelas_financeiras_compra(compra)
+    for indice, parcela in enumerate(parcelas, start=1):
+        total_parcelas = parcela["total"] or (len(parcelas) if len(parcelas) > 1 else None)
+        numero_parcela = parcela["numero"] or (indice if total_parcelas else None)
+        observacao = parcela["observacao"]
+        if total_parcelas:
+            prefixo = f"Parcela {numero_parcela}/{total_parcelas} da Compra #{compra.id}."
+            observacao = f"{prefixo} {observacao}".strip()
+        ContaPagar.objects.create(
+            compra=compra,
+            fornecedor=compra.fornecedor,
+            data_emissao=compra.data_compra,
+            data_vencimento=parcela["data_vencimento"],
+            valor_original=parcela["valor"],
+            valor_em_aberto=parcela["valor"],
+            numero_parcela=numero_parcela,
+            total_parcelas=total_parcelas,
+            status=ContaPagar.STATUS_ABERTA,
+            observacao=observacao,
+        )
+
+
 def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None):
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
@@ -9304,18 +9415,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
         compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
 
         if _compra_pagamento_conta_futura(compra.tipo_pagamento):
-            ContaPagar.objects.get_or_create(
-                compra=compra,
-                defaults={
-                    "fornecedor": compra.fornecedor,
-                    "data_emissao": compra.data_compra,
-                    "data_vencimento": compra.data_vencimento,
-                    "valor_original": compra.total,
-                    "valor_em_aberto": compra.total,
-                    "status": ContaPagar.STATUS_ABERTA,
-                    "observacao": compra.observacao or "",
-                },
-            )
+            _criar_contas_pagar_compra(compra)
         else:
             _registrar_movimentos_compra_a_vista(compra, valores_origem)
 
@@ -9583,11 +9683,23 @@ def compras_detalhe(request, pk):
     compra = get_object_or_404(
         Compra.objects.select_related("fornecedor").prefetch_related(
             "itens__produto",
-            Prefetch("conta_pagar__pagamentos", queryset=PagamentoContaPagar.objects.order_by("-data_pagamento", "-id")),
+            Prefetch(
+                "contas_pagar",
+                queryset=ContaPagar.objects.prefetch_related(
+                    Prefetch("pagamentos", queryset=PagamentoContaPagar.objects.order_by("-data_pagamento", "-id"))
+                ).order_by("numero_parcela", "data_vencimento", "id"),
+            ),
         ),
         pk=pk,
     )
-    conta_pagar = getattr(compra, "conta_pagar", None)
+    contas_pagar = _contas_pagar_da_compra(compra)
+    for conta in contas_pagar:
+        conta.total_pago_detalhe = _total_pago_conta_pagar(conta)
+        if conta.numero_parcela and conta.total_parcelas:
+            conta.parcela_rotulo = f"{conta.numero_parcela}/{conta.total_parcelas}"
+        else:
+            conta.parcela_rotulo = "-"
+    conta_pagar = contas_pagar[0] if len(contas_pagar) == 1 else None
     compra_a_vista = _compra_pagamento_imediato(compra.tipo_pagamento)
     situacao_financeira_texto, _ = _situacao_financeira_compra_lista(compra)
     pagamento_detalhe_texto = compra.tipo_pagamento_texto
@@ -9618,6 +9730,7 @@ def compras_detalhe(request, pk):
             "compra": compra,
             "itens": compra.itens.all(),
             "conta_pagar": conta_pagar,
+            "contas_pagar": contas_pagar,
             "movimentos_financeiros": _movimentos_financeiros_compra(compra),
             "alocacao_financeira": alocacao_financeira,
             "compra_a_vista": compra_a_vista,
@@ -9683,12 +9796,10 @@ def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_finance
     if anterior_prazo == novo_prazo:
         return False, ""
 
-    conta_pagar = (
-        ContaPagar.objects
-        .filter(compra=compra)
-        .prefetch_related("pagamentos")
-        .first()
-    )
+    contas_pagar = _contas_pagar_da_compra(compra)
+    if len(contas_pagar) > 1:
+        raise ValueError("Compra com multiplas Contas a Pagar exige correcao financeira especifica por parcela.")
+    conta_pagar = contas_pagar[0] if contas_pagar else None
 
     if anterior_prazo and not novo_prazo:
         tinha_pagamento = bool(conta_pagar and conta_pagar.pagamentos.exists())
@@ -9803,17 +9914,7 @@ def _corrigir_pagamento_simples_compra(compra, novo_pagamento, movimento_finance
         compra.save(update_fields=["tipo_pagamento", "data_vencimento", "atualizado_em"])
 
         if not conta_pagar:
-            total = _financeiro_dinheiro(compra.total).quantize(Decimal("0.01"))
-            ContaPagar.objects.create(
-                compra=compra,
-                fornecedor=compra.fornecedor,
-                data_emissao=compra.data_compra or timezone.localdate(),
-                data_vencimento=compra.data_vencimento,
-                valor_original=total,
-                valor_em_aberto=total,
-                status=ContaPagar.STATUS_ABERTA,
-                observacao="Criada automaticamente ao mudar a compra para A prazo.",
-            )
+            _criar_contas_pagar_compra(compra)
 
         if conta_devolucao:
             nome_conta = conta_devolucao.nome
@@ -10055,7 +10156,12 @@ def compra_corrigir_itens(request, pk):
 
 def compra_corrigir_financeiro(request, pk):
     compra = get_object_or_404(
-        Compra.objects.select_related("fornecedor").prefetch_related("conta_pagar__pagamentos"),
+        Compra.objects.select_related("fornecedor").prefetch_related(
+            Prefetch(
+                "contas_pagar",
+                queryset=ContaPagar.objects.prefetch_related("pagamentos").order_by("numero_parcela", "data_vencimento", "id"),
+            )
+        ),
         pk=pk,
     )
     if not _compra_pagamento_a_prazo(compra.tipo_pagamento):
@@ -10065,7 +10171,15 @@ def compra_corrigir_financeiro(request, pk):
         )
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
-    conta_pagar = getattr(compra, "conta_pagar", None)
+    contas_pagar = _contas_pagar_da_compra(compra)
+    if len(contas_pagar) > 1:
+        messages.error(
+            request,
+            "Esta compra possui multiplas Contas a Pagar. Corrija ou baixe cada parcela individualmente.",
+        )
+        return redirect("estoque:compras_detalhe", pk=compra.pk)
+
+    conta_pagar = contas_pagar[0] if contas_pagar else None
     if not conta_pagar:
         messages.error(request, "Esta compra nao possui Conta a Pagar vinculada.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -10298,6 +10412,7 @@ def compra_corrigir_financeiro(request, pk):
         messages.success(request, "Financeiro da compra corrigido com sucesso. Caixa/Banco nao foi alterado.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
+    _garantir_contas_financeiras_padrao()
     return render(
         request,
         "estoque/compra_corrigir_financeiro.html",

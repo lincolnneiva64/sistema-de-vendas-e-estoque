@@ -84,15 +84,20 @@
 
             <label class="cf-confirmacao">
               <input type="radio" name="movimento_financeiro_correcao" value="manter" required>
-              <span><strong>Manter financeiro como esta</strong><br>Corrige a Conta a Pagar sem alterar Caixa/Banco.</span>
+              <span><strong>Erro de lancamento da nota.</strong><br>Corrige a Conta a Pagar sem alterar Caixa/Banco.</span>
             </label>
 
             {% for conta in contas_financeiras %}
               <label class="cf-confirmacao">
                 <input type="radio" name="movimento_financeiro_correcao" value="devolver:{{ conta.id }}" required>
-                <span><strong>Devolver valor para {{ conta.nome }}</strong><br>Registra entrada nesta conta no valor pago a maior.</span>
+                <span><strong>Fornecedor devolveu dinheiro</strong><br>Registra entrada em {{ conta.nome }} no valor pago a maior.</span>
               </label>
             {% endfor %}
+
+            <label class="cf-confirmacao">
+              <input type="radio" name="movimento_financeiro_correcao" value="credito_fornecedor" required>
+              <span><strong>Ficar como credito com fornecedor</strong><br>Registra o credito no historico da compra sem alterar Caixa/Banco.</span>
+            </label>
           {% endif %}
 
           <label class="cf-confirmacao">
@@ -125,6 +130,9 @@ document.getElementById("formCorrigirFinanceiroCompra")?.addEventListener("submi
   if (movimento && motivo && conta) {
     if (movimento.value === "manter") {
       motivo.value = "erro_lancamento";
+      conta.value = "";
+    } else if (movimento.value === "credito_fornecedor") {
+      motivo.value = "credito_fornecedor";
       conta.value = "";
     } else if (movimento.value.startsWith("devolver:")) {
       motivo.value = "devolucao_dinheiro";

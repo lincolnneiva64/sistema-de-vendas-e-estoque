@@ -1903,6 +1903,13 @@ class Compra(models.Model):
         null=True,
         related_name="compras",
     )
+    lista_fornecedor = models.OneToOneField(
+        "ListaCompraFornecedor",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="compra_vinculada",
+    )
     data_compra = models.DateField()
     data_vencimento = models.DateField(blank=True, null=True)
     tipo_pagamento = models.CharField(max_length=40, blank=True)
@@ -1927,6 +1934,10 @@ class Compra(models.Model):
     def __str__(self):
         fornecedor_nome = self.fornecedor.nome if self.fornecedor else "Fornecedor nao informado"
         return f"Compra #{self.id} - {fornecedor_nome}"
+
+    @property
+    def conta_pagar(self):
+        return self.contas_pagar.order_by("numero_parcela", "data_vencimento", "id").first()
 
     @property
     def tipo_pagamento_texto(self):
@@ -2247,10 +2258,10 @@ class ContaPagar(models.Model):
         (STATUS_CANCELADA, "Cancelada"),
     ]
 
-    compra = models.OneToOneField(
+    compra = models.ForeignKey(
         Compra,
         on_delete=models.CASCADE,
-        related_name="conta_pagar",
+        related_name="contas_pagar",
         blank=True,
         null=True,
     )
@@ -2265,6 +2276,8 @@ class ContaPagar(models.Model):
     data_vencimento = models.DateField(blank=True, null=True)
     valor_original = models.DecimalField(max_digits=12, decimal_places=2)
     valor_em_aberto = models.DecimalField(max_digits=12, decimal_places=2)
+    numero_parcela = models.PositiveIntegerField(blank=True, null=True)
+    total_parcelas = models.PositiveIntegerField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
     observacao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -2275,6 +2288,8 @@ class ContaPagar(models.Model):
 
     def __str__(self):
         if self.compra_id:
+            if self.numero_parcela and self.total_parcelas:
+                return f"Conta a pagar - Compra #{self.compra_id} - Parcela {self.numero_parcela}/{self.total_parcelas}"
             return f"Conta a pagar - Compra #{self.compra_id}"
         if self.documento_legado:
             return f"Conta a pagar - Documento {self.documento_legado}"

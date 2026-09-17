@@ -152,6 +152,9 @@
             <td>
               {% if conta.compra_id %}
                 <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Compra #{{ conta.compra.id }}</a>
+                {% if conta.numero_parcela and conta.total_parcelas %}
+                  <div style="margin-top:6px; font-size:12px; font-weight:800; color:#64748b;">Parcela {{ conta.numero_parcela }}/{{ conta.total_parcelas }}</div>
+                {% endif %}
               {% elif conta.documento_legado %}
                 Documento {{ conta.documento_legado }}
               {% else %}
@@ -238,6 +241,9 @@
             <span class="contas-pagar-mobile-value">
               {% if conta.compra_id %}
                 Compra #{{ conta.compra.id }}
+                {% if conta.numero_parcela and conta.total_parcelas %}
+                  <br>Parcela {{ conta.numero_parcela }}/{{ conta.total_parcelas }}
+                {% endif %}
               {% elif conta.documento_legado %}
                 Documento {{ conta.documento_legado }}
               {% else %}
