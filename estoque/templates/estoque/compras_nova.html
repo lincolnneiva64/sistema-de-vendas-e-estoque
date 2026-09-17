@@ -2534,7 +2534,7 @@
           </div>
         </div>
         {% if lista_origem_compra %}
-          <div class="compras-boletos-compra" id="painelBoletosCompra" data-lista-id="{{ lista_origem_compra.id }}">
+          <div class="compras-boletos-compra" id="painelBoletosCompra" data-lista-id="{{ lista_origem_compra.id }}" data-valores-personalizados="{% if pagamento_nota_compra and pagamento_nota_compra.forma == 'varios_boletos' and pagamento_nota_compra.linhas %}1{% else %}0{% endif %}">
             <div class="compras-boletos-topo">
               <strong>Financeiro da nota da Lista #{{ lista_origem_compra.id }}</strong>
               <span>Dados usados para criar as Contas a Pagar ao finalizar.</span>
@@ -2569,7 +2569,7 @@
                     <div class="compras-boleto-numero">Boleto {{ parcela.numero }}</div>
                     <div class="compras-field">
                       <label>Valor</label>
-                      <input type="text" name="compra_parcela_valor_{{ parcela.numero }}" inputmode="decimal" autocomplete="off" value="{{ parcela.valor_input }}">
+                      <input type="text" name="compra_parcela_valor_{{ parcela.numero }}" inputmode="decimal" autocomplete="off" value="{{ parcela.valor_input }}" data-valor-automatico="0">
                     </div>
                     <div class="compras-field">
                       <label>Vencimento</label>
@@ -2582,7 +2582,7 @@
                   <div class="compras-boleto-numero">Boleto 1</div>
                   <div class="compras-field">
                     <label>Valor</label>
-                    <input type="text" name="compra_parcela_valor_1" inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
+                    <input type="text" name="compra_parcela_valor_1" inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}" data-valor-automatico="1">
                   </div>
                   <div class="compras-field">
                     <label>Vencimento</label>
@@ -5671,6 +5671,7 @@
   const compraSomaBoletos = document.getElementById("compraSomaBoletos");
   const compraDiferencaBoletos = document.getElementById("compraDiferencaBoletos");
   const compraDiferencaBoletosChip = document.getElementById("compraDiferencaBoletosChip");
+  let boletosCompraValoresAutomaticos = !(painelBoletosCompra && painelBoletosCompra.dataset.valoresPersonalizados === "1");
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
   let bloquearAberturaInicialFornecedor = false;
@@ -5814,6 +5815,17 @@
     });
   }
 
+  function valoresSugeridosBoletosCompra(valorNota, quantidade) {
+    const totalCentavos = Math.max(Number(valorNota || 0), 0);
+    const totalBoletos = Math.max(Number(quantidade || 0), 0);
+    if (!totalBoletos) return [];
+    const valorBase = Math.floor(totalCentavos / totalBoletos);
+    const resto = totalCentavos - (valorBase * totalBoletos);
+    return Array.from({ length: totalBoletos }, function(_, indice) {
+      return valorBase + (indice < resto ? 1 : 0);
+    });
+  }
+
   function boletosAtuaisCompra() {
     if (!compraListaBoletos) return [];
     return Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")).map(function(linha, indice) {
@@ -5821,32 +5833,46 @@
       const vencimento = linha.querySelector('[name^="compra_parcela_vencimento_"]');
       return {
         valor: valor ? valor.value : "",
+        automatico: valor ? valor.dataset.valorAutomatico === "1" : true,
         vencimento: vencimento ? vencimento.value : "",
         numero: indice + 1
       };
     });
   }
 
-  function renderizarBoletosCompra(quantidade) {
+  function marcarValoresBoletosComoManuais(event) {
+    const alvo = event && event.target ? event.target : null;
+    if (!alvo || !alvo.matches('[name^="compra_parcela_valor_"]')) return;
+    boletosCompraValoresAutomaticos = false;
+    alvo.dataset.valorAutomatico = "0";
+  }
+
+  function renderizarBoletosCompra(quantidade, opcoes) {
     if (!compraListaBoletos) return;
+    const redistribuir = opcoes && opcoes.redistribuir;
     const atuais = boletosAtuaisCompra();
     const valorNota = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
-    const valorBase = quantidade > 0 ? Math.floor(valorNota / quantidade) : 0;
-    const resto = quantidade > 0 ? valorNota - (valorBase * quantidade) : 0;
+    const valoresSugeridos = valoresSugeridosBoletosCompra(valorNota, quantidade);
     compraListaBoletos.innerHTML = "";
     for (let indice = 0; indice < quantidade; indice += 1) {
       const numero = indice + 1;
       const atual = atuais[indice] || {};
-      const valorSugerido = valorBase + (indice < resto ? 1 : 0);
+      const valorSugerido = valoresSugeridos[indice] || 0;
+      const usarSugestao = redistribuir || boletosCompraValoresAutomaticos || !atual.valor;
+      const valorLinha = usarSugestao ? valorCampoCompraBoletos(valorSugerido) : atual.valor;
+      const valorAutomatico = usarSugestao ? "1" : "0";
       const linha = document.createElement("div");
       linha.className = "compras-boleto-linha";
       linha.setAttribute("data-boleto-linha", "1");
       linha.innerHTML = [
         '<div class="compras-boleto-numero">Boleto ' + numero + '</div>',
-        '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(atual.valor || valorCampoCompraBoletos(valorSugerido)) + '"></div>',
+        '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(valorLinha) + '" data-valor-automatico="' + valorAutomatico + '"></div>',
         '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>'
       ].join("");
       compraListaBoletos.appendChild(linha);
+    }
+    if (redistribuir) {
+      boletosCompraValoresAutomaticos = true;
     }
   }
 
@@ -5884,7 +5910,7 @@
       compraQuantidadeBoletos.disabled = !varios;
     }
     if (boletosAtuaisCompra().length !== quantidade) {
-      renderizarBoletosCompra(quantidade);
+      renderizarBoletosCompra(quantidade, { redistribuir: boletosCompraValoresAutomaticos });
     }
     atualizarResumoBoletosCompra();
   }
@@ -6160,20 +6186,36 @@
   }
 
   if (compraFormaCobrancaNota) {
-    compraFormaCobrancaNota.addEventListener("change", atualizarBoletosCompra);
+    compraFormaCobrancaNota.addEventListener("change", function() {
+      boletosCompraValoresAutomaticos = true;
+      atualizarBoletosCompra();
+    });
   }
   if (compraQuantidadeBoletos) {
     compraQuantidadeBoletos.addEventListener("change", function() {
-      renderizarBoletosCompra(parseInt(compraQuantidadeBoletos.value || "1", 10) || 1);
+      boletosCompraValoresAutomaticos = true;
+      renderizarBoletosCompra(parseInt(compraQuantidadeBoletos.value || "1", 10) || 1, { redistribuir: true });
       atualizarBoletosCompra();
     });
   }
   if (compraValorNotaBoleto) {
-    compraValorNotaBoleto.addEventListener("input", atualizarResumoBoletosCompra);
+    compraValorNotaBoleto.addEventListener("input", function() {
+      if (boletosCompraValoresAutomaticos) {
+        const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+        renderizarBoletosCompra(quantidade, { redistribuir: true });
+      }
+      atualizarResumoBoletosCompra();
+    });
   }
   if (compraListaBoletos) {
-    compraListaBoletos.addEventListener("input", atualizarResumoBoletosCompra);
-    compraListaBoletos.addEventListener("change", atualizarResumoBoletosCompra);
+    compraListaBoletos.addEventListener("input", function(event) {
+      marcarValoresBoletosComoManuais(event);
+      atualizarResumoBoletosCompra();
+    });
+    compraListaBoletos.addEventListener("change", function(event) {
+      marcarValoresBoletosComoManuais(event);
+      atualizarResumoBoletosCompra();
+    });
   }
 
   if (observacao) {

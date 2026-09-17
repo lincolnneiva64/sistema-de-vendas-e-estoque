@@ -4001,6 +4001,49 @@ class FechamentoCompraFinanceiroTests(TestCase):
         self.assertContains(resposta, "Total dos produtos")
         self.assertContains(resposta, "Soma dos boletos")
 
+    def test_compra_gerada_pela_lista_js_sugere_divisao_uniforme_dois_boletos_sem_centavos(self):
+        valor_nota = 117800
+        quantidade = 2
+        valor_base = valor_nota // quantidade
+        resto = valor_nota - (valor_base * quantidade)
+        sugestao = [valor_base + (1 if indice < resto else 0) for indice in range(quantidade)]
+
+        self.assertEqual(sugestao, [58900, 58900])
+        self.assertEqual(sum(sugestao), valor_nota)
+
+    def test_compra_gerada_pela_lista_js_sugere_divisao_uniforme_dois_boletos_com_centavos(self):
+        valor_nota = 117821
+        quantidade = 2
+        valor_base = valor_nota // quantidade
+        resto = valor_nota - (valor_base * quantidade)
+        sugestao = [valor_base + (1 if indice < resto else 0) for indice in range(quantidade)]
+
+        self.assertEqual(sugestao, [58911, 58910])
+        self.assertEqual(sum(sugestao), valor_nota)
+
+    def test_compra_gerada_pela_lista_js_sugere_divisao_uniforme_tres_boletos_com_soma_exata(self):
+        valor_nota = 10001
+        quantidade = 3
+        valor_base = valor_nota // quantidade
+        resto = valor_nota - (valor_base * quantidade)
+        sugestao = [valor_base + (1 if indice < resto else 0) for indice in range(quantidade)]
+
+        self.assertEqual(sugestao, [3334, 3334, 3333])
+        self.assertEqual(sum(sugestao), valor_nota)
+
+    def test_compra_gerada_pela_lista_js_preserva_valor_manual_ao_alterar_outros_campos(self):
+        lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
+        _, compra = self._gerar_compra_da_lista(lista)
+
+        resposta = self.client.get(reverse("estoque:compra_editar", kwargs={"pk": compra.pk}), secure=True)
+
+        self.assertContains(resposta, "function valoresSugeridosBoletosCompra(valorNota, quantidade)")
+        self.assertContains(resposta, "return valorBase + (indice < resto ? 1 : 0);")
+        self.assertContains(resposta, "boletosCompraValoresAutomaticos = false;")
+        self.assertContains(resposta, 'alvo.dataset.valorAutomatico = "0";')
+        self.assertContains(resposta, "if (boletosCompraValoresAutomaticos) {")
+        self.assertContains(resposta, "renderizarBoletosCompra(quantidade, { redistribuir: true });")
+
     def test_compra_gerada_pela_lista_finaliza_aprazo_com_dois_boletos_da_tela(self):
         lista = self._criar_lista_fornecedor_conferida(total=Decimal("1178.00"))
         _, compra = self._gerar_compra_da_lista(lista)
