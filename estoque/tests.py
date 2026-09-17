@@ -32746,7 +32746,6 @@ class SeparacaoVendaFase1Tests(TestCase):
 
     def test_fila_agrupa_separacoes_por_localidade_do_cliente(self):
         casos = [
-            ("Rubem Arruda", "Furo da Marinha", "Mosqueiro", "Furo da Marinha - Mosqueiro"),
             ("Magno Recem Mescouto", "Genipauba", "Santa Bárbara do Pará", "Genipauba - Santa Bárbara do Pará"),
             ("Emerson Barata", "Centro", "Santa Bárbara do Pará", "Centro - Santa Bárbara do Pará"),
             ("Francisco Miranda", "Livramento", "Santa Bárbara do Pará", "Livramento - Santa Bárbara do Pará"),
@@ -32760,6 +32759,46 @@ class SeparacaoVendaFase1Tests(TestCase):
         for nome, _bairro, _cidade, localidade in casos:
             self.assertContains(resposta, localidade)
             self.assertContains(resposta, nome)
+
+    def test_fila_agrupa_bairros_de_mosqueiro_em_rota_unica_com_excecao_furo_da_marinha(self):
+        casos_mosqueiro = [
+            ("Cliente Centro Mosqueiro", "Centro", "Mosqueiro"),
+            ("Cliente Ariramba Mosqueiro", "Ariramba", "MOSQUEIRO"),
+            ("Cliente Murubira Mosqueiro", "Murubira", "mosqueiro"),
+            ("Cliente Furo Mosqueiro", "Furo da Marinha", "Mosqueiro"),
+        ]
+        for nome, bairro, cidade in casos_mosqueiro:
+            self._enviar(self._criar_venda_para_separacao(nome, bairro=bairro, cidade=cidade))
+
+        separacoes = list(
+            SeparacaoVenda.objects.select_related("venda", "venda__cliente")
+            .prefetch_related("itens__item_venda__produto", "venda__itens__produto")
+        )
+        grupos = views._montar_grupos_rota_separacao(separacoes)
+        grupos_por_titulo = {grupo["titulo"]: grupo for grupo in grupos}
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertEqual(set(grupos_por_titulo), {"MOSQUEIRO", "FURO DA MARINHA - MOSQUEIRO"})
+        self.assertEqual(grupos_por_titulo["MOSQUEIRO"]["total_notas"], 3)
+        self.assertEqual(grupos_por_titulo["FURO DA MARINHA - MOSQUEIRO"]["total_notas"], 1)
+        self.assertContains(resposta, "MOSQUEIRO")
+        self.assertContains(resposta, "FURO DA MARINHA - MOSQUEIRO")
+        self.assertNotContains(resposta, "Centro - Mosqueiro")
+        self.assertNotContains(resposta, "Ariramba - MOSQUEIRO")
+        self.assertNotContains(resposta, "Murubira - mosqueiro")
+
+    def test_fila_nao_agrupa_centro_de_outra_cidade_com_mosqueiro(self):
+        venda = self._criar_venda_para_separacao(
+            "Cliente Centro Outra Cidade",
+            bairro="Centro",
+            cidade="Santa Barbara do Para",
+        )
+        self._enviar(venda)
+
+        resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
+
+        self.assertContains(resposta, "Centro - Santa Barbara do Para")
+        self.assertNotContains(resposta, "MOSQUEIRO")
 
     def test_fila_sem_bairro_ou_cidade_fica_sem_rota_definida(self):
         venda = self._criar_venda_para_separacao("Cliente Sem Localidade")
@@ -32793,7 +32832,7 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
-        self.assertContains(resposta, "Furo da Marinha - Mosqueiro")
+        self.assertContains(resposta, "FURO DA MARINHA - MOSQUEIRO")
         self.assertNotContains(resposta, "Rota Cancelada")
         self.assertNotContains(resposta, "Rota Pendencia Antiga")
         self.assertNotContains(resposta, "Rota Atual")
@@ -34135,12 +34174,12 @@ class SeparacaoVendaFase1Tests(TestCase):
 
     def test_rota_com_todas_notas_prontas_mostra_entregas(self):
         self.cliente.bairro = "Centro"
-        self.cliente.cidade = "Santa Barbara do Para"
+        self.cliente.cidade = "Mosqueiro"
         self.cliente.save(update_fields=["bairro", "cidade"])
         segunda = self._criar_venda_para_separacao(
             "Cliente Rota Pronta",
-            bairro="Centro",
-            cidade="Santa Barbara do Para",
+            bairro="Ariramba",
+            cidade="Mosqueiro",
         )
         self._enviar()
         self._enviar(segunda)
@@ -34151,6 +34190,9 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         self.assertContains(resposta, "ROTA CONCLUIDA - TODAS AS NOTAS PRONTAS")
         self.assertContains(resposta, "ENTREGAS")
+        self.assertContains(resposta, "MOSQUEIRO")
+        self.assertNotContains(resposta, "Centro - Mosqueiro")
+        self.assertNotContains(resposta, "Ariramba - Mosqueiro")
         self.assertContains(resposta, f"{reverse('estoque:entregas_dia')}?data=")
 
     def test_rota_com_nota_em_revisao_mostra_reaberta_sem_entregas(self):

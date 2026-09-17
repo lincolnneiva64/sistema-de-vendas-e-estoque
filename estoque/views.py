@@ -21136,9 +21136,24 @@ def _localidade_operacional_cliente(cliente):
         return ""
     bairro = " ".join((cliente.bairro or "").strip().split())
     cidade = " ".join((cliente.cidade or "").strip().split())
+    bairro_normalizado = _normalizar_texto_rota(bairro)
+    cidade_normalizada = _normalizar_texto_rota(cidade)
+    if cidade_normalizada == "mosqueiro":
+        if bairro_normalizado == "furo da marinha":
+            return "FURO DA MARINHA - MOSQUEIRO"
+        return "MOSQUEIRO"
     if bairro and cidade:
         return f"{bairro} - {cidade}"
     return bairro or cidade
+
+
+def _normalizar_texto_rota(valor):
+    texto = " ".join(str(valor or "").strip().split()).casefold()
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize("NFKD", texto)
+        if not unicodedata.combining(caractere)
+    )
 
 
 def _ordem_status_separacao(status):
