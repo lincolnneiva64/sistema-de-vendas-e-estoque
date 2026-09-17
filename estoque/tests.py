@@ -29292,10 +29292,31 @@ class VendaEdicaoUnificadaTests(TestCase):
         fim_funcao = conteudo.index("function criarLinhaItemVenda", inicio_funcao)
         corpo_funcao = conteudo[inicio_funcao:fim_funcao]
         self.assertIn("window.location.href = vendasUrl;", corpo_funcao)
+        self.assertNotIn("vendaEdicaoRetornoUrl || vendasUrl", corpo_funcao)
         self.assertNotIn("limparItensVenda();", corpo_funcao)
         self.assertNotIn("limparCabecalhoVenda(true);", corpo_funcao)
         self.assertNotIn("clienteSelecionado = clientePreviewFinanceiro;", conteudo)
         self.assertIn("preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);", conteudo)
+
+    def test_tela_vendas_nova_venda_em_edicao_ignora_next_da_fila(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        retorno = f"{reverse('estoque:separacao_vendas_fila')}?data=2026-09-16&aba=separacao"
+        querystring = urlencode({"editar": venda.id, "next": retorno})
+
+        resposta = self.client.get(
+            f"{reverse('estoque:vendas')}?{querystring}",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["venda_edicao"]["next"], retorno)
+        conteudo = resposta.content.decode()
+        inicio_funcao = conteudo.index("function sairModoEdicaoParaNovaVenda()")
+        fim_funcao = conteudo.index("function criarLinhaItemVenda", inicio_funcao)
+        corpo_funcao = conteudo[inicio_funcao:fim_funcao]
+        self.assertIn("window.location.href = vendasUrl;", corpo_funcao)
+        self.assertNotIn("window.location.href = vendaEdicaoRetornoUrl", corpo_funcao)
+        self.assertIn("next: vendaEdicaoRetornoUrl || \"\"", conteudo)
 
     def test_tela_vendas_modo_edicao_carrega_separacao_existente(self):
         cliente, produto, venda, item = self.criar_venda_base()
@@ -32498,6 +32519,29 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, "Editar venda")
         self.assertNotContains(resposta, f"ajuste_separacao={separacao.id}")
         self.assertNotContains(resposta, "Editar nota")
+
+    def test_fila_exibe_nova_venda_limpa_e_preserva_next_no_editar(self):
+        self._enviar()
+        data_fila = self.venda.data_venda.isoformat()
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": data_fila, "aba": "separacao"},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, f'href="{reverse("estoque:vendas")}">Nova venda</a>')
+        conteudo = resposta.content.decode()
+        inicio_botao = conteudo.index(">Nova venda</a>")
+        inicio_anchor = conteudo.rfind("<a ", 0, inicio_botao)
+        botao_nova_venda = conteudo[inicio_anchor:inicio_botao]
+        self.assertIn(f'href="{reverse("estoque:vendas")}"', botao_nova_venda)
+        self.assertNotIn("editar=", botao_nova_venda)
+        self.assertNotIn("next=", botao_nova_venda)
+        self.assertContains(resposta, f'{reverse("estoque:vendas")}?editar={self.venda.id}&next=')
+        self.assertContains(resposta, f"data%3D{data_fila}")
+        self.assertContains(resposta, "aba%3Dseparacao")
 
     def test_fila_exibe_atalhos_hoje_e_ontem(self):
         hoje = date(2026, 9, 14)

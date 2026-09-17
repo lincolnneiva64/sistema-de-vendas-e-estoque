@@ -138,6 +138,7 @@
           <input type="hidden" name="aba" value="{{ aba_ativa }}">
         </div>
         <div class="sep-filter-actions">
+          <a class="sep-btn" href="{% url 'estoque:vendas' %}">Nova venda</a>
           <a class="sep-btn secondary" href="{{ hoje_url }}">Hoje</a>
           <a class="sep-btn secondary" href="{{ ontem_url }}">Ontem</a>
           <button class="sep-btn" type="submit">Buscar</button>
