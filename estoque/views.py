@@ -22436,6 +22436,8 @@ def _gerar_paginas_nota_whatsapp(venda):
     fonte_texto_negrito = _fonte_nota_whatsapp(26)
     fonte_tabela = _fonte_nota_whatsapp(25)
     fonte_tabela_negrito = _fonte_nota_whatsapp(26, True)
+    fonte_item_indice = _fonte_nota_whatsapp(21)
+    fonte_item_quantidade = _fonte_nota_whatsapp(25, True)
     fonte_total = _fonte_nota_whatsapp(45, True)
 
     paginas = []
@@ -22559,17 +22561,21 @@ def _gerar_paginas_nota_whatsapp(venda):
     def desenhar_item(indice, item):
         nonlocal y
         nome = item.produto.nome if item.produto else "Produto nao identificado"
-        quantidade = _formatar_quantidade(item.quantidade)
+        quantidade = _formatar_quantidade(item.quantidade).replace(".", ",")
         unidade = item.unidade or "-"
         preco = _formatar_moeda(item.preco_unitario)
         subtotal = _formatar_moeda(item.valor_total)
         resumo = f"{quantidade} {unidade} × {preco}"
         subtotal_largura = _texto_largura(draw, subtotal, fonte_tabela_negrito)
         x_subtotal = largura - margem - 52 - subtotal_largura
-        largura_nome = 790
-        linhas_nome = _quebrar_texto(draw, f"{indice}. {nome}", fonte_tabela_negrito, largura_nome)
+        x_badge = x1 + 22
+        badge_largura = 58
+        badge_altura = 34
+        x_nome = x_badge + badge_largura + 18
+        largura_nome = largura - margem - 54 - x_nome
+        linhas_nome = _quebrar_texto(draw, nome, fonte_tabela_negrito, largura_nome)
         linhas_nome = linhas_nome[:2]
-        altura_item = 88 if len(linhas_nome) == 1 else 118
+        altura_item = 92 if len(linhas_nome) == 1 else 122
         adicionar_pagina_se_precisar(altura_item)
         topo = y
         draw.rounded_rectangle(
@@ -22579,13 +22585,44 @@ def _gerar_paginas_nota_whatsapp(venda):
             outline="#cbd5e1",
             width=2,
         )
-        texto_y = topo + 13
+        texto_y = topo + 11
+        resumo_y = topo + 50 + (len(linhas_nome) - 1) * 28
+        resumo_altura = 36
+        conteudo_topo = texto_y
+        conteudo_base = resumo_y - 4 + resumo_altura
+        badge_y = int((conteudo_topo + conteudo_base - badge_altura) / 2)
+        draw.rounded_rectangle(
+            (x_badge, badge_y, x_badge + badge_largura, badge_y + badge_altura),
+            radius=10,
+            fill="#f1f5f9",
+            outline="#e2e8f0",
+            width=1,
+        )
+        indice_texto = str(indice)
+        indice_largura = _texto_largura(draw, indice_texto, fonte_item_indice)
+        draw.text(
+            (x_badge + (badge_largura - indice_largura) / 2, badge_y + 4),
+            indice_texto,
+            fill="#64748b",
+            font=fonte_item_indice,
+        )
+
         for linha in linhas_nome:
-            draw.text((x1 + 24, texto_y), linha, fill=texto, font=fonte_tabela_negrito)
+            draw.text((x_nome, texto_y), linha, fill=texto, font=fonte_tabela_negrito)
             texto_y += 32
 
-        resumo_y = topo + 50 + (len(linhas_nome) - 1) * 28
-        draw.text((x1 + 24, resumo_y), resumo, fill="#1f2937", font=fonte_tabela)
+        resumo_largura = _texto_largura(draw, resumo, fonte_item_quantidade)
+        resumo_x = x_nome
+        resumo_padding_x = 14
+        resumo_caixa_largura = min(resumo_largura + resumo_padding_x * 2, x_subtotal - resumo_x - 18)
+        draw.rounded_rectangle(
+            (resumo_x, resumo_y - 4, resumo_x + resumo_caixa_largura, resumo_y - 4 + resumo_altura),
+            radius=9,
+            fill="#dcfce7",
+            outline="#bbf7d0",
+            width=1,
+        )
+        draw.text((resumo_x + resumo_padding_x, resumo_y), resumo, fill="#14532d", font=fonte_item_quantidade)
         draw.text((x_subtotal, resumo_y), subtotal, fill=texto, font=fonte_tabela_negrito)
         y = topo + altura_item + 2
 
