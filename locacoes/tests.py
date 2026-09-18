@@ -824,6 +824,25 @@ class LocacoesPagamentosTermoTests(TestCase):
             }],
         )
 
+    def test_pagamento_por_recebimento_cliente_pode_nao_criar_movimento_financeiro(self):
+        locacao = self.criar_locacao()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        pagamento = locacao.registrar_pagamento(
+            Decimal("5.00"),
+            PagamentoLocacao.FORMA_PIX,
+            responsavel="Camila",
+            criar_movimento_financeiro=False,
+        )
+        locacao.refresh_from_db()
+        pagamento.refresh_from_db()
+
+        self.assertEqual(locacao.total_pago, Decimal("5.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("11.00"))
+        self.assertEqual(locacao.status_financeiro, Locacao.FINANCEIRO_PARCIAL)
+        self.assertIsNone(pagamento.movimento_financeiro_id)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
     def test_sinal_reduz_saldo_sem_quitar_indevidamente(self):
         locacao = self.criar_locacao()
 

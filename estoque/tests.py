@@ -32,6 +32,13 @@ from .services.fornecedor_visitas import calcular_proxima_visita
 from .services.unificar_polpa_acerola import unificar_polpa_acerola
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
 from . import views
+from locacoes.models import (
+    ConfiguracaoLocacao,
+    FaixaPrecoLocacao,
+    ItemLocacao,
+    Locacao,
+)
+
 
 
 class FonteNotaWhatsappTests(SimpleTestCase):
@@ -21504,6 +21511,78 @@ class PixRecebidoTests(TestCase):
         self.assertIn("Conferido antes de ignorar.", pix.observacao)
         self.assertIn("Pix ignorado sem baixa pelo operador", pix.observacao)
 
+    def test_receber_cliente_exibe_venda_e_locacao_no_total_em_aberto(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Venda e Locacao",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, valor="50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("50.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+
+        response = self.client.get(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_em_aberto"], Decimal("74.00"))
+        self.assertContains(response, f"Venda #{conta.venda_id}")
+        self.assertContains(response, f"Loca??o #{locacao.id}")
+        self.assertContains(response, "3 mesas")
+        self.assertContains(response, "12 cadeiras")
+
+    def test_receber_cliente_pode_quitar_somente_locacao_sem_baixar_venda(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Pagamento Locacao",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, valor="50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("50.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+        self.assertEqual(locacao.total_pago, Decimal("24.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(
+            locacao.status_financeiro,
+            Locacao.FINANCEIRO_QUITADA,
+        )
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.count(),
+            movimentos_antes + 1,
+        )
+
+        movimento = MovimentoFinanceiro.objects.order_by("-id").first()
+        self.assertEqual(movimento.origem, "recebimento_cliente")
+        self.assertEqual(movimento.valor, Decimal("24.00"))
+
     def _criar_conta_receber_pix(self, cliente, valor="100.00"):
         venda = Venda.objects.create(
             cliente=cliente,
@@ -21518,6 +21597,48 @@ class PixRecebidoTests(TestCase):
             valor_original=valor,
             valor_em_aberto=valor,
             status=ContaReceber.STATUS_ABERTA,
+        )
+
+    def _criar_locacao_cliente(self, cliente, mesas=3, cadeiras=12):
+        configuracao = ConfiguracaoLocacao.obter()
+        configuracao.total_mesas = 10
+        configuracao.total_cadeiras = 40
+        configuracao.save(update_fields=["total_mesas", "total_cadeiras"])
+
+        faixa = FaixaPrecoLocacao.objects.get(
+            codigo=FaixaPrecoLocacao.CENTRO_PERTO
+        )
+        hoje = timezone.localdate()
+
+        itens = []
+        if mesas:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_MESA_AVULSA,
+                "quantidade": mesas,
+                "preco_diaria": Decimal("2.00"),
+            })
+        if cadeiras:
+            itens.append({
+                "tipo": ItemLocacao.TIPO_CADEIRA_AVULSA,
+                "quantidade": cadeiras,
+                "preco_diaria": Decimal("1.50"),
+            })
+
+        return Locacao.criar_reserva(
+            {
+                "cliente": cliente,
+                "tipo_pessoa": Locacao.TIPO_PESSOA_CLIENTE,
+                "endereco_entrega": "Rua Teste, 100",
+                "data_entrega": hoje,
+                "horario_entrega": "09:00",
+                "data_evento": hoje,
+                "horario_evento": "18:00",
+                "data_prevista_devolucao": hoje + timedelta(days=1),
+                "data_vencimento_saldo": hoje,
+                "faixa_preco": faixa,
+                "observacao": "",
+            },
+            itens,
         )
 
     def _post_receber_cliente(

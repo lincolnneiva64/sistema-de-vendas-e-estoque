@@ -1454,7 +1454,73 @@
             </div>
             <div class="rc-note">Confira a previa antes de confirmar. A baixa real sera gravada somente apos a confirmacao final.</div>
           </section>
-        </form>
+
+        <input type="hidden" name="selecao_dividas_ativa" value="1">
+
+        <div class="mt-3 mb-3">
+          <div class="fw-semibold mb-2">
+            D?vidas que ser?o pagas
+          </div>
+
+          <div class="small text-muted mb-2">
+            Marque somente as d?vidas que deseja incluir neste recebimento.
+          </div>
+
+          {% for conta in contas %}
+            <label class="d-flex align-items-start gap-2 mb-2">
+              <input
+                type="checkbox"
+                name="dividas"
+                value="conta:{{ conta.id }}"
+                checked
+                class="mt-1"
+              >
+              <span>
+                <strong>
+                  {% if conta.venda_id %}
+                    Venda #{{ conta.venda_id }}
+                  {% else %}
+                    Conta #{{ conta.id }}
+                  {% endif %}
+                </strong>
+                ? saldo R$ {{ conta.valor_em_aberto|floatformat:2 }}
+              </span>
+            </label>
+          {% endfor %}
+
+          {% for locacao in locacoes_abertas %}
+            <label class="d-flex align-items-start gap-2 mb-2">
+              <input
+                type="checkbox"
+                name="dividas"
+                value="locacao:{{ locacao.id }}"
+                checked
+                class="mt-1"
+              >
+              <span>
+                <strong>Loca??o #{{ locacao.id }}</strong>
+
+                {% if locacao.itens.all %}
+                  ?
+                  {% for item in locacao.itens.all %}
+                    {% if item.tipo == "mesa_avulsa" %}
+                      {{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}
+                    {% elif item.tipo == "cadeira_avulsa" %}
+                      {{ item.quantidade }} cadeira{{ item.quantidade|pluralize:"s" }}
+                    {% else %}
+                      {{ item.quantidade }} {{ item.get_tipo_display }}
+                    {% endif %}
+                    {% if not forloop.last %} / {% endif %}
+                  {% endfor %}
+                {% endif %}
+
+                ? saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+
+</form>
         {% if pix_recebido_escolhido %}
           <form id="pixRemoverClienteConfirmadoForm" method="post" action="{{ pix_remover_cliente_url }}">
             {% csrf_token %}
@@ -1513,7 +1579,7 @@
               </div>
             </section>
           {% endif %}
-          {% if contas %}
+          {% if contas or locacoes_abertas %}
             <div class="rc-table-wrap">
               <table class="rc-table">
                 <thead>
@@ -1552,6 +1618,27 @@
                         {% endif %}
                         <span class="rc-pill">Nao atingida</span><br>
                         Saldo continua R$ {{ conta.valor_em_aberto|floatformat:2 }}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                  {% for locacao in locacoes_abertas %}
+                    <tr class="rc-row-prevista-neutra">
+                      <td>Loca??o #{{ locacao.id }}</td>
+                      <td>
+                        {% for item in locacao.itens.all %}
+                          {% if item.tipo == "mesa_avulsa" %}{{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}{% endif %}
+                          {% if item.tipo == "cadeira_avulsa" %}{{ item.quantidade }} cadeira{{ item.quantidade|pluralize:"s" }}{% endif %}
+                          {% if not forloop.last %} / {% endif %}
+                        {% endfor %}
+                      </td>
+                      <td>{{ locacao.data_entrega|date:"d/m/Y" }}</td>
+                      <td>{{ locacao.data_vencimento_saldo|date:"d/m/Y"|default:"-" }}</td>
+                      <td class="rc-num">R$ {{ locacao.total|floatformat:2 }}</td>
+                      <td class="rc-num">R$ {{ locacao.saldo_devedor|floatformat:2 }}</td>
+                      <td>{{ locacao.get_status_financeiro_display }}</td>
+                      <td class="rc-preview-cell">
+                        <span class="rc-pill">N?o atingida</span><br>
+                        Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                       </td>
                     </tr>
                   {% endfor %}
@@ -1604,6 +1691,50 @@
                     {% endif %}
                     <span class="rc-pill">Nao atingida</span><br>
                     Saldo continua R$ {{ conta.valor_em_aberto|floatformat:2 }}
+                  </div>
+                </article>
+              {% endfor %}
+              {% for locacao in locacoes_abertas %}
+                <article class="rc-conta-mobile-card rc-row-prevista-neutra">
+                  <div class="rc-conta-mobile-topo">
+                    <div>
+                      <span class="rc-conta-mobile-numero">Loca??o #{{ locacao.id }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-venda">
+                      {% for item in locacao.itens.all %}
+                        {% if item.tipo == "mesa_avulsa" %}{{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}{% endif %}
+                        {% if item.tipo == "cadeira_avulsa" %}{{ item.quantidade }} cadeira{{ item.quantidade|pluralize:"s" }}{% endif %}
+                        {% if not forloop.last %} / {% endif %}
+                      {% endfor %}
+                    </div>
+                  </div>
+
+                  <div class="rc-conta-mobile-grid">
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Data da loca??o</span>
+                      <span class="rc-conta-mobile-valor">{{ locacao.data_entrega|date:"d/m/Y" }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Vencimento</span>
+                      <span class="rc-conta-mobile-valor">{{ locacao.data_vencimento_saldo|date:"d/m/Y"|default:"-" }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Original</span>
+                      <span class="rc-conta-mobile-valor dinheiro">R$ {{ locacao.total|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Em aberto</span>
+                      <span class="rc-conta-mobile-valor dinheiro">R$ {{ locacao.saldo_devedor|floatformat:2 }}</span>
+                    </div>
+                    <div class="rc-conta-mobile-campo">
+                      <span class="rc-conta-mobile-label">Status</span>
+                      <span class="rc-conta-mobile-valor">{{ locacao.get_status_financeiro_display }}</span>
+                    </div>
+                  </div>
+
+                  <div class="rc-conta-mobile-preview">
+                    <span class="rc-pill">N?o atingida</span><br>
+                    Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                   </div>
                 </article>
               {% endfor %}

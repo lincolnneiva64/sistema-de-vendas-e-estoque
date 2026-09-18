@@ -934,7 +934,16 @@ class Locacao(models.Model):
             self.refresh_from_db()
             return locacao
 
-    def registrar_pagamento(self, valor, forma_pagamento, data_hora=None, observacao="", responsavel=""):
+    def registrar_pagamento(
+        self,
+        valor,
+        forma_pagamento,
+        data_hora=None,
+        observacao="",
+        responsavel="",
+        criar_movimento_financeiro=True,
+        operacao_recebimento_cliente=None,
+    ):
         valor = Decimal(valor or "0").quantize(Decimal("0.01"))
         if valor <= Decimal("0.00"):
             raise ValidationError("Informe um valor de pagamento maior que zero.")
@@ -951,13 +960,15 @@ class Locacao(models.Model):
                 raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
             pagamento = PagamentoLocacao.objects.create(
                 locacao=locacao,
+                operacao_recebimento_cliente=operacao_recebimento_cliente,
                 valor=valor,
                 data_hora=data_hora or timezone.now(),
                 forma_pagamento=forma_pagamento,
                 observacao=str(observacao or "").strip(),
                 responsavel=str(responsavel or "").strip(),
             )
-            pagamento.criar_movimento_financeiro()
+            if criar_movimento_financeiro:
+                pagamento.criar_movimento_financeiro()
             locacao.atualizar_financeiro()
             EventoLocacao.objects.create(
                 locacao=locacao,
@@ -2544,6 +2555,13 @@ class PagamentoLocacao(models.Model):
     ]
 
     locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="pagamentos")
+    operacao_recebimento_cliente = models.ForeignKey(
+        "estoque.OperacaoRecebimentoCliente",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="pagamentos_locacao",
+    )
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     data_hora = models.DateTimeField(default=timezone.now)
     forma_pagamento = models.CharField(max_length=20, choices=FORMA_CHOICES)
