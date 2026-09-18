@@ -328,7 +328,7 @@ select {
 }
 .produto-sugestao-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     padding: 6px 12px;
@@ -2893,7 +2893,6 @@ td:first-child {
     <input type="text" id="produtoBusca" placeholder="Selecione um produto" autocomplete="off">
     <div id="produtoSugestoes" class="produto-sugestoes"></div>
 <div id="estoquePreview" class="estoque-preview"></div>
-<div id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></div>
 <div
     id="conferenciaEstoqueContador"
     class="conferencia-estoque-contador"
@@ -2938,7 +2937,7 @@ td:first-child {
 <div class="preco-venda-wrap">
     <span id="precoMargemCusto" class="preco-margem-custo" aria-live="polite"></span>
     <input type="text" id="preco" placeholder="Preço">
-    <span id="precoConferidoBadge" class="preco-conferido-campo-badge" hidden>Preço conferido</span>
+    <div id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></div>
 </div>
         </div>
 
@@ -3680,8 +3679,8 @@ function renderizarHistoricoProdutoCliente(historico) {
         `Último preço do cliente: ${precoHistorico} em ${formatarDataHistoricoProduto(historico.data_venda)}`;
 }
 
-function atualizarHistoricoProdutoCliente() {
-    const optionSelecionada = produto.options[produto.selectedIndex];
+function atualizarHistoricoProdutoCliente(optionProduto = null) {
+    const optionSelecionada = optionProduto || produto.options[produto.selectedIndex];
     const produtoIdSelecionado = optionSelecionada?.dataset?.produtoId || "";
     if (!clienteSelecionadoValido() || !produtoIdSelecionado) {
         ocultarHistoricoProdutoCliente();
@@ -7297,7 +7296,6 @@ function renderSugestoes() {
 
     div.innerHTML = `
     <span class="nome-item-sugestao">${textoHighlight}</span>
-    ${precoConferido ? '<span class="preco-conferido-sugestao">Preço conferido</span>' : ''}
     <span
         class="estoque-item-sugestao ${classeEstoque}"
         data-produto-id="${opt.dataset.produtoId || ""}"
@@ -7407,6 +7405,12 @@ if (fracionadoSug && unidadeFracSug) {
 });
 
     sugestoesBox.style.display = "block";
+
+    const produtoAtivo = sugestoes[indexAtivo];
+    if (produtoAtivo) {
+        atualizarHistoricoProdutoCliente(produtoAtivo);
+    }
+
     const itemAtivo = sugestoesBox.querySelector(".produto-sugestao-item.ativo");
 if (itemAtivo) {
     itemAtivo.scrollIntoView({
