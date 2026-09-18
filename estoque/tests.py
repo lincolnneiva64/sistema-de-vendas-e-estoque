@@ -32636,6 +32636,490 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)
 
 
+class CentralContasPagarTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Micos Distribuidora")
+        self.outro_fornecedor = Fornecedor.objects.create(nome="Outro Fornecedor")
+        self.hoje = timezone.localdate()
+        self.url = reverse("estoque:contas_pagar")
+
+    def _compra(self, fornecedor=None, total="1000.00"):
+        return Compra.objects.create(
+            fornecedor=fornecedor or self.fornecedor,
+            data_compra=self.hoje,
+            data_vencimento=self.hoje + timedelta(days=7),
+            tipo_pagamento="aprazo",
+            total=Decimal(total),
+            total_produtos=Decimal(total),
+            status=Compra.STATUS_FINALIZADA,
+        )
+
+    def _conta(
+        self,
+        valor="1000.00",
+        aberto=None,
+        status=ContaPagar.STATUS_ABERTA,
+        vencimento=None,
+        fornecedor=None,
+        compra=None,
+        numero_parcela=None,
+        total_parcelas=None,
+        documento_legado="",
+    ):
+        valor = Decimal(valor)
+        return ContaPagar.objects.create(
+            compra=compra,
+            fornecedor=fornecedor or self.fornecedor,
+            documento_legado=documento_legado or None,
+            data_emissao=self.hoje,
+            data_vencimento=vencimento if vencimento is not None else self.hoje + timedelta(days=7),
+            valor_original=valor,
+            valor_em_aberto=Decimal(aberto) if aberto is not None else valor,
+            numero_parcela=numero_parcela,
+            total_parcelas=total_parcelas,
+            status=status,
+        )
+
+    def _baixar(self, conta, valor, juros="0,00", data_pagamento=None):
+        return self.client.post(
+            reverse("estoque:conta_pagar_baixar", kwargs={"pk": conta.pk}),
+            {
+                "valor_pago": valor,
+                "juros_bancarios": juros,
+                "data_pagamento": (data_pagamento or self.hoje).isoformat(),
+                "forma_pagamento": "Pix",
+                "observacao": "Baixa pela central",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def test_baixa_integral_sem_juros_quita_conta_e_movimenta_principal(self):
+        conta = self._conta(valor="1000.00")
+
+        resposta = self._baixar(conta, "1000,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        conta.refresh_from_db()
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimento = MovimentoFinanceiro.objects.get(origem="conta_pagar_fornecedor")
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(pagamento.valor, Decimal("1000.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("0.00"))
+        self.assertEqual(movimento.valor, Decimal("1000.00"))
+
+    def test_baixa_integral_com_juros_movimenta_desembolso_total_sem_alterar_original(self):
+        conta = self._conta(valor="100.00")
+        conta_banco = views._conta_financeira_por_forma_pagamento("Pix", cartao_para_receber=False)
+        conta_banco.saldo_inicial = Decimal("1000.00")
+        conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        saldo_antes = views._saldo_conta_financeira(conta_banco)
+
+        resposta = self._baixar(conta, "100,00", juros="5,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        conta.refresh_from_db()
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimento = MovimentoFinanceiro.objects.get(origem="conta_pagar_fornecedor")
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(pagamento.valor, Decimal("100.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("5.00"))
+        self.assertEqual(movimento.valor, Decimal("105.00"))
+        self.assertEqual(movimento.conta, conta_banco)
+        self.assertEqual(views._saldo_conta_financeira(conta_banco), saldo_antes - Decimal("105.00"))
+
+        resposta_central = self.client.get(
+            self.url,
+            {
+                "atalho": "com_juros",
+                "data_inicio": self.hoje.isoformat(),
+                "data_fim": self.hoje.isoformat(),
+            },
+            secure=True,
+        )
+        contas = {item.id: item for item in resposta_central.context["contas"]}
+        self.assertIn(conta.id, contas)
+        self.assertEqual(contas[conta.id].principal_pago, Decimal("100.00"))
+        self.assertEqual(contas[conta.id].juros_pagos, Decimal("5.00"))
+        self.assertContains(resposta_central, f'data-history-target="historico-conta-{conta.pk}"')
+
+    def test_baixa_parcial_sem_juros_mantem_status_parcial(self):
+        conta = self._conta(valor="1000.00")
+
+        resposta = self._baixar(conta, "400,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        conta.refresh_from_db()
+        movimento = MovimentoFinanceiro.objects.get(origem="conta_pagar_fornecedor")
+        self.assertEqual(conta.valor_em_aberto, Decimal("600.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(movimento.valor, Decimal("400.00"))
+
+    def test_baixa_parcial_com_juros_nao_reduz_principal_pelos_juros(self):
+        conta = self._conta(valor="100.00")
+        conta_banco = views._conta_financeira_por_forma_pagamento("Pix", cartao_para_receber=False)
+        conta_banco.saldo_inicial = Decimal("1000.00")
+        conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        saldo_antes = views._saldo_conta_financeira(conta_banco)
+
+        resposta = self._baixar(conta, "40,00", juros="5,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        conta.refresh_from_db()
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimento = MovimentoFinanceiro.objects.get(origem="conta_pagar_fornecedor")
+        self.assertEqual(conta.valor_original, Decimal("100.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("60.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(pagamento.valor, Decimal("40.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("5.00"))
+        self.assertEqual(movimento.valor, Decimal("45.00"))
+        self.assertEqual(movimento.conta, conta_banco)
+        self.assertEqual(views._saldo_conta_financeira(conta_banco), saldo_antes - Decimal("45.00"))
+
+    def test_baixa_de_uma_parcela_nao_altera_outra_parcela_da_mesma_compra(self):
+        compra = self._compra(total="1000.00")
+        primeira = self._conta(valor="400.00", compra=compra, numero_parcela=1, total_parcelas=2)
+        segunda = self._conta(valor="600.00", compra=compra, numero_parcela=2, total_parcelas=2)
+
+        resposta = self._baixar(primeira, "400,00", juros="5,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        primeira.refresh_from_db()
+        segunda.refresh_from_db()
+        self.assertEqual(primeira.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(primeira.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(segunda.status, ContaPagar.STATUS_ABERTA)
+        self.assertEqual(segunda.valor_em_aberto, Decimal("600.00"))
+
+    def test_filtros_operacionais_vencidas_hoje_7_30_parciais_e_pagas(self):
+        vencida = self._conta(valor="10.00", vencimento=self.hoje - timedelta(days=1), documento_legado="VENCIDA")
+        hoje = self._conta(valor="20.00", vencimento=self.hoje, documento_legado="HOJE")
+        prox_7 = self._conta(valor="30.00", vencimento=self.hoje + timedelta(days=5), documento_legado="SETE")
+        prox_30 = self._conta(valor="40.00", vencimento=self.hoje + timedelta(days=20), documento_legado="TRINTA")
+        parcial = self._conta(valor="50.00", aberto="25.00", status=ContaPagar.STATUS_PARCIAL, vencimento=self.hoje + timedelta(days=40), documento_legado="PARCIAL")
+        paga = self._conta(valor="60.00", aberto="0.00", status=ContaPagar.STATUS_PAGA, vencimento=self.hoje + timedelta(days=60), documento_legado="PAGA")
+        PagamentoContaPagar.objects.create(conta=paga, data_pagamento=self.hoje, valor=Decimal("60.00"), forma_pagamento="Pix")
+
+        casos = [
+            ("vencidas", vencida, [hoje, prox_7, prox_30, parcial, paga]),
+            ("hoje", hoje, [vencida, prox_7, prox_30, parcial, paga]),
+            ("proximos_7", prox_7, [vencida, prox_30, parcial, paga]),
+            ("proximos_30", prox_30, [vencida, parcial, paga]),
+            ("parciais", parcial, [vencida, hoje, prox_7, prox_30, paga]),
+            ("pagas", paga, [vencida, hoje, prox_7, prox_30, parcial]),
+        ]
+        for atalho, esperado, ausentes in casos:
+            with self.subTest(atalho=atalho):
+                resposta = self.client.get(self.url, {"atalho": atalho}, secure=True)
+                ids = {conta.id for conta in resposta.context["contas"]}
+                self.assertIn(esperado.id, ids)
+                self.assertFalse({conta.id for conta in ausentes} & ids)
+
+    def test_atalhos_exibem_quantidades_e_valores_calculados(self):
+        self._conta(valor="10.00", vencimento=self.hoje - timedelta(days=1), documento_legado="VENCIDA")
+        self._conta(valor="20.00", vencimento=self.hoje, documento_legado="HOJE")
+        self._conta(valor="30.00", vencimento=self.hoje + timedelta(days=5), documento_legado="SETE")
+        self._conta(valor="40.00", vencimento=self.hoje + timedelta(days=20), documento_legado="TRINTA")
+        self._conta(
+            valor="50.00",
+            aberto="25.00",
+            status=ContaPagar.STATUS_PARCIAL,
+            vencimento=self.hoje + timedelta(days=40),
+            documento_legado="PARCIAL",
+        )
+        paga = self._conta(
+            valor="60.00",
+            aberto="0.00",
+            status=ContaPagar.STATUS_PAGA,
+            vencimento=self.hoje + timedelta(days=60),
+            documento_legado="PAGA",
+        )
+        com_juros = self._conta(
+            valor="100.00",
+            aberto="0.00",
+            status=ContaPagar.STATUS_PAGA,
+            vencimento=self.hoje + timedelta(days=70),
+            documento_legado="COM-JUROS",
+        )
+        PagamentoContaPagar.objects.create(
+            conta=paga,
+            data_pagamento=self.hoje,
+            valor=Decimal("60.00"),
+            juros_bancarios=Decimal("0.00"),
+            forma_pagamento="Pix",
+        )
+        PagamentoContaPagar.objects.create(
+            conta=com_juros,
+            data_pagamento=self.hoje,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("7.50"),
+            forma_pagamento="Pix",
+        )
+
+        resposta = self.client.get(self.url, secure=True)
+
+        atalhos = {item["valor"]: item for item in resposta.context["atalhos"]}
+        self.assertEqual(atalhos["todas"]["quantidade"], 7)
+        self.assertIsNone(atalhos["todas"]["valor_resumo"])
+        self.assertEqual(atalhos["todas"]["resumo_texto"], "todos status")
+        self.assertEqual(atalhos["vencidas"]["quantidade"], 1)
+        self.assertEqual(atalhos["vencidas"]["valor_resumo"], Decimal("10.00"))
+        self.assertEqual(atalhos["hoje"]["quantidade"], 1)
+        self.assertEqual(atalhos["hoje"]["valor_resumo"], Decimal("20.00"))
+        self.assertEqual(atalhos["proximos_7"]["quantidade"], 1)
+        self.assertEqual(atalhos["proximos_7"]["valor_resumo"], Decimal("30.00"))
+        self.assertEqual(atalhos["proximos_30"]["quantidade"], 2)
+        self.assertEqual(atalhos["proximos_30"]["valor_resumo"], Decimal("70.00"))
+        self.assertEqual(atalhos["parciais"]["quantidade"], 1)
+        self.assertEqual(atalhos["parciais"]["valor_resumo"], Decimal("25.00"))
+        self.assertEqual(atalhos["pagas"]["quantidade"], 2)
+        self.assertEqual(atalhos["pagas"]["valor_resumo"], Decimal("160.00"))
+        self.assertEqual(atalhos["com_juros"]["quantidade"], 1)
+        self.assertEqual(atalhos["com_juros"]["quantidade_label"], "pagamento(s)")
+        self.assertEqual(atalhos["com_juros"]["valor_resumo"], Decimal("7.50"))
+
+    def test_atalhos_respeitam_filtros_combinados_de_fornecedor_e_periodo(self):
+        self._conta(
+            valor="10.00",
+            vencimento=self.hoje - timedelta(days=2),
+            fornecedor=self.fornecedor,
+            documento_legado="M-ANTIGA",
+        )
+        self._conta(
+            valor="20.00",
+            vencimento=self.hoje - timedelta(days=1),
+            fornecedor=self.outro_fornecedor,
+            documento_legado="O-ANTIGA",
+        )
+        self._conta(
+            valor="30.00",
+            vencimento=self.hoje - timedelta(days=10),
+            fornecedor=self.fornecedor,
+            documento_legado="M-FORA",
+        )
+
+        resposta = self.client.get(
+            self.url,
+            {
+                "atalho": "vencidas",
+                "fornecedor": str(self.fornecedor.id),
+                "data_inicio": (self.hoje - timedelta(days=3)).isoformat(),
+                "data_fim": self.hoje.isoformat(),
+            },
+            secure=True,
+        )
+
+        ids = {conta.id for conta in resposta.context["contas"]}
+        self.assertEqual(len(ids), 1)
+        atalhos = {item["valor"]: item for item in resposta.context["atalhos"]}
+        self.assertEqual(atalhos["vencidas"]["quantidade"], 1)
+        self.assertEqual(atalhos["vencidas"]["valor_resumo"], Decimal("10.00"))
+
+    def test_filtro_com_juros_e_soma_por_periodo(self):
+        com_juros = self._conta(valor="100.00", aberto="0.00", status=ContaPagar.STATUS_PAGA, documento_legado="COM-JUROS")
+        sem_juros = self._conta(valor="80.00", aberto="0.00", status=ContaPagar.STATUS_PAGA, documento_legado="SEM-JUROS")
+        PagamentoContaPagar.objects.create(
+            conta=com_juros,
+            data_pagamento=self.hoje,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("7.50"),
+            forma_pagamento="Pix",
+        )
+        PagamentoContaPagar.objects.create(
+            conta=sem_juros,
+            data_pagamento=self.hoje,
+            valor=Decimal("80.00"),
+            juros_bancarios=Decimal("0.00"),
+            forma_pagamento="Pix",
+        )
+
+        resposta = self.client.get(
+            self.url,
+            {
+                "atalho": "com_juros",
+                "data_inicio": self.hoje.isoformat(),
+                "data_fim": self.hoje.isoformat(),
+            },
+            secure=True,
+        )
+
+        ids = {conta.id for conta in resposta.context["contas"]}
+        self.assertIn(com_juros.id, ids)
+        self.assertNotIn(sem_juros.id, ids)
+        self.assertEqual(resposta.context["juros_pagos_periodo"], Decimal("7.50"))
+        self.assertEqual(resposta.context["principal_pago_periodo"], Decimal("100.00"))
+        self.assertEqual(resposta.context["total_desembolsado_periodo"], Decimal("107.50"))
+
+    def test_modal_recebe_valores_monetarios_em_formato_brasileiro(self):
+        self._conta(valor="246.00", documento_legado="VALOR-246")
+        self._conta(valor="1162.91", documento_legado="VALOR-1162")
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'data-aberto="246,00"')
+        self.assertContains(resposta, 'data-original="246,00"')
+        self.assertContains(resposta, 'data-aberto="1.162,91"')
+        self.assertContains(resposta, 'data-original="1.162,91"')
+        self.assertContains(resposta, "function numero(valor)")
+        self.assertContains(resposta, 'const temVirgula = texto.includes(",");', html=False)
+
+    def test_template_renderiza_auto_filtros_e_marcador_neutro_do_fornecedor(self):
+        self._conta(valor="246.00")
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, 'id="contasPagarFiltros"')
+        self.assertContains(resposta, 'select[name=\'fornecedor\'], select[name=\'situacao\'], input[name=\'data_inicio\'], input[name=\'data_fim\']', html=False)
+        self.assertContains(resposta, 'input[name=\'compra\'], input[name=\'q\']', html=False)
+        self.assertContains(resposta, "function enviarFiltros()")
+        self.assertContains(resposta, 'class="cp-provider-pill"')
+        self.assertContains(resposta, "Micos Distribuidora")
+
+    def test_faixa_de_totais_historicos_nao_renderiza_na_central(self):
+        self._conta(valor="246.00")
+
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertNotContains(resposta, "Periodo aplicado por")
+        self.assertNotContains(resposta, "Juros/multas:")
+        self.assertNotContains(resposta, "Total desembolsado:")
+
+    def test_conta_paga_legada_sem_pagamento_mostra_historico_legado_sem_inventar_valor(self):
+        conta = self._conta(
+            valor="280.00",
+            aberto="0.00",
+            status=ContaPagar.STATUS_PAGA,
+            documento_legado="LEGADO-PAGO",
+        )
+        pagamentos_antes = PagamentoContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self.client.get(self.url, {"atalho": "pagas"}, secure=True)
+
+        self.assertEqual(PagamentoContaPagar.objects.count(), pagamentos_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+        conta.refresh_from_db()
+        self.assertEqual(conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertIn(conta.id, {item.id for item in resposta.context["contas"]})
+        self.assertTrue(resposta.context["contas"][0].pagamento_legado_sem_historico)
+        self.assertContains(resposta, "Historico legado")
+        self.assertNotContains(resposta, f'data-history-target="historico-conta-{conta.pk}"')
+
+        trecho = resposta.content.decode("utf-8")
+        inicio = trecho.index(f'data-conta-pagar-id="{conta.pk}"')
+        fim = trecho.index("</tr>", inicio)
+        linha = trecho[inicio:fim]
+        self.assertIn("Historico legado", linha)
+        self.assertNotIn('class="cp-money paid zero">R$ 0', linha)
+
+    def test_conta_paga_com_pagamento_continua_mostrando_pago_e_historico(self):
+        conta = self._conta(
+            valor="100.00",
+            aberto="0.00",
+            status=ContaPagar.STATUS_PAGA,
+            documento_legado="PAGO-COM-HISTORICO",
+        )
+        PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=self.hoje,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("2.50"),
+            forma_pagamento="Pix",
+            observacao="Pagamento com historico",
+        )
+
+        resposta = self.client.get(self.url, {"atalho": "pagas"}, secure=True)
+
+        contas = {item.id: item for item in resposta.context["contas"]}
+        self.assertFalse(contas[conta.id].pagamento_legado_sem_historico)
+        self.assertEqual(contas[conta.id].principal_pago, Decimal("100.00"))
+        self.assertContains(resposta, f'data-history-target="historico-conta-{conta.pk}"')
+        self.assertContains(resposta, "Pagamento com historico")
+        trecho = resposta.content.decode("utf-8")
+        inicio = trecho.index(f'data-conta-pagar-id="{conta.pk}"')
+        fim = trecho.index("</tr>", inicio)
+        linha = trecho[inicio:fim]
+        self.assertNotIn("Historico legado", linha)
+
+    def test_baixa_valores_brasileiros_especificos_preserva_decimal_correto(self):
+        conta = self._conta(valor="246.00")
+
+        resposta = self._baixar(conta, "246,00", juros="23,70")
+
+        self.assertEqual(resposta.status_code, 200)
+        conta.refresh_from_db()
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimento = MovimentoFinanceiro.objects.get(origem="conta_pagar_fornecedor")
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(pagamento.valor, Decimal("246.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("23.70"))
+        self.assertEqual(movimento.valor, Decimal("269.70"))
+
+    def test_historico_fica_recolhido_por_padrao_e_disponivel_para_expansao(self):
+        conta = self._conta(valor="100.00", aberto="0.00", status=ContaPagar.STATUS_PAGA)
+        PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=self.hoje,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("2.50"),
+            forma_pagamento="Pix",
+            observacao="Pagamento teste",
+        )
+
+        resposta = self.client.get(self.url, {"atalho": "pagas"}, secure=True)
+
+        self.assertContains(resposta, f'data-history-target="historico-conta-{conta.pk}"')
+        self.assertContains(resposta, f'<tr class="cp-history-row" id="historico-conta-{conta.pk}">', html=False)
+        self.assertNotContains(resposta, f'<tr class="cp-history-row aberto" id="historico-conta-{conta.pk}">', html=False)
+        self.assertContains(resposta, "Pagamento teste")
+
+    def test_parcelas_e_conta_legada_continuam_na_origem_da_tabela(self):
+        compra = self._compra(total="1000.00")
+        self._conta(valor="589.11", compra=compra, numero_parcela=1, total_parcelas=2)
+        self._conta(valor="589.10", compra=compra, numero_parcela=2, total_parcelas=2)
+        self._conta(valor="125.00", documento_legado="28741-01/2-BO", compra=None)
+
+        resposta = self.client.get(self.url, {"atalho": "todas"}, secure=True)
+
+        self.assertContains(resposta, f"Compra #{compra.id}")
+        self.assertContains(resposta, "Parcela 1/2")
+        self.assertContains(resposta, "Parcela 2/2")
+        self.assertContains(resposta, "Documento 28741-01/2-BO")
+
+    def test_conta_legada_sem_compra_permanece_na_central(self):
+        conta = self._conta(valor="125.00", documento_legado="FB-2026-0001", compra=None)
+
+        resposta = self.client.get(self.url, {"compra": "FB-2026-0001"}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Documento FB-2026-0001")
+        self.assertIn(conta.id, {item.id for item in resposta.context["contas"]})
+
+    def test_baixa_rollback_completo_quando_movimento_financeiro_nao_e_criado(self):
+        conta = self._conta(valor="260.00")
+        conta_banco = views._conta_financeira_por_forma_pagamento("Pix", cartao_para_receber=False)
+        conta_banco.saldo_inicial = Decimal("1000.00")
+        conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        saldo_antes = views._saldo_conta_financeira(conta_banco)
+
+        with patch("estoque.views._registrar_movimento_conta_pagar_fornecedor", return_value=None):
+            resposta = self._baixar(conta, "260,00", juros="15,00")
+
+        self.assertEqual(resposta.status_code, 400)
+        conta.refresh_from_db()
+        self.assertEqual(PagamentoContaPagar.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.assertEqual(conta.valor_em_aberto, Decimal("260.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
+        self.assertEqual(views._saldo_conta_financeira(conta_banco), saldo_antes)
+
+
 class ContaPagarLegadaTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Legado")

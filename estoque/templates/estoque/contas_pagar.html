@@ -1,217 +1,307 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Contas a pagar{% endblock %}
+{% block title %}Central de Contas a Pagar{% endblock %}
 {% block content %}
 <style>
-  .contas-pagar-page { max-width:1120px; margin:18px auto 90px; padding:0 14px; color:#172033; }
-  .contas-pagar-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:12px; }
-  .contas-pagar-title { margin:0; font-size:1.55rem; font-weight:900; }
-  .contas-pagar-subtitle { margin:3px 0 0; color:#64748b; font-weight:700; }
-  .contas-pagar-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-  .contas-pagar-btn { border:0; border-radius:9px; padding:9px 14px; font-weight:850; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:40px; cursor:pointer; transition:transform .08s ease, filter .08s ease, box-shadow .08s ease; }
-  .contas-pagar-btn:active { transform:scale(.96); filter:brightness(.92); box-shadow:inset 0 3px 8px rgba(15,23,42,.22); }
-  .contas-pagar-btn-primary { background:#2563eb; color:#fff; }
-  .contas-pagar-btn-secondary { background:#dbeafe; color:#164173; border:1px solid #7ea6d9; }
-  .contas-pagar-btn-success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
-  .contas-pagar-card { background:#fff; border:1px solid #e1e7ef; border-radius:14px; box-shadow:0 14px 30px rgba(15,23,42,.06); margin-bottom:12px; overflow:hidden; }
-  .contas-pagar-resumo { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .contas-pagar-resumo-item { background:#fffbeb; border:1.5px solid #f59e0b; border-radius:12px; padding:12px; }
-  .contas-pagar-resumo-label { display:block; color:#92400e; font-size:.78rem; font-weight:900; text-transform:uppercase; }
-  .contas-pagar-resumo-valor { display:block; margin-top:4px; font-size:1.2rem; font-weight:950; color:#172033; }
-  .contas-pagar-filtros { padding:14px 16px; display:grid; grid-template-columns:1.4fr .7fr auto auto; gap:8px; align-items:end; }
-  .contas-pagar-field label { display:block; font-weight:850; font-size:.82rem; margin-bottom:4px; color:#334155; }
-  .contas-pagar-field input, .contas-pagar-field select { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; min-height:40px; }
-  .contas-pagar-table { width:100%; border-collapse:collapse; }
-  .contas-pagar-table th { text-align:left; font-size:.72rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px; border-bottom:1px solid #edf1f6; }
-  .contas-pagar-table td { padding:10px; border-bottom:1px solid #f0f3f8; vertical-align:middle; font-weight:750; }
-  .contas-pagar-status { display:inline-flex; border-radius:999px; padding:4px 9px; background:#eef6ff; color:#164173; font-weight:900; font-size:.8rem; }
-  .contas-pagar-valor { font-weight:950; color:#166534; white-space:nowrap; }
-  .contas-pagar-atrasada { background:#fff7ed; }
-  .contas-pagar-mobile { display:none; }
-  .contas-pagar-mobile-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 10px 22px rgba(15,23,42,.07); padding:12px; margin-bottom:10px; }
-  .contas-pagar-mobile-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
-  .contas-pagar-mobile-title { font-weight:950; font-size:1rem; }
-  .contas-pagar-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
-  .contas-pagar-mobile-label { display:block; color:#64748b; font-size:.74rem; font-weight:900; text-transform:uppercase; }
-  .contas-pagar-mobile-value { display:block; font-weight:850; color:#172033; }
-  .contas-pagar-empty { padding:24px 14px; text-align:center; color:#64748b; font-weight:800; }
-  .contas-pagar-alerta { display:none; border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:850; }
-  .contas-pagar-alerta.visivel { display:block; }
-  .contas-pagar-alerta.sucesso { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
-  .contas-pagar-alerta.erro { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
-  .contas-pagar-modal { position:fixed; inset:0; z-index:3000; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.48); }
-  .contas-pagar-modal.aberto { display:flex; }
-  .contas-pagar-modal-caixa { width:min(520px, 100%); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 24px 70px rgba(15,23,42,.28); }
-  .contas-pagar-modal-topo { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; border-bottom:1px solid #e5e7eb; background:#fffbeb; }
-  .contas-pagar-modal-topo h2 { margin:0; font-size:1.12rem; font-weight:950; color:#78350f; }
-  .contas-pagar-modal-fechar { border:0; background:#fff7ed; color:#78350f; font-size:1.35rem; font-weight:900; cursor:pointer; border-radius:8px; width:36px; height:36px; }
-  .contas-pagar-modal-corpo { padding:14px 16px; }
-  .contas-pagar-modal-resumo { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:12px; }
-  .contas-pagar-modal-info { border:1px solid #e2e8f0; border-radius:10px; padding:9px 10px; background:#f8fafc; }
-  .contas-pagar-modal-label { display:block; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
-  .contas-pagar-modal-valor { display:block; margin-top:3px; color:#172033; font-weight:900; }
-  .contas-pagar-modal-form { display:grid; gap:10px; }
-  .contas-pagar-modal-form label { display:block; font-weight:850; font-size:.82rem; color:#334155; margin-bottom:4px; }
-  .contas-pagar-modal-form input, .contas-pagar-modal-form textarea { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; }
-  .contas-pagar-modal-form textarea { resize:vertical; min-height:70px; }
-  .contas-pagar-modal-acoes { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 16px; background:#f8fafc; }
-  .contas-pagar-historico-row td { background:#f8fafc; padding:0 10px 10px; }
-  .contas-pagar-historico { border:1px solid #dbeafe; border-radius:10px; background:#eff6ff; padding:9px 10px; color:#172033; }
-  .contas-pagar-historico-title { margin:0 0 6px; font-size:.82rem; font-weight:950; color:#164173; text-transform:uppercase; }
-  .contas-pagar-historico-lista { display:grid; gap:6px; }
-  .contas-pagar-historico-item { display:grid; grid-template-columns:.75fr .7fr .9fr 1.4fr; gap:8px; align-items:start; padding:7px 8px; border-radius:8px; background:#fff; border:1px solid #dbeafe; font-size:.84rem; }
-  .contas-pagar-historico-label { display:block; color:#64748b; font-size:.68rem; font-weight:900; text-transform:uppercase; }
-  .contas-pagar-historico-valor { font-weight:900; color:#172033; }
-
+  .cp-page { max-width:1280px; margin:18px auto 90px; padding:0 14px; color:#172033; }
+  .cp-header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:14px; }
+  .cp-title { margin:0; font-size:1.55rem; font-weight:950; }
+  .cp-subtitle { margin:3px 0 0; color:#64748b; font-weight:750; }
+  .cp-actions, .cp-quick { display:flex; gap:8px; flex-wrap:wrap; }
+  .cp-actions { justify-content:flex-end; }
+  .cp-btn { border:0; border-radius:8px; padding:9px 13px; font-weight:850; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:38px; cursor:pointer; transition:transform .08s ease, filter .08s ease; }
+  .cp-btn:active { transform:scale(.97); filter:brightness(.94); }
+  .cp-btn.primary { background:#2563eb; color:#fff; }
+  .cp-btn.secondary { background:#e8f1ff; color:#164173; border:1px solid #b7ccec; }
+  .cp-btn.success { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  .cp-btn.ghost { background:#f8fafc; color:#334155; border:1px solid #d7dee9; }
+  .cp-btn.ativo { background:#172033; color:#fff; border-color:#172033; }
+  .cp-btn.quick { flex-direction:column; align-items:flex-start; min-width:132px; line-height:1.12; padding:8px 12px; }
+  .cp-quick-label { font-size:.88rem; }
+  .cp-quick-meta { display:block; margin-top:3px; color:#64748b; font-size:.72rem; font-weight:760; white-space:nowrap; }
+  .cp-btn.ativo .cp-quick-meta { color:#cbd5e1; }
+  .cp-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 12px 28px rgba(15,23,42,.06); margin-bottom:12px; overflow:hidden; }
+  .cp-summary { display:grid; grid-template-columns:repeat(7, minmax(130px,1fr)); gap:10px; margin-bottom:12px; }
+  .cp-summary-card { background:#fff; border:1px solid #e1e7ef; border-radius:10px; padding:11px 12px; box-shadow:0 10px 22px rgba(15,23,42,.05); }
+  .cp-summary-card strong { display:block; font-size:1.08rem; margin-top:4px; color:#172033; white-space:nowrap; }
+  .cp-summary-card span { display:block; color:#64748b; font-size:.72rem; font-weight:950; text-transform:uppercase; }
+  .cp-summary-card small { display:block; margin-top:2px; color:#64748b; font-weight:800; }
+  .cp-summary-card.danger { border-color:#fecaca; background:#fff7f7; }
+  .cp-summary-card.warn { border-color:#fde68a; background:#fffbeb; }
+  .cp-summary-card.good { border-color:#bbf7d0; background:#f0fdf4; }
+  .cp-summary-card.info { border-color:#bfdbfe; background:#eff6ff; }
+  .cp-filters { padding:14px; display:grid; grid-template-columns:1.25fr 1fr .75fr .75fr .9fr auto auto; gap:9px; align-items:end; }
+  .cp-field label { display:block; font-weight:850; font-size:.78rem; margin-bottom:4px; color:#334155; }
+  .cp-field input, .cp-field select { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px 10px; font-weight:750; outline:none; min-height:39px; background:#fff; }
+  .cp-period-note { padding:0 14px 12px; color:#64748b; font-weight:800; font-size:.86rem; }
+  .cp-table-wrap { overflow-x:auto; }
+  .cp-table { width:100%; min-width:980px; border-collapse:collapse; }
+  .cp-table th { text-align:left; font-size:.68rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px 11px; border-bottom:1px solid #edf1f6; }
+  .cp-table th.grupo { background:#eef6ff; color:#164173; font-size:.72rem; letter-spacing:.02em; }
+  .cp-table td { padding:11px; border-bottom:1px solid #f0f3f8; vertical-align:middle; font-weight:750; }
+  .cp-money { font-weight:950; color:#172033; white-space:nowrap; }
+  .cp-money.open { color:#166534; }
+  .cp-money.interest.zero, .cp-money.paid.zero, .cp-money.original { color:#64748b; font-weight:820; }
+  .cp-money.interest:not(.zero) { color:#92400e; }
+  .cp-legacy-history { display:inline-flex; align-items:center; border-radius:999px; padding:4px 8px; background:#f1f5f9; border:1px solid #cbd5e1; color:#64748b; font-size:.74rem; font-weight:900; white-space:nowrap; }
+  .cp-origin a { font-weight:900; color:#164173; text-decoration:none; }
+  .cp-account { display:grid; grid-template-columns:130px minmax(190px,1fr) minmax(150px, .9fr); gap:12px; align-items:center; }
+  .cp-account-date { font-weight:950; color:#172033; }
+  .cp-account-provider { font-weight:950; color:#172033; }
+  .cp-provider-marked { display:inline-flex; align-items:center; gap:7px; min-width:0; }
+  .cp-provider-pill { width:9px; height:22px; border-radius:999px; border:1px solid #cbd5e1; background:#f1f5f9; box-shadow:inset 0 0 0 1px rgba(255,255,255,.65); flex:0 0 auto; }
+  .cp-provider-name { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .cp-account-origin { color:#334155; font-weight:850; }
+  .cp-account-origin small { display:block; color:#64748b; font-weight:850; margin-top:3px; }
+  .cp-values-grid { display:grid; grid-template-columns:repeat(4, minmax(96px,1fr)); gap:10px; align-items:center; }
+  .cp-value-label { display:block; color:#64748b; font-size:.66rem; font-weight:900; text-transform:uppercase; margin-bottom:2px; }
+  .cp-status-actions { display:flex; gap:8px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+  .cp-status { display:inline-flex; border-radius:999px; padding:4px 9px; font-weight:950; font-size:.76rem; white-space:nowrap; }
+  .cp-status.vencida { background:#fee2e2; color:#991b1b; }
+  .cp-status.hoje, .cp-status.parcial { background:#fef3c7; color:#92400e; }
+  .cp-status.a-vencer, .cp-status.neutra { background:#dbeafe; color:#164173; }
+  .cp-status.paga { background:#dcfce7; color:#166534; }
+  .cp-status.cancelada { background:#e5e7eb; color:#4b5563; }
+  .cp-alert { display:none; border-radius:10px; padding:9px 12px; margin-bottom:10px; font-weight:850; }
+  .cp-alert.visivel { display:block; }
+  .cp-alert.sucesso { background:#ecfdf3; border:1px solid #b7e4c7; color:#166534; }
+  .cp-alert.erro { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .cp-history-toggle { min-height:32px; padding:6px 10px; font-size:.78rem; }
+  .cp-history-row { display:none; }
+  tr.cp-history-row.aberto { display:table-row; }
+  div.cp-history-row.aberto { display:block; }
+  .cp-history-row td { background:#f8fafc; padding:0 10px 10px; }
+  .cp-history { border:1px solid #dbeafe; border-radius:10px; background:#eff6ff; padding:9px 10px; }
+  .cp-history-title { margin:0 0 6px; font-size:.78rem; font-weight:950; color:#164173; text-transform:uppercase; }
+  .cp-history-list { display:grid; gap:6px; }
+  .cp-history-item { display:grid; grid-template-columns:.7fr .75fr .75fr .9fr 1.4fr; gap:8px; padding:7px 8px; border-radius:8px; background:#fff; border:1px solid #dbeafe; font-size:.82rem; }
+  .cp-history-label { display:block; color:#64748b; font-size:.66rem; font-weight:900; text-transform:uppercase; }
+  .cp-history-value { font-weight:900; color:#172033; }
+  .cp-empty { padding:24px 14px; text-align:center; color:#64748b; font-weight:850; }
+  .cp-mobile { display:none; }
+  .cp-mobile-card { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 10px 22px rgba(15,23,42,.07); padding:12px; margin-bottom:10px; }
+  .cp-mobile-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; margin-bottom:8px; }
+  .cp-mobile-title { font-weight:950; font-size:1rem; }
+  .cp-mobile-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .cp-mobile-label { display:block; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
+  .cp-mobile-value { display:block; font-weight:850; color:#172033; }
+  .cp-modal { position:fixed; inset:0; z-index:3000; display:none; align-items:center; justify-content:center; padding:16px; background:rgba(15,23,42,.48); }
+  .cp-modal.aberto { display:flex; }
+  .cp-modal-box { width:min(560px, 100%); max-height:90vh; overflow:auto; background:#fff; border-radius:14px; box-shadow:0 24px 70px rgba(15,23,42,.28); }
+  .cp-modal-top { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:13px 16px; border-bottom:1px solid #e5e7eb; background:#fffbeb; }
+  .cp-modal-top h2 { margin:0; font-size:1.12rem; font-weight:950; color:#78350f; }
+  .cp-modal-close { border:0; background:#fff7ed; color:#78350f; font-size:1.35rem; font-weight:900; cursor:pointer; border-radius:8px; width:36px; height:36px; }
+  .cp-modal-body { padding:14px 16px; }
+  .cp-modal-summary { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:12px; }
+  .cp-modal-info { border:1px solid #e2e8f0; border-radius:10px; padding:9px 10px; background:#f8fafc; }
+  .cp-modal-label { display:block; color:#64748b; font-size:.72rem; font-weight:900; text-transform:uppercase; }
+  .cp-modal-value { display:block; margin-top:3px; color:#172033; font-weight:900; }
+  .cp-modal-form { display:grid; gap:10px; }
+  .cp-modal-form label { display:block; font-weight:850; font-size:.82rem; color:#334155; margin-bottom:4px; }
+  .cp-modal-form input, .cp-modal-form textarea { width:100%; border:1.5px solid #d3dbe8; border-radius:9px; padding:9px 11px; font-weight:750; outline:none; }
+  .cp-modal-form textarea { resize:vertical; min-height:70px; }
+  .cp-debit-preview { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; padding:10px; border:1.5px solid #bbf7d0; border-radius:10px; background:#f0fdf4; }
+  .cp-debit-preview div { color:#166534; font-weight:850; }
+  .cp-debit-preview strong { display:block; color:#14532d; font-size:1.05rem; margin-top:2px; }
+  .cp-modal-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 16px 16px; background:#f8fafc; }
+  @media (max-width:1080px) {
+    .cp-summary { grid-template-columns:repeat(3, minmax(150px,1fr)); }
+    .cp-filters { grid-template-columns:1fr 1fr; }
+  }
   @media (max-width:760px) {
-    .contas-pagar-page { margin-top:14px; padding:0 10px 80px; }
-    .contas-pagar-header { flex-direction:column; align-items:stretch; }
-    .contas-pagar-actions { justify-content:stretch; }
-    .contas-pagar-btn { flex:1 1 auto; }
-    .contas-pagar-resumo { grid-template-columns:1fr; }
-    .contas-pagar-filtros { grid-template-columns:1fr; padding:12px; }
-    .contas-pagar-desktop { display:none; }
-    .contas-pagar-mobile { display:block; }
-    .contas-pagar-modal-resumo { grid-template-columns:1fr; }
-    .contas-pagar-modal-acoes { flex-direction:column; }
-    .contas-pagar-historico-item { grid-template-columns:1fr 1fr; }
+    .cp-page { margin-top:14px; padding:0 10px 80px; }
+    .cp-header { flex-direction:column; align-items:stretch; }
+    .cp-actions { justify-content:stretch; }
+    .cp-btn { flex:1 1 auto; }
+    .cp-btn.quick { min-width:calc(50% - 8px); }
+    .cp-summary { grid-template-columns:1fr 1fr; }
+    .cp-filters { grid-template-columns:1fr; padding:12px; }
+    .cp-desktop { display:none; }
+    .cp-mobile { display:block; }
+    .cp-modal-summary, .cp-debit-preview { grid-template-columns:1fr; }
+    .cp-modal-actions { flex-direction:column; }
+    .cp-history-item { grid-template-columns:1fr 1fr; }
   }
 </style>
 
-<div class="contas-pagar-page">
-  <header class="contas-pagar-header">
+<div class="cp-page">
+  <header class="cp-header">
     <div>
-      <h1 class="contas-pagar-title">Contas a pagar</h1>
-      <p class="contas-pagar-subtitle">Visão geral das dívidas com fornecedores.</p>
+      <h1 class="cp-title">Central de Contas a Pagar</h1>
+      <p class="cp-subtitle">Obrigacoes com fornecedores, boletos e baixas financeiras.</p>
     </div>
-    <div class="contas-pagar-actions">
-      <a href="{% url 'estoque:compras_nova' %}" class="contas-pagar-btn contas-pagar-btn-primary">Nova compra</a>
-      <a href="{% url 'estoque:compras_lista' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Consultar Compras</a>
-      <a href="{% url 'estoque:painel_financeiro' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Central Financeira</a>
-      <a href="{% url 'estoque:home' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Painel</a>
+    <div class="cp-actions">
+      <a href="{% url 'estoque:compras_nova' %}" class="cp-btn primary">Nova compra</a>
+      <a href="{% url 'estoque:compras_lista' %}" class="cp-btn secondary">Compras</a>
+      <a href="{% url 'estoque:painel_financeiro' %}" class="cp-btn secondary">Central Financeira</a>
     </div>
   </header>
 
   {% if messages %}
     {% for message in messages %}
-      <div style="border-radius:12px; padding:9px 12px; margin-bottom:10px; font-weight:800; background:#ecfdf3; border:1px solid #b7e4c7; color:#166534;">{{ message }}</div>
+      <div class="cp-alert visivel sucesso">{{ message }}</div>
     {% endfor %}
   {% endif %}
-  <div id="contasPagarFeedback" class="contas-pagar-alerta" role="alert" aria-live="polite"></div>
+  <div id="contasPagarFeedback" class="cp-alert" role="alert" aria-live="polite"></div>
 
-  <section class="contas-pagar-resumo" style="margin-bottom:12px;">
-    <div class="contas-pagar-resumo-item">
-      <span class="contas-pagar-resumo-label">Total em aberto</span>
-      <span class="contas-pagar-resumo-valor">R$ {{ total_aberto|floatformat:2 }}</span>
-    </div>
-    <div class="contas-pagar-resumo-item">
-      <span class="contas-pagar-resumo-label">Total listado</span>
-      <span class="contas-pagar-resumo-valor">R$ {{ total_original|floatformat:2 }}</span>
+  <section class="cp-summary">
+    <div class="cp-summary-card info"><span>Em aberto</span><strong>R$ {{ resumo_cards.aberto.valor|floatformat:2 }}</strong><small>{{ resumo_cards.aberto.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card danger"><span>Vencidas</span><strong>R$ {{ resumo_cards.vencidas.valor|floatformat:2 }}</strong><small>{{ resumo_cards.vencidas.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card warn"><span>Vence hoje</span><strong>R$ {{ resumo_cards.hoje.valor|floatformat:2 }}</strong><small>{{ resumo_cards.hoje.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card"><span>Proximos 7 dias</span><strong>R$ {{ resumo_cards.proximos_7.valor|floatformat:2 }}</strong><small>{{ resumo_cards.proximos_7.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card"><span>Proximos 30 dias</span><strong>R$ {{ resumo_cards.proximos_30.valor|floatformat:2 }}</strong><small>{{ resumo_cards.proximos_30.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card warn"><span>Parciais</span><strong>R$ {{ resumo_cards.parciais.valor|floatformat:2 }}</strong><small>{{ resumo_cards.parciais.quantidade }} conta(s)</small></div>
+    <div class="cp-summary-card good"><span>Juros pagos</span><strong>R$ {{ resumo_cards.juros.valor|floatformat:2 }}</strong><small>{{ resumo_cards.juros.quantidade }} pagamento(s)</small></div>
+  </section>
+
+  <section class="cp-card" style="padding:12px 14px;">
+    <div class="cp-quick">
+      {% for item in atalhos %}
+        <a href="{{ item.url }}" class="cp-btn ghost quick{% if item.ativo %} ativo{% endif %}">
+          <span class="cp-quick-label">{{ item.label }}</span>
+          <span class="cp-quick-meta">
+            {{ item.quantidade }} {{ item.quantidade_label }}
+            {% if item.resumo_texto %}
+              · {{ item.resumo_texto }}
+            {% else %}
+              · R$ {{ item.valor_resumo|floatformat:2 }}
+            {% endif %}
+          </span>
+        </a>
+      {% endfor %}
     </div>
   </section>
 
-  <section class="contas-pagar-card">
-    <form method="get" class="contas-pagar-filtros">
-      <div class="contas-pagar-field">
-        <label>Buscar fornecedor ou compra</label>
-        <input type="search" name="q" value="{{ termo }}" placeholder="Fornecedor, compra ou observação">
-      </div>
-      <div class="contas-pagar-field">
-        <label>Status</label>
-        <select name="status">
-          <option value="abertas" {% if status == "abertas" %}selected{% endif %}>Abertas</option>
-          <option value="todas" {% if status == "todas" %}selected{% endif %}>Todas</option>
-          {% for valor, texto in status_choices %}
-            <option value="{{ valor }}" {% if status == valor %}selected{% endif %}>{{ texto }}</option>
+  <section class="cp-card">
+    <form method="get" class="cp-filters" id="contasPagarFiltros">
+      <div class="cp-field">
+        <label>Fornecedor</label>
+        <select name="fornecedor">
+          <option value="">Todos</option>
+          {% for fornecedor in fornecedores %}
+            <option value="{{ fornecedor.id }}" {% if fornecedor_id == fornecedor.id|stringformat:"s" %}selected{% endif %}>{{ fornecedor.nome }}</option>
           {% endfor %}
         </select>
       </div>
-      <button type="submit" class="contas-pagar-btn contas-pagar-btn-primary">Buscar</button>
-      {% if termo or status != "abertas" %}
-        <a href="{% url 'estoque:contas_pagar' %}" class="contas-pagar-btn contas-pagar-btn-secondary">Limpar</a>
-      {% endif %}
+      <div class="cp-field">
+        <label>Compra/documento</label>
+        <input type="search" name="compra" value="{{ compra_documento }}" placeholder="109 ou FB-2026">
+      </div>
+      <div class="cp-field">
+        <label>Inicio</label>
+        <input type="date" name="data_inicio" value="{{ data_inicio }}">
+      </div>
+      <div class="cp-field">
+        <label>Fim</label>
+        <input type="date" name="data_fim" value="{{ data_fim }}">
+      </div>
+      <div class="cp-field">
+        <label>Situacao</label>
+        <select name="situacao">
+          {% for valor, texto in situacao_choices %}
+            <option value="{{ valor }}" {% if situacao == valor %}selected{% endif %}>{{ texto }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="cp-field">
+        <label>Busca livre</label>
+        <input type="search" name="q" value="{{ termo }}" placeholder="Fornecedor ou observacao">
+      </div>
+      <button type="submit" class="cp-btn primary">Filtrar</button>
+      <a href="{% url 'estoque:contas_pagar' %}" class="cp-btn secondary">Limpar</a>
+      {% if atalho %}<input type="hidden" name="atalho" value="{{ atalho }}">{% endif %}
     </form>
+    <div class="cp-period-note">Para contas abertas/vencidas o periodo usa vencimento. Em Pagas ou Com juros, usa data efetiva do pagamento.</div>
   </section>
 
-  <section class="contas-pagar-card contas-pagar-desktop">
-    <table class="contas-pagar-table">
+  <section class="cp-card cp-desktop cp-table-wrap">
+    <table class="cp-table">
       <thead>
         <tr>
-          <th>Fornecedor</th>
-          <th>Compra</th>
-          <th>Vencimento</th>
-          <th>Status</th>
-          <th>Original</th>
-          <th>Aberto</th>
-          <th></th>
+          <th class="grupo">Conta</th>
+          <th class="grupo">Valores</th>
+          <th class="grupo">Status/Acao</th>
         </tr>
       </thead>
       <tbody>
         {% for conta in contas %}
           <tr data-conta-pagar-id="{{ conta.pk }}">
-            <td>{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</td>
             <td>
-              {% if conta.compra_id %}
-                <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Compra #{{ conta.compra.id }}</a>
-                {% if conta.numero_parcela and conta.total_parcelas %}
-                  <div style="margin-top:6px; font-size:12px; font-weight:800; color:#64748b;">Parcela {{ conta.numero_parcela }}/{{ conta.total_parcelas }}</div>
-                {% endif %}
-              {% elif conta.documento_legado %}
-                Documento {{ conta.documento_legado }}
-              {% else %}
-                Conta #{{ conta.pk }}
-              {% endif %}
+              <div class="cp-account">
+                <div>
+                  <span class="cp-value-label">Vencimento</span>
+                  <span class="cp-account-date">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                </div>
+                <div>
+                  <span class="cp-value-label">Fornecedor</span>
+                  <span class="cp-account-provider cp-provider-marked">
+                    <span class="cp-provider-pill" aria-hidden="true"></span>
+                    <span class="cp-provider-name">{{ conta.fornecedor.nome|default:"Fornecedor nao informado" }}</span>
+                  </span>
+                </div>
+                <div class="cp-account-origin cp-origin">
+                  <span class="cp-value-label">Origem</span>
+                  {% if conta.compra_id %}
+                    <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}">Compra #{{ conta.compra.id }}</a>
+                    {% if conta.parcela_rotulo != "-" %}<small>Parcela {{ conta.parcela_rotulo }}</small>{% endif %}
+                  {% elif conta.documento_legado %}
+                    Documento {{ conta.documento_legado }}
+                  {% else %}
+                    Conta #{{ conta.pk }}
+                  {% endif %}
+                </div>
+              </div>
             </td>
-            <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
-            <td><span class="contas-pagar-status">{{ conta.get_status_display }}</span></td>
-            <td class="contas-pagar-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
-            <td class="contas-pagar-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>
             <td>
+              <div class="cp-values-grid">
+                <div><span class="cp-value-label">Original</span><span class="cp-money original">R$ {{ conta.valor_original|floatformat:2 }}</span></div>
+                <div>
+                  <span class="cp-value-label">Pago</span>
+                  {% if conta.pagamento_legado_sem_historico %}
+                    <span class="cp-legacy-history">Historico legado</span>
+                  {% else %}
+                    <span class="cp-money paid{% if conta.principal_pago == 0 %} zero{% endif %}">R$ {{ conta.principal_pago|floatformat:2 }}</span>
+                  {% endif %}
+                </div>
+                <div><span class="cp-value-label">Juros</span><span class="cp-money interest{% if conta.juros_pagos == 0 %} zero{% endif %}">R$ {{ conta.juros_pagos|floatformat:2 }}</span></div>
+                <div><span class="cp-value-label">Em aberto</span><span class="cp-money open">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span></div>
+              </div>
+            </td>
+            <td>
+              <div class="cp-status-actions">
+                <span class="cp-status {{ conta.situacao_classe }}">{{ conta.situacao_texto }}</span>
+                {% if conta.pagamentos.all %}
+                  <button type="button" class="cp-btn ghost cp-history-toggle" data-history-target="historico-conta-{{ conta.pk }}" aria-expanded="false">Historico</button>
+                {% endif %}
               {% if conta.status != "paga" and conta.status != "cancelada" %}
                 <button
                   type="button"
-                  class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
+                  class="cp-btn success btnAbrirBaixaContaPagar"
                   data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
                   data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
                   data-compra="{% if conta.compra_id %}{{ conta.compra.id }}{% endif %}"
                   data-documento="{{ conta.documento_legado|default:'' }}"
                   data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
                   data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
-                  data-original="{{ conta.valor_original|floatformat:2 }}"
-                  data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
-                >Baixar</button>
+                  data-original="{{ conta.valor_original_input }}"
+                  data-aberto="{{ conta.valor_em_aberto_input }}"
+                >Pagar/Baixar</button>
               {% endif %}
+              </div>
             </td>
           </tr>
           {% if conta.pagamentos.all %}
-            <tr class="contas-pagar-historico-row">
-              <td colspan="7">
-                <div class="contas-pagar-historico">
-                  <p class="contas-pagar-historico-title">Historico de pagamentos</p>
-                  <div class="contas-pagar-historico-lista">
+            <tr class="cp-history-row" id="historico-conta-{{ conta.pk }}">
+              <td colspan="3">
+                <div class="cp-history">
+                  <p class="cp-history-title">Historico de pagamentos</p>
+                  <div class="cp-history-list">
                     {% for pagamento in conta.pagamentos.all %}
-                      <div class="contas-pagar-historico-item">
-                        <div>
-                          <span class="contas-pagar-historico-label">Data</span>
-                          <span class="contas-pagar-historico-valor">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span>
-                        </div>
-                        <div>
-                          <span class="contas-pagar-historico-label">Valor</span>
-                          <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
-                        </div>
-                        {% if pagamento.juros_bancarios %}
-                          <div>
-                            <span class="contas-pagar-historico-label">Juros</span>
-                            <span class="contas-pagar-historico-valor">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span>
-                          </div>
-                        {% endif %}
-                        <div>
-                          <span class="contas-pagar-historico-label">Forma</span>
-                          <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
-                        </div>
-                        <div>
-                          <span class="contas-pagar-historico-label">Observacao</span>
-                          <span class="contas-pagar-historico-valor">{{ pagamento.observacao|default:"-" }}</span>
-                        </div>
+                      <div class="cp-history-item">
+                        <div><span class="cp-history-label">Data</span><span class="cp-history-value">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span></div>
+                        <div><span class="cp-history-label">Principal</span><span class="cp-history-value">R$ {{ pagamento.valor|floatformat:2 }}</span></div>
+                        <div><span class="cp-history-label">Juros</span><span class="cp-history-value">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span></div>
+                        <div><span class="cp-history-label">Forma</span><span class="cp-history-value">{{ pagamento.forma_pagamento|default:"-" }}</span></div>
+                        <div><span class="cp-history-label">Observacao</span><span class="cp-history-value">{{ pagamento.observacao|default:"-" }}</span></div>
                       </div>
                     {% endfor %}
                   </div>
@@ -220,158 +310,122 @@
             </tr>
           {% endif %}
         {% empty %}
-          <tr>
-            <td colspan="7" class="contas-pagar-empty">Nenhuma conta encontrada.</td>
-          </tr>
+          <tr><td colspan="10" class="cp-empty">Nenhuma conta encontrada.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </section>
 
-  <section class="contas-pagar-mobile">
+  <section class="cp-mobile">
     {% for conta in contas %}
-      <article class="contas-pagar-mobile-card" data-conta-pagar-id="{{ conta.pk }}">
-        <div class="contas-pagar-mobile-top">
-          <span class="contas-pagar-mobile-title">{{ conta.fornecedor.nome|default:"Fornecedor não informado" }}</span>
-          <span class="contas-pagar-status">{{ conta.get_status_display }}</span>
+      <article class="cp-mobile-card" data-conta-pagar-id="{{ conta.pk }}">
+        <div class="cp-mobile-top">
+          <span class="cp-mobile-title cp-provider-marked">
+            <span class="cp-provider-pill" aria-hidden="true"></span>
+            <span class="cp-provider-name">{{ conta.fornecedor.nome|default:"Fornecedor nao informado" }}</span>
+          </span>
+          <span class="cp-status {{ conta.situacao_classe }}">{{ conta.situacao_texto }}</span>
         </div>
-        <div class="contas-pagar-mobile-grid">
+        <div class="cp-mobile-grid">
+          <div><span class="cp-mobile-label">Vencimento</span><span class="cp-mobile-value">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span></div>
+          <div><span class="cp-mobile-label">Origem</span><span class="cp-mobile-value">{% if conta.compra_id %}Compra #{{ conta.compra.id }}{% elif conta.documento_legado %}{{ conta.documento_legado }}{% else %}Conta #{{ conta.pk }}{% endif %}</span></div>
+          <div><span class="cp-mobile-label">Parcela</span><span class="cp-mobile-value">{{ conta.parcela_rotulo }}</span></div>
+          <div><span class="cp-mobile-label">Original</span><span class="cp-mobile-value cp-money">R$ {{ conta.valor_original|floatformat:2 }}</span></div>
           <div>
-            <span class="contas-pagar-mobile-label">{% if conta.compra_id %}Compra{% else %}Referencia{% endif %}</span>
-            <span class="contas-pagar-mobile-value">
-              {% if conta.compra_id %}
-                Compra #{{ conta.compra.id }}
-                {% if conta.numero_parcela and conta.total_parcelas %}
-                  <br>Parcela {{ conta.numero_parcela }}/{{ conta.total_parcelas }}
-                {% endif %}
-              {% elif conta.documento_legado %}
-                Documento {{ conta.documento_legado }}
-              {% else %}
-                Conta #{{ conta.pk }}
-              {% endif %}
-            </span>
+            <span class="cp-mobile-label">Principal pago</span>
+            {% if conta.pagamento_legado_sem_historico %}
+              <span class="cp-mobile-value cp-legacy-history">Historico legado</span>
+            {% else %}
+              <span class="cp-mobile-value cp-money">R$ {{ conta.principal_pago|floatformat:2 }}</span>
+            {% endif %}
           </div>
-          <div>
-            <span class="contas-pagar-mobile-label">Vencimento</span>
-            <span class="contas-pagar-mobile-value">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
-          </div>
-          <div>
-            <span class="contas-pagar-mobile-label">Original</span>
-            <span class="contas-pagar-mobile-value contas-pagar-valor">R$ {{ conta.valor_original|floatformat:2 }}</span>
-          </div>
-          <div>
-            <span class="contas-pagar-mobile-label">Aberto</span>
-            <span class="contas-pagar-mobile-value contas-pagar-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span>
-          </div>
+          <div><span class="cp-mobile-label">Juros</span><span class="cp-mobile-value cp-money interest">R$ {{ conta.juros_pagos|floatformat:2 }}</span></div>
+          <div><span class="cp-mobile-label">Em aberto</span><span class="cp-mobile-value cp-money open">R$ {{ conta.valor_em_aberto|floatformat:2 }}</span></div>
         </div>
-        <div class="contas-pagar-actions">
-          {% if conta.compra_id %}
-            <a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="contas-pagar-btn contas-pagar-btn-secondary">Ver compra</a>
-          {% endif %}
+        <div class="cp-actions">
+          {% if conta.compra_id %}<a href="{% url 'estoque:compras_detalhe' conta.compra.pk %}" class="cp-btn secondary">Ver compra</a>{% endif %}
           {% if conta.status != "paga" and conta.status != "cancelada" %}
             <button
               type="button"
-              class="contas-pagar-btn contas-pagar-btn-success btnAbrirBaixaContaPagar"
+              class="cp-btn success btnAbrirBaixaContaPagar"
               data-url="{% url 'estoque:conta_pagar_baixar' conta.pk %}"
               data-fornecedor="{{ conta.fornecedor.nome|default:'Fornecedor nao informado' }}"
               data-compra="{% if conta.compra_id %}{{ conta.compra.id }}{% endif %}"
               data-documento="{{ conta.documento_legado|default:'' }}"
               data-vencimento="{{ conta.data_vencimento|date:'d/m/Y'|default:'-' }}"
               data-vencimento-iso="{{ conta.data_vencimento|date:'Y-m-d' }}"
-              data-original="{{ conta.valor_original|floatformat:2 }}"
-              data-aberto="{{ conta.valor_em_aberto|floatformat:2 }}"
-            >Baixar</button>
+              data-original="{{ conta.valor_original_input }}"
+              data-aberto="{{ conta.valor_em_aberto_input }}"
+            >Pagar/Baixar</button>
+          {% endif %}
+          {% if conta.pagamentos.all %}
+            <button type="button" class="cp-btn ghost cp-history-toggle" data-history-target="historico-mobile-conta-{{ conta.pk }}" aria-expanded="false">Historico</button>
           {% endif %}
         </div>
         {% if conta.pagamentos.all %}
-          <div class="contas-pagar-historico" style="margin-top:10px;">
-            <p class="contas-pagar-historico-title">Historico de pagamentos</p>
-            <div class="contas-pagar-historico-lista">
-              {% for pagamento in conta.pagamentos.all %}
-                <div class="contas-pagar-historico-item">
-                  <div>
-                    <span class="contas-pagar-historico-label">Data</span>
-                    <span class="contas-pagar-historico-valor">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span>
+          <div class="cp-history-row" id="historico-mobile-conta-{{ conta.pk }}">
+            <div class="cp-history" style="margin-top:10px;">
+              <p class="cp-history-title">Historico de pagamentos</p>
+              <div class="cp-history-list">
+                {% for pagamento in conta.pagamentos.all %}
+                  <div class="cp-history-item">
+                    <div><span class="cp-history-label">Data</span><span class="cp-history-value">{{ pagamento.data_pagamento|date:"d/m/Y" }}</span></div>
+                    <div><span class="cp-history-label">Principal</span><span class="cp-history-value">R$ {{ pagamento.valor|floatformat:2 }}</span></div>
+                    <div><span class="cp-history-label">Juros</span><span class="cp-history-value">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span></div>
+                    <div><span class="cp-history-label">Forma</span><span class="cp-history-value">{{ pagamento.forma_pagamento|default:"-" }}</span></div>
+                    <div><span class="cp-history-label">Observacao</span><span class="cp-history-value">{{ pagamento.observacao|default:"-" }}</span></div>
                   </div>
-                  <div>
-                    <span class="contas-pagar-historico-label">Valor</span>
-                    <span class="contas-pagar-historico-valor">R$ {{ pagamento.valor|floatformat:2 }}</span>
-                  </div>
-                  {% if pagamento.juros_bancarios %}
-                    <div>
-                      <span class="contas-pagar-historico-label">Juros</span>
-                      <span class="contas-pagar-historico-valor">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span>
-                    </div>
-                  {% endif %}
-                  <div>
-                    <span class="contas-pagar-historico-label">Forma</span>
-                    <span class="contas-pagar-historico-valor">{{ pagamento.forma_pagamento|default:"-" }}</span>
-                  </div>
-                  <div>
-                    <span class="contas-pagar-historico-label">Observacao</span>
-                    <span class="contas-pagar-historico-valor">{{ pagamento.observacao|default:"-" }}</span>
-                  </div>
-                </div>
-              {% endfor %}
+                {% endfor %}
+              </div>
             </div>
           </div>
         {% endif %}
       </article>
     {% empty %}
-      <div class="contas-pagar-mobile-card contas-pagar-empty">Nenhuma conta encontrada.</div>
+      <div class="cp-mobile-card cp-empty">Nenhuma conta encontrada.</div>
     {% endfor %}
   </section>
 </div>
 
-<div id="modalBaixaContaPagar" class="contas-pagar-modal" aria-hidden="true">
-  <div class="contas-pagar-modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modalBaixaContaPagarTitulo">
-    <div class="contas-pagar-modal-topo">
+<div id="modalBaixaContaPagar" class="cp-modal" aria-hidden="true">
+  <div class="cp-modal-box" role="dialog" aria-modal="true" aria-labelledby="modalBaixaContaPagarTitulo">
+    <div class="cp-modal-top">
       <h2 id="modalBaixaContaPagarTitulo">Baixar conta a pagar</h2>
-      <button type="button" id="fecharModalBaixaContaPagar" class="contas-pagar-modal-fechar" aria-label="Fechar">x</button>
+      <button type="button" id="fecharModalBaixaContaPagar" class="cp-modal-close" aria-label="Fechar">x</button>
     </div>
     <form id="formBaixaContaPagar">
       {% csrf_token %}
-      <div class="contas-pagar-modal-corpo">
-        <div class="contas-pagar-modal-resumo">
-          <div class="contas-pagar-modal-info">
-            <span class="contas-pagar-modal-label">Fornecedor</span>
-            <span class="contas-pagar-modal-valor" id="baixaContaFornecedor">-</span>
-          </div>
-          <div class="contas-pagar-modal-info">
-            <span class="contas-pagar-modal-label">Compra</span>
-            <span class="contas-pagar-modal-valor" id="baixaContaCompra">-</span>
-          </div>
-          <div class="contas-pagar-modal-info">
-            <span class="contas-pagar-modal-label">Vencimento</span>
-            <span class="contas-pagar-modal-valor" id="baixaContaVencimento">-</span>
-          </div>
-          <div class="contas-pagar-modal-info">
-            <span class="contas-pagar-modal-label">Valor original</span>
-            <span class="contas-pagar-modal-valor" id="baixaContaOriginal">R$ 0,00</span>
-          </div>
-          <div class="contas-pagar-modal-info">
-            <span class="contas-pagar-modal-label">Valor em aberto</span>
-            <span class="contas-pagar-modal-valor" id="baixaContaAberto">R$ 0,00</span>
-          </div>
+      <div class="cp-modal-body">
+        <div class="cp-modal-summary">
+          <div class="cp-modal-info"><span class="cp-modal-label">Fornecedor</span><span class="cp-modal-value" id="baixaContaFornecedor">-</span></div>
+          <div class="cp-modal-info"><span class="cp-modal-label">Origem</span><span class="cp-modal-value" id="baixaContaCompra">-</span></div>
+          <div class="cp-modal-info"><span class="cp-modal-label">Vencimento</span><span class="cp-modal-value" id="baixaContaVencimento">-</span></div>
+          <div class="cp-modal-info"><span class="cp-modal-label">Valor original</span><span class="cp-modal-value" id="baixaContaOriginal">R$ 0,00</span></div>
+          <div class="cp-modal-info"><span class="cp-modal-label">Saldo principal</span><span class="cp-modal-value" id="baixaContaAberto">R$ 0,00</span></div>
         </div>
-        <div class="contas-pagar-modal-form">
+        <div class="cp-modal-form">
           <div>
-            <label for="valorPagoContaPagar">Valor aplicado na conta</label>
+            <label for="valorPagoContaPagar">Principal que sera pago</label>
             <input id="valorPagoContaPagar" name="valor_pago" type="text" inputmode="decimal" autocomplete="off">
           </div>
           <div>
-            <label for="jurosBancariosContaPagar">Juros bancarios</label>
+            <label for="jurosBancariosContaPagar">Juros/multa bancaria</label>
             <input id="jurosBancariosContaPagar" name="juros_bancarios" type="text" inputmode="decimal" autocomplete="off" value="0,00">
+          </div>
+          <div class="cp-debit-preview">
+            <div>Principal<strong id="previewPrincipalContaPagar">R$ 0,00</strong></div>
+            <div>Juros/multa<strong id="previewJurosContaPagar">R$ 0,00</strong></div>
+            <div>Total a debitar<strong id="previewTotalContaPagar">R$ 0,00</strong></div>
           </div>
           <div>
             <label for="dataPagamentoContaPagar">Data do pagamento</label>
             <input id="dataPagamentoContaPagar" name="data_pagamento" type="date">
-            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros bancarios conforme banco/boleto.</small>
+            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros bancarios exatamente como apareceram no banco ou boleto.</small>
           </div>
           <div>
             <label for="formaPagamentoContaPagar">Forma de pagamento</label>
-            <input id="formaPagamentoContaPagar" name="forma_pagamento" type="text" autocomplete="off" value="Pix" placeholder="Pix, dinheiro, cartao">
-            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">Esse pagamento será lançado automaticamente em Caixa/Banco conforme a forma de pagamento.</small>
+            <input id="formaPagamentoContaPagar" name="forma_pagamento" type="text" autocomplete="off" value="Pix" placeholder="Pix, dinheiro, banco, boleto">
+            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">O saldo da conta baixa apenas pelo principal. Caixa/Banco sai pelo total a debitar.</small>
           </div>
           <div>
             <label for="observacaoContaPagar">Observacao</label>
@@ -379,9 +433,9 @@
           </div>
         </div>
       </div>
-      <div class="contas-pagar-modal-acoes">
-        <button type="button" id="cancelarBaixaContaPagar" class="contas-pagar-btn contas-pagar-btn-secondary">Cancelar</button>
-        <button type="submit" id="confirmarBaixaContaPagar" class="contas-pagar-btn contas-pagar-btn-primary">Confirmar baixa</button>
+      <div class="cp-modal-actions">
+        <button type="button" id="cancelarBaixaContaPagar" class="cp-btn secondary">Cancelar</button>
+        <button type="submit" id="confirmarBaixaContaPagar" class="cp-btn primary">Confirmar baixa</button>
       </div>
     </form>
   </div>
@@ -401,9 +455,60 @@
   const avisoAtraso = document.getElementById("avisoAtrasoContaPagar");
   const formaPagamento = document.getElementById("formaPagamentoContaPagar");
   const observacao = document.getElementById("observacaoContaPagar");
+  const filtrosForm = document.getElementById("contasPagarFiltros");
+  const previewPrincipal = document.getElementById("previewPrincipalContaPagar");
+  const previewJuros = document.getElementById("previewJurosContaPagar");
+  const previewTotal = document.getElementById("previewTotalContaPagar");
   let urlBaixaAtual = "";
   let vencimentoIsoAtual = "";
   let focoAnterior = null;
+
+  function numero(valor) {
+    let texto = String(valor || "").replace("R$", "").replace(/\s/g, "").trim();
+    if (!texto) return 0;
+    const temVirgula = texto.includes(",");
+    const temPonto = texto.includes(".");
+    if (temVirgula) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else if (temPonto) {
+      const partes = texto.split(".");
+      if (partes.length > 2) {
+        const decimal = partes.pop();
+        texto = partes.join("") + "." + decimal;
+      }
+    }
+    const parsed = Number(texto);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function moeda(valor) {
+    return "R$ " + Math.max(0, valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function valorInput(valor) {
+    return Math.max(0, valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function enviarFiltros() {
+    if (!filtrosForm) return;
+    if (typeof filtrosForm.requestSubmit === "function") {
+      filtrosForm.requestSubmit();
+    } else {
+      filtrosForm.submit();
+    }
+  }
+
+  filtrosForm?.querySelectorAll("select[name='fornecedor'], select[name='situacao'], input[name='data_inicio'], input[name='data_fim']").forEach(function (campo) {
+    campo.addEventListener("change", enviarFiltros);
+  });
+
+  filtrosForm?.querySelectorAll("input[name='compra'], input[name='q']").forEach(function (campo) {
+    campo.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      enviarFiltros();
+    });
+  });
 
   function referenciaConta(botao) {
     if (botao.dataset.compra) return "Compra #" + botao.dataset.compra;
@@ -417,17 +522,23 @@
     return new Date(hoje.getTime() - offset).toISOString().slice(0, 10);
   }
 
+  function atualizarPreview() {
+    const principal = numero(valorPago?.value);
+    const juros = numero(jurosBancarios?.value);
+    if (previewPrincipal) previewPrincipal.textContent = moeda(principal);
+    if (previewJuros) previewJuros.textContent = moeda(juros);
+    if (previewTotal) previewTotal.textContent = moeda(principal + juros);
+  }
+
   function atualizarAvisoAtraso() {
     if (!avisoAtraso || !dataPagamento) return;
-    avisoAtraso.style.display = vencimentoIsoAtual && dataPagamento.value && dataPagamento.value > vencimentoIsoAtual
-      ? "block"
-      : "none";
+    avisoAtraso.style.display = vencimentoIsoAtual && dataPagamento.value && dataPagamento.value > vencimentoIsoAtual ? "block" : "none";
   }
 
   function mostrarFeedback(tipo, texto) {
     if (!feedback) return;
     feedback.textContent = texto;
-    feedback.className = "contas-pagar-alerta visivel " + tipo;
+    feedback.className = "cp-alert visivel " + tipo;
   }
 
   function abrirModal(botao) {
@@ -439,12 +550,13 @@
     document.getElementById("baixaContaVencimento").textContent = botao.dataset.vencimento || "-";
     document.getElementById("baixaContaOriginal").textContent = "R$ " + (botao.dataset.original || "0,00");
     document.getElementById("baixaContaAberto").textContent = "R$ " + (botao.dataset.aberto || "0,00");
-    if (valorPago) valorPago.value = botao.dataset.aberto || "";
+    if (valorPago) valorPago.value = valorInput(numero(botao.dataset.aberto || ""));
     if (jurosBancarios) jurosBancarios.value = "0,00";
     if (dataPagamento) dataPagamento.value = hojeISO();
     if (formaPagamento && !formaPagamento.value) formaPagamento.value = "Pix";
     if (observacao) observacao.value = "";
     atualizarAvisoAtraso();
+    atualizarPreview();
     modal?.classList.add("aberto");
     modal?.setAttribute("aria-hidden", "false");
     window.setTimeout(function () {
@@ -461,15 +573,58 @@
     focoAnterior?.focus();
   }
 
-  dataPagamento?.addEventListener("change", atualizarAvisoAtraso);
+  dataPagamento?.addEventListener("change", function () {
+    atualizarAvisoAtraso();
+    atualizarPreview();
+  });
+  valorPago?.addEventListener("input", atualizarPreview);
+  jurosBancarios?.addEventListener("input", atualizarPreview);
   jurosBancarios?.addEventListener("blur", function () {
     if (!jurosBancarios.value.trim()) jurosBancarios.value = "0,00";
+    jurosBancarios.value = valorInput(numero(jurosBancarios.value));
+    atualizarPreview();
   });
   valorPago?.addEventListener("blur", function () {
     if (!valorPago.value.trim()) valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
+    valorPago.value = valorInput(numero(valorPago.value));
+    atualizarPreview();
+  });
+
+  function camposNavegaveisModal() {
+    return Array.from(form?.querySelectorAll("input, select, textarea, button") || []).filter(function (campo) {
+      if (campo.disabled || campo.type === "hidden") return false;
+      if (campo === cancelar) return false;
+      if (campo.offsetParent === null && !campo.getClientRects().length) return false;
+      return true;
+    });
+  }
+
+  form?.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+    const alvo = event.target;
+    if (!alvo || alvo.tagName === "SELECT") return;
+    if (alvo === confirmar) return;
+    const campos = camposNavegaveisModal();
+    const indice = campos.indexOf(alvo);
+    if (indice === -1) return;
+    event.preventDefault();
+    const proximo = campos[indice + 1] || confirmar;
+    proximo?.focus();
+    if (typeof proximo?.select === "function" && proximo.tagName !== "BUTTON") {
+      proximo.select();
+    }
   });
 
   document.addEventListener("click", function (event) {
+    const historico = event.target.closest(".cp-history-toggle");
+    if (historico) {
+      const alvo = document.getElementById(historico.dataset.historyTarget || "");
+      const abrir = !alvo?.classList.contains("aberto");
+      alvo?.classList.toggle("aberto", abrir);
+      historico.setAttribute("aria-expanded", abrir ? "true" : "false");
+      historico.textContent = abrir ? "Recolher" : "Historico";
+      return;
+    }
     const botao = event.target.closest(".btnAbrirBaixaContaPagar");
     if (botao) {
       abrirModal(botao);

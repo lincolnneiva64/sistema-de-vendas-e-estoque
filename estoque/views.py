@@ -1867,6 +1867,12 @@ def _financeiro_moeda_br(valor):
     return f"R$ {_financeiro_dinheiro(valor):.2f}".replace(".", ",")
 
 
+def _financeiro_decimal_br(valor):
+    numero = _financeiro_dinheiro(valor).quantize(Decimal("0.01"))
+    texto = f"{numero:,.2f}"
+    return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def _parse_decimal_financeiro(valor):
     texto = str(valor or "").strip()
     if not texto:
@@ -5569,12 +5575,15 @@ def conta_pagar_baixar(request, pk):
         conta.valor_em_aberto = (conta.valor_em_aberto - valor).quantize(Decimal("0.01"))
         conta.status = ContaPagar.STATUS_PAGA if conta.valor_em_aberto <= 0 else ContaPagar.STATUS_PARCIAL
         conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
-        _registrar_movimento_conta_pagar_fornecedor(
+        movimento = _registrar_movimento_conta_pagar_fornecedor(
             conta,
-            valor,
+            (valor + juros_bancarios).quantize(Decimal("0.01")),
             data_pagamento,
             forma_pagamento,
         )
+        if movimento is None:
+            transaction.set_rollback(True)
+            return JsonResponse({"ok": False, "erro": "Nao foi possivel registrar a saida financeira do pagamento."}, status=400)
 
     return JsonResponse({
         "ok": True,
@@ -24232,7 +24241,18 @@ def pedido_detalhe(request, pk):
 
 def contas_pagar(request):
     termo = request.GET.get("q", "").strip()
-    status = request.GET.get("status", "abertas").strip()
+    fornecedor_id = request.GET.get("fornecedor", "").strip()
+    compra_documento = request.GET.get("compra", "").strip()
+    data_inicio = parse_date(request.GET.get("data_inicio") or "")
+    data_fim = parse_date(request.GET.get("data_fim") or "")
+    if data_inicio and data_fim and data_inicio > data_fim:
+        data_inicio, data_fim = data_fim, data_inicio
+    situacao = (request.GET.get("situacao") or request.GET.get("status") or "abertas").strip()
+    atalho = (request.GET.get("atalho") or "").strip()
+    hoje = timezone.localdate()
+    amanha = hoje + timedelta(days=1)
+    fim_7 = hoje + timedelta(days=7)
+    fim_30 = hoje + timedelta(days=30)
 
     contas_base = (
         ContaPagar.objects
@@ -24249,17 +24269,322 @@ def contas_pagar(request):
             | Q(observacao__icontains=termo)
         )
 
-    if status == "abertas":
-        contas = contas_base.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
-    elif status in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA}:
-        contas = contas_base.filter(status=status)
-    else:
-        status = "todas"
-        contas = contas_base
+    if fornecedor_id:
+        try:
+            fornecedor_id_int = int(fornecedor_id)
+        except (TypeError, ValueError):
+            fornecedor_id = ""
+        else:
+            contas_base = contas_base.filter(fornecedor_id=fornecedor_id_int)
 
-    contas_abertas = contas.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
-    total_aberto = contas_abertas.aggregate(total=Sum("valor_em_aberto")).get("total") or Decimal("0.00")
-    total_original = contas.aggregate(total=Sum("valor_original")).get("total") or Decimal("0.00")
+    if compra_documento:
+        contas_base = contas_base.filter(
+            Q(compra__id__icontains=compra_documento)
+            | Q(documento_legado__icontains=compra_documento)
+        )
+
+    situacoes_validas = {
+        "todas",
+        "abertas",
+        ContaPagar.STATUS_ABERTA,
+        ContaPagar.STATUS_PARCIAL,
+        ContaPagar.STATUS_PAGA,
+        ContaPagar.STATUS_CANCELADA,
+    }
+    if situacao not in situacoes_validas:
+        situacao = "abertas"
+
+    contas = contas_base
+    periodo_tipo = "vencimento"
+
+    if situacao == "abertas":
+        contas = contas.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
+    elif situacao in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA}:
+        contas = contas.filter(status=situacao)
+
+    if atalho == "todas":
+        situacao = "todas"
+        contas = contas_base
+    elif atalho == "vencidas":
+        contas = contas_base.filter(
+            status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            data_vencimento__lt=hoje,
+        )
+    elif atalho == "hoje":
+        contas = contas_base.filter(
+            status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            data_vencimento=hoje,
+        )
+    elif atalho == "proximos_7":
+        contas = contas_base.filter(
+            status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            data_vencimento__range=(amanha, fim_7),
+        )
+    elif atalho == "proximos_30":
+        contas = contas_base.filter(
+            status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            data_vencimento__range=(amanha, fim_30),
+        )
+    elif atalho == "parciais":
+        contas = contas_base.filter(status=ContaPagar.STATUS_PARCIAL)
+    elif atalho == "pagas":
+        periodo_tipo = "pagamento"
+        contas = contas_base.filter(status=ContaPagar.STATUS_PAGA)
+    elif atalho == "com_juros":
+        periodo_tipo = "pagamento"
+        contas = contas_base.filter(pagamentos__juros_bancarios__gt=Decimal("0.00")).distinct()
+    elif atalho:
+        atalho = ""
+
+    if data_inicio:
+        if periodo_tipo == "pagamento":
+            contas = contas.filter(pagamentos__data_pagamento__gte=data_inicio).distinct()
+        else:
+            contas = contas.filter(data_vencimento__gte=data_inicio)
+    if data_fim:
+        if periodo_tipo == "pagamento":
+            contas = contas.filter(pagamentos__data_pagamento__lte=data_fim).distinct()
+        else:
+            contas = contas.filter(data_vencimento__lte=data_fim)
+
+    contas_abertas_base = contas_base.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
+
+    def resumo_contas(qs):
+        agregado = qs.aggregate(total=Sum("valor_em_aberto"), quantidade=Count("id"))
+        return {
+            "valor": agregado.get("total") or Decimal("0.00"),
+            "quantidade": agregado.get("quantidade") or 0,
+        }
+
+    resumo_cards = {
+        "aberto": resumo_contas(contas_abertas_base),
+        "vencidas": resumo_contas(contas_abertas_base.filter(data_vencimento__lt=hoje)),
+        "hoje": resumo_contas(contas_abertas_base.filter(data_vencimento=hoje)),
+        "proximos_7": resumo_contas(contas_abertas_base.filter(data_vencimento__range=(amanha, fim_7))),
+        "proximos_30": resumo_contas(contas_abertas_base.filter(data_vencimento__range=(amanha, fim_30))),
+        "parciais": resumo_contas(contas_abertas_base.filter(status=ContaPagar.STATUS_PARCIAL)),
+    }
+
+    pagamentos_periodo = PagamentoContaPagar.objects.filter(conta__in=contas_base)
+    if data_inicio:
+        pagamentos_periodo = pagamentos_periodo.filter(data_pagamento__gte=data_inicio)
+    if data_fim:
+        pagamentos_periodo = pagamentos_periodo.filter(data_pagamento__lte=data_fim)
+    pagamentos_com_juros_periodo = pagamentos_periodo.filter(juros_bancarios__gt=Decimal("0.00"))
+    pagamentos_resumo = pagamentos_com_juros_periodo if atalho == "com_juros" else pagamentos_periodo
+    resumo_pagamentos = pagamentos_resumo.aggregate(
+        principal=Sum("valor"),
+        juros=Sum("juros_bancarios"),
+        quantidade=Count("id"),
+    )
+    resumo_juros = pagamentos_com_juros_periodo.aggregate(
+        principal=Sum("valor"),
+        juros=Sum("juros_bancarios"),
+        quantidade=Count("id"),
+    )
+    principal_pago_periodo = resumo_pagamentos.get("principal") or Decimal("0.00")
+    juros_pagos_periodo = resumo_pagamentos.get("juros") or Decimal("0.00")
+    resumo_cards["juros"] = {
+        "valor": juros_pagos_periodo,
+        "quantidade": resumo_juros.get("quantidade") or 0,
+        "principal": resumo_juros.get("principal") or Decimal("0.00"),
+        "total_desembolsado": (
+            (resumo_juros.get("principal") or Decimal("0.00"))
+            + (resumo_juros.get("juros") or Decimal("0.00"))
+        ).quantize(Decimal("0.01")),
+    }
+
+    def aplicar_periodo_atalho(qs, tipo_periodo):
+        if data_inicio:
+            if tipo_periodo == "pagamento":
+                qs = qs.filter(pagamentos__data_pagamento__gte=data_inicio).distinct()
+            else:
+                qs = qs.filter(data_vencimento__gte=data_inicio)
+        if data_fim:
+            if tipo_periodo == "pagamento":
+                qs = qs.filter(pagamentos__data_pagamento__lte=data_fim).distinct()
+            else:
+                qs = qs.filter(data_vencimento__lte=data_fim)
+        return qs
+
+    def contas_do_atalho(valor):
+        tipo_periodo = "vencimento"
+        if valor == "todas":
+            qs = contas_base
+        elif valor == "vencidas":
+            qs = contas_base.filter(
+                status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+                data_vencimento__lt=hoje,
+            )
+        elif valor == "hoje":
+            qs = contas_base.filter(
+                status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+                data_vencimento=hoje,
+            )
+        elif valor == "proximos_7":
+            qs = contas_base.filter(
+                status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+                data_vencimento__range=(amanha, fim_7),
+            )
+        elif valor == "proximos_30":
+            qs = contas_base.filter(
+                status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+                data_vencimento__range=(amanha, fim_30),
+            )
+        elif valor == "parciais":
+            qs = contas_base.filter(status=ContaPagar.STATUS_PARCIAL)
+        elif valor == "pagas":
+            tipo_periodo = "pagamento"
+            qs = contas_base.filter(status=ContaPagar.STATUS_PAGA)
+        elif valor == "com_juros":
+            tipo_periodo = "pagamento"
+            qs = contas_base.filter(pagamentos__juros_bancarios__gt=Decimal("0.00")).distinct()
+        else:
+            qs = contas_base.none()
+        return aplicar_periodo_atalho(qs, tipo_periodo).distinct(), tipo_periodo
+
+    def pagamentos_do_atalho(contas_qs, somente_juros=False):
+        pagamentos_qs = PagamentoContaPagar.objects.filter(conta__in=contas_qs)
+        if data_inicio:
+            pagamentos_qs = pagamentos_qs.filter(data_pagamento__gte=data_inicio)
+        if data_fim:
+            pagamentos_qs = pagamentos_qs.filter(data_pagamento__lte=data_fim)
+        if somente_juros:
+            pagamentos_qs = pagamentos_qs.filter(juros_bancarios__gt=Decimal("0.00"))
+            valor_campo = "juros_bancarios"
+        else:
+            valor_campo = "valor"
+        return pagamentos_qs.aggregate(
+            valor=Sum(valor_campo),
+            quantidade=Count("id"),
+        )
+
+    def resumo_atalho(valor):
+        contas_qs, _tipo_periodo = contas_do_atalho(valor)
+        if valor == "todas":
+            return {
+                "valor": None,
+                "quantidade": contas_qs.count(),
+                "quantidade_label": "conta(s)",
+                "resumo_texto": "todos status",
+            }
+        if valor == "com_juros":
+            agregado = pagamentos_do_atalho(contas_qs, somente_juros=True)
+            return {
+                "valor": agregado.get("valor") or Decimal("0.00"),
+                "quantidade": agregado.get("quantidade") or 0,
+                "quantidade_label": "pagamento(s)",
+                "resumo_texto": "",
+            }
+        if valor == "pagas":
+            agregado = pagamentos_do_atalho(contas_qs)
+            return {
+                "valor": agregado.get("valor") or Decimal("0.00"),
+                "quantidade": contas_qs.count(),
+                "quantidade_label": "conta(s)",
+                "resumo_texto": "",
+            }
+        agregado = contas_qs.aggregate(total=Sum("valor_em_aberto"), quantidade=Count("id"))
+        return {
+            "valor": agregado.get("total") or Decimal("0.00"),
+            "quantidade": agregado.get("quantidade") or 0,
+            "quantidade_label": "conta(s)",
+            "resumo_texto": "",
+        }
+
+    contas = list(contas.distinct())
+    for conta in contas:
+        pagamentos = list(conta.pagamentos.all())
+        conta.tem_pagamentos = bool(pagamentos)
+        conta.pagamento_legado_sem_historico = (
+            not conta.tem_pagamentos
+            and conta.status == ContaPagar.STATUS_PAGA
+            and conta.valor_em_aberto <= Decimal("0.00")
+        )
+        conta.principal_pago = sum((_financeiro_dinheiro(pagamento.valor) for pagamento in pagamentos), Decimal("0.00")).quantize(Decimal("0.01"))
+        conta.juros_pagos = sum((_financeiro_dinheiro(pagamento.juros_bancarios) for pagamento in pagamentos), Decimal("0.00")).quantize(Decimal("0.01"))
+        conta.total_desembolsado = (conta.principal_pago + conta.juros_pagos).quantize(Decimal("0.01"))
+        conta.valor_original_input = _financeiro_decimal_br(conta.valor_original)
+        conta.valor_em_aberto_input = _financeiro_decimal_br(conta.valor_em_aberto)
+        if conta.numero_parcela and conta.total_parcelas:
+            conta.parcela_rotulo = f"{conta.numero_parcela}/{conta.total_parcelas}"
+        else:
+            conta.parcela_rotulo = "-"
+
+        conta.situacao_classe = "neutra"
+        conta.situacao_texto = conta.get_status_display()
+        if conta.status == ContaPagar.STATUS_CANCELADA:
+            conta.situacao_classe = "cancelada"
+            conta.situacao_texto = "Cancelada"
+        elif conta.status == ContaPagar.STATUS_PAGA or conta.valor_em_aberto <= Decimal("0.00"):
+            conta.situacao_classe = "paga"
+            conta.situacao_texto = "Paga"
+        elif conta.status == ContaPagar.STATUS_PARCIAL:
+            conta.situacao_classe = "parcial"
+            conta.situacao_texto = "Parcial"
+            if conta.data_vencimento and conta.data_vencimento < hoje:
+                dias = (hoje - conta.data_vencimento).days
+                conta.situacao_classe = "vencida"
+                conta.situacao_texto = f"Parcial - vencida ha {dias} dia(s)"
+        elif conta.data_vencimento:
+            if conta.data_vencimento < hoje:
+                dias = (hoje - conta.data_vencimento).days
+                conta.situacao_classe = "vencida"
+                conta.situacao_texto = f"Vencida ha {dias} dia(s)"
+            elif conta.data_vencimento == hoje:
+                conta.situacao_classe = "hoje"
+                conta.situacao_texto = "Vence hoje"
+            else:
+                dias = (conta.data_vencimento - hoje).days
+                conta.situacao_classe = "a-vencer"
+                conta.situacao_texto = f"Vence em {dias} dia(s)"
+        else:
+            conta.situacao_texto = "Sem vencimento"
+
+    total_aberto = resumo_cards["aberto"]["valor"]
+    total_original = sum((_financeiro_dinheiro(conta.valor_original) for conta in contas), Decimal("0.00")).quantize(Decimal("0.01"))
+
+    fornecedores = Fornecedor.objects.filter(
+        contas_pagar__isnull=False
+    ).distinct().order_by("nome")
+
+    query_base = request.GET.copy()
+    atalhos = [
+        ("todas", "Todas"),
+        ("vencidas", "Vencidas"),
+        ("hoje", "Hoje"),
+        ("proximos_7", "Proximos 7 dias"),
+        ("proximos_30", "Proximos 30 dias"),
+        ("parciais", "Parciais"),
+        ("pagas", "Pagas"),
+        ("com_juros", "Com juros"),
+    ]
+    atalhos_contexto = []
+    for valor, label in atalhos:
+        params = query_base.copy()
+        params["atalho"] = valor
+        if valor == "todas":
+            params["situacao"] = "todas"
+        resumo = resumo_atalho(valor)
+        atalhos_contexto.append({
+            "valor": valor,
+            "label": label,
+            "url": f"?{params.urlencode()}",
+            "ativo": atalho == valor,
+            "quantidade": resumo["quantidade"],
+            "quantidade_label": resumo["quantidade_label"],
+            "valor_resumo": resumo["valor"],
+            "resumo_texto": resumo["resumo_texto"],
+        })
+
+    situacao_choices = [
+        ("abertas", "Abertas e parciais"),
+        ("todas", "Todas"),
+        *ContaPagar.STATUS_CHOICES,
+    ]
+
+    periodo_label = "data de pagamento" if periodo_tipo == "pagamento" else "vencimento"
+    total_desembolsado_periodo = (principal_pago_periodo + juros_pagos_periodo).quantize(Decimal("0.01"))
 
     return render(
         request,
@@ -24267,10 +24592,26 @@ def contas_pagar(request):
         {
             "contas": contas,
             "termo": termo,
-            "status": status,
+            "fornecedor_id": fornecedor_id,
+            "compra_documento": compra_documento,
+            "data_inicio": data_inicio.isoformat() if data_inicio else "",
+            "data_fim": data_fim.isoformat() if data_fim else "",
+            "situacao": situacao,
+            "status": situacao,
+            "atalho": atalho,
+            "atalhos": atalhos_contexto,
+            "periodo_tipo": periodo_tipo,
+            "periodo_label": periodo_label,
             "total_aberto": total_aberto,
             "total_original": total_original,
+            "resumo_cards": resumo_cards,
+            "principal_pago_periodo": principal_pago_periodo,
+            "juros_pagos_periodo": juros_pagos_periodo,
+            "total_desembolsado_periodo": total_desembolsado_periodo,
+            "pagamentos_com_juros_quantidade": resumo_juros.get("quantidade") or 0,
             "status_choices": ContaPagar.STATUS_CHOICES,
+            "situacao_choices": situacao_choices,
+            "fornecedores": fornecedores,
         },
     )
 
