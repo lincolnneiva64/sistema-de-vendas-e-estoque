@@ -1,0 +1,207 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Painel Gerencial de Resultado{% endblock %}
+{% block content %}
+<style>
+  .rg-page { max-width:1280px; margin:18px auto 90px; padding:0 14px; color:#172033; }
+  .rg-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-end; margin-bottom:14px; }
+  .rg-title { margin:0; font-size:1.55rem; font-weight:950; }
+  .rg-subtitle { margin:4px 0 0; color:#64748b; font-weight:760; }
+  .rg-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .rg-btn { border:1px solid #b7ccec; background:#e8f1ff; color:#164173; border-radius:8px; min-height:38px; padding:8px 12px; font-weight:900; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+  .rg-btn.primary { border-color:#172033; background:#172033; color:#fff; }
+  .rg-panel { background:#fff; border:1px solid #e1e7ef; border-radius:12px; box-shadow:0 12px 28px rgba(15,23,42,.06); margin-bottom:12px; overflow:hidden; }
+  .rg-filter { padding:13px 14px; display:flex; gap:9px; align-items:end; flex-wrap:wrap; }
+  .rg-field label { display:block; font-size:.78rem; color:#334155; font-weight:900; margin-bottom:4px; }
+  .rg-field input { min-height:38px; border:1.5px solid #d3dbe8; border-radius:8px; padding:7px 10px; font-weight:800; }
+  .rg-summary { display:grid; grid-template-columns:repeat(5, minmax(150px, 1fr)); gap:10px; margin-bottom:12px; }
+  .rg-card { background:#fff; border:1px solid #e1e7ef; border-radius:10px; padding:12px; box-shadow:0 10px 22px rgba(15,23,42,.05); }
+  .rg-card span { display:block; color:#64748b; font-size:.72rem; font-weight:950; text-transform:uppercase; }
+  .rg-card strong { display:block; margin-top:5px; color:#172033; font-size:1.15rem; font-weight:950; white-space:nowrap; }
+  .rg-card small { display:block; margin-top:4px; color:#64748b; font-weight:800; line-height:1.25; }
+  .rg-card.resultado strong { color:#166534; }
+  .rg-card.limitado { background:#f8fafc; }
+  .rg-section-head { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:13px 14px; border-bottom:1px solid #eef2f7; }
+  .rg-section-head h2 { margin:0; font-size:1.05rem; font-weight:950; color:#172033; }
+  .rg-muted { color:#64748b; font-weight:800; font-size:.86rem; }
+  .rg-bars { padding:12px 14px 14px; display:grid; gap:10px; }
+  .rg-group { border:1px solid #e1e7ef; border-radius:10px; overflow:hidden; background:#fff; }
+  .rg-group summary { list-style:none; cursor:pointer; padding:11px 12px; display:grid; grid-template-columns:minmax(180px, .8fr) minmax(180px, 1.6fr) auto auto; gap:12px; align-items:center; }
+  .rg-group summary::-webkit-details-marker { display:none; }
+  .rg-group-name { font-weight:950; color:#172033; }
+  .rg-bar-track { height:14px; border-radius:999px; background:#eef2f7; overflow:hidden; }
+  .rg-bar-fill { height:100%; min-width:2px; border-radius:999px; background:#64748b; }
+  .rg-money { font-weight:950; color:#172033; white-space:nowrap; }
+  .rg-percent { color:#64748b; font-weight:850; white-space:nowrap; }
+  .rg-drill { padding:0 12px 12px; display:grid; gap:8px; }
+  .rg-category { border:1px solid #dbeafe; border-radius:9px; background:#f8fbff; padding:9px; }
+  .rg-category-title { display:flex; justify-content:space-between; gap:8px; font-weight:950; color:#164173; margin-bottom:7px; }
+  .rg-launch { display:grid; grid-template-columns:96px 1fr auto; gap:8px; padding:6px 0; border-top:1px solid #e6edf7; font-size:.86rem; font-weight:760; color:#334155; }
+  .rg-launch:first-of-type { border-top:0; }
+  .rg-sim { padding:13px 14px; display:grid; gap:10px; }
+  .rg-sim-row { display:grid; grid-template-columns:minmax(180px, 1fr) 120px 150px 150px; gap:9px; align-items:center; }
+  .rg-sim-row input { width:100%; min-height:36px; border:1.5px solid #d3dbe8; border-radius:8px; padding:7px 9px; font-weight:850; }
+  .rg-sim-total { display:grid; grid-template-columns:repeat(4, minmax(140px, 1fr)); gap:10px; margin-top:4px; }
+  .rg-note { padding:10px 14px; color:#475569; font-weight:780; line-height:1.4; border-top:1px solid #eef2f7; background:#f8fafc; }
+  .rg-note ul { margin:6px 0 0 18px; padding:0; }
+  @media (max-width:860px) {
+    .rg-header { flex-direction:column; align-items:stretch; }
+    .rg-actions { justify-content:stretch; }
+    .rg-btn { flex:1 1 auto; }
+    .rg-summary { grid-template-columns:1fr 1fr; }
+    .rg-group summary, .rg-sim-row { grid-template-columns:1fr; }
+    .rg-sim-total { grid-template-columns:1fr 1fr; }
+    .rg-launch { grid-template-columns:1fr; }
+  }
+</style>
+
+<main class="rg-page">
+  <header class="rg-header">
+    <div>
+      <h1 class="rg-title">Painel Gerencial de Resultado</h1>
+      <p class="rg-subtitle">Visao mensal analitica, sem alterar dados financeiros.</p>
+    </div>
+    <nav class="rg-actions" aria-label="Atalhos financeiros">
+      <a class="rg-btn" href="{% url 'estoque:painel_financeiro' %}">Central Financeira</a>
+      <a class="rg-btn" href="{% url 'estoque:contas_pagar' %}">Contas a Pagar</a>
+      <a class="rg-btn" href="{% url 'estoque:home' %}">Painel</a>
+    </nav>
+  </header>
+
+  <section class="rg-panel">
+    <form method="get" class="rg-filter">
+      <div class="rg-field">
+        <label for="mesResultado">Periodo</label>
+        <input id="mesResultado" name="mes" type="month" value="{{ periodo.mes_valor }}">
+      </div>
+      <button class="rg-btn primary" type="submit">Aplicar</button>
+      <a class="rg-btn" href="?mes={{ periodo.mes_atual }}">Mes atual</a>
+      <a class="rg-btn" href="?mes={{ periodo.mes_anterior }}">Mes anterior</a>
+    </form>
+  </section>
+
+  <section class="rg-summary">
+    <div class="rg-card"><span>Faturamento</span><strong>{{ faturamento_texto }}</strong><small>{{ vendas_qtd }} venda(s) nao cancelada(s)</small></div>
+    <div class="rg-card limitado"><span>(-) CMV</span><strong>{{ cmv_texto }}</strong><small>Custo historico por item ainda nao existe.</small></div>
+    <div class="rg-card limitado"><span>= Margem bruta</span><strong>{{ margem_bruta_texto }}</strong><small>Nao calculada nesta versao.</small></div>
+    <div class="rg-card"><span>(-) Despesas confiaveis</span><strong>{{ despesas_total_texto }}</strong><small>Despesas diarias + juros de contas pagas.</small></div>
+    <div class="rg-card resultado"><span>= Resultado gerencial parcial</span><strong>{{ resultado_parcial_texto }}</strong><small>Sem CMV e sem classificacoes inferidas.</small></div>
+  </section>
+
+  <section class="rg-panel">
+    <div class="rg-section-head">
+      <h2>Grupos de custos e despesas</h2>
+      <span class="rg-muted">{{ periodo.rotulo }}</span>
+    </div>
+    <div class="rg-bars">
+      {% for grupo in grupos %}
+        <details class="rg-group" data-sim-group data-valor="{{ grupo.valor|stringformat:'s' }}">
+          <summary>
+            <span class="rg-group-name">{{ grupo.nome }}</span>
+            <span class="rg-bar-track"><span class="rg-bar-fill" style="width:{{ grupo.largura_barra|stringformat:'s' }}%;"></span></span>
+            <span class="rg-money">{{ grupo.valor_texto }}</span>
+            <span class="rg-percent">{{ grupo.percentual_faturamento }}% do faturamento</span>
+          </summary>
+          <div class="rg-drill">
+            {% for categoria in grupo.categorias_lista %}
+              <div class="rg-category">
+                <div class="rg-category-title"><span>{{ categoria.nome }}</span><span>{{ categoria.valor_texto }}</span></div>
+                {% for lancamento in categoria.lancamentos %}
+                  <div class="rg-launch">
+                    <span>{{ lancamento.data|date:"d/m/Y" }}</span>
+                    <span>{{ lancamento.descricao }} <small>({{ lancamento.origem }})</small></span>
+                    <span class="rg-money">{{ lancamento.valor_texto }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+      {% empty %}
+        <div class="rg-muted">Nenhum custo ou despesa confiavel encontrado neste periodo.</div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="rg-panel" id="simulador">
+    <div class="rg-section-head">
+      <h2>Simulador visual de reducao de custos</h2>
+      <button type="button" class="rg-btn" id="limparSimulacao">Limpar simulacao</button>
+    </div>
+    <div class="rg-sim">
+      {% for grupo in grupos %}
+        <div class="rg-sim-row" data-sim-row data-atual="{{ grupo.valor|stringformat:'s' }}">
+          <strong>{{ grupo.nome }}</strong>
+          <span class="rg-money">{{ grupo.valor_texto }}</span>
+          <label>
+            <span class="rg-muted">Simulado</span>
+            <input type="number" min="0" step="0.01" value="{{ grupo.valor|stringformat:'s' }}" data-sim-input>
+          </label>
+          <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+        </div>
+      {% empty %}
+        <p class="rg-muted">Sem grupos para simular neste periodo.</p>
+      {% endfor %}
+      <div class="rg-sim-total">
+        <div class="rg-card"><span>Resultado atual</span><strong id="resultadoAtual" data-valor="{{ resultado_parcial|stringformat:'s' }}">{{ resultado_parcial_texto }}</strong></div>
+        <div class="rg-card resultado"><span>Resultado simulado</span><strong id="resultadoSimulado">{{ resultado_parcial_texto }}</strong></div>
+        <div class="rg-card"><span>Melhoria mensal</span><strong id="melhoriaMensal">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Impacto anualizado</span><strong id="impactoAnual">R$ 0,00</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="rg-panel">
+    <div class="rg-note">
+      <strong>Auditoria das fontes</strong>
+      <ul>
+        {% for fonte in fontes_dados %}<li>{{ fonte }}</li>{% endfor %}
+      </ul>
+      <strong>Limitacoes desta versao</strong>
+      <ul>
+        {% for item in limitacoes %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  function numero(valor) {
+    const n = Number(String(valor || "0").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  }
+  function moeda(valor) {
+    return "R$ " + (valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  const resultadoAtualEl = document.getElementById("resultadoAtual");
+  const resultadoBase = numero(resultadoAtualEl?.dataset.valor);
+  const linhas = Array.from(document.querySelectorAll("[data-sim-row]"));
+  function recalcular() {
+    let economia = 0;
+    linhas.forEach(function (linha) {
+      const atual = numero(linha.dataset.atual);
+      const input = linha.querySelector("[data-sim-input]");
+      const simulado = Math.max(0, numero(input?.value));
+      const economiaLinha = Math.max(0, atual - simulado);
+      economia += economiaLinha;
+      const alvo = linha.querySelector("[data-sim-economia]");
+      if (alvo) alvo.textContent = "Economia: " + moeda(economiaLinha);
+    });
+    document.getElementById("resultadoSimulado").textContent = moeda(resultadoBase + economia);
+    document.getElementById("melhoriaMensal").textContent = moeda(economia);
+    document.getElementById("impactoAnual").textContent = moeda(economia * 12);
+  }
+  linhas.forEach(function (linha) {
+    linha.querySelector("[data-sim-input]")?.addEventListener("input", recalcular);
+  });
+  document.getElementById("limparSimulacao")?.addEventListener("click", function () {
+    linhas.forEach(function (linha) {
+      const input = linha.querySelector("[data-sim-input]");
+      if (input) input.value = linha.dataset.atual || "0.00";
+    });
+    recalcular();
+  });
+  recalcular();
+})();
+</script>
+{% endblock %}

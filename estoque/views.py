@@ -4170,6 +4170,184 @@ def emprestimos_dividas(request):
     )
 
 
+def _painel_resultado_periodo(request):
+    hoje = timezone.localdate()
+    valor = (request.GET.get("mes") or "").strip()
+    if valor:
+        try:
+            ano, mes = [int(parte) for parte in valor.split("-", 1)]
+            inicio = date(ano, mes, 1)
+        except (TypeError, ValueError):
+            inicio = hoje.replace(day=1)
+    else:
+        inicio = hoje.replace(day=1)
+    if inicio.month == 12:
+        proximo = date(inicio.year + 1, 1, 1)
+    else:
+        proximo = date(inicio.year, inicio.month + 1, 1)
+    fim = proximo - timedelta(days=1)
+    anterior = (inicio.replace(day=1) - timedelta(days=1)).replace(day=1)
+    return {
+        "inicio": inicio,
+        "fim": fim,
+        "mes_valor": f"{inicio.year:04d}-{inicio.month:02d}",
+        "mes_atual": f"{hoje.year:04d}-{hoje.month:02d}",
+        "mes_anterior": f"{anterior.year:04d}-{anterior.month:02d}",
+        "rotulo": inicio.strftime("%m/%Y"),
+    }
+
+
+def _painel_resultado_categoria_despesa(categoria):
+    rotulos = dict(DespesaDiaria.CATEGORIA_CHOICES)
+    categoria = (categoria or "").strip()
+    if not categoria:
+        return "nao_classificado", "Nao classificado", "Nao classificado"
+
+    grupos = {
+        DespesaDiaria.CATEGORIA_GASOLINA: ("veiculos", "Veiculos"),
+        DespesaDiaria.CATEGORIA_ESTACIONAMENTO: ("veiculos", "Veiculos"),
+        DespesaDiaria.CATEGORIA_MANUTENCAO: ("veiculos", "Veiculos"),
+        DespesaDiaria.CATEGORIA_ALIMENTACAO: ("alimentacao", "Alimentacao"),
+        DespesaDiaria.CATEGORIA_AJUDANTE_DIARIA: ("pessoal", "Pessoal"),
+        DespesaDiaria.CATEGORIA_PESSOAL: ("pessoal", "Pessoal"),
+        DespesaDiaria.CATEGORIA_COMPRA_EMERGENCIAL: ("mercadorias_emergenciais", "Mercadorias emergenciais"),
+        DespesaDiaria.CATEGORIA_GELO: ("mercadorias_emergenciais", "Mercadorias emergenciais"),
+        DespesaDiaria.CATEGORIA_FRETE_ENTREGA: ("operacionais", "Operacionais"),
+        DespesaDiaria.CATEGORIA_MATERIAL_APOIO: ("operacionais", "Operacionais"),
+        DespesaDiaria.CATEGORIA_OUTROS: ("outras", "Outras"),
+    }
+    grupo_slug, grupo_nome = grupos.get(categoria, ("nao_classificado", "Nao classificado"))
+    return grupo_slug, grupo_nome, rotulos.get(categoria, "Nao classificado")
+
+
+def _painel_resultado_adicionar_lancamento(grupos, grupo_slug, grupo_nome, categoria_nome, lancamento):
+    grupo = grupos.setdefault(
+        grupo_slug,
+        {
+            "slug": grupo_slug,
+            "nome": grupo_nome,
+            "valor": Decimal("0.00"),
+            "categorias": {},
+            "lancamentos": [],
+        },
+    )
+    valor = _financeiro_dinheiro(lancamento["valor"]).quantize(Decimal("0.01"))
+    grupo["valor"] = (grupo["valor"] + valor).quantize(Decimal("0.01"))
+    grupo["lancamentos"].append(lancamento)
+    categoria = grupo["categorias"].setdefault(
+        categoria_nome,
+        {"nome": categoria_nome, "valor": Decimal("0.00"), "lancamentos": []},
+    )
+    categoria["valor"] = (categoria["valor"] + valor).quantize(Decimal("0.01"))
+    categoria["lancamentos"].append(lancamento)
+
+
+def _painel_resultado_gerencial_contexto(request):
+    periodo = _painel_resultado_periodo(request)
+    inicio = periodo["inicio"]
+    fim = periodo["fim"]
+
+    vendas_qs = Venda.objects.filter(cancelada=False, data_venda__range=(inicio, fim))
+    faturamento = _financeiro_dinheiro(vendas_qs.aggregate(total=Sum("total"))["total"]).quantize(Decimal("0.01"))
+    vendas_qtd = vendas_qs.count()
+
+    grupos = {}
+    despesas_qs = DespesaDiaria.objects.filter(data_hora__date__range=(inicio, fim)).order_by("data_hora", "id")
+    for despesa in despesas_qs:
+        grupo_slug, grupo_nome, categoria_nome = _painel_resultado_categoria_despesa(despesa.categoria)
+        _painel_resultado_adicionar_lancamento(
+            grupos,
+            grupo_slug,
+            grupo_nome,
+            categoria_nome,
+            {
+                "tipo": "Despesa diaria",
+                "data": timezone.localtime(despesa.data_hora).date(),
+                "descricao": despesa.observacao or despesa.get_categoria_display() or "Nao classificado",
+                "valor": _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01")),
+                "origem": f"Despesa #{despesa.id}",
+            },
+        )
+
+    pagamentos_juros = (
+        PagamentoContaPagar.objects
+        .select_related("conta__fornecedor")
+        .filter(data_pagamento__range=(inicio, fim), juros_bancarios__gt=Decimal("0.00"))
+        .order_by("data_pagamento", "id")
+    )
+    for pagamento in pagamentos_juros:
+        fornecedor = pagamento.conta.fornecedor.nome if pagamento.conta and pagamento.conta.fornecedor else "Fornecedor nao informado"
+        documento = pagamento.conta.documento_legado if pagamento.conta else ""
+        descricao = f"{fornecedor}"
+        if documento:
+            descricao = f"{descricao} - Documento {documento}"
+        _painel_resultado_adicionar_lancamento(
+            grupos,
+            "juros_multas",
+            "Juros e multas",
+            "Juros/multa bancaria",
+            {
+                "tipo": "Juros conta a pagar",
+                "data": pagamento.data_pagamento,
+                "descricao": descricao,
+                "valor": _financeiro_dinheiro(pagamento.juros_bancarios).quantize(Decimal("0.01")),
+                "origem": f"Pagamento conta #{pagamento.conta_id}",
+            },
+        )
+
+    despesas_total = sum((grupo["valor"] for grupo in grupos.values()), Decimal("0.00")).quantize(Decimal("0.01"))
+    resultado_parcial = (faturamento - despesas_total).quantize(Decimal("0.01"))
+    maior_valor = max([grupo["valor"] for grupo in grupos.values()] or [Decimal("0.00")])
+    grupos_lista = []
+    for grupo in sorted(grupos.values(), key=lambda item: item["valor"], reverse=True):
+        percentual_faturamento = Decimal("0.00")
+        if faturamento > Decimal("0.00"):
+            percentual_faturamento = ((grupo["valor"] / faturamento) * Decimal("100")).quantize(Decimal("0.01"))
+        largura = Decimal("0.00")
+        if maior_valor > Decimal("0.00"):
+            largura = ((grupo["valor"] / maior_valor) * Decimal("100")).quantize(Decimal("0.01"))
+        grupo["percentual_faturamento"] = percentual_faturamento
+        grupo["largura_barra"] = largura
+        grupo["valor_texto"] = _financeiro_moeda_br(grupo["valor"])
+        grupo["categorias_lista"] = sorted(grupo["categorias"].values(), key=lambda item: item["valor"], reverse=True)
+        for categoria in grupo["categorias_lista"]:
+            categoria["valor_texto"] = _financeiro_moeda_br(categoria["valor"])
+            for lancamento in categoria["lancamentos"]:
+                lancamento["valor_texto"] = _financeiro_moeda_br(lancamento["valor"])
+        grupos_lista.append(grupo)
+
+    return {
+        "periodo": periodo,
+        "faturamento": faturamento,
+        "faturamento_texto": _financeiro_moeda_br(faturamento),
+        "vendas_qtd": vendas_qtd,
+        "cmv_disponivel": False,
+        "cmv_texto": "Indisponivel",
+        "margem_bruta_texto": "Indisponivel",
+        "despesas_total": despesas_total,
+        "despesas_total_texto": _financeiro_moeda_br(despesas_total),
+        "resultado_parcial": resultado_parcial,
+        "resultado_parcial_texto": _financeiro_moeda_br(resultado_parcial),
+        "grupos": grupos_lista,
+        "fontes_dados": [
+            "Faturamento: Venda.total de vendas nao canceladas no periodo.",
+            "Despesas: DespesaDiaria por data_hora no periodo.",
+            "Juros/multas: PagamentoContaPagar.juros_bancarios no periodo.",
+            "MovimentoFinanceiro nao e usado como fonte geral de despesa para evitar dupla contagem.",
+        ],
+        "limitacoes": [
+            "CMV nao foi calculado porque ItemVenda nao guarda custo historico no momento da venda.",
+            "Principal de contas a pagar, compras e emprestimos nao entram como despesa operacional nesta versao.",
+            "Juros de emprestimos/dividas nao sao separados em campo proprio e por isso nao entram automaticamente.",
+        ],
+    }
+
+
+def painel_resultado_gerencial(request):
+    contexto = _painel_resultado_gerencial_contexto(request)
+    return render(request, "estoque/painel_resultado_gerencial.html", contexto)
+
+
 def emprestimo_divida_nova(request):
     _garantir_contas_financeiras_padrao()
     contas_financeiras = _contas_financeiras_com_saldo()

@@ -33185,6 +33185,140 @@ class ContaPagarLegadaTests(TestCase):
         self.assertEqual(pagamento_payload["documento_legado"], "FB-2026-0001")
 
 
+class PainelResultadoGerencialTests(TestCase):
+    def setUp(self):
+        self.url = reverse("estoque:painel_resultado_gerencial")
+        self.data = date(2026, 9, 10)
+        self.mes = "2026-09"
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Juros")
+
+    def _data_hora(self, dia):
+        return timezone.make_aware(datetime(2026, 9, dia, 10, 0, 0))
+
+    def _venda(self, total, data=None, cancelada=False):
+        return Venda.objects.create(
+            data_venda=data or self.data,
+            total=Decimal(total),
+            tipo_pagamento="Pix",
+            cancelada=cancelada,
+        )
+
+    def _despesa(self, valor, categoria=DespesaDiaria.CATEGORIA_GASOLINA, dia=10, observacao=""):
+        return DespesaDiaria.objects.create(
+            data_hora=self._data_hora(dia),
+            valor=Decimal(valor),
+            categoria=categoria,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao=observacao,
+        )
+
+    def test_calcula_faturamento_despesas_juros_e_resultado_sem_duplicar_movimentos(self):
+        self._venda("500.00")
+        self._venda("100.00", cancelada=True)
+        self._venda("200.00", data=date(2026, 8, 31))
+        self._despesa("50.00", DespesaDiaria.CATEGORIA_GASOLINA, observacao="Combustivel")
+        self._despesa("20.00", DespesaDiaria.CATEGORIA_ALIMENTACAO, observacao="Lanche")
+        conta = ContaPagar.objects.create(
+            fornecedor=self.fornecedor,
+            data_emissao=self.data,
+            data_vencimento=self.data,
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("0.00"),
+            status=ContaPagar.STATUS_PAGA,
+        )
+        PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=self.data,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("5.00"),
+            forma_pagamento="Pix",
+        )
+        banco = ContaFinanceira.objects.create(nome="Banco Teste", tipo=ContaFinanceira.TIPO_BANCO, saldo_inicial=Decimal("1000.00"))
+        MovimentoFinanceiro.objects.create(
+            conta=banco,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("105.00"),
+            data=self.data,
+            origem="conta_pagar_fornecedor",
+            descricao="Pagamento fornecedor",
+        )
+        MovimentoFinanceiro.objects.create(
+            conta=banco,
+            conta_destino=banco,
+            tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA,
+            valor=Decimal("999.00"),
+            data=self.data,
+            origem="transferencia_teste",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["faturamento"], Decimal("500.00"))
+        self.assertEqual(resposta.context["despesas_total"], Decimal("75.00"))
+        self.assertEqual(resposta.context["resultado_parcial"], Decimal("425.00"))
+        nomes = [grupo["nome"] for grupo in resposta.context["grupos"]]
+        self.assertIn("Veiculos", nomes)
+        self.assertIn("Alimentacao", nomes)
+        self.assertIn("Juros e multas", nomes)
+        self.assertContains(resposta, "CMV nao foi calculado")
+        self.assertContains(resposta, "MovimentoFinanceiro nao e usado como fonte geral de despesa")
+
+    def test_filtro_mensal_e_periodo_sem_movimento(self):
+        self._venda("300.00", data=date(2026, 8, 20))
+        self._despesa("80.00", dia=5)
+
+        setembro = self.client.get(self.url, {"mes": "2026-09"}, secure=True)
+        outubro = self.client.get(self.url, {"mes": "2026-10"}, secure=True)
+
+        self.assertEqual(setembro.context["faturamento"], Decimal("0.00"))
+        self.assertEqual(setembro.context["despesas_total"], Decimal("80.00"))
+        self.assertEqual(outubro.context["faturamento"], Decimal("0.00"))
+        self.assertEqual(outubro.context["despesas_total"], Decimal("0.00"))
+        self.assertContains(outubro, "Nenhum custo ou despesa confiavel encontrado")
+
+    def test_registro_sem_categoria_vai_para_nao_classificado(self):
+        self._venda("100.00")
+        self._despesa("25.00", categoria="", observacao="Sem categoria")
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.context["despesas_total"], Decimal("25.00"))
+        self.assertContains(resposta, "Nao classificado")
+        grupos = {grupo["nome"]: grupo for grupo in resposta.context["grupos"]}
+        self.assertIn("Nao classificado", grupos)
+
+    def test_visualizacao_do_painel_nao_altera_dados_financeiros(self):
+        self._venda("100.00")
+        self._despesa("25.00")
+        antes = {
+            "vendas": Venda.objects.count(),
+            "despesas": DespesaDiaria.objects.count(),
+            "contas": ContaPagar.objects.count(),
+            "pagamentos": PagamentoContaPagar.objects.count(),
+            "movimentos": MovimentoFinanceiro.objects.count(),
+        }
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        depois = {
+            "vendas": Venda.objects.count(),
+            "despesas": DespesaDiaria.objects.count(),
+            "contas": ContaPagar.objects.count(),
+            "pagamentos": PagamentoContaPagar.objects.count(),
+            "movimentos": MovimentoFinanceiro.objects.count(),
+        }
+        self.assertEqual(depois, antes)
+
+    def test_home_e_central_financeira_exibem_atalho_do_painel(self):
+        home = self.client.get(reverse("estoque:home"), secure=True)
+        financeiro = self.client.get(reverse("estoque:painel_financeiro"), secure=True)
+
+        self.assertContains(home, reverse("estoque:painel_resultado_gerencial"))
+        self.assertContains(financeiro, reverse("estoque:painel_resultado_gerencial"))
+
+
 class PagarFornecedorTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Renascer")
