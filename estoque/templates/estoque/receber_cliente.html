@@ -1459,11 +1459,11 @@
 
         <div class="mt-3 mb-3">
           <div class="fw-semibold mb-2">
-            D?vidas que ser?o pagas
+            Dívidas que serão pagas
           </div>
 
           <div class="small text-muted mb-2">
-            Marque somente as d?vidas que deseja incluir neste recebimento.
+            Marque somente as dívidas que deseja incluir neste recebimento.
           </div>
 
           {% for conta in contas %}
@@ -1498,7 +1498,7 @@
                 class="mt-1"
               >
               <span>
-                <strong>Loca??o #{{ locacao.id }}</strong>
+                <strong>Locação #{{ locacao.id }}</strong>
 
                 {% if locacao.itens.all %}
                   ?
@@ -1622,8 +1622,8 @@
                     </tr>
                   {% endfor %}
                   {% for locacao in locacoes_abertas %}
-                    <tr class="rc-row-prevista-neutra">
-                      <td>Loca??o #{{ locacao.id }}</td>
+                    <tr id="locacaoPreview{{ locacao.id }}" class="rc-row-prevista-neutra">
+                      <td>Locação #{{ locacao.id }}</td>
                       <td>
                         {% for item in locacao.itens.all %}
                           {% if item.tipo == "mesa_avulsa" %}{{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}{% endif %}
@@ -1636,7 +1636,7 @@
                       <td class="rc-num">R$ {{ locacao.total|floatformat:2 }}</td>
                       <td class="rc-num">R$ {{ locacao.saldo_devedor|floatformat:2 }}</td>
                       <td>{{ locacao.get_status_financeiro_display }}</td>
-                      <td class="rc-preview-cell">
+                      <td class="rc-preview-cell" id="previewLocacao{{ locacao.id }}">
                         <span class="rc-pill">N?o atingida</span><br>
                         Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                       </td>
@@ -1695,10 +1695,10 @@
                 </article>
               {% endfor %}
               {% for locacao in locacoes_abertas %}
-                <article class="rc-conta-mobile-card rc-row-prevista-neutra">
+                <article id="locacaoPreviewMobile{{ locacao.id }}" class="rc-conta-mobile-card rc-row-prevista-neutra">
                   <div class="rc-conta-mobile-topo">
                     <div>
-                      <span class="rc-conta-mobile-numero">Loca??o #{{ locacao.id }}</span>
+                      <span class="rc-conta-mobile-numero">Locação #{{ locacao.id }}</span>
                     </div>
                     <div class="rc-conta-mobile-venda">
                       {% for item in locacao.itens.all %}
@@ -1711,7 +1711,7 @@
 
                   <div class="rc-conta-mobile-grid">
                     <div class="rc-conta-mobile-campo">
-                      <span class="rc-conta-mobile-label">Data da loca??o</span>
+                      <span class="rc-conta-mobile-label">Data da locação</span>
                       <span class="rc-conta-mobile-valor">{{ locacao.data_entrega|date:"d/m/Y" }}</span>
                     </div>
                     <div class="rc-conta-mobile-campo">
@@ -1732,7 +1732,7 @@
                     </div>
                   </div>
 
-                  <div class="rc-conta-mobile-preview">
+                  <div class="rc-conta-mobile-preview" id="previewLocacaoMobile{{ locacao.id }}">
                     <span class="rc-pill">N?o atingida</span><br>
                     Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                   </div>
@@ -2371,6 +2371,7 @@
     const btnCompartilharComprovanteImagem = document.getElementById("btn-compartilhar-comprovante-imagem");
     const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
+    const dividasCheckboxes = Array.from(document.querySelectorAll("input[name='dividas']"));
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
     const listaHistorico = document.getElementById("historicoRecenteCliente");
@@ -2381,6 +2382,18 @@
     const totalAberto = contas.reduce(function (total, conta) {
       return total + Number(conta.valor_em_aberto || 0);
     }, 0);
+
+    function chaveDivida(conta) {
+      return (conta.tipo || "conta") + ":" + conta.id;
+    }
+
+    function dividaEstaSelecionada(conta) {
+      const chave = chaveDivida(conta);
+      const checkbox = dividasCheckboxes.find(function (item) {
+        return item.value === chave;
+      });
+      return checkbox ? checkbox.checked : true;
+    }
     let resolverModalReceber = null;
     let focoAnteriorReceber = null;
 
@@ -2567,11 +2580,20 @@
     }
 
     function atualizarLinha(conta, classe, html) {
-      const linha = document.getElementById("contaPreview" + conta.id);
-      const celula = document.getElementById("previewConta" + conta.id);
-      const cardMobile = document.getElementById("contaPreviewMobile" + conta.id);
-      const celulaMobile = document.getElementById("previewContaMobile" + conta.id);
-      const detalheAtualizacao = detalheContaAtualizada(conta);
+      const ehLocacao = (conta.tipo || "conta") === "locacao";
+      const linha = document.getElementById(
+        (ehLocacao ? "locacaoPreview" : "contaPreview") + conta.id
+      );
+      const celula = document.getElementById(
+        (ehLocacao ? "previewLocacao" : "previewConta") + conta.id
+      );
+      const cardMobile = document.getElementById(
+        (ehLocacao ? "locacaoPreviewMobile" : "contaPreviewMobile") + conta.id
+      );
+      const celulaMobile = document.getElementById(
+        (ehLocacao ? "previewLocacaoMobile" : "previewContaMobile") + conta.id
+      );
+      const detalheAtualizacao = ehLocacao ? "" : detalheContaAtualizada(conta);
       if (linha) {
         linha.classList.remove("rc-row-prevista-quitada", "rc-row-prevista-parcial", "rc-row-prevista-neutra");
         linha.classList.add(classe);
@@ -2592,30 +2614,55 @@
       let restante = numeroDigitado(valor?.value);
       const valorInformado = restante;
       let aplicado = 0;
-      let contasAtingidas = 0;
+      let dividasAtingidas = 0;
+      const aplicacoes = [];
 
       contas.forEach(function (conta) {
+        if (!dividaEstaSelecionada(conta)) {
+          if ((conta.tipo || "conta") === "conta") {
+            atualizarLinha(
+              conta,
+              "rc-row-prevista-neutra",
+              '<span class="rc-pill">N?o selecionada</span><br>Saldo continua ' + moeda(Number(conta.valor_em_aberto || 0))
+            );
+          }
+          return;
+        }
+
         const aberto = Number(conta.valor_em_aberto || 0);
         const receber = Math.min(restante, aberto);
         restante = Math.max(restante - receber, 0);
         aplicado += receber;
 
+        if (receber > 0) {
+          dividasAtingidas += 1;
+          aplicacoes.push({
+            titulo: conta.titulo || (
+              (conta.tipo || "conta") === "locacao"
+                ? "Locação #" + conta.id
+                : (conta.venda_id ? "Venda #" + conta.venda_id : "Conta #" + conta.id)
+            ),
+            descricao: conta.descricao || "",
+            valor: receber,
+            saldoApos: Math.max(aberto - receber, 0)
+          });
+        }
+
         if (valorInformado <= 0 || receber <= 0) {
           atualizarLinha(
             conta,
             "rc-row-prevista-neutra",
-            '<span class="rc-pill">Nao atingida</span><br>Saldo continua ' + moeda(aberto)
+            '<span class="rc-pill">N?o atingida</span><br>Saldo continua ' + moeda(aberto)
           );
           return;
         }
 
-        contasAtingidas += 1;
         const saldoApos = Math.max(aberto - receber, 0);
         if (saldoApos <= 0.009) {
           atualizarLinha(
             conta,
             "rc-row-prevista-quitada",
-            '<span class="rc-pill quitara">Sera quitada</span><br>Recebera ' + moeda(receber)
+            '<span class="rc-pill quitara">Será quitada</span><br>Receberá ' + moeda(receber)
           );
           return;
         }
@@ -2623,41 +2670,67 @@
         atualizarLinha(
           conta,
           "rc-row-prevista-parcial",
-          '<span class="rc-pill parcial">Ficara parcial</span><br>Recebera ' + moeda(receber) + '<br>Saldo apos: ' + moeda(saldoApos)
+          '<span class="rc-pill parcial">Ficar? parcial</span><br>Receberá ' + moeda(receber) + '<br>Saldo ap?s: ' + moeda(saldoApos)
         );
       });
 
       if (resumo) {
-        resumo.textContent = valorInformado > 0
-          ? ("Aplicacao prevista: " + moeda(aplicado) + " em " + contasAtingidas + " conta(s).")
-          : "Informe um valor para calcular a previa.";
+        if (valorInformado <= 0) {
+          resumo.textContent = "Informe um valor para calcular a pr?via.";
+        } else if (!aplicacoes.length) {
+          resumo.textContent = "Nenhuma d?vida selecionada receberá este valor.";
+        } else {
+          const detalhes = aplicacoes.map(function (item) {
+            let textoAplicacao = item.titulo + " ? " + moeda(item.valor);
+            if (item.descricao) {
+              textoAplicacao += " (" + item.descricao + ")";
+            }
+            if (item.saldoApos <= 0.009) {
+              textoAplicacao += " ? ficará quitada";
+            } else {
+              textoAplicacao += " ? saldo ap?s: " + moeda(item.saldoApos);
+            }
+            return textoAplicacao;
+          });
+
+          resumo.textContent = "Aplicação do recebimento: " + detalhes.join(" | ");
+        }
       }
 
       const sobra = Math.max(restante, 0);
       const saldoContinuara = Math.max(totalAberto - aplicado, 0);
+
       if (totalRecebidoPreview) totalRecebidoPreview.textContent = moeda(valorInformado);
       if (totalAplicadoPreview) totalAplicadoPreview.textContent = moeda(aplicado);
       if (sobraPreview) sobraPreview.textContent = moeda(sobra);
       if (saldoAbertoPreview) saldoAbertoPreview.textContent = moeda(saldoContinuara);
       if (saldoAposRecebimentoResumo) saldoAposRecebimentoResumo.textContent = moeda(saldoContinuara);
+
       if (sobraBox) {
         if (sobra > 0.009) {
           sobraBox.hidden = false;
-          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se será devolvida como troco ou guardada como crédito.";
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se ser? devolvida como troco ou guardada como cr?dito.";
         } else {
           sobraBox.hidden = true;
           sobraBox.textContent = "";
         }
       }
+
       if (destinoSobra) {
         destinoSobra.hidden = sobra <= 0.009;
       }
+
       atualizarAlertaDuplicidade();
       atualizarOrdemFocoSobra(sobra > 0.009);
+
       if (confirmarCredito) {
         confirmarCredito.value = "";
       }
     }
+
+    dividasCheckboxes.forEach(function (checkbox) {
+      checkbox.addEventListener("change", calcularPrevia, listenerOptions);
+    });
 
     function atualizarOrdemFocoSobra(temSobra) {
       opcoesSobra.forEach(function (opcao, indice) {

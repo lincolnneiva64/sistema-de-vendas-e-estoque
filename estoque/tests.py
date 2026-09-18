@@ -297,7 +297,7 @@ class FornecedorDestinatarioListaTests(TestCase):
             tipo=FornecedorDestinatarioLista.TIPO_TEMPORARIO,
             vigencia_inicio=date(2026, 7, 14),
             vigencia_fim=date(2026, 7, 20),
-            motivo="Teste de substitui??o",
+            motivo="Teste de substituição",
         )
 
         self.assertTrue(padrao.ativo)
@@ -21532,7 +21532,7 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["total_em_aberto"], Decimal("74.00"))
         self.assertContains(response, f"Venda #{conta.venda_id}")
-        self.assertContains(response, f"Loca??o #{locacao.id}")
+        self.assertContains(response, f"Loca\u00e7\u00e3o #{locacao.id}")
         self.assertContains(response, "3 mesas")
         self.assertContains(response, "12 cadeiras")
 
@@ -21582,6 +21582,311 @@ class PixRecebidoTests(TestCase):
         movimento = MovimentoFinanceiro.objects.order_by("-id").first()
         self.assertEqual(movimento.origem, "recebimento_cliente")
         self.assertEqual(movimento.valor, Decimal("24.00"))
+
+
+    def test_receber_cliente_funciona_com_somente_locacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Somente Locacao",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.total_pago, Decimal("24.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(
+            locacao.status_financeiro,
+            Locacao.FINANCEIRO_QUITADA,
+        )
+
+        operacao = OperacaoRecebimentoCliente.objects.get(cliente=cliente)
+        comprovante = operacao.comprovante_dados
+
+        self.assertEqual(comprovante["contas"], [])
+        self.assertEqual(len(comprovante["locacoes"]), 1)
+        self.assertEqual(
+            comprovante["locacoes"][0]["locacao_id"],
+            locacao.id,
+        )
+        self.assertEqual(
+            comprovante["locacoes"][0]["valor_aplicado"],
+            "24.00",
+        )
+        self.assertEqual(
+            comprovante["locacoes"][0]["saldo_restante"],
+            "0.00",
+        )
+        self.assertTrue(comprovante["locacoes"][0]["quitada"])
+        self.assertIn(
+            "3 mesas",
+            comprovante["locacoes"][0]["descricao"],
+        )
+        self.assertIn(
+            "12 cadeiras",
+            comprovante["locacoes"][0]["descricao"],
+        )
+        self.assertEqual(comprovante["locacoes_abertas"], [])
+
+        mensagem = views._montar_mensagem_confirmacao_recebimento(
+            comprovante
+        )
+
+        self.assertIn(
+            f"Loca\u00e7\u00e3o #{locacao.id}",
+            mensagem,
+        )
+        self.assertIn("R$ 24,00", mensagem)
+        self.assertIn("3 mesas", mensagem)
+        self.assertIn("12 cadeiras", mensagem)
+        self.assertIn("Loca\u00e7\u00e3o quitada.", mensagem)
+        self.assertNotIn(
+            "Nenhuma conta identificada com seguranca.",
+            mensagem,
+        )
+        self.assertIn(
+            "Nao ficou nenhuma conta em aberto apos este pagamento.",
+            mensagem,
+        )
+
+    def test_receber_cliente_permite_pagamento_parcial_da_locacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Locacao Parcial",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "10,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.total_pago, Decimal("10.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("14.00"))
+        self.assertEqual(
+            locacao.status_financeiro,
+            Locacao.FINANCEIRO_PARCIAL,
+        )
+
+    def test_receber_cliente_pode_quitar_somente_venda_e_preservar_locacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Somente Venda Selecionada",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, valor="50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "50,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"conta:{conta.id}"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+
+    def test_receber_cliente_pode_pagar_venda_e_locacao_na_mesma_operacao(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Pagamento Misto",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, valor="50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "74,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [
+                    f"conta:{conta.id}",
+                    f"locacao:{locacao.id}",
+                ],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(locacao.total_pago, Decimal("24.00"))
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.count(),
+            movimentos_antes + 1,
+        )
+        movimento = MovimentoFinanceiro.objects.order_by("-id").first()
+        self.assertEqual(movimento.origem, "recebimento_cliente")
+        self.assertEqual(movimento.valor, Decimal("74.00"))
+
+        operacao = OperacaoRecebimentoCliente.objects.get(cliente=cliente)
+        comprovante = operacao.comprovante_dados
+
+        self.assertEqual(len(comprovante["contas"]), 1)
+        self.assertEqual(
+            comprovante["contas"][0]["conta_id"],
+            conta.id,
+        )
+        self.assertEqual(len(comprovante["locacoes"]), 1)
+        self.assertEqual(
+            comprovante["locacoes"][0]["locacao_id"],
+            locacao.id,
+        )
+        self.assertEqual(
+            comprovante["locacoes"][0]["valor_aplicado"],
+            "24.00",
+        )
+        self.assertEqual(
+            comprovante["locacoes"][0]["saldo_restante"],
+            "0.00",
+        )
+        self.assertTrue(comprovante["locacoes"][0]["quitada"])
+        self.assertEqual(comprovante["locacoes_abertas"], [])
+
+        historico = views._pagamentos_recentes_cliente(cliente.id)
+        operacao_historico = next(
+            item
+            for item in historico
+            if item["tipo"] == "operacao"
+            and item["id"] == operacao.id
+        )
+
+        self.assertEqual(len(operacao_historico["aplicacoes"]), 2)
+
+        aplicacao_venda = next(
+            item
+            for item in operacao_historico["aplicacoes"]
+            if item["tipo_divida"] == "conta"
+        )
+        aplicacao_locacao = next(
+            item
+            for item in operacao_historico["aplicacoes"]
+            if item["tipo_divida"] == "locacao"
+        )
+
+        self.assertEqual(aplicacao_venda["conta_id"], conta.id)
+        self.assertEqual(aplicacao_venda["valor"], Decimal("50.00"))
+
+        self.assertEqual(aplicacao_locacao["locacao_id"], locacao.id)
+        self.assertEqual(aplicacao_locacao["valor"], Decimal("24.00"))
+        self.assertTrue(aplicacao_locacao["quitada"])
+        self.assertIn("3 mesas", aplicacao_locacao["descricao"])
+        self.assertIn("12 cadeiras", aplicacao_locacao["descricao"])
+
+    def test_receber_cliente_rejeita_divida_selecionada_em_duplicidade(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Divida Duplicada",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [
+                    f"locacao:{locacao.id}",
+                    f"locacao:{locacao.id}",
+                ],
+            },
+            secure=True,
+            follow=True,
+        )
+
+        locacao.refresh_from_db()
+
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+        self.assertContains(
+            response,
+            "A mesma divida foi selecionada mais de uma vez.",
+        )
+
+    def test_receber_cliente_rejeita_locacao_de_outro_cliente(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Correto",
+            ativo=True,
+        )
+        outro_cliente = Cliente.objects.create(
+            nome="Outro Cliente",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(
+            outro_cliente,
+            mesas=3,
+            cadeiras=12,
+        )
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+            follow=True,
+        )
+
+        locacao.refresh_from_db()
+
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+        self.assertEqual(response.status_code, 200)
 
     def _criar_conta_receber_pix(self, cliente, valor="100.00"):
         venda = Venda.objects.create(
@@ -24403,6 +24708,186 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Cliente Multi Dois")
         self.assertContains(resposta, '<span class="rcr-value money">R$ 40,00</span>', html=True)
 
+
+    def test_desfazer_recebimento_somente_locacao_restaura_locacao(self):
+        from locacoes.models import PagamentoLocacao
+
+        cliente = Cliente.objects.create(
+            nome="Cliente Desfaz Somente Locacao",
+            bairro="Jardim",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(
+            cliente,
+            mesas=3,
+            cadeiras=12,
+        )
+
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+        self.assertEqual(locacao.total_pago, Decimal("24.00"))
+
+        pagamento = PagamentoLocacao.objects.get(
+            operacao_recebimento_cliente=operacao
+        )
+        self.assertEqual(pagamento.locacao_id, locacao.id)
+        self.assertEqual(pagamento.valor, Decimal("24.00"))
+        self.assertIsNone(pagamento.movimento_financeiro_id)
+
+        self._post_desfazer_recebimento(
+            operacao,
+            self._url_recebimentos_rota("Jardim"),
+        )
+
+        locacao.refresh_from_db()
+        operacao.refresh_from_db()
+
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+        self.assertNotEqual(
+            locacao.status_financeiro,
+            Locacao.FINANCEIRO_QUITADA,
+        )
+
+        self.assertFalse(
+            PagamentoLocacao.objects.filter(
+                operacao_recebimento_cliente=operacao
+            ).exists()
+        )
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="recebimento_cliente_estorno"
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            MovimentoFinanceiro.objects.count(),
+            movimentos_antes + 2,
+        )
+        self.assertTrue(operacao.comprovante_dados["desfeito"])
+        self.assertIn(
+            locacao.id,
+            operacao.comprovante_dados["locacoes_restauradas_ids"],
+        )
+
+    def test_desfazer_recebimento_misto_restaura_venda_e_locacao(self):
+        from locacoes.models import PagamentoLocacao
+
+        cliente = Cliente.objects.create(
+            nome="Cliente Desfaz Misto",
+            bairro="Jardim",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(
+            cliente,
+            valor="50.00",
+        )
+        locacao = self._criar_locacao_cliente(
+            cliente,
+            mesas=3,
+            cadeiras=12,
+        )
+
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "74,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [
+                    f"conta:{conta.id}",
+                    f"locacao:{locacao.id}",
+                ],
+            },
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        operacao = OperacaoRecebimentoCliente.objects.get()
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("0.00"))
+
+        self.assertTrue(
+            PagamentoLocacao.objects.filter(
+                operacao_recebimento_cliente=operacao,
+                locacao=locacao,
+                valor=Decimal("24.00"),
+            ).exists()
+        )
+        self.assertEqual(
+            RecebimentoContaReceber.objects.filter(
+                operacao=operacao,
+                conta=conta,
+            ).count(),
+            1,
+        )
+
+        self._post_desfazer_recebimento(
+            operacao,
+            self._url_recebimentos_rota("Jardim"),
+        )
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+        operacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("50.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+
+        self.assertEqual(
+            RecebimentoContaReceber.objects.filter(
+                operacao=operacao
+            ).count(),
+            0,
+        )
+        self.assertFalse(
+            PagamentoLocacao.objects.filter(
+                operacao_recebimento_cliente=operacao
+            ).exists()
+        )
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="recebimento_cliente_estorno"
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            MovimentoFinanceiro.objects.count(),
+            movimentos_antes + 2,
+        )
+        self.assertTrue(operacao.comprovante_dados["desfeito"])
+
     def test_desfazer_recebimento_simples_em_dinheiro_restaura_conta_e_financeiro(self):
         cliente = Cliente.objects.create(nome="Cliente Desfaz Dinheiro", bairro="Jardim", ativo=True)
         conta = self._criar_conta_receber_pix(cliente, "100.00")
@@ -24788,6 +25273,157 @@ class PixRecebidoTests(TestCase):
 
         self.assertContains(resposta, "Corrigir recebimento")
         self.assertContains(resposta, self._url_corrigir_recebimento(operacao))
+
+
+    def test_corrigir_recebimento_somente_locacao_preserva_divida_original(self):
+        from locacoes.models import PagamentoLocacao
+
+        cliente = Cliente.objects.create(
+            nome="Cliente Corrige Somente Locacao",
+            bairro="Jardim",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, "50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "24,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [f"locacao:{locacao.id}"],
+            },
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self._post_corrigir_recebimento(
+            operacao_original,
+            "10,00",
+            forma_pagamento="PIX",
+            motivo="Valor da locacao informado incorretamente.",
+        )
+
+        self.assertContains(resposta, "corrigido")
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+        operacao_original.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("50.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+        self.assertEqual(locacao.total_pago, Decimal("10.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("14.00"))
+
+        operacao_nova = (
+            OperacaoRecebimentoCliente.objects
+            .exclude(pk=operacao_original.pk)
+            .get()
+        )
+
+        self.assertEqual(
+            PagamentoLocacao.objects.filter(
+                operacao_recebimento_cliente=operacao_nova,
+                locacao=locacao,
+                valor=Decimal("10.00"),
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            RecebimentoContaReceber.objects.filter(
+                operacao=operacao_nova
+            ).count(),
+            0,
+        )
+
+        self.assertTrue(operacao_original.comprovante_dados["corrigida"])
+        self.assertEqual(
+            operacao_original.comprovante_dados["corrigida_por_operacao_id"],
+            operacao_nova.id,
+        )
+
+    def test_corrigir_recebimento_misto_preserva_venda_e_locacao_originais(self):
+        from locacoes.models import PagamentoLocacao
+
+        cliente = Cliente.objects.create(
+            nome="Cliente Corrige Misto",
+            bairro="Jardim",
+            ativo=True,
+        )
+        conta = self._criar_conta_receber_pix(cliente, "50.00")
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "74,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+                "dividas": [
+                    f"conta:{conta.id}",
+                    f"locacao:{locacao.id}",
+                ],
+            },
+            secure=True,
+        )
+        self.assertEqual(response.status_code, 302)
+
+        operacao_original = OperacaoRecebimentoCliente.objects.get()
+
+        resposta = self._post_corrigir_recebimento(
+            operacao_original,
+            "60,00",
+            forma_pagamento="PIX",
+            motivo="Valor misto informado incorretamente.",
+        )
+
+        self.assertContains(resposta, "corrigido")
+
+        conta.refresh_from_db()
+        locacao.refresh_from_db()
+
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(locacao.total_pago, Decimal("10.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("14.00"))
+
+        operacao_nova = (
+            OperacaoRecebimentoCliente.objects
+            .exclude(pk=operacao_original.pk)
+            .get()
+        )
+
+        recebimento_venda = RecebimentoContaReceber.objects.get(
+            operacao=operacao_nova,
+            conta=conta,
+        )
+        self.assertEqual(recebimento_venda.valor, Decimal("50.00"))
+
+        pagamento_locacao = PagamentoLocacao.objects.get(
+            operacao_recebimento_cliente=operacao_nova,
+            locacao=locacao,
+        )
+        self.assertEqual(pagamento_locacao.valor, Decimal("10.00"))
+
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="recebimento_cliente"
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="recebimento_cliente_estorno"
+            ).count(),
+            1,
+        )
 
     def test_corrigir_recebimento_de_528_para_3025_restaura_reaplica_e_audita(self):
         data_recebimento = date(2026, 9, 13)

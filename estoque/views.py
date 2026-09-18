@@ -1,3 +1,4 @@
+from datetime import datetime
 import base64
 import binascii
 import copy
@@ -2129,8 +2130,14 @@ def _criar_operacao_recebimento_cliente(
             contas_ids_selecionadas = []
             locacoes_ids_selecionadas = []
 
-            for token in dividas_selecionadas:
-                tipo, separador, identificador = str(token).partition(":")
+            tokens_normalizados = [str(token) for token in dividas_selecionadas]
+            if len(tokens_normalizados) != len(set(tokens_normalizados)):
+                raise RecebimentoContaErro(
+                    "A mesma divida foi selecionada mais de uma vez."
+                )
+
+            for token in tokens_normalizados:
+                tipo, separador, identificador = token.partition(":")
                 if not separador or not identificador.isdigit():
                     raise RecebimentoContaErro("Selecao de divida invalida.")
 
@@ -2323,6 +2330,7 @@ def _criar_operacao_recebimento_cliente(
 
         locacoes_afetadas = 0
         locacoes_atualizadas_ids = []
+        locacoes_confirmacao_whatsapp = []
 
         for tipo_divida, divida, valor_aplicar, sobra_divida in distribuicao:
             if tipo_divida == "conta":
@@ -2430,12 +2438,18 @@ def _criar_operacao_recebimento_cliente(
                         else str(usuario)
                     )
 
+                data_hora_locacao = timezone.make_aware(
+                    datetime.combine(data_recebimento, datetime.min.time()),
+                    timezone.get_current_timezone(),
+                )
+
                 locacao.registrar_pagamento(
                     valor_aplicar,
                     mapa_forma_locacao.get(
                         forma_pagamento,
                         PagamentoLocacao.FORMA_OUTRO,
                     ),
+                    data_hora=data_hora_locacao,
                     observacao=(
                         "Recebimento pela conta unificada do cliente."
                     ),
@@ -2452,6 +2466,35 @@ def _criar_operacao_recebimento_cliente(
 
                 locacoes_afetadas += 1
                 locacoes_atualizadas_ids.append(locacao.id)
+
+                descricao_itens = []
+                for item in locacao.itens.all():
+                    quantidade = item.quantidade or 0
+                    if quantidade <= 0:
+                        continue
+
+                    if item.tipo == item.TIPO_MESA_AVULSA:
+                        nome_item = "mesa" if quantidade == 1 else "mesas"
+                    elif item.tipo == item.TIPO_CADEIRA_AVULSA:
+                        nome_item = "cadeira" if quantidade == 1 else "cadeiras"
+                    else:
+                        nome_item = item.get_tipo_display()
+
+                    descricao_itens.append(
+                        f"{quantidade} {nome_item}"
+                    )
+
+                saldo_restante_locacao = (
+                    locacao.saldo_devedor or Decimal("0.00")
+                ).quantize(Decimal("0.01"))
+
+                locacoes_confirmacao_whatsapp.append({
+                    "locacao_id": locacao.id,
+                    "descricao": " · ".join(descricao_itens),
+                    "valor_aplicado": valor_aplicar,
+                    "saldo_restante": saldo_restante_locacao,
+                    "quitada": saldo_restante_locacao <= Decimal("0.00"),
+                })
 
         _registrar_movimento_recebimento_cliente(
             cliente,
@@ -2490,6 +2533,33 @@ def _criar_operacao_recebimento_cliente(
                 "dias_aberto": dias_aberto,
                 "em_atraso": bool(prazo_cliente and dias_aberto > prazo_cliente),
             })
+        locacoes_abertas_confirmacao = []
+        for locacao_aberta in _locacoes_abertas_cliente_qs(cliente.id):
+            descricao_itens = []
+            for item in locacao_aberta.itens.all():
+                quantidade = item.quantidade or 0
+                if quantidade <= 0:
+                    continue
+
+                if item.tipo == item.TIPO_MESA_AVULSA:
+                    nome_item = "mesa" if quantidade == 1 else "mesas"
+                elif item.tipo == item.TIPO_CADEIRA_AVULSA:
+                    nome_item = "cadeira" if quantidade == 1 else "cadeiras"
+                else:
+                    nome_item = item.get_tipo_display()
+
+                descricao_itens.append(
+                    f"{quantidade} {nome_item}"
+                )
+
+            locacoes_abertas_confirmacao.append({
+                "locacao_id": locacao_aberta.id,
+                "descricao": " · ".join(descricao_itens),
+                "saldo_atual": (
+                    locacao_aberta.saldo_devedor or Decimal("0.00")
+                ).quantize(Decimal("0.01")),
+            })
+
         dados_confirmacao_whatsapp = {
             "cliente_nome": cliente.nome,
             "data_recebimento": data_recebimento.strftime("%d/%m/%Y"),
@@ -2498,6 +2568,8 @@ def _criar_operacao_recebimento_cliente(
             "forma_pagamento": forma_pagamento,
             "contas": contas_confirmacao_whatsapp,
             "contas_abertas": contas_abertas_confirmacao,
+            "locacoes": locacoes_confirmacao_whatsapp,
+            "locacoes_abertas": locacoes_abertas_confirmacao,
             "saldo_atual": saldo_atual_confirmacao,
             "credito_gerado": credito_gerado_total,
         }
@@ -2571,29 +2643,109 @@ def _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir=None):
 
 
 def _payload_operacao_recebimento_cliente(operacao):
-    saldo_distribuir = (operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01"))
+    dados_comprovante = _dados_comprovante_operacao_recebimento(operacao)
     aplicacoes = []
-    for recebimento in operacao.recebimentos.all():
-        aplicacao = _payload_aplicacao_recebimento_cliente(recebimento, saldo_distribuir)
-        aplicacoes.append(aplicacao)
-        saldo_distribuir = aplicacao["resta_distribuir"] or Decimal("0.00")
+
+    contas_snapshot = dados_comprovante.get("contas") or []
+    locacoes_snapshot = dados_comprovante.get("locacoes") or []
+
+    if contas_snapshot or locacoes_snapshot:
+        for conta in contas_snapshot:
+            aplicacoes.append({
+                "tipo_divida": "conta",
+                "conta_id": conta.get("conta_id") or "",
+                "venda_id": conta.get("venda_id") or "",
+                "locacao_id": "",
+                "titulo": (
+                    f"Venda #{conta.get('venda_id')}"
+                    if conta.get("venda_id")
+                    else f"Conta #{conta.get('conta_id')}"
+                ),
+                "descricao": "",
+                "valor": _decimal_comprovante(
+                    conta.get("valor_aplicado")
+                ),
+                "saldo_antes_distribuir": _decimal_comprovante(
+                    conta.get("saldo_antes")
+                ),
+                "resta_distribuir": _decimal_comprovante(
+                    conta.get("saldo_restante")
+                ),
+                "quitada": bool(conta.get("quitada")),
+            })
+
+        for locacao in locacoes_snapshot:
+            aplicacoes.append({
+                "tipo_divida": "locacao",
+                "conta_id": "",
+                "venda_id": "",
+                "locacao_id": locacao.get("locacao_id") or "",
+                "titulo": f"Loca\u00e7\u00e3o #{locacao.get('locacao_id')}",
+                "descricao": locacao.get("descricao") or "",
+                "valor": _decimal_comprovante(
+                    locacao.get("valor_aplicado")
+                ),
+                "saldo_antes_distribuir": None,
+                "resta_distribuir": _decimal_comprovante(
+                    locacao.get("saldo_restante")
+                ),
+                "quitada": bool(locacao.get("quitada")),
+            })
+    else:
+        saldo_distribuir = (
+            operacao.valor_recebido or Decimal("0.00")
+        ).quantize(Decimal("0.01"))
+
+        for recebimento in operacao.recebimentos.all():
+            aplicacao = _payload_aplicacao_recebimento_cliente(
+                recebimento,
+                saldo_distribuir,
+            )
+            aplicacao["tipo_divida"] = "conta"
+            aplicacao["locacao_id"] = ""
+            aplicacao["titulo"] = (
+                f"Venda #{aplicacao['venda_id']}"
+                if aplicacao.get("venda_id")
+                else f"Conta #{aplicacao['conta_id']}"
+            )
+            aplicacao["descricao"] = ""
+            aplicacoes.append(aplicacao)
+            saldo_distribuir = (
+                aplicacao["resta_distribuir"] or Decimal("0.00")
+            )
+
     return {
         "id": operacao.id,
         "tipo": "operacao",
         "criado_em": operacao.criado_em,
-        "criado_em_data": timezone.localtime(operacao.criado_em).date().isoformat(),
-        "data_recebimento": operacao.data_recebimento.isoformat() if operacao.data_recebimento else "",
-        "data_recebimento_label": operacao.data_recebimento.strftime("%d/%m/%Y") if operacao.data_recebimento else "",
-        "valor": (operacao.valor_recebido or Decimal("0.00")).quantize(Decimal("0.01")),
-        "valor_numero": float(operacao.valor_recebido or Decimal("0.00")),
+        "criado_em_data": timezone.localtime(
+            operacao.criado_em
+        ).date().isoformat(),
+        "data_recebimento": (
+            operacao.data_recebimento.isoformat()
+            if operacao.data_recebimento
+            else ""
+        ),
+        "data_recebimento_label": (
+            operacao.data_recebimento.strftime("%d/%m/%Y")
+            if operacao.data_recebimento
+            else ""
+        ),
+        "valor": (
+            operacao.valor_recebido or Decimal("0.00")
+        ).quantize(Decimal("0.01")),
+        "valor_numero": float(
+            operacao.valor_recebido or Decimal("0.00")
+        ),
         "forma_pagamento": operacao.forma_pagamento,
         "conta_id": "",
         "venda_id": "",
         "observacao": "",
         "aplicacoes": aplicacoes,
-        "credito_gerado": (operacao.credito_gerado or Decimal("0.00")).quantize(Decimal("0.01")),
+        "credito_gerado": (
+            operacao.credito_gerado or Decimal("0.00")
+        ).quantize(Decimal("0.01")),
     }
-
 
 def _payload_recebimento_legado_cliente(recebimento):
     payload = {
@@ -12468,6 +12620,7 @@ def _montar_mensagem_confirmacao_recebimento(dados):
     ]
 
     contas = dados.get("contas", [])
+    locacoes = dados.get("locacoes", [])
     if contas:
         for conta in contas:
             venda = conta.get("venda_id") or conta.get("conta_id") or "-"
@@ -12487,10 +12640,36 @@ def _montar_mensagem_confirmacao_recebimento(dados):
                 f"abatido {_formatar_moeda(valor_aplicado)}; "
                 f"{status}; {complemento}."
             )
-    else:
+    elif not locacoes:
         linhas.append("- Nenhuma conta identificada com seguranca.")
 
+    if locacoes:
+        for locacao in locacoes:
+            locacao_id = locacao.get("locacao_id") or "-"
+            valor_aplicado = _decimal_comprovante(
+                locacao.get("valor_aplicado")
+            )
+            saldo_restante = _decimal_comprovante(
+                locacao.get("saldo_restante")
+            )
+            descricao = str(locacao.get("descricao") or "").strip()
+
+            linhas.append(
+                f"- Loca\u00e7\u00e3o #{locacao_id}: "
+                f"abatido {_formatar_moeda(valor_aplicado)}."
+            )
+            if descricao:
+                linhas.append(f"  {descricao}")
+
+            if locacao.get("quitada"):
+                linhas.append("  Loca\u00e7\u00e3o quitada.")
+            else:
+                linhas.append(
+                    f"  Falta {_formatar_moeda(saldo_restante)}."
+                )
+
     contas_abertas = dados.get("contas_abertas", [])
+    locacoes_abertas = dados.get("locacoes_abertas", [])
     linhas.append("")
 
     if contas_abertas:
@@ -12508,8 +12687,28 @@ def _montar_mensagem_confirmacao_recebimento(dados):
                 f"falta {_formatar_moeda(saldo_conta)} "
                 f"({dias_aberto} dia{plural} em aberto{atraso})."
             )
-    else:
-        linhas.append("Nao ficou nenhuma conta em aberto apos este pagamento.")
+    if locacoes_abertas:
+        if not contas_abertas:
+            linhas.append("Contas que ainda faltam pagar:")
+
+        for locacao in locacoes_abertas:
+            locacao_id = locacao.get("locacao_id") or "-"
+            saldo_locacao = _decimal_comprovante(
+                locacao.get("saldo_atual")
+            )
+            descricao = str(locacao.get("descricao") or "").strip()
+
+            linhas.append(
+                f"- Loca\u00e7\u00e3o #{locacao_id}: "
+                f"falta {_formatar_moeda(saldo_locacao)}."
+            )
+            if descricao:
+                linhas.append(f"  {descricao}")
+
+    if not contas_abertas and not locacoes_abertas:
+        linhas.append(
+            "Nao ficou nenhuma conta em aberto apos este pagamento."
+        )
 
     linhas.extend([
         "",
@@ -12585,6 +12784,26 @@ def _serializar_dados_comprovante_recebimento(cliente, dados):
                 "em_atraso": bool(conta.get("em_atraso")),
             }
             for conta in dados.get("contas_abertas", [])
+        ],
+        "locacoes": [
+            {
+                "locacao_id": locacao["locacao_id"],
+                "descricao": locacao.get("descricao") or "",
+                "valor_aplicado": str(locacao["valor_aplicado"]),
+                "saldo_restante": str(
+                    locacao.get("saldo_restante") or "0.00"
+                ),
+                "quitada": bool(locacao.get("quitada")),
+            }
+            for locacao in dados.get("locacoes", [])
+        ],
+        "locacoes_abertas": [
+            {
+                "locacao_id": locacao["locacao_id"],
+                "descricao": locacao.get("descricao") or "",
+                "saldo_atual": str(locacao["saldo_atual"]),
+            }
+            for locacao in dados.get("locacoes_abertas", [])
         ],
     }
 
@@ -15493,8 +15712,8 @@ def receber_cliente(request, cliente_id):
             else:
                 if valor_recebido <= Decimal("0.00"):
                     messages.warning(request, "Informe um valor recebido maior que zero.")
-                elif not contas:
-                    messages.warning(request, "Nao ha contas abertas para receber deste cliente.")
+                elif not contas and not locacoes_abertas:
+                    messages.warning(request, "Nao ha dividas abertas para receber deste cliente.")
                 else:
                     saldo_aberto_confirmacao = total_em_aberto.quantize(Decimal("0.01"))
                     excedente_confirmacao = (valor_recebido - saldo_aberto_confirmacao).quantize(Decimal("0.01"))
@@ -15599,12 +15818,47 @@ def receber_cliente(request, cliente_id):
 
     contas_preview = [
         {
+            "tipo": "conta",
             "id": conta.id,
             "venda_id": conta.venda_id,
+            "titulo": (
+                f"Venda #{conta.venda_id}"
+                if conta.venda_id
+                else f"Conta #{conta.id}"
+            ),
+            "descricao": "",
             "valor_em_aberto": float(conta.valor_em_aberto or Decimal("0.00")),
         }
         for conta in contas
     ]
+
+    for locacao in locacoes_abertas:
+        descricao_itens = []
+        for item in locacao.itens.all():
+            quantidade = item.quantidade
+            if item.tipo == "mesa_avulsa":
+                descricao_itens.append(
+                    f"{quantidade} {'mesa' if quantidade == 1 else 'mesas'}"
+                )
+            elif item.tipo == "cadeira_avulsa":
+                descricao_itens.append(
+                    f"{quantidade} {'cadeira' if quantidade == 1 else 'cadeiras'}"
+                )
+            else:
+                descricao_itens.append(
+                    f"{quantidade} {item.get_tipo_display()}"
+                )
+
+        contas_preview.append({
+            "tipo": "locacao",
+            "id": locacao.id,
+            "venda_id": None,
+            "titulo": f"Locação #{locacao.id}",
+            "descricao": " / ".join(descricao_itens),
+            "valor_em_aberto": float(
+                locacao.saldo_devedor or Decimal("0.00")
+            ),
+        })
     tem_pix_em_atencao = False if carregamento_parcial else _tem_pix_em_atencao()
     recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
     recebimentos_dia_url = _url_recebimentos_dia()
@@ -15678,6 +15932,8 @@ def _dados_comprovante_operacao_recebimento(operacao):
     dados.setdefault("credito_gerado", str(operacao.credito_gerado))
     dados.setdefault("contas", [])
     dados.setdefault("contas_abertas", [])
+    dados.setdefault("locacoes", [])
+    dados.setdefault("locacoes_abertas", [])
     return dados
 
 
@@ -16245,8 +16501,20 @@ def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
             .filter(operacao=operacao)
             .order_by("id")
         )
-        if not recebimentos:
-            raise DesfazerRecebimentoErro("Este recebimento nao tem baixas vinculadas para desfazer com seguranca.")
+        from locacoes.models import PagamentoLocacao
+
+        pagamentos_locacao = list(
+            PagamentoLocacao.objects
+            .select_for_update()
+            .select_related("locacao")
+            .filter(operacao_recebimento_cliente=operacao)
+            .order_by("id")
+        )
+
+        if not recebimentos and not pagamentos_locacao:
+            raise DesfazerRecebimentoErro(
+                "Este recebimento nao tem baixas vinculadas para desfazer com seguranca."
+            )
 
         creditos = list(
             CreditoCliente.objects
@@ -16293,6 +16561,19 @@ def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
             conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
             contas_restauradas.append(conta.id)
 
+        locacoes_restauradas = []
+        for pagamento_locacao in pagamentos_locacao:
+            locacao = pagamento_locacao.locacao
+            if not locacao:
+                raise DesfazerRecebimentoErro(
+                    "Pagamento de locacao sem locacao vinculada."
+                )
+            locacao_id = locacao.id
+            pagamento_locacao.delete()
+            locacao.atualizar_financeiro()
+            if locacao_id not in locacoes_restauradas:
+                locacoes_restauradas.append(locacao_id)
+
         for credito in creditos:
             credito.delete()
         for recebimento in recebimentos:
@@ -16325,6 +16606,7 @@ def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
             dados["movimento_financeiro_original_ambiguo"] = True
             dados["movimentos_financeiros_candidatos_ids"] = movimentos_candidatos_ambiguos_ids
         dados["contas_restauradas_ids"] = contas_restauradas
+        dados["locacoes_restauradas_ids"] = locacoes_restauradas
         operacao.comprovante_dados = dados
         operacao.status_recibo = OperacaoRecebimentoCliente.STATUS_RECIBO_DISPENSADO
         operacao.recibo_dispensado_em = timezone.now()
@@ -16897,6 +17179,30 @@ def receber_cliente_corrigir_recebimento(request, operacao_id):
                                 if recebimento.conta_id
                             ]
 
+                            from locacoes.models import PagamentoLocacao
+
+                            pagamentos_locacao_originais = list(
+                                PagamentoLocacao.objects
+                                .select_for_update()
+                                .filter(
+                                    operacao_recebimento_cliente=operacao_original
+                                )
+                                .only("locacao_id")
+                            )
+                            locacoes_originais_ids = [
+                                pagamento.locacao_id
+                                for pagamento in pagamentos_locacao_originais
+                                if pagamento.locacao_id
+                            ]
+
+                            dividas_originais = [
+                                f"conta:{conta_id}"
+                                for conta_id in contas_originais_ids
+                            ] + [
+                                f"locacao:{locacao_id}"
+                                for locacao_id in locacoes_originais_ids
+                            ]
+
                             fechamento_destino = _rota_bloqueada_para_recebimento(
                                 operacao_original.cliente,
                                 operacao_original.rota_snapshot,
@@ -16937,12 +17243,29 @@ def receber_cliente_corrigir_recebimento(request, operacao_id):
                                     contas_ids_adicionais=contas_originais_ids,
                                 )
                             )
-                            saldo_referencia = sum(
-                                (
-                                    (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
-                                    for conta in contas_referencia
-                                ),
-                                Decimal("0.00"),
+                            locacoes_referencia = list(
+                                _locacoes_abertas_cliente_qs(
+                                    operacao_original.cliente_id,
+                                    bloquear=True,
+                                ).filter(id__in=locacoes_originais_ids)
+                            )
+
+                            saldo_referencia = (
+                                sum(
+                                    (
+                                        (conta.valor_em_aberto or Decimal("0.00")).quantize(Decimal("0.01"))
+                                        for conta in contas_referencia
+                                        if conta.id in contas_originais_ids
+                                    ),
+                                    Decimal("0.00"),
+                                )
+                                + sum(
+                                    (
+                                        (locacao.saldo_devedor or Decimal("0.00")).quantize(Decimal("0.01"))
+                                        for locacao in locacoes_referencia
+                                    ),
+                                    Decimal("0.00"),
+                                )
                             ).quantize(Decimal("0.01"))
                             excedente_referencia = (valor_correto - saldo_referencia).quantize(Decimal("0.01"))
                             destino_diferenca = destino_original or "troco"
@@ -16967,6 +17290,7 @@ def receber_cliente_corrigir_recebimento(request, operacao_id):
                                 hoje_referencia=data_correta,
                                 somente_contas_ate_referencia=True,
                                 contas_ids_adicionais=contas_originais_ids,
+                                dividas_selecionadas=dividas_originais,
                             )
                             operacao_nova = resultado_novo["operacao"]
 
@@ -17189,11 +17513,25 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
     )
     voltar_receber_url = reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente_id})
     contas_abatidas = comprovante_dados.get("contas", [])
+    locacoes_abatidas = comprovante_dados.get("locacoes", [])
     contas_abertas = comprovante_dados.get("contas_abertas", [])
-    contas_abertas_total = sum(
-        (_decimal_comprovante(conta.get("saldo_atual")) for conta in contas_abertas),
-        Decimal("0.00"),
-    )
+    locacoes_abertas = comprovante_dados.get("locacoes_abertas", [])
+    contas_abertas_total = (
+        sum(
+            (
+                _decimal_comprovante(conta.get("saldo_atual"))
+                for conta in contas_abertas
+            ),
+            Decimal("0.00"),
+        )
+        + sum(
+            (
+                _decimal_comprovante(locacao.get("saldo_atual"))
+                for locacao in locacoes_abertas
+            ),
+            Decimal("0.00"),
+        )
+    ).quantize(Decimal("0.01"))
     contexto_rota_recebimento, proximo_cliente_recebimento = _proximo_cliente_recebimento_rota(cliente, operacao)
     historico_recebimentos_rota_dia, total_recebimentos_rota_dia = _historico_recebimentos_dia_rota(
         cliente,
@@ -17263,8 +17601,18 @@ def receber_cliente_confirmado(request, cliente_id, operacao_id):
         "contas_abatidas": contas_abatidas,
         "contas_abatidas_qtd": len(contas_abatidas),
         "primeira_conta_abatida": contas_abatidas[0] if contas_abatidas else None,
+        "locacoes_abatidas": locacoes_abatidas,
+        "locacoes_abatidas_qtd": len(locacoes_abatidas),
         "contas_abertas": contas_abertas,
         "contas_abertas_qtd": len(contas_abertas),
+        "locacoes_abertas": locacoes_abertas,
+        "locacoes_abertas_qtd": len(locacoes_abertas),
+        "dividas_abatidas_qtd": (
+            len(contas_abatidas) + len(locacoes_abatidas)
+        ),
+        "dividas_abertas_qtd": (
+            len(contas_abertas) + len(locacoes_abertas)
+        ),
         "contas_abertas_total_formatado": _formatar_moeda(contas_abertas_total),
         "whatsapp_confirmacao": whatsapp_confirmacao,
         "comprovante_imagem_url": comprovante_imagem_url,
