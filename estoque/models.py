@@ -511,6 +511,22 @@ class ItemVenda(models.Model):
     )
     estoque_unidade_snapshot = models.CharField(max_length=20, blank=True)
 
+    # Custo historico congelado no momento da venda.
+    custo_unitario_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
+    custo_total_snapshot = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    custo_unidade_snapshot = models.CharField(max_length=20, blank=True)
+    custo_origem_snapshot = models.CharField(max_length=30, blank=True)
+
     class Meta:
         ordering = ["id"]
 
@@ -669,6 +685,23 @@ class ItemVendaRemovido(models.Model):
         blank=True,
     )
     estoque_unidade_snapshot = models.CharField(max_length=20, blank=True)
+
+    # Preserva o custo historico do item mesmo depois da remocao.
+    custo_unitario_snapshot = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
+    custo_total_snapshot = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    custo_unidade_snapshot = models.CharField(max_length=20, blank=True)
+    custo_origem_snapshot = models.CharField(max_length=30, blank=True)
+
     item_venda_original_id = models.PositiveIntegerField(blank=True, null=True)
     credito_gerado = models.ForeignKey(
         "CreditoCliente",

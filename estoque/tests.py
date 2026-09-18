@@ -14750,6 +14750,177 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(item.estoque_movimentado, Decimal("5.000"))
         self.assertEqual(item.estoque_depois, Decimal("5.000"))
 
+    def test_gravar_venda_registra_snapshot_historico_de_custo(self):
+        produto = self._produto_teste("Produto Snapshot Custo Venda", quantidade=10)
+        Produto.objects.filter(pk=produto.pk).update(preco_compra=Decimal("4.25"))
+        produto.refresh_from_db()
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="3",
+            preco="6.00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        self.assertEqual(item.custo_unitario_snapshot, Decimal("4.2500"))
+        self.assertEqual(item.custo_total_snapshot, Decimal("12.75"))
+        self.assertEqual(item.custo_unidade_snapshot, "un")
+        self.assertEqual(item.custo_origem_snapshot, "preco_compra_atual")
+
+    def test_snapshot_custo_venda_nao_muda_quando_preco_compra_produto_muda(self):
+        produto = self._produto_teste("Produto Custo Historico Imutavel", quantidade=10)
+        Produto.objects.filter(pk=produto.pk).update(preco_compra=Decimal("4.00"))
+        produto.refresh_from_db()
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="2",
+            preco="6.00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        Produto.objects.filter(pk=produto.pk).update(preco_compra=Decimal("9.00"))
+        produto.refresh_from_db()
+
+        item.refresh_from_db()
+        self.assertEqual(item.custo_unitario_snapshot, Decimal("4.0000"))
+        self.assertEqual(item.custo_total_snapshot, Decimal("8.00"))
+
+    def test_gravar_venda_sem_preco_compra_mantem_custo_desconhecido(self):
+        produto = self._produto_teste("Produto Custo Desconhecido", quantidade=10)
+        Produto.objects.filter(pk=produto.pk).update(preco_compra=None)
+        produto.refresh_from_db()
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="2",
+            preco="6.00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        self.assertIsNone(item.custo_unitario_snapshot)
+        self.assertIsNone(item.custo_total_snapshot)
+        self.assertEqual(item.custo_unidade_snapshot, "")
+        self.assertEqual(item.custo_origem_snapshot, "")
+
+    def test_gravar_venda_mil_fracionado_registra_cmv_proporcional(self):
+        produto = self._produto_teste(
+            "Produto MIL Snapshot Custo",
+            quantidade=Decimal("2.000"),
+        )
+        produto.unidade_compra = "MIL"
+        produto.unidade_venda_1 = "MIL"
+        produto.vende_fracionado = False
+        produto.preco_compra = Decimal("70.00")
+        produto.preco_vista = Decimal("96.00")
+        produto.preco_prazo = Decimal("98.00")
+        produto.save(update_fields=[
+            "unidade_compra",
+            "unidade_venda_1",
+            "vende_fracionado",
+            "preco_compra",
+            "preco_vista",
+            "preco_prazo",
+        ])
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="0.500",
+            unidade="MIL",
+            preco="96.00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        self.assertEqual(item.estoque_movimentado, Decimal("0.500"))
+        self.assertEqual(item.custo_unitario_snapshot, Decimal("70.0000"))
+        self.assertEqual(item.custo_total_snapshot, Decimal("35.00"))
+        self.assertEqual(item.custo_unidade_snapshot, "MIL")
+        self.assertEqual(item.custo_origem_snapshot, "preco_compra_atual")
+
+
+    def test_gravar_venda_fracionada_kg_g_registra_cmv_proporcional(self):
+        produto = self._produto_teste(
+            "Produto KG G Snapshot Custo",
+            quantidade=Decimal("10.000"),
+        )
+        Produto.objects.filter(pk=produto.pk).update(
+            preco_compra=Decimal("10.00"),
+            preco_vista=Decimal("20.00"),
+            preco_prazo=Decimal("22.00"),
+            unidade_compra="KG",
+            unidade_venda_1="KG",
+            unidade_venda_2="G",
+            fator_conversao=Decimal("1000"),
+            vende_fracionado=True,
+        )
+        produto.refresh_from_db()
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="750",
+            unidade="G",
+            preco="0.02",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        self.assertEqual(item.estoque_movimentado, Decimal("0.750"))
+        self.assertEqual(item.custo_unitario_snapshot, Decimal("10.0000"))
+        self.assertEqual(item.custo_total_snapshot, Decimal("7.50"))
+        self.assertEqual(item.custo_unidade_snapshot, "KG")
+
+
+    def test_gravar_venda_caixa_12_uma_unidade_registra_cmv_exato(self):
+        produto = self._produto_teste(
+            "Produto Caixa 12 Snapshot Custo",
+            quantidade=Decimal("10.000"),
+        )
+        Produto.objects.filter(pk=produto.pk).update(
+            preco_compra=Decimal("100.00"),
+            preco_vista=Decimal("120.00"),
+            preco_prazo=Decimal("130.00"),
+            unidade_compra="CX",
+            unidade_venda_1="CX",
+            unidade_venda_2="UN",
+            fator_conversao=Decimal("12"),
+            vende_fracionado=True,
+        )
+        produto.refresh_from_db()
+
+        resposta = self._post_gravar_venda(
+            produto,
+            quantidade="1",
+            unidade="UN",
+            preco="12.00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["sucesso"])
+
+        item = Venda.objects.get(pk=resposta.json()["venda_id"]).itens.get()
+
+        self.assertEqual(item.custo_unitario_snapshot, Decimal("100.0000"))
+        self.assertEqual(item.custo_total_snapshot, Decimal("8.33"))
+        self.assertEqual(item.custo_unidade_snapshot, "CX")
+
+
     def test_gravar_venda_bloqueia_estoque_insuficiente(self):
         produto = self._produto_teste("Produto Estoque Insuficiente Venda", quantidade=1)
 
@@ -30736,6 +30907,9 @@ class VendaEdicaoUnificadaTests(TestCase):
         batata = self.criar_produto("Batata Decimal Financeiro", estoque="5.000")
         cebola = self.criar_produto("Cebola Decimal Financeiro", estoque="5.000")
         maionese = self.criar_produto("Maionese Decimal Financeiro", estoque="5.000")
+        Produto.objects.filter(
+            pk__in=[alho.pk, batata.pk, cebola.pk, maionese.pk]
+        ).update(preco_compra=Decimal("1.00"))
         for produto in [alho, batata, cebola]:
             produto.unidade_venda_1 = "KG"
             produto.unidade_compra = "KG"
@@ -30807,6 +30981,9 @@ class VendaEdicaoUnificadaTests(TestCase):
         batata = self.criar_produto("Batata Decimal Truncada", estoque="5.000")
         cebola = self.criar_produto("Cebola Decimal Truncada", estoque="5.000")
         maionese = self.criar_produto("Maionese Decimal Truncada", estoque="5.000")
+        Produto.objects.filter(
+            pk__in=[alho.pk, batata.pk, cebola.pk, maionese.pk]
+        ).update(preco_compra=Decimal("1.00"))
         for produto in [alho, batata, cebola]:
             produto.unidade_venda_1 = "KG"
             produto.unidade_compra = "KG"
@@ -31138,6 +31315,70 @@ class VendaEdicaoUnificadaTests(TestCase):
                 venda=venda,
                 tipo_evento="quantidade_item_alterada",
             ).exists()
+        )
+
+    def test_edicao_unificada_cx12_preserva_custo_historico_e_precisao(self):
+        cliente, produto, venda, item = self.criar_venda_base(
+            quantidade="1.000",
+            preco="30.00",
+            estoque="9.917",
+        )
+
+        Produto.objects.filter(pk=produto.pk).update(
+            preco_compra=Decimal("240.00"),
+            unidade_compra="CX",
+            unidade_venda_1="CX",
+            unidade_venda_2="UN",
+            fator_conversao=Decimal("12.00"),
+            vende_fracionado=True,
+        )
+        produto.refresh_from_db()
+
+        ItemVenda.objects.filter(pk=item.pk).update(
+            unidade="UN",
+            custo_unitario_snapshot=Decimal("100.0000"),
+            custo_total_snapshot=Decimal("8.33"),
+            custo_unidade_snapshot="CX",
+            custo_origem_snapshot="preco_compra_atual",
+            estoque_antes=Decimal("10.000"),
+            estoque_movimentado=Decimal("0.083"),
+            estoque_depois=Decimal("9.917"),
+            estoque_unidade_snapshot="CX",
+        )
+        item.refresh_from_db()
+
+        payload = self.payload_edicao(
+            venda,
+            item,
+            quantidade="2.000",
+            preco="30.00",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        item.refresh_from_db()
+        produto.refresh_from_db()
+
+        self.assertEqual(item.quantidade, Decimal("2.000"))
+        self.assertEqual(
+            item.custo_unitario_snapshot,
+            Decimal("100.0000"),
+        )
+        self.assertEqual(
+            item.custo_total_snapshot,
+            Decimal("16.67"),
+        )
+        self.assertEqual(item.custo_unidade_snapshot, "CX")
+        self.assertEqual(
+            item.custo_origem_snapshot,
+            "preco_compra_atual",
         )
 
     def test_edicao_unificada_aumenta_ct_fracionado_movimentando_delta_decimal(self):
@@ -31867,6 +32108,19 @@ class VendaEdicaoUnificadaTests(TestCase):
             estoque="8.000",
         )
 
+        ItemVenda.objects.filter(pk=item.pk).update(
+            custo_unitario_snapshot=Decimal("4.2500"),
+            custo_total_snapshot=Decimal("8.50"),
+            custo_unidade_snapshot="UN",
+            custo_origem_snapshot="preco_compra_atual",
+        )
+        Produto.objects.filter(pk=produto.pk).update(
+            preco_compra=Decimal("7.00"),
+        )
+
+        item.refresh_from_db()
+        produto.refresh_from_db()
+
         payload = self.payload_edicao(
             venda,
             item,
@@ -31894,6 +32148,20 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(venda.total, Decimal("25.00"))
         self.assertEqual(conta.valor_original, Decimal("25.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("25.00"))
+
+        self.assertEqual(
+            item.custo_unitario_snapshot,
+            Decimal("4.2500"),
+        )
+        self.assertEqual(
+            item.custo_total_snapshot,
+            Decimal("8.50"),
+        )
+        self.assertEqual(item.custo_unidade_snapshot, "UN")
+        self.assertEqual(
+            item.custo_origem_snapshot,
+            "preco_compra_atual",
+        )
 
     def test_edicao_unificada_converte_a_prazo_para_a_vista_quitando_conta_vinculada(self):
         cliente, produto, venda, item = self.criar_venda_base(
