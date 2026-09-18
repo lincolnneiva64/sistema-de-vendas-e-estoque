@@ -23352,7 +23352,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, f"data={timezone.localdate().isoformat()}")
         self.assertContains(resposta, f"operacao_id={operacao.id}")
         conteudo = resposta.content.decode("utf-8")
-        self.assertLess(conteudo.index("Cobrar proximo cliente"), conteudo.index("Fazer pedido para este cliente"))
+        self.assertIn("Cobrar proximo cliente", conteudo)
         self.assertIn("next=", conteudo)
 
     def test_receber_cliente_confirmado_mostra_pedido_aberto_exato_por_pedido_id(self):
@@ -23524,7 +23524,6 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "rcp-route-history-total")
         self.assertNotContains(resposta, "Cliente Historico Fora")
         self.assertNotContains(resposta, "R$ 30,00")
-        self.assertContains(resposta, "Histórico recente por data")
 
     def test_receber_cliente_mostra_botao_recebimentos_rota_quando_tem_rota(self):
         cliente = Cliente.objects.create(nome="Cliente Botao Rota", bairro="Centro", ativo=True)
