@@ -1499,22 +1499,8 @@
               >
               <span>
                 <strong>Locação #{{ locacao.id }}</strong>
-
-                {% if locacao.itens.all %}
-                  ?
-                  {% for item in locacao.itens.all %}
-                    {% if item.tipo == "mesa_avulsa" %}
-                      {{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}
-                    {% elif item.tipo == "cadeira_avulsa" %}
-                      {{ item.quantidade }} cadeira{{ item.quantidade|pluralize:"s" }}
-                    {% else %}
-                      {{ item.quantidade }} {{ item.get_tipo_display }}
-                    {% endif %}
-                    {% if not forloop.last %} / {% endif %}
-                  {% endfor %}
-                {% endif %}
-
-                ? saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}
+                <span data-descricao-locacao="{{ locacao.id }}"></span>
+                — saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}
               </span>
             </label>
           {% endfor %}
@@ -2371,6 +2357,17 @@
     const btnCompartilharComprovanteImagem = document.getElementById("btn-compartilhar-comprovante-imagem");
     const btnVoltarTelaVenda = document.getElementById("btn-voltar-tela-venda");
     const contas = JSON.parse(document.getElementById("contasPreviewCliente")?.textContent || "[]");
+    document.querySelectorAll("[data-descricao-locacao]").forEach(function (elemento) {
+      const locacaoId = Number(elemento.dataset.descricaoLocacao);
+      const contaLocacao = contas.find(function (conta) {
+        return (conta.tipo || "") === "locacao" && Number(conta.id) === locacaoId;
+      });
+
+      if (contaLocacao && contaLocacao.descricao) {
+        elemento.textContent = " \u2014 " + contaLocacao.descricao + " ";
+      }
+    });
+
     const dividasCheckboxes = Array.from(document.querySelectorAll("input[name='dividas']"));
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
@@ -2698,6 +2695,7 @@
             return textoAplicacao;
           });
 
+          resumo.style.whiteSpace = "pre-line";
           resumo.textContent = "Aplicação do recebimento: " + detalhes.join(" | ");
         }
       }
