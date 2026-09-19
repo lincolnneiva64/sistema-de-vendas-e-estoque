@@ -32,7 +32,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -4630,6 +4630,33 @@ def _painel_resultado_categoria_despesa(categoria):
     return grupo_slug, grupo_nome, rotulos.get(categoria, "Nao classificado")
 
 
+def _painel_resultado_catalogo_despesa(catalogo):
+    """Classifica despesas estruturadas pelo catalogo, sem depender da categoria legada."""
+    grupo = (catalogo.grupo or "").strip()
+    categoria = (catalogo.categoria or "").strip()
+
+    grupos = {
+        "veiculos": ("veiculos", "Veiculos"),
+        "estrutura": ("estrutura", "Estrutura"),
+        "pessoal": ("pessoal", "Pessoal"),
+        "operacionais": ("operacionais", "Operacionais"),
+        "alimentacao": ("alimentacao", "Alimentacao"),
+        "mercadorias emergenciais": (
+            "mercadorias_emergenciais",
+            "Mercadorias emergenciais",
+        ),
+        "outras": ("outras", "Outras"),
+    }
+
+    grupo_slug, grupo_nome = grupos.get(
+        grupo.lower(),
+        ("nao_classificado", "Nao classificado"),
+    )
+
+    categoria_nome = categoria or catalogo.nome or "Nao classificado"
+    return grupo_slug, grupo_nome, categoria_nome
+
+
 def _painel_resultado_adicionar_lancamento(grupos, grupo_slug, grupo_nome, categoria_nome, lancamento):
     grupo = grupos.setdefault(
         grupo_slug,
@@ -4694,9 +4721,31 @@ def _painel_resultado_gerencial_contexto(request):
         margem_bruta = (faturamento - cmv_conhecido).quantize(Decimal("0.01"))
 
     grupos = {}
-    despesas_qs = DespesaDiaria.objects.filter(data_hora__date__range=(inicio, fim)).order_by("data_hora", "id")
+    despesas_qs = (
+        DespesaDiaria.objects
+        .select_related("catalogo")
+        .filter(data_hora__date__range=(inicio, fim))
+        .order_by("data_hora", "id")
+    )
     for despesa in despesas_qs:
-        grupo_slug, grupo_nome, categoria_nome = _painel_resultado_categoria_despesa(despesa.categoria)
+        # Despesa pessoal pode sair de uma conta da empresa e, portanto,
+        # gera movimento financeiro, mas nao e custo operacional da empresa.
+        # Lancamentos historicos sem catalogo preservam o comportamento antigo.
+        if (
+            despesa.catalogo
+            and despesa.catalogo.tipo == CatalogoDespesa.TIPO_PESSOAL
+        ):
+            continue
+
+        if despesa.catalogo:
+            grupo_slug, grupo_nome, categoria_nome = (
+                _painel_resultado_catalogo_despesa(despesa.catalogo)
+            )
+        else:
+            grupo_slug, grupo_nome, categoria_nome = (
+                _painel_resultado_categoria_despesa(despesa.categoria)
+            )
+
         _painel_resultado_adicionar_lancamento(
             grupos,
             grupo_slug,
@@ -4705,7 +4754,12 @@ def _painel_resultado_gerencial_contexto(request):
             {
                 "tipo": "Despesa diaria",
                 "data": timezone.localtime(despesa.data_hora).date(),
-                "descricao": despesa.observacao or despesa.get_categoria_display() or "Nao classificado",
+                "descricao": (
+                    despesa.observacao
+                    or (despesa.catalogo.nome if despesa.catalogo else "")
+                    or despesa.get_categoria_display()
+                    or "Nao classificado"
+                ),
                 "valor": _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01")),
                 "origem": f"Despesa #{despesa.id}",
             },
@@ -4997,6 +5051,13 @@ def despesas_diarias(request):
     inicio_mes = hoje.replace(day=1)
 
     contas_saida = _contas_saida_despesa_diaria()
+    catalogo_despesas = CatalogoDespesa.objects.filter(
+        ativo=True,
+    ).order_by("ordem", "tipo", "grupo", "nome")
+    catalogo_favoritos = catalogo_despesas.filter(favorito=True)
+    catalogo_empresa = catalogo_despesas.filter(tipo=CatalogoDespesa.TIPO_EMPRESA)
+    catalogo_pessoal = catalogo_despesas.filter(tipo=CatalogoDespesa.TIPO_PESSOAL)
+
     operadores_despesa_diaria = Funcionario.objects.filter(
         ativo=True,
         pode_operar_sistema=True,
@@ -5031,6 +5092,15 @@ def despesas_diarias(request):
             return redirect("estoque:despesas_diarias")
 
         categoria = request.POST.get("categoria")
+        catalogo = None
+        catalogo_id = request.POST.get("catalogo_id")
+
+        if catalogo_id and str(catalogo_id).isdigit():
+            catalogo = CatalogoDespesa.objects.filter(
+                pk=catalogo_id,
+                ativo=True,
+            ).first()
+
         observacao = (request.POST.get("observacao") or "").strip()
         operador = (request.POST.get("operador") or "").strip()
         data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
@@ -5046,6 +5116,27 @@ def despesas_diarias(request):
             ).first()
 
         categorias_validas = {opcao[0] for opcao in DespesaDiaria.CATEGORIA_CHOICES}
+
+        if catalogo:
+            # O catalogo estruturado e a fonte principal da classificacao.
+            # A categoria legada continua preenchida apenas para manter
+            # compatibilidade com relatorios e rotinas antigas.
+            grupo_catalogo = (catalogo.grupo or "").strip().lower()
+            categoria_catalogo = (catalogo.categoria or "").strip().lower()
+
+            if catalogo.tipo == CatalogoDespesa.TIPO_PESSOAL:
+                categoria = DespesaDiaria.CATEGORIA_PESSOAL
+            elif categoria_catalogo == "combustivel":
+                categoria = DespesaDiaria.CATEGORIA_GASOLINA
+            elif categoria_catalogo == "manutencao":
+                categoria = DespesaDiaria.CATEGORIA_MANUTENCAO
+            elif categoria_catalogo == "material de apoio":
+                categoria = DespesaDiaria.CATEGORIA_MATERIAL_APOIO
+            elif grupo_catalogo == "pessoal":
+                categoria = DespesaDiaria.CATEGORIA_AJUDANTE_DIARIA
+            else:
+                categoria = DespesaDiaria.CATEGORIA_OUTROS
+
         forma_pagamento = DespesaDiaria.FORMA_PIX
         if conta_saida and conta_saida.tipo == ContaFinanceira.TIPO_CAIXA:
             forma_pagamento = DespesaDiaria.FORMA_DINHEIRO
@@ -5101,6 +5192,7 @@ def despesas_diarias(request):
             despesa = DespesaDiaria.objects.create(
                 data_hora=data_hora,
                 valor=valor,
+                catalogo=catalogo,
                 categoria=categoria,
                 forma_pagamento=forma_pagamento,
                 operador=operador,
@@ -5176,6 +5268,10 @@ def despesas_diarias(request):
             "quantidade_periodo": len(despesas_filtradas),
             "total_mes": total_mes,
             "categorias": DespesaDiaria.CATEGORIA_CHOICES,
+            "catalogo_despesas": catalogo_despesas,
+            "catalogo_favoritos": catalogo_favoritos,
+            "catalogo_empresa": catalogo_empresa,
+            "catalogo_pessoal": catalogo_pessoal,
             "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
             "forma_padrao": DespesaDiaria.FORMA_PIX,
             "contas_saida": contas_saida,

@@ -281,6 +281,247 @@
     box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18) !important;
     background: #eff6ff !important;
   }
+
+  .despesa-form-rapido {
+    padding: 16px;
+  }
+
+  .despesa-rapido-titulo {
+    font-size: 1.12rem;
+    font-weight: 950;
+  }
+
+  .despesa-rapido-ajuda {
+    margin: 2px 0 14px;
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 750;
+  }
+
+  .despesa-valor-principal label,
+  .despesa-tipo-titulo {
+    display: block;
+    margin-bottom: 5px;
+    color: #334155;
+    font-size: .82rem;
+    font-weight: 950;
+  }
+
+  .despesa-money-grande {
+    min-height: 62px;
+    margin-bottom: 15px;
+    border-width: 2px;
+  }
+
+  .despesa-money-grande .despesa-money-prefix {
+    font-size: 1.35rem;
+  }
+
+  .despesa-money-grande input {
+    min-height: 58px;
+    font-size: 1.65rem;
+    font-weight: 950;
+  }
+
+  .despesa-atalhos {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .despesa-atalho {
+    min-height: 64px;
+    padding: 8px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    color: #172033;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .despesa-atalho span {
+    display: block;
+    font-size: .88rem;
+    font-weight: 950;
+  }
+
+  .despesa-atalho small {
+    display: block;
+    margin-top: 3px;
+    color: #64748b;
+    font-size: .7rem;
+    font-weight: 750;
+  }
+
+  .despesa-atalho.ativo {
+    border-color: #2563eb;
+    background: #eff6ff;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, .12);
+  }
+
+  .despesa-todos-tipos {
+    margin-bottom: 10px;
+  }
+
+  .despesa-selecao-atual {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #ecfdf5;
+    color: #166534;
+    font-size: .8rem;
+    font-weight: 900;
+  }
+
+  .despesa-grid-principal {
+    margin-top: 10px;
+  }
+
+  .despesa-detalhes {
+    margin-top: 12px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
+  }
+
+  .despesa-detalhes summary {
+    color: #2563eb;
+    font-size: .86rem;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .despesa-detalhes-grid {
+    margin-top: 10px;
+  }
+
+  .despesa-limpar {
+    width: 100%;
+    margin-top: 5px;
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    font-weight: 850;
+    cursor: pointer;
+  }
+
+  @media (max-width: 720px) {
+    .despesa-atalhos {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .despesa-atalho {
+      min-height: 60px;
+    }
+
+    .despesa-money-grande input {
+      font-size: 1.45rem;
+    }
+  }
+
+
+  .despesa-escolha-raiz {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .despesa-raiz {
+    min-height: 82px;
+    padding: 12px;
+    border: 2px solid #cbd5e1;
+    border-radius: 11px;
+    background: #fff;
+    color: #172033;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .despesa-raiz strong {
+    display: block;
+    font-size: 1rem;
+    font-weight: 950;
+  }
+
+  .despesa-raiz small {
+    display: block;
+    margin-top: 4px;
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 750;
+  }
+
+  .despesa-raiz.ativo {
+    border-color: #2563eb;
+    background: #eff6ff;
+  }
+
+  .despesa-nivel {
+    margin: 8px 0 12px;
+    padding: 11px;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+  }
+
+  .despesa-nivel-cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 9px;
+  }
+
+  .despesa-nivel-cabecalho strong {
+    font-weight: 950;
+  }
+
+  .despesa-nivel-cabecalho button {
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    font-weight: 900;
+    cursor: pointer;
+  }
+
+  .despesa-pessoas {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .despesa-pessoa {
+    min-height: 52px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 9px;
+    background: #fff;
+    color: #172033;
+    font-weight: 950;
+    cursor: pointer;
+  }
+
+  .despesa-pessoa.ativo {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .despesa-nivel-pessoa {
+    margin-top: 10px;
+  }
+
+  @media (max-width: 720px) {
+    .despesa-escolha-raiz {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .despesa-pessoas {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
 </style>
 
 <main class="despesa-page">
@@ -301,83 +542,220 @@
     {% endfor %}
   {% endif %}
 
-  <section class="despesa-form">
+  <section class="despesa-form despesa-form-rapido">
     <form method="post" id="formDespesaDiaria">
       {% csrf_token %}
       <input type="hidden" name="acao" id="acaoDespesaDiaria" value="">
-      <div class="despesa-grid">
-        <div class="despesa-field">
-          <label for="dataDespesaDiaria">Data</label>
-          <input id="dataDespesaDiaria" name="data_lancamento" type="date" value="{{ hoje|date:'Y-m-d' }}" required>
+      <input type="hidden" name="catalogo_id" id="catalogoDespesaId" value="">
+      <input type="hidden" name="categoria" id="categoriaDespesaDiaria" value="outros">
+
+      <div class="despesa-rapido-titulo">Nova despesa</div>
+      <div class="despesa-rapido-ajuda">Informe o valor, toque no tipo de despesa e escolha de onde saiu o dinheiro.</div>
+
+      <div class="despesa-valor-principal">
+        <label for="valorDespesaDiaria">Valor</label>
+        <div class="despesa-money-wrap despesa-money-grande">
+          <span class="despesa-money-prefix">R$</span>
+          <input id="valorDespesaDiaria" name="valor" type="text"
+                 inputmode="decimal" autocomplete="off"
+                 placeholder="0,00" required>
         </div>
-        <div class="despesa-field">
-          <label for="valorDespesaDiaria">Valor</label>
-          <div class="despesa-money-wrap">
-            <span class="despesa-money-prefix">R$</span>
-            <input id="valorDespesaDiaria" name="valor" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" required>
-          </div>
+      </div>
+
+      <div class="despesa-tipo-titulo">De quem é essa despesa?</div>
+
+      <div class="despesa-escolha-raiz">
+        <button type="button"
+                class="despesa-raiz"
+                data-tipo-despesa="empresa">
+          <strong>Empresa</strong>
+          <small>Operação, veículos, funcionários e depósito</small>
+        </button>
+
+        <button type="button"
+                class="despesa-raiz"
+                data-tipo-despesa="pessoal">
+          <strong>Pessoal</strong>
+          <small>Lincoln, Roseli e família</small>
+        </button>
+      </div>
+
+      <div id="areaEmpresa" class="despesa-nivel" hidden>
+        <div class="despesa-nivel-cabecalho">
+          <strong>Empresa</strong>
+          <button type="button" class="despesa-voltar-tipo">Trocar</button>
         </div>
-        <div class="despesa-field">
-          <label for="categoriaDespesaDiaria">Categoria</label>
-          <select id="categoriaDespesaDiaria" name="categoria" required>
-            {% for valor, texto in categorias %}
-              <option value="{{ valor }}">{{ texto }}</option>
+
+        <div class="despesa-atalhos">
+          {% for item in catalogo_empresa %}
+            {% if item.favorito %}
+              <button type="button"
+                      class="despesa-atalho"
+                      data-catalogo-id="{{ item.id }}"
+                      data-catalogo-nome="{{ item.nome }}">
+                <span>{{ item.nome }}</span>
+                <small>{{ item.grupo }} · {{ item.categoria }}</small>
+              </button>
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        <div class="despesa-field despesa-todos-tipos">
+          <label for="catalogoEmpresaSelect">Outras despesas da empresa</label>
+          <select id="catalogoEmpresaSelect">
+            <option value="">Ver todas...</option>
+            {% for item in catalogo_empresa %}
+              <option value="{{ item.id }}">{{ item.nome }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="despesa-field despesa-field-full">
-          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro *</label>
+      </div>
+
+      <div id="areaPessoal" class="despesa-nivel" hidden>
+        <div class="despesa-nivel-cabecalho">
+          <strong>Pessoal</strong>
+          <button type="button" class="despesa-voltar-tipo">Trocar</button>
+        </div>
+
+        <div id="escolhaPessoa">
+          <div class="despesa-tipo-titulo">De quem?</div>
+
+          <div class="despesa-pessoas">
+            <button type="button" class="despesa-pessoa" data-pessoa="Lincoln">
+              Lincoln
+            </button>
+            <button type="button" class="despesa-pessoa" data-pessoa="Roseli">
+              Roseli
+            </button>
+            <button type="button" class="despesa-pessoa" data-pessoa="Familia">
+              Família
+            </button>
+          </div>
+        </div>
+
+        <div id="opcoesPessoais" hidden>
+          <div class="despesa-nivel-cabecalho despesa-nivel-pessoa">
+            <strong id="nomePessoaSelecionada"></strong>
+            <button type="button" id="trocarPessoa">Trocar pessoa</button>
+          </div>
+
+          <div class="despesa-atalhos">
+            {% for item in catalogo_pessoal %}
+              <button type="button"
+                      class="despesa-atalho despesa-atalho-pessoal"
+                      data-catalogo-id="{{ item.id }}"
+                      data-catalogo-nome="{{ item.nome }}"
+                      data-pessoa="{{ item.pessoa }}"
+                      {% if not item.favorito %}data-secundario="1"{% endif %}
+                      {% if not item.favorito %}hidden{% endif %}>
+                <span>{{ item.nome }}</span>
+                <small>{{ item.grupo }} · {{ item.categoria }}</small>
+              </button>
+            {% endfor %}
+          </div>
+
+          <div class="despesa-field despesa-todos-tipos">
+            <label for="catalogoPessoalSelect">Outras despesas</label>
+            <select id="catalogoPessoalSelect">
+              <option value="">Ver todas...</option>
+              {% for item in catalogo_pessoal %}
+                <option value="{{ item.id }}"
+                        data-pessoa="{{ item.pessoa }}">
+                  {{ item.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="despesaTipoSelecionado" class="despesa-selecao-atual" hidden></div>
+
+      <div class="despesa-grid despesa-grid-principal">
+        <div class="despesa-field">
+          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro?</label>
           <select id="contaSaidaDespesaDiaria" name="conta_saida" required>
-            <option value="">Selecione de onde saiu o dinheiro</option>
+            <option value="">Selecione</option>
             {% for conta in contas_saida %}
               <option value="{{ conta.id }}">{{ conta.nome }}</option>
             {% endfor %}
           </select>
-          <div class="despesa-item-meta">Escolha Caixa, Banco/Pix ou Sangria. Esta escolha e quem manda no financeiro.</div>
         </div>
-        <div class="despesa-field despesa-field-full">
-          <label>
-            <input id="pagaComDinheiroRota" name="paga_com_dinheiro_rota" type="checkbox" value="1">
-            Pago com dinheiro em posse da rota
-          </label>
-          <div class="despesa-item-meta">Esta marcacao nao cria outra saida financeira. Ela apenas informa que a despesa foi paga com dinheiro que estava em posse da rota.</div>
-        </div>
-        <div id="camposDinheiroRota" class="despesa-field despesa-field-full" hidden>
-          <div class="despesa-grid">
-            <div class="despesa-field">
-              <label for="rotaRecebimentoDespesa">Rota</label>
-              <select id="rotaRecebimentoDespesa" name="rota_recebimento">
-                <option value="">Selecione a rota</option>
-                {% for rota in rotas_recebimento_opcoes %}
-                  <option value="{{ rota }}">{{ rota }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="despesa-field">
-              <label for="dataRotaRecebimentoDespesa">Data da rota</label>
-              <input id="dataRotaRecebimentoDespesa" name="data_rota_recebimento" type="date" value="{{ hoje|date:'Y-m-d' }}">
-            </div>
-          </div>
-        </div>
-        <div class="despesa-field despesa-field-full">
-          <label for="operadorDespesaDiaria">Operador</label>
+
+        <div class="despesa-field">
+          <label for="operadorDespesaDiaria">Quem está lançando?</label>
           <select id="operadorDespesaDiaria" name="operador" required>
-            <option value="">Selecione o operador</option>
+            <option value="">Selecione</option>
             {% for operador in operadores_despesa_diaria %}
               <option value="{{ operador.nome }}">{{ operador.nome }}</option>
             {% endfor %}
           </select>
-          <div class="despesa-item-meta">Quem esta lancando esta despesa.</div>
-        </div>
-        <div class="despesa-field despesa-field-full">
-          <label for="observacaoDespesaDiaria">Observacao opcional</label>
-          <textarea id="observacaoDespesaDiaria" name="observacao" placeholder="Ex.: gasolina da entrega, lanche na rua, despesa pessoal..."></textarea>
         </div>
       </div>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px;">
-        <button class="despesa-btn despesa-submit" type="submit" id="btnSalvarDespesaDiaria" style="margin-top:0;">Lancar despesa</button>
-        <button class="despesa-btn despesa-btn-secondary despesa-submit" type="button" id="btnLimparDespesaDiaria" style="margin-top:0;">Limpar campos</button>
-      </div>
+
+      <details class="despesa-detalhes" id="detalhesDespesa">
+        <summary>Adicionar detalhes</summary>
+
+        <div class="despesa-grid despesa-detalhes-grid">
+          <div class="despesa-field">
+            <label for="dataDespesaDiaria">Data</label>
+            <input id="dataDespesaDiaria" name="data_lancamento"
+                   type="date" value="{{ hoje|date:'Y-m-d' }}" required>
+          </div>
+
+          <div class="despesa-field despesa-field-full">
+            <label>
+              <input id="pagaComDinheiroRota"
+                     name="paga_com_dinheiro_rota"
+                     type="checkbox" value="1">
+              Pago com dinheiro em posse da rota
+            </label>
+          </div>
+
+          <div id="camposDinheiroRota"
+               class="despesa-field despesa-field-full"
+               hidden>
+            <div class="despesa-grid">
+              <div class="despesa-field">
+                <label for="rotaRecebimentoDespesa">Rota</label>
+                <select id="rotaRecebimentoDespesa" name="rota_recebimento">
+                  <option value="">Selecione a rota</option>
+                  {% for rota in rotas_recebimento_opcoes %}
+                    <option value="{{ rota }}">{{ rota }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="despesa-field">
+                <label for="dataRotaRecebimentoDespesa">Data da rota</label>
+                <input id="dataRotaRecebimentoDespesa"
+                       name="data_rota_recebimento"
+                       type="date"
+                       value="{{ hoje|date:'Y-m-d' }}">
+              </div>
+            </div>
+          </div>
+
+          <div class="despesa-field despesa-field-full">
+            <label for="observacaoDespesaDiaria">Observação</label>
+            <textarea id="observacaoDespesaDiaria"
+                      name="observacao"
+                      placeholder="Opcional"></textarea>
+          </div>
+        </div>
+      </details>
+
+      <button class="despesa-btn despesa-submit"
+              type="submit"
+              id="btnSalvarDespesaDiaria">
+        Lançar despesa
+      </button>
+
+      <button class="despesa-limpar"
+              type="button"
+              id="btnLimparDespesaDiaria">
+        Limpar
+      </button>
     </form>
   </section>
 
@@ -537,36 +915,45 @@
   const acao = document.getElementById("acaoDespesaDiaria");
   const btnSalvar = document.getElementById("btnSalvarDespesaDiaria");
   const btnLimpar = document.getElementById("btnLimparDespesaDiaria");
-  let envioEmAndamento = false;
-  const campos = [
-    document.getElementById("dataDespesaDiaria"),
-    document.getElementById("valorDespesaDiaria"),
-    document.getElementById("categoriaDespesaDiaria"),
-    document.getElementById("contaSaidaDespesaDiaria"),
-    document.getElementById("pagaComDinheiroRota"),
-    document.getElementById("rotaRecebimentoDespesa"),
-    document.getElementById("dataRotaRecebimentoDespesa"),
-    document.getElementById("operadorDespesaDiaria"),
-    document.getElementById("observacaoDespesaDiaria"),
-    btnSalvar
-  ].filter(Boolean);
 
-  if (!form || !acao || !btnSalvar) {
-    return;
-  }
+  if (!form || !acao || !btnSalvar) return;
 
-  const dataCampo = document.getElementById("dataDespesaDiaria");
   const valorCampo = document.getElementById("valorDespesaDiaria");
-  const categoriaCampo = document.getElementById("categoriaDespesaDiaria");
+  const catalogoIdCampo = document.getElementById("catalogoDespesaId");
+  const selecaoAtual = document.getElementById("despesaTipoSelecionado");
+
+  const botoesRaiz = Array.from(document.querySelectorAll(".despesa-raiz"));
+  const areaEmpresa = document.getElementById("areaEmpresa");
+  const areaPessoal = document.getElementById("areaPessoal");
+  const botoesVoltarTipo = Array.from(document.querySelectorAll(".despesa-voltar-tipo"));
+
+  const escolhaPessoa = document.getElementById("escolhaPessoa");
+  const opcoesPessoais = document.getElementById("opcoesPessoais");
+  const nomePessoaSelecionada = document.getElementById("nomePessoaSelecionada");
+  const trocarPessoa = document.getElementById("trocarPessoa");
+  const botoesPessoa = Array.from(document.querySelectorAll(".despesa-pessoa"));
+
+  const botoesCatalogo = Array.from(document.querySelectorAll(".despesa-atalho"));
+  const botoesPessoais = Array.from(document.querySelectorAll(".despesa-atalho-pessoal"));
+
+  const selectEmpresa = document.getElementById("catalogoEmpresaSelect");
+  const selectPessoal = document.getElementById("catalogoPessoalSelect");
+
   const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
+  const operadorCampo = document.getElementById("operadorDespesaDiaria");
+  const dataCampo = document.getElementById("dataDespesaDiaria");
+  const detalhes = document.getElementById("detalhesDespesa");
+
   const dinheiroRotaCampo = document.getElementById("pagaComDinheiroRota");
   const camposDinheiroRota = document.getElementById("camposDinheiroRota");
-  const rotaRecebimentoCampo = document.getElementById("rotaRecebimentoDespesa");
-  const dataRotaRecebimentoCampo = document.getElementById("dataRotaRecebimentoDespesa");
-  const operadorCampo = document.getElementById("operadorDespesaDiaria");
+  const rotaCampo = document.getElementById("rotaRecebimentoDespesa");
+  const dataRotaCampo = document.getElementById("dataRotaRecebimentoDespesa");
   const observacaoCampo = document.getElementById("observacaoDespesaDiaria");
 
-  function dataHojeISO() {
+  let envioEmAndamento = false;
+  let pessoaAtual = "";
+
+  function hojeISO() {
     const hoje = new Date();
     const ano = hoje.getFullYear();
     const mes = String(hoje.getMonth() + 1).padStart(2, "0");
@@ -574,73 +961,205 @@
     return `${ano}-${mes}-${dia}`;
   }
 
-  function limparCamposDespesa() {
-    if (dataCampo) dataCampo.value = dataHojeISO();
-    if (valorCampo) valorCampo.value = "";
-    if (categoriaCampo) categoriaCampo.selectedIndex = 0;
-    if (contaCampo) {
-      contaCampo.value = "";
+  function limparSelecaoCatalogo() {
+    if (catalogoIdCampo) catalogoIdCampo.value = "";
+
+    botoesCatalogo.forEach(function (botao) {
+      botao.classList.remove("ativo");
+    });
+
+    if (selectEmpresa) selectEmpresa.value = "";
+    if (selectPessoal) selectPessoal.value = "";
+
+    if (selecaoAtual) {
+      selecaoAtual.hidden = true;
+      selecaoAtual.textContent = "";
     }
-    if (dinheiroRotaCampo) dinheiroRotaCampo.checked = false;
-    if (rotaRecebimentoCampo) rotaRecebimentoCampo.value = "";
-    if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.value = dataCampo ? dataCampo.value : dataHojeISO();
-    atualizarCamposDinheiroRota();
-    if (observacaoCampo) observacaoCampo.value = "";
-    if (operadorCampo) operadorCampo.selectedIndex = 0;
-    marcarFoco(valorCampo || dataCampo);
   }
 
-  function atualizarCamposDinheiroRota() {
+  function selecionarCatalogo(id, nome) {
+    limparSelecaoCatalogo();
+
+    if (!id) return;
+
+    if (catalogoIdCampo) catalogoIdCampo.value = String(id);
+
+    botoesCatalogo.forEach(function (botao) {
+      if (botao.dataset.catalogoId === String(id)) {
+        botao.classList.add("ativo");
+      }
+    });
+
+    if (selecaoAtual) {
+      selecaoAtual.textContent = "Selecionado: " + nome;
+      selecaoAtual.hidden = false;
+    }
+
+    if (contaCampo && !contaCampo.value) {
+      contaCampo.focus();
+    }
+  }
+
+  function escolherTipo(tipo) {
+    limparSelecaoCatalogo();
+
+    botoesRaiz.forEach(function (botao) {
+      botao.classList.toggle(
+        "ativo",
+        botao.dataset.tipoDespesa === tipo
+      );
+    });
+
+    if (areaEmpresa) areaEmpresa.hidden = tipo !== "empresa";
+    if (areaPessoal) areaPessoal.hidden = tipo !== "pessoal";
+
+    if (tipo === "pessoal") {
+      escolherPessoa("");
+    }
+  }
+
+  function escolherPessoa(pessoa) {
+    pessoaAtual = pessoa || "";
+    limparSelecaoCatalogo();
+
+    botoesPessoa.forEach(function (botao) {
+      botao.classList.toggle(
+        "ativo",
+        botao.dataset.pessoa === pessoaAtual
+      );
+    });
+
+    if (escolhaPessoa) escolhaPessoa.hidden = Boolean(pessoaAtual);
+    if (opcoesPessoais) opcoesPessoais.hidden = !pessoaAtual;
+
+    if (nomePessoaSelecionada) {
+      nomePessoaSelecionada.textContent =
+        pessoaAtual === "Familia" ? "Família" : pessoaAtual;
+    }
+
+    botoesPessoais.forEach(function (botao) {
+      const mesmaPessoa = botao.dataset.pessoa === pessoaAtual;
+      const secundario = botao.dataset.secundario === "1";
+      botao.hidden = !mesmaPessoa || secundario;
+    });
+
+    if (selectPessoal) {
+      selectPessoal.value = "";
+
+      Array.from(selectPessoal.options).forEach(function (option, indice) {
+        if (indice === 0) {
+          option.hidden = false;
+          return;
+        }
+
+        option.hidden = option.dataset.pessoa !== pessoaAtual;
+      });
+    }
+  }
+
+  botoesRaiz.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherTipo(botao.dataset.tipoDespesa);
+    });
+  });
+
+  botoesVoltarTipo.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherTipo("");
+    });
+  });
+
+  botoesPessoa.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherPessoa(botao.dataset.pessoa);
+    });
+  });
+
+  if (trocarPessoa) {
+    trocarPessoa.addEventListener("click", function () {
+      escolherPessoa("");
+    });
+  }
+
+  botoesCatalogo.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      selecionarCatalogo(
+        botao.dataset.catalogoId,
+        botao.dataset.catalogoNome
+      );
+    });
+  });
+
+  if (selectEmpresa) {
+    selectEmpresa.addEventListener("change", function () {
+      if (!selectEmpresa.value) {
+        limparSelecaoCatalogo();
+        return;
+      }
+
+      const option = selectEmpresa.options[selectEmpresa.selectedIndex];
+      selecionarCatalogo(selectEmpresa.value, option.textContent.trim());
+      selectEmpresa.value = String(catalogoIdCampo.value);
+    });
+  }
+
+  if (selectPessoal) {
+    selectPessoal.addEventListener("change", function () {
+      if (!selectPessoal.value) {
+        limparSelecaoCatalogo();
+        return;
+      }
+
+      const option = selectPessoal.options[selectPessoal.selectedIndex];
+      selecionarCatalogo(selectPessoal.value, option.textContent.trim());
+      selectPessoal.value = String(catalogoIdCampo.value);
+    });
+  }
+
+  function atualizarRota() {
     const ativo = Boolean(dinheiroRotaCampo && dinheiroRotaCampo.checked);
+
     if (camposDinheiroRota) camposDinheiroRota.hidden = !ativo;
-    if (rotaRecebimentoCampo) rotaRecebimentoCampo.required = ativo;
-    if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.required = ativo;
+    if (rotaCampo) rotaCampo.required = ativo;
+    if (dataRotaCampo) dataRotaCampo.required = ativo;
+
     if (!ativo) {
-      if (rotaRecebimentoCampo) rotaRecebimentoCampo.value = "";
-      if (dataRotaRecebimentoCampo) dataRotaRecebimentoCampo.value = "";
-    } else if (dataRotaRecebimentoCampo && !dataRotaRecebimentoCampo.value && dataCampo) {
-      dataRotaRecebimentoCampo.value = dataCampo.value;
+      if (rotaCampo) rotaCampo.value = "";
+      if (dataRotaCampo) dataRotaCampo.value = "";
+    } else if (dataRotaCampo && !dataRotaCampo.value) {
+      dataRotaCampo.value = dataCampo && dataCampo.value
+        ? dataCampo.value
+        : hojeISO();
     }
   }
 
-  function marcarFoco(campo) {
-    campos.forEach(function (item) {
-      item.classList.remove("despesa-foco-enter");
-    });
+  function limparTudo() {
+    envioEmAndamento = false;
 
-    if (!campo) {
-      return;
-    }
+    if (valorCampo) valorCampo.value = "";
+    if (contaCampo) contaCampo.value = "";
+    if (operadorCampo) operadorCampo.value = "";
+    if (dataCampo) dataCampo.value = hojeISO();
+    if (observacaoCampo) observacaoCampo.value = "";
 
-    campo.focus();
+    if (dinheiroRotaCampo) dinheiroRotaCampo.checked = false;
 
-    if (campo.select && campo.tagName === "INPUT") {
-      campo.select();
-    }
+    atualizarRota();
+    escolherTipo("");
 
-    campo.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
+    if (detalhes) detalhes.open = false;
 
-    campo.classList.add("despesa-foco-enter");
+    btnSalvar.disabled = false;
+    btnSalvar.textContent = "Lançar despesa";
 
-    setTimeout(function () {
-      campo.classList.remove("despesa-foco-enter");
-    }, 1200);
+    if (valorCampo) valorCampo.focus();
   }
 
-  function focoProximo(campoAtual) {
-    const i = campos.indexOf(campoAtual);
-    const proximo = campos[i + 1];
+  function prepararEnvio() {
+    if (envioEmAndamento) return false;
 
-    if (proximo) {
-      marcarFoco(proximo);
-    }
-  }
-
-  function prepararEnvioDespesa() {
-    if (envioEmAndamento) {
+    if (!catalogoIdCampo || !catalogoIdCampo.value) {
+      alert("Escolha a despesa antes de lançar.");
       return false;
     }
 
@@ -655,60 +1174,255 @@
     return true;
   }
 
-  function enviarDespesa() {
-    if (envioEmAndamento) {
-      return;
-    }
-
-    if (form.requestSubmit) {
-      form.requestSubmit(btnSalvar);
-      return;
-    }
-
-    if (!prepararEnvioDespesa()) {
-      return;
-    }
-
-    form.submit();
-  }
-
-  form.addEventListener("keydown", function (event) {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (event.target === btnSalvar) {
-      enviarDespesa();
-      return;
-    }
-
-    focoProximo(event.target);
-  }, true);
-
   form.addEventListener("submit", function (event) {
-    if (!prepararEnvioDespesa()) {
-      event.preventDefault();
-    }
-  });
-
-  btnSalvar.addEventListener("click", function (event) {
-    if (envioEmAndamento) {
+    if (!prepararEnvio()) {
       event.preventDefault();
     }
   });
 
   if (btnLimpar) {
-    btnLimpar.addEventListener("click", function () {
-      limparCamposDespesa();
-    });
+    btnLimpar.addEventListener("click", limparTudo);
   }
 
   if (dinheiroRotaCampo) {
-    dinheiroRotaCampo.addEventListener("change", atualizarCamposDinheiroRota);
-    atualizarCamposDinheiroRota();
+    dinheiroRotaCampo.addEventListener("change", atualizarRota);
   }
+
+  function primeiroVisivel(elementos) {
+    return elementos.find(function (el) {
+      return !el.hidden && el.offsetParent !== null && !el.disabled;
+    });
+  }
+
+  function focarTipoDespesa() {
+    const botao = primeiroVisivel(botoesRaiz);
+    if (botao) botao.focus();
+  }
+
+  function focarPrimeiraDespesaEmpresa() {
+    const botoes = botoesCatalogo.filter(function (botao) {
+      return !botao.classList.contains("despesa-atalho-pessoal");
+    });
+
+    const botao = primeiroVisivel(botoes);
+    if (botao) {
+      botao.focus();
+    } else if (selectEmpresa) {
+      selectEmpresa.focus();
+    }
+  }
+
+  function focarPrimeiraPessoa() {
+    const botao = primeiroVisivel(botoesPessoa);
+    if (botao) botao.focus();
+  }
+
+  function focarPrimeiraDespesaPessoal() {
+    const botao = primeiroVisivel(botoesPessoais);
+
+    if (botao) {
+      botao.focus();
+    } else if (selectPessoal) {
+      selectPessoal.focus();
+    }
+  }
+
+  function focarConta() {
+    if (contaCampo) contaCampo.focus();
+  }
+
+  function focarOperador() {
+    if (operadorCampo) operadorCampo.focus();
+  }
+
+  if (valorCampo) {
+    valorCampo.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+      focarTipoDespesa();
+    });
+  }
+
+  botoesRaiz.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+
+      const tipo = botao.dataset.tipoDespesa;
+      escolherTipo(tipo);
+
+      if (tipo === "empresa") {
+        focarPrimeiraDespesaEmpresa();
+      } else if (tipo === "pessoal") {
+        focarPrimeiraPessoa();
+      }
+    });
+  });
+
+  botoesPessoa.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+      escolherPessoa(botao.dataset.pessoa);
+      focarPrimeiraDespesaPessoal();
+    });
+  });
+
+  botoesCatalogo.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+
+      selecionarCatalogo(
+        botao.dataset.catalogoId,
+        botao.dataset.catalogoNome
+      );
+
+      focarConta();
+    });
+  });
+
+  if (selectEmpresa) {
+    selectEmpresa.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      if (!selectEmpresa.value) return;
+
+      event.preventDefault();
+
+      const option = selectEmpresa.options[selectEmpresa.selectedIndex];
+      selecionarCatalogo(
+        selectEmpresa.value,
+        option.textContent.trim()
+      );
+
+      focarConta();
+    });
+  }
+
+  if (selectPessoal) {
+    selectPessoal.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      if (!selectPessoal.value) return;
+
+      event.preventDefault();
+
+      const option = selectPessoal.options[selectPessoal.selectedIndex];
+      selecionarCatalogo(
+        selectPessoal.value,
+        option.textContent.trim()
+      );
+
+      focarConta();
+    });
+  }
+
+  if (contaCampo) {
+    contaCampo.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      if (!contaCampo.value) return;
+
+      event.preventDefault();
+      focarOperador();
+    });
+  }
+
+  if (operadorCampo) {
+    operadorCampo.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      if (!operadorCampo.value) return;
+
+      event.preventDefault();
+      btnSalvar.focus();
+    });
+  }
+
+  btnSalvar.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+
+    if (typeof form.requestSubmit === "function") {
+      form.requestSubmit(btnSalvar);
+    } else {
+      btnSalvar.click();
+    }
+  });
+
+  function navegarBotoes(event, botoes, colunas) {
+    const teclas = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+
+    if (!teclas.includes(event.key)) return false;
+
+    const visiveis = botoes.filter(function (botao) {
+      return !botao.hidden && botao.offsetParent !== null && !botao.disabled;
+    });
+
+    const atual = visiveis.indexOf(document.activeElement);
+    if (atual === -1) return false;
+
+    let proximo = atual;
+
+    if (event.key === "ArrowRight") {
+      proximo = atual + 1;
+      if (proximo >= visiveis.length) proximo = 0;
+    }
+
+    if (event.key === "ArrowLeft") {
+      proximo = atual - 1;
+      if (proximo < 0) proximo = visiveis.length - 1;
+    }
+
+    if (event.key === "ArrowDown") {
+      proximo = atual + colunas;
+      if (proximo >= visiveis.length) {
+        proximo = atual;
+      }
+    }
+
+    if (event.key === "ArrowUp") {
+      proximo = atual - colunas;
+      if (proximo < 0) {
+        proximo = atual;
+      }
+    }
+
+    event.preventDefault();
+    visiveis[proximo].focus();
+    return true;
+  }
+
+  botoesRaiz.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      navegarBotoes(event, botoesRaiz, 2);
+    });
+  });
+
+  botoesPessoa.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      navegarBotoes(event, botoesPessoa, 3);
+    });
+  });
+
+  botoesCatalogo.forEach(function (botao) {
+    botao.addEventListener("keydown", function (event) {
+      const pessoais = botao.classList.contains("despesa-atalho-pessoal");
+
+      const grupo = pessoais
+        ? botoesPessoais
+        : botoesCatalogo.filter(function (item) {
+            return !item.classList.contains("despesa-atalho-pessoal");
+          });
+
+      navegarBotoes(event, grupo, pessoais ? 3 : 4);
+    });
+  });
+
+  escolherTipo("");
+  atualizarRota();
 })();
 </script>
 

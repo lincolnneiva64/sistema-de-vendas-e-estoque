@@ -2577,6 +2577,38 @@ class PagamentoEmprestimoDivida(models.Model):
         return f"Pagamento R$ {self.valor} - {self.divida}"
 
 
+class CatalogoDespesa(models.Model):
+    TIPO_EMPRESA = "empresa"
+    TIPO_PESSOAL = "pessoal"
+    TIPO_CHOICES = [
+        (TIPO_EMPRESA, "Empresa"),
+        (TIPO_PESSOAL, "Pessoal"),
+    ]
+
+    nome = models.CharField(max_length=120)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
+    grupo = models.CharField(max_length=80)
+    categoria = models.CharField(max_length=80)
+    pessoa = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Lincoln, Roseli ou Familia quando for despesa pessoal.",
+    )
+    favorito = models.BooleanField(default=False)
+    ativo = models.BooleanField(default=True)
+    ordem = models.PositiveIntegerField(default=100)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["ordem", "tipo", "grupo", "nome"]
+        verbose_name = "Item do catalogo de despesas"
+        verbose_name_plural = "Catalogo de despesas"
+
+    def __str__(self):
+        return f"{self.nome} - {self.get_tipo_display()}"
+
+
 class DespesaDiaria(models.Model):
     CATEGORIA_GASOLINA = "gasolina"
     CATEGORIA_ALIMENTACAO = "alimentacao"
@@ -2620,6 +2652,13 @@ class DespesaDiaria(models.Model):
 
     data_hora = models.DateTimeField(default=timezone.now)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
+    catalogo = models.ForeignKey(
+        CatalogoDespesa,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="lancamentos",
+    )
     categoria = models.CharField(max_length=40, choices=CATEGORIA_CHOICES)
     forma_pagamento = models.CharField(max_length=40, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_PIX)
     operador = models.CharField(max_length=120, blank=True)

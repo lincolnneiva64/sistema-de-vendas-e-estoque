@@ -25,7 +25,7 @@ from django.utils import timezone
 from PIL import Image
 
 from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm, ProdutoForm
-from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, data_pertence_calendario_visita_fornecedor, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
 from .services.separacao_vendas import alteracoes_fisicas_apos_separacao, consolidar_alteracoes_fisicas_apos_separacao, eventos_fisicos_apos_separacao
@@ -30369,6 +30369,7 @@ class DespesaDiariaFinanceiroTests(TestCase):
         conta,
         valor="50,00",
         categoria=None,
+        catalogo_id=None,
         observacao="Despesa teste",
         follow=True,
         paga_com_dinheiro_rota=False,
@@ -30386,6 +30387,8 @@ class DespesaDiariaFinanceiroTests(TestCase):
             "rota_recebimento": rota_recebimento,
             "data_rota_recebimento": data_rota_recebimento,
         }
+        if catalogo_id is not None:
+            dados["catalogo_id"] = str(catalogo_id)
         if paga_com_dinheiro_rota:
             dados["paga_com_dinheiro_rota"] = "1"
         return self.client.post(
@@ -30397,6 +30400,69 @@ class DespesaDiariaFinanceiroTests(TestCase):
 
     def _movimento_unico(self):
         return MovimentoFinanceiro.objects.get(origem="despesa_diaria")
+
+    def test_catalogo_empresa_grava_classificacao_e_uma_unica_saida(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Gasolina - Gol Teste",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Veiculos",
+            categoria="Combustivel",
+            favorito=True,
+            ativo=True,
+            ordem=1,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_caixa,
+            valor="80,00",
+            catalogo_id=catalogo.id,
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            observacao="Abastecimento Gol",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertEqual(despesa.categoria, DespesaDiaria.CATEGORIA_GASOLINA)
+
+        movimentos = MovimentoFinanceiro.objects.filter(origem="despesa_diaria")
+        self.assertEqual(movimentos.count(), 1)
+        movimento = movimentos.get()
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(movimento.valor, Decimal("80.00"))
+        self.assertEqual(movimento.conta, self.conta_caixa)
+
+    def test_catalogo_pessoal_grava_classificacao_e_uma_unica_saida(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Despesa pessoal - Roseli Teste",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            grupo="Pessoal",
+            categoria="Despesa pessoal",
+            pessoa="Roseli",
+            favorito=True,
+            ativo=True,
+            ordem=1,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_banco,
+            valor="120,00",
+            catalogo_id=catalogo.id,
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            observacao="Despesa Roseli",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertEqual(despesa.categoria, DespesaDiaria.CATEGORIA_PESSOAL)
+
+        movimentos = MovimentoFinanceiro.objects.filter(origem="despesa_diaria")
+        self.assertEqual(movimentos.count(), 1)
+        movimento = movimentos.get()
+        self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(movimento.valor, Decimal("120.00"))
+        self.assertEqual(movimento.conta, self.conta_banco)
 
     def test_despesa_com_caixa_debita_caixa(self):
         self._post_despesa(self.conta_caixa)
@@ -30578,7 +30644,7 @@ class DespesaDiariaFinanceiroTests(TestCase):
         conteudo = resposta.content.decode()
         trecho_select = conteudo.split('id="contaSaidaDespesaDiaria"')[1].split("</select>")[0]
 
-        self.assertIn('<option value="">Selecione de onde saiu o dinheiro</option>', trecho_select)
+        self.assertIn('<option value="">Selecione</option>', trecho_select)
         self.assertNotIn("selected", trecho_select)
         self.assertIn(f'<option value="{self.conta_caixa.id}">{self.conta_caixa.nome}</option>', trecho_select)
         self.assertIn(f'<option value="{self.conta_banco.id}">{self.conta_banco.nome}</option>', trecho_select)
@@ -34646,6 +34712,95 @@ class PainelResultadoGerencialTests(TestCase):
         self.assertIsNone(resposta.context["resultado_gerencial"])
         self.assertEqual(resposta.context["resultado_base_simulador"], Decimal("500.00"))
         self.assertContains(resposta, "CMV incompleto: 1 de 2 item(ns)")
+
+
+    def test_despesa_empresa_com_catalogo_entra_no_resultado_operacional(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Gasolina - Teste",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Veiculos",
+            categoria="Combustivel",
+            favorito=True,
+            ativo=True,
+            ordem=1,
+        )
+        DespesaDiaria.objects.create(
+            data_hora=self._data_hora(10),
+            valor=Decimal("80.00"),
+            catalogo=catalogo,
+            categoria=DespesaDiaria.CATEGORIA_GASOLINA,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Combustivel teste",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["despesas_total"], Decimal("80.00"))
+        self.assertContains(resposta, "Combustivel teste")
+
+    def test_despesa_empresa_usa_grupo_e_categoria_do_catalogo_no_painel(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Energia - Deposito Teste",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Estrutura",
+            categoria="Energia",
+            favorito=True,
+            ativo=True,
+            ordem=1,
+        )
+        DespesaDiaria.objects.create(
+            data_hora=self._data_hora(10),
+            valor=Decimal("150.00"),
+            catalogo=catalogo,
+            categoria=DespesaDiaria.CATEGORIA_OUTROS,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Energia deposito teste",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["despesas_total"], Decimal("150.00"))
+
+        grupos = resposta.context["grupos"]
+        estrutura = next(grupo for grupo in grupos if grupo["slug"] == "estrutura")
+
+        self.assertEqual(estrutura["nome"], "Estrutura")
+        self.assertEqual(estrutura["valor"], Decimal("150.00"))
+        self.assertEqual(len(estrutura["categorias_lista"]), 1)
+        self.assertEqual(estrutura["categorias_lista"][0]["nome"], "Energia")
+        self.assertEqual(
+            estrutura["categorias_lista"][0]["valor"],
+            Decimal("150.00"),
+        )
+
+    def test_despesa_pessoal_com_catalogo_nao_entra_no_resultado_operacional(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Despesa pessoal - Teste",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            grupo="Pessoal",
+            categoria="Despesa pessoal",
+            pessoa="Roseli",
+            favorito=True,
+            ativo=True,
+            ordem=1,
+        )
+        despesa = DespesaDiaria.objects.create(
+            data_hora=self._data_hora(10),
+            valor=Decimal("120.00"),
+            catalogo=catalogo,
+            categoria=DespesaDiaria.CATEGORIA_PESSOAL,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Despesa pessoal teste",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(DespesaDiaria.objects.filter(pk=despesa.pk).exists())
+        self.assertEqual(resposta.context["despesas_total"], Decimal("0.00"))
+        self.assertNotContains(resposta, "Despesa pessoal teste")
 
 
 class PagarFornecedorTests(TestCase):
