@@ -123,7 +123,7 @@
   </div>
 
   {% if messages %}{% for message in messages %}<div class="compra-correcao-aviso">{{ message }}</div>{% endfor %}{% endif %}
-  <p class="compra-correcao-aviso">Esta correção ajusta estoque e total da compra. Caixa/Banco e Conta a Pagar não serão alterados nesta etapa; qualquer diferença ficará registrada para conferência.</p>
+  <p class="compra-correcao-aviso">Revise os itens, valores e vencimentos antes de salvar. Em compras com boleto, a Conta a Pagar será atualizada junto com a compra. Caixa/Banco só será ajustado quando o fluxo de pagamento exigir.</p>
 
   <section class="compra-correcao-card">
     <h2>Resumo</h2>
@@ -272,7 +272,7 @@
       </div>
       <div class="compra-correcao-rodape">
         <label class="compra-correcao-confirmacao"><input type="checkbox" required> Confirmo os itens, valores e boletos informados.</label>
-        <button type="submit" class="compra-correcao-btn" id="btnSalvarCorrecaoItensCompra">Salvar correção dos itens</button>
+        <button type="submit" class="compra-correcao-btn" id="btnSalvarCorrecaoItensCompra">Salvar alterações</button>
       </div>
     </section>
   </form>
