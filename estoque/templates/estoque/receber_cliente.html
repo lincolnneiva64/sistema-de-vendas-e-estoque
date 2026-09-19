@@ -1047,6 +1047,62 @@
     }
   }
 
+
+  .rc-locacao-destaque {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding: 14px 16px;
+    border: 3px solid #b7791f;
+    border-radius: 12px;
+    background: #fff8df;
+  }
+
+  .rc-locacao-destaque-titulo {
+    margin-bottom: 10px;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .04em;
+    color: #8a4b08;
+  }
+
+  .rc-locacao-destaque-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    margin: 0;
+  }
+
+  .rc-locacao-checkbox {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    flex: 0 0 auto;
+  }
+
+  .rc-locacao-destaque-conteudo {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    font-size: 14px;
+  }
+
+  .rc-locacao-detalhes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+  }
+
+  .rc-locacao-consequencia {
+    display: block;
+    margin-top: 3px;
+    padding: 7px 9px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .65);
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
@@ -1393,6 +1449,43 @@
                 <label for="valorRecebidoCliente">Valor recebido</label>
                 <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}" tabindex="1">
               </div>
+              {% if locacoes_abertas %}
+                <div class="rc-locacao-destaque">
+                  <div class="rc-locacao-destaque-titulo">
+                    LOCAÇÃO EM ABERTO
+                  </div>
+
+                  {% for locacao in locacoes_abertas %}
+                    <label class="rc-locacao-destaque-item">
+                      <input
+                        type="checkbox"
+                        name="dividas"
+                        value="locacao:{{ locacao.id }}"
+                        checked
+                        class="rc-locacao-checkbox"
+                      >
+                      <span class="rc-locacao-destaque-conteudo">
+                        <strong>
+                          Quitar locação #{{ locacao.id }} com este recebimento
+                        </strong>
+
+                        <span class="rc-locacao-detalhes">
+                          <span data-descricao-locacao="{{ locacao.id }}"></span>
+                          <span>
+                            Saldo da locação:
+                            <strong>R$ {{ locacao.saldo_devedor|floatformat:2 }}</strong>
+                          </span>
+                        </span>
+
+                        <span
+                          class="rc-locacao-consequencia"
+                          data-consequencia-locacao="{{ locacao.id }}"
+                        ></span>
+                      </span>
+                    </label>
+                  {% endfor %}
+                </div>
+              {% endif %}
               <div id="alertaDuplicidadeRecebimentoCliente" class="rc-duplicidade-alerta" role="alert" aria-live="polite"></div>
               <div class="rc-field rc-field-data">
                 <label for="dataRecebimentoCliente">Data do recebimento</label>
@@ -1488,22 +1581,7 @@
             </label>
           {% endfor %}
 
-          {% for locacao in locacoes_abertas %}
-            <label class="d-flex align-items-start gap-2 mb-2">
-              <input
-                type="checkbox"
-                name="dividas"
-                value="locacao:{{ locacao.id }}"
-                checked
-                class="mt-1"
-              >
-              <span>
-                <strong>Locação #{{ locacao.id }}</strong>
-                <span data-descricao-locacao="{{ locacao.id }}"></span>
-                — saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}
-              </span>
-            </label>
-          {% endfor %}
+
         </div>
 
 </form>
@@ -2368,6 +2446,47 @@
       }
     });
 
+    function atualizarAvisoLocacao(conta, receber, saldoApos) {
+      if ((conta.tipo || "") !== "locacao") {
+        return;
+      }
+
+      const aviso = document.querySelector(
+        '[data-consequencia-locacao="' + conta.id + '"]'
+      );
+
+      if (!aviso) {
+        return;
+      }
+
+      const saldoAtual = Number(conta.valor_em_aberto || 0);
+
+      if (!dividaEstaSelecionada(conta)) {
+        aviso.textContent =
+          "A locação NÃO ser? abatida. Continuará em aberto: "
+          + moeda(saldoAtual) + ".";
+        return;
+      }
+
+      if (receber <= 0) {
+        aviso.textContent =
+          "Loca??o marcada. Este recebimento não destina valor ? locação.";
+        return;
+      }
+
+      if (saldoApos <= 0.009) {
+        aviso.textContent =
+          moeda(receber)
+          + " serão abatidos da locação. Ela ficará QUITADA.";
+        return;
+      }
+
+      aviso.textContent =
+        moeda(receber)
+        + " serão abatidos da locação. Restará "
+        + moeda(saldoApos) + ".";
+    }
+
     const dividasCheckboxes = Array.from(document.querySelectorAll("input[name='dividas']"));
     const pagamentosHoje = JSON.parse(document.getElementById("pagamentosHojeCliente")?.textContent || "[]");
     const pagamentosRecentes = JSON.parse(document.getElementById("pagamentosRecentesCliente")?.textContent || "[]");
@@ -2616,6 +2735,12 @@
 
       contas.forEach(function (conta) {
         if (!dividaEstaSelecionada(conta)) {
+          atualizarAvisoLocacao(
+            conta,
+            0,
+            Number(conta.valor_em_aberto || 0)
+          );
+
           if ((conta.tipo || "conta") === "conta") {
             atualizarLinha(
               conta,
@@ -2655,6 +2780,8 @@
         }
 
         const saldoApos = Math.max(aberto - receber, 0);
+        atualizarAvisoLocacao(conta, receber, saldoApos);
+
         if (saldoApos <= 0.009) {
           atualizarLinha(
             conta,
@@ -2686,7 +2813,7 @@
 
             if (item.saldoApos <= 0.009) {
               textoAplicacao += "\nAp\u00f3s o recebimento, esta "
-                + ((item.titulo || "").startsWith("Loca") ? "loca\u00e7\u00e3o" : "d\u00edvida")
+                + ((item.titulo || "").startsWith("Loca") ? "locação" : "d\u00edvida")
                 + " ficar\u00e1 quitada.";
             } else {
               textoAplicacao += "\nSaldo ap\u00f3s o recebimento: " + moeda(item.saldoApos);
