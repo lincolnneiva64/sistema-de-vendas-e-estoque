@@ -5156,6 +5156,11 @@ function limparVendaAposGravacao() {
     limparPedidoImportadoVenda();
     limparFechamentoVenda();
     atualizarTotalGeral();
+
+    if (btnGravarVenda) {
+        btnGravarVenda.disabled = false;
+        btnGravarVenda.textContent = "Gravar Venda";
+    }
 }
 
 function sairModoEdicaoParaNovaVenda() {
