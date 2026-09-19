@@ -1701,7 +1701,7 @@
                       <td class="rc-num">R$ {{ locacao.saldo_devedor|floatformat:2 }}</td>
                       <td>{{ locacao.get_status_financeiro_display }}</td>
                       <td class="rc-preview-cell" id="previewLocacao{{ locacao.id }}">
-                        <span class="rc-pill">N?o atingida</span><br>
+                        <span class="rc-pill">Não atingida</span><br>
                         Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                       </td>
                     </tr>
@@ -1797,7 +1797,7 @@
                   </div>
 
                   <div class="rc-conta-mobile-preview" id="previewLocacaoMobile{{ locacao.id }}">
-                    <span class="rc-pill">N?o atingida</span><br>
+                    <span class="rc-pill">Não atingida</span><br>
                     Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                   </div>
                 </article>
@@ -2442,7 +2442,7 @@
       });
 
       if (contaLocacao && contaLocacao.descricao) {
-        elemento.textContent = " \u2014 " + contaLocacao.descricao + " ";
+        elemento.textContent = contaLocacao.descricao;
       }
     });
 
@@ -2463,14 +2463,14 @@
 
       if (!dividaEstaSelecionada(conta)) {
         aviso.textContent =
-          "A locação NÃO ser? abatida. Continuará em aberto: "
+          "A locação NÃO será abatida. O valor não será usado para quitar esta locação. Ela continuará em aberto: "
           + moeda(saldoAtual) + ".";
         return;
       }
 
       if (receber <= 0) {
         aviso.textContent =
-          "Loca??o marcada. Este recebimento não destina valor ? locação.";
+          "Locação marcada. Este recebimento não destina valor à locação.";
         return;
       }
 
@@ -2745,7 +2745,7 @@
             atualizarLinha(
               conta,
               "rc-row-prevista-neutra",
-              '<span class="rc-pill">N?o selecionada</span><br>Saldo continua ' + moeda(Number(conta.valor_em_aberto || 0))
+              '<span class="rc-pill">Não selecionada</span><br>Saldo continua ' + moeda(Number(conta.valor_em_aberto || 0))
             );
           }
           return;
@@ -2774,7 +2774,7 @@
           atualizarLinha(
             conta,
             "rc-row-prevista-neutra",
-            '<span class="rc-pill">N?o atingida</span><br>Saldo continua ' + moeda(aberto)
+            '<span class="rc-pill">Não atingida</span><br>Saldo continua ' + moeda(aberto)
           );
           return;
         }
@@ -2794,15 +2794,15 @@
         atualizarLinha(
           conta,
           "rc-row-prevista-parcial",
-          '<span class="rc-pill parcial">Ficar? parcial</span><br>Receberá ' + moeda(receber) + '<br>Saldo ap?s: ' + moeda(saldoApos)
+          '<span class="rc-pill parcial">Ficará parcial</span><br>Receberá ' + moeda(receber) + '<br>Saldo após: ' + moeda(saldoApos)
         );
       });
 
       if (resumo) {
         if (valorInformado <= 0) {
-          resumo.textContent = "Informe um valor para calcular a pr?via.";
+          resumo.textContent = "Informe um valor para calcular a prévia.";
         } else if (!aplicacoes.length) {
-          resumo.textContent = "Nenhuma d?vida selecionada receberá este valor.";
+          resumo.textContent = "Nenhuma dívida selecionada receberá este valor.";
         } else {
           const detalhes = aplicacoes.map(function (item) {
             let textoAplicacao = item.titulo + " \u2014 " + moeda(item.valor);
@@ -2839,7 +2839,7 @@
       if (sobraBox) {
         if (sobra > 0.009) {
           sobraBox.hidden = false;
-          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se ser? devolvida como troco ou guardada como cr?dito.";
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se será devolvida como troco ou guardada como crédito.";
         } else {
           sobraBox.hidden = true;
           sobraBox.textContent = "";
