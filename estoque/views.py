@@ -4661,6 +4661,38 @@ def _painel_resultado_gerencial_contexto(request):
     faturamento = _financeiro_dinheiro(vendas_qs.aggregate(total=Sum("total"))["total"]).quantize(Decimal("0.01"))
     vendas_qtd = vendas_qs.count()
 
+    itens_vendidos_qs = ItemVenda.objects.filter(venda__in=vendas_qs)
+    itens_vendidos_qtd = itens_vendidos_qs.count()
+    itens_com_custo_qtd = itens_vendidos_qs.filter(
+        custo_total_snapshot__isnull=False
+    ).count()
+
+    cmv_conhecido = _financeiro_dinheiro(
+        itens_vendidos_qs.aggregate(total=Sum("custo_total_snapshot"))["total"]
+    ).quantize(Decimal("0.01"))
+
+    if itens_vendidos_qtd > 0:
+        cobertura_cmv = (
+            Decimal(itens_com_custo_qtd)
+            / Decimal(itens_vendidos_qtd)
+            * Decimal("100")
+        ).quantize(Decimal("0.01"))
+    else:
+        cobertura_cmv = (
+            Decimal("100.00")
+            if faturamento == Decimal("0.00")
+            else Decimal("0.00")
+        )
+
+    cmv_disponivel = (
+        itens_vendidos_qtd > 0
+        and itens_com_custo_qtd == itens_vendidos_qtd
+    )
+
+    margem_bruta = None
+    if cmv_disponivel:
+        margem_bruta = (faturamento - cmv_conhecido).quantize(Decimal("0.01"))
+
     grupos = {}
     despesas_qs = DespesaDiaria.objects.filter(data_hora__date__range=(inicio, fim)).order_by("data_hora", "id")
     for despesa in despesas_qs:
@@ -4707,6 +4739,18 @@ def _painel_resultado_gerencial_contexto(request):
 
     despesas_total = sum((grupo["valor"] for grupo in grupos.values()), Decimal("0.00")).quantize(Decimal("0.01"))
     resultado_parcial = (faturamento - despesas_total).quantize(Decimal("0.01"))
+
+    resultado_gerencial = None
+    if cmv_disponivel:
+        resultado_gerencial = (
+            margem_bruta - despesas_total
+        ).quantize(Decimal("0.01"))
+
+    resultado_base_simulador = (
+        resultado_gerencial
+        if resultado_gerencial is not None
+        else resultado_parcial
+    )
     maior_valor = max([grupo["valor"] for grupo in grupos.values()] or [Decimal("0.00")])
     grupos_lista = []
     for grupo in sorted(grupos.values(), key=lambda item: item["valor"], reverse=True):
@@ -4731,25 +4775,52 @@ def _painel_resultado_gerencial_contexto(request):
         "faturamento": faturamento,
         "faturamento_texto": _financeiro_moeda_br(faturamento),
         "vendas_qtd": vendas_qtd,
-        "cmv_disponivel": False,
-        "cmv_texto": "Indisponivel",
-        "margem_bruta_texto": "Indisponivel",
+        "cmv_disponivel": cmv_disponivel,
+        "cmv_conhecido": cmv_conhecido,
+        "cmv_texto": _financeiro_moeda_br(cmv_conhecido),
+        "cobertura_cmv": cobertura_cmv,
+        "itens_vendidos_qtd": itens_vendidos_qtd,
+        "itens_com_custo_qtd": itens_com_custo_qtd,
+        "margem_bruta": margem_bruta,
+        "margem_bruta_texto": (
+            _financeiro_moeda_br(margem_bruta)
+            if margem_bruta is not None
+            else "Indisponivel"
+        ),
+        "resultado_gerencial": resultado_gerencial,
+        "resultado_gerencial_texto": (
+            _financeiro_moeda_br(resultado_gerencial)
+            if resultado_gerencial is not None
+            else "Indisponivel"
+        ),
         "despesas_total": despesas_total,
         "despesas_total_texto": _financeiro_moeda_br(despesas_total),
         "resultado_parcial": resultado_parcial,
         "resultado_parcial_texto": _financeiro_moeda_br(resultado_parcial),
+        "resultado_base_simulador": resultado_base_simulador,
+        "resultado_base_simulador_texto": _financeiro_moeda_br(resultado_base_simulador),
         "grupos": grupos_lista,
         "fontes_dados": [
             "Faturamento: Venda.total de vendas nao canceladas no periodo.",
+            "CMV: soma de ItemVenda.custo_total_snapshot das vendas nao canceladas no periodo.",
             "Despesas: DespesaDiaria por data_hora no periodo.",
             "Juros/multas: PagamentoContaPagar.juros_bancarios no periodo.",
             "MovimentoFinanceiro nao e usado como fonte geral de despesa para evitar dupla contagem.",
         ],
-        "limitacoes": [
-            "CMV nao foi calculado porque ItemVenda nao guarda custo historico no momento da venda.",
-            "Principal de contas a pagar, compras e emprestimos nao entram como despesa operacional nesta versao.",
-            "Juros de emprestimos/dividas nao sao separados em campo proprio e por isso nao entram automaticamente.",
-        ],
+        "limitacoes": (
+            ([] if cmv_disponivel else [
+                (
+                    f"CMV incompleto: {itens_com_custo_qtd} de "
+                    f"{itens_vendidos_qtd} item(ns) possuem custo historico "
+                    "no periodo. Margem bruta e resultado gerencial completo "
+                    "permanecem indisponiveis."
+                )
+            ])
+            + [
+                "Principal de contas a pagar, compras e emprestimos nao entram como despesa operacional nesta versao.",
+                "Juros de emprestimos/dividas nao sao separados em campo proprio e por isso nao entram automaticamente.",
+            ]
+        ),
     }
 
 

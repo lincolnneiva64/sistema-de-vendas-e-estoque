@@ -81,10 +81,50 @@
 
   <section class="rg-summary">
     <div class="rg-card"><span>Faturamento</span><strong>{{ faturamento_texto }}</strong><small>{{ vendas_qtd }} venda(s) nao cancelada(s)</small></div>
-    <div class="rg-card limitado"><span>(-) CMV</span><strong>{{ cmv_texto }}</strong><small>Custo historico por item ainda nao existe.</small></div>
-    <div class="rg-card limitado"><span>= Margem bruta</span><strong>{{ margem_bruta_texto }}</strong><small>Nao calculada nesta versao.</small></div>
+
+    <div class="rg-card{% if not cmv_disponivel %} limitado{% endif %}">
+      <span>(-) CMV{% if not cmv_disponivel %} conhecido{% endif %}</span>
+      <strong>{{ cmv_texto }}</strong>
+      <small>
+        {% if cmv_disponivel %}
+          Cobertura completa: {{ itens_com_custo_qtd }} de {{ itens_vendidos_qtd }} item(ns).
+        {% elif itens_vendidos_qtd %}
+          Cobertura: {{ cobertura_cmv }}% ({{ itens_com_custo_qtd }} de {{ itens_vendidos_qtd }} item(ns)).
+        {% elif vendas_qtd %}
+          Vendas deste periodo nao possuem itens com custo historico disponivel.
+        {% else %}
+          Sem vendas no periodo.
+        {% endif %}
+      </small>
+    </div>
+
+    <div class="rg-card{% if not cmv_disponivel %} limitado{% endif %}">
+      <span>= Margem bruta</span>
+      <strong>{{ margem_bruta_texto }}</strong>
+      <small>
+        {% if cmv_disponivel %}
+          Faturamento menos CMV historico.
+        {% else %}
+          Aguardando cobertura completa do custo historico.
+        {% endif %}
+      </small>
+    </div>
+
     <div class="rg-card"><span>(-) Despesas confiaveis</span><strong>{{ despesas_total_texto }}</strong><small>Despesas diarias + juros de contas pagas.</small></div>
-    <div class="rg-card resultado"><span>= Resultado gerencial parcial</span><strong>{{ resultado_parcial_texto }}</strong><small>Sem CMV e sem classificacoes inferidas.</small></div>
+
+    {% if cmv_disponivel %}
+      <div class="rg-card resultado">
+        <span>= Resultado gerencial</span>
+        <strong>{{ resultado_gerencial_texto }}</strong>
+        <small>Margem bruta menos despesas confiaveis.</small>
+      </div>
+    {% else %}
+      <div class="rg-card resultado">
+        <span>= Resultado parcial sem CMV</span>
+        <strong>{{ resultado_parcial_texto }}</strong>
+        <small>Nao representa lucro: o CMV ainda nao possui cobertura completa.</small>
+      </div>
+    {% endif %}
   </section>
 
   <section class="rg-panel">
@@ -142,8 +182,8 @@
         <p class="rg-muted">Sem grupos para simular neste periodo.</p>
       {% endfor %}
       <div class="rg-sim-total">
-        <div class="rg-card"><span>Resultado atual</span><strong id="resultadoAtual" data-valor="{{ resultado_parcial|stringformat:'s' }}">{{ resultado_parcial_texto }}</strong></div>
-        <div class="rg-card resultado"><span>Resultado simulado</span><strong id="resultadoSimulado">{{ resultado_parcial_texto }}</strong></div>
+        <div class="rg-card"><span>Resultado atual</span><strong id="resultadoAtual" data-valor="{{ resultado_base_simulador|stringformat:'s' }}">{{ resultado_base_simulador_texto }}</strong></div>
+        <div class="rg-card resultado"><span>Resultado simulado</span><strong id="resultadoSimulado">{{ resultado_base_simulador_texto }}</strong></div>
         <div class="rg-card"><span>Melhoria mensal</span><strong id="melhoriaMensal">R$ 0,00</strong></div>
         <div class="rg-card"><span>Impacto anualizado</span><strong id="impactoAnual">R$ 0,00</strong></div>
       </div>

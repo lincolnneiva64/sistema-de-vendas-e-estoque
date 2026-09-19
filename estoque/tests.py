@@ -34525,7 +34525,7 @@ class PainelResultadoGerencialTests(TestCase):
         self.assertIn("Veiculos", nomes)
         self.assertIn("Alimentacao", nomes)
         self.assertIn("Juros e multas", nomes)
-        self.assertContains(resposta, "CMV nao foi calculado")
+        self.assertContains(resposta, "CMV incompleto: 0 de 0 item(ns)")
         self.assertContains(resposta, "MovimentoFinanceiro nao e usado como fonte geral de despesa")
 
     def test_filtro_mensal_e_periodo_sem_movimento(self):
@@ -34581,6 +34581,71 @@ class PainelResultadoGerencialTests(TestCase):
 
         self.assertContains(home, reverse("estoque:painel_resultado_gerencial"))
         self.assertContains(financeiro, reverse("estoque:painel_resultado_gerencial"))
+
+    def test_cmv_com_cobertura_completa_calcula_margem_e_resultado(self):
+        venda = self._venda("500.00")
+        ItemVenda.objects.create(
+            venda=venda,
+            quantidade=Decimal("2.000"),
+            unidade="UN",
+            preco_unitario=Decimal("250.00"),
+            valor_total=Decimal("500.00"),
+            custo_unitario_snapshot=Decimal("100.0000"),
+            custo_total_snapshot=Decimal("200.00"),
+            custo_unidade_snapshot="UN",
+            custo_origem_snapshot="preco_compra_atual",
+        )
+        self._despesa("50.00")
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.context["cmv_disponivel"])
+        self.assertEqual(resposta.context["cmv_conhecido"], Decimal("200.00"))
+        self.assertEqual(resposta.context["cobertura_cmv"], Decimal("100.00"))
+        self.assertEqual(resposta.context["margem_bruta"], Decimal("300.00"))
+        self.assertEqual(resposta.context["resultado_gerencial"], Decimal("250.00"))
+        self.assertEqual(resposta.context["resultado_base_simulador"], Decimal("250.00"))
+        self.assertContains(resposta, "Resultado gerencial")
+        self.assertNotContains(resposta, "CMV incompleto:")
+
+    def test_cmv_parcial_mostra_cobertura_sem_calcular_margem_completa(self):
+        venda = self._venda("500.00")
+        ItemVenda.objects.create(
+            venda=venda,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("250.00"),
+            valor_total=Decimal("250.00"),
+            custo_unitario_snapshot=Decimal("100.0000"),
+            custo_total_snapshot=Decimal("100.00"),
+            custo_unidade_snapshot="UN",
+            custo_origem_snapshot="preco_compra_atual",
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("250.00"),
+            valor_total=Decimal("250.00"),
+            custo_unitario_snapshot=None,
+            custo_total_snapshot=None,
+            custo_unidade_snapshot="",
+            custo_origem_snapshot="",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(resposta.context["cmv_disponivel"])
+        self.assertEqual(resposta.context["cmv_conhecido"], Decimal("100.00"))
+        self.assertEqual(resposta.context["cobertura_cmv"], Decimal("50.00"))
+        self.assertEqual(resposta.context["itens_com_custo_qtd"], 1)
+        self.assertEqual(resposta.context["itens_vendidos_qtd"], 2)
+        self.assertIsNone(resposta.context["margem_bruta"])
+        self.assertIsNone(resposta.context["resultado_gerencial"])
+        self.assertEqual(resposta.context["resultado_base_simulador"], Decimal("500.00"))
+        self.assertContains(resposta, "CMV incompleto: 1 de 2 item(ns)")
 
 
 class PagarFornecedorTests(TestCase):
