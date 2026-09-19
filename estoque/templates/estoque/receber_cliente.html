@@ -2681,15 +2681,20 @@
           resumo.textContent = "Nenhuma d?vida selecionada receberá este valor.";
         } else {
           const detalhes = aplicacoes.map(function (item) {
-            let textoAplicacao = item.titulo + " ? " + moeda(item.valor);
+            let textoAplicacao = item.titulo + " \u2014 " + moeda(item.valor);
+
             if (item.descricao) {
-              textoAplicacao += " (" + item.descricao + ")";
+              textoAplicacao += "\n" + item.descricao;
             }
+
             if (item.saldoApos <= 0.009) {
-              textoAplicacao += " ? ficará quitada";
+              textoAplicacao += "\nAp\u00f3s o recebimento, esta "
+                + ((item.titulo || "").startsWith("Loca") ? "loca\u00e7\u00e3o" : "d\u00edvida")
+                + " ficar\u00e1 quitada.";
             } else {
-              textoAplicacao += " ? saldo ap?s: " + moeda(item.saldoApos);
+              textoAplicacao += "\nSaldo ap\u00f3s o recebimento: " + moeda(item.saldoApos);
             }
+
             return textoAplicacao;
           });
 

@@ -15893,32 +15893,37 @@ def receber_cliente(request, cliente_id):
     ]
 
     for locacao in locacoes_abertas:
-        descricao_itens = []
+        total_mesas = 0
+        total_cadeiras = 0
+
         for item in locacao.itens.all():
-            quantidade = item.quantidade
-            if item.tipo == "mesa_avulsa":
-                descricao_itens.append(
-                    f"{quantidade} {'mesa' if quantidade == 1 else 'mesas'}"
-                )
-            elif item.tipo == "cadeira_avulsa":
-                descricao_itens.append(
-                    f"{quantidade} {'cadeira' if quantidade == 1 else 'cadeiras'}"
-                )
-            else:
-                descricao_itens.append(
-                    f"{quantidade} {item.get_tipo_display()}"
-                )
+            necessidade = item.necessidade_estoque()
+            total_mesas += necessidade.get("mesas", 0)
+            total_cadeiras += necessidade.get("cadeiras", 0)
+
+        descricao_itens = []
+        if total_mesas:
+            descricao_itens.append(
+                f"{total_mesas} mesa" if total_mesas == 1 else f"{total_mesas} mesas"
+            )
+        if total_cadeiras:
+            descricao_itens.append(
+                f"{total_cadeiras} cadeira"
+                if total_cadeiras == 1
+                else f"{total_cadeiras} cadeiras"
+            )
 
         contas_preview.append({
             "tipo": "locacao",
             "id": locacao.id,
             "venda_id": None,
-            "titulo": f"Locação #{locacao.id}",
-            "descricao": " / ".join(descricao_itens),
+            "titulo": f"Loca\u00e7\u00e3o #{locacao.id}",
+            "descricao": " \u00b7 ".join(descricao_itens),
             "valor_em_aberto": float(
                 locacao.saldo_devedor or Decimal("0.00")
             ),
         })
+
     tem_pix_em_atencao = False if carregamento_parcial else _tem_pix_em_atencao()
     recebimentos_rota_url = _url_recebimentos_rota(rota_filtro, request.get_full_path())
     recebimentos_dia_url = _url_recebimentos_dia()
