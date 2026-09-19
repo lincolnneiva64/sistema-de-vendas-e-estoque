@@ -21584,6 +21584,33 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(movimento.valor, Decimal("24.00"))
 
 
+    def test_cobranca_cliente_inclui_locacao_aberta_com_itens_e_saldo(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Cobranca Locacao",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(
+            cliente,
+            mesas=3,
+            cadeiras=12,
+        )
+
+        from estoque.views import _resumo_cliente_venda
+
+        resumo = _resumo_cliente_venda(cliente)
+        contas = resumo["whatsapp_cobranca"]["contas"]
+
+        self.assertEqual(len(contas), 1)
+        self.assertEqual(contas[0]["tipo"], "locacao")
+        self.assertEqual(contas[0]["titulo"], f"Loca\u00e7\u00e3o #{locacao.id}")
+        self.assertEqual(contas[0]["descricao"], "3 mesas \u00b7 12 cadeiras")
+        self.assertEqual(contas[0]["valor"], "R$ 24,00")
+        self.assertEqual(resumo["financeiro"]["contas_abertas_qtd"], 1)
+        self.assertEqual(
+            Decimal(resumo["financeiro"]["contas_abertas_total"]),
+            Decimal("24.00"),
+        )
+
     def test_receber_cliente_funciona_com_somente_locacao(self):
         cliente = Cliente.objects.create(
             nome="Cliente Somente Locacao",

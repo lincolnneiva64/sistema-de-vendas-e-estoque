@@ -12125,7 +12125,7 @@ def _resumo_cliente_venda(cliente, hoje=None):
         .first()
     )
     maior_atraso_dias = (hoje - vencimento_mais_antigo).days if vencimento_mais_antigo else 0
-    contas_preview = _montar_contas_preview_cobranca(contas_abertas_qs, hoje)
+    contas_preview = _montar_contas_preview_cobranca(contas_abertas_qs, hoje, locacoes_abertas_qs)
     whatsapp_cobranca = _montar_whatsapp_cobranca_cliente(
         cliente,
         contas_abertas,
@@ -12526,31 +12526,91 @@ def _preview_cobranca_central(cliente, contas, hoje):
     }
 
 
-def _montar_contas_preview_cobranca(contas_qs, hoje):
+def _montar_contas_preview_cobranca(contas_qs, hoje, locacoes_qs=None):
     contas = []
+
     for conta in contas_qs.select_related("venda").order_by("data_vencimento", "id"):
         vencimento = conta.data_vencimento
         atraso_dias = (hoje - vencimento).days if vencimento and vencimento < hoje else 0
+
         if atraso_dias == 1:
             status_texto = "Vencida há 1 dia"
         elif atraso_dias > 1:
             status_texto = f"Vencida há {atraso_dias} dias"
         else:
             status_texto = "Em dia"
+
         venda = conta.venda if conta.venda_id else None
         referencia_legada = conta.numero_legado or conta.id
+
         contas.append({
+            "tipo": "venda",
             "titulo": (
                 f"Venda #{venda.id}"
                 if venda
                 else f"Conta antiga #{referencia_legada}"
             ),
-            "data": _formatar_data_cobranca((venda.data_venda if venda else None) or conta.data_emissao),
+            "data": _formatar_data_cobranca(
+                (venda.data_venda if venda else None) or conta.data_emissao
+            ),
             "vencimento": _formatar_data_cobranca(vencimento),
-            "valor": _formatar_moeda(conta.valor_em_aberto or Decimal("0.00")),
+            "valor": _formatar_moeda(
+                conta.valor_em_aberto or Decimal("0.00")
+            ),
             "status": status_texto,
             "vencida": atraso_dias > 0,
         })
+
+    if locacoes_qs is not None:
+        for locacao in locacoes_qs.prefetch_related("itens").order_by(
+            "data_vencimento_saldo", "id"
+        ):
+            vencimento = locacao.data_vencimento_saldo
+            atraso_dias = (
+                (hoje - vencimento).days
+                if vencimento and vencimento < hoje
+                else 0
+            )
+
+            if atraso_dias == 1:
+                status_texto = "Vencida há 1 dia"
+            elif atraso_dias > 1:
+                status_texto = f"Vencida há {atraso_dias} dias"
+            else:
+                status_texto = "Em dia"
+
+            total_mesas = 0
+            total_cadeiras = 0
+            for item in locacao.itens.all():
+                necessidade = item.necessidade_estoque()
+                total_mesas += necessidade.get("mesas", 0)
+                total_cadeiras += necessidade.get("cadeiras", 0)
+
+            descricao_itens = []
+            if total_mesas:
+                descricao_itens.append(
+                    f"{total_mesas} mesa" if total_mesas == 1 else f"{total_mesas} mesas"
+                )
+            if total_cadeiras:
+                descricao_itens.append(
+                    f"{total_cadeiras} cadeira"
+                    if total_cadeiras == 1
+                    else f"{total_cadeiras} cadeiras"
+                )
+
+            contas.append({
+                "tipo": "locacao",
+                "titulo": f"Locação #{locacao.id}",
+                "descricao": " · ".join(descricao_itens),
+                "data": "",
+                "vencimento": _formatar_data_cobranca(vencimento),
+                "valor": _formatar_moeda(
+                    locacao.saldo_devedor or Decimal("0.00")
+                ),
+                "status": status_texto,
+                "vencida": atraso_dias > 0,
+            })
+
     return contas
 
 
@@ -23873,19 +23933,36 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
             status_cor = vermelho if vencida else azul
             titulo = conta.get("titulo") or "Conta"
             status = conta.get("status") or "Em dia"
-            meta = (
-                f"Data: {conta.get('data') or 'Data não informada'} | "
-                f"Vencimento: {conta.get('vencimento') or 'Vencimento não informado'} | "
-                f"Valor em aberto: {conta.get('valor') or 'R$ 0,00'}"
+            descricao = str(conta.get("descricao") or "").strip()
+
+            if conta.get("tipo") == "locacao":
+                meta = (
+                    f"Vencimento: {conta.get('vencimento') or 'Vencimento não informado'} | "
+                    f"Valor em aberto: {conta.get('valor') or 'R$ 0,00'}"
+                )
+            else:
+                meta = (
+                    f"Data: {conta.get('data') or 'Data não informada'} | "
+                    f"Vencimento: {conta.get('vencimento') or 'Vencimento não informado'} | "
+                    f"Valor em aberto: {conta.get('valor') or 'R$ 0,00'}"
+                )
+
+            linhas_descricao = (
+                _quebrar_texto(draw, descricao, fonte_texto, direita - x - 44)[:2]
+                if descricao
+                else []
             )
             linhas_meta = _quebrar_texto(draw, meta, fonte_texto, direita - x - 44)[:2]
-            altura_card = 82 + len(linhas_meta) * 34
+            altura_card = 82 + (len(linhas_descricao) + len(linhas_meta)) * 34
             draw.rounded_rectangle((x, y, direita, y + altura_card), radius=14, fill=fill, outline=outline, width=3 if vencida else 2)
             draw.text((x + 20, y + 13), titulo, fill=texto, font=fonte_texto_negrito)
             status_largura = _texto_largura(draw, status, fonte_label)
             draw.rounded_rectangle((direita - status_largura - 54, y + 12, direita - 20, y + 49), radius=18, fill="#fee2e2" if vencida else "#dbeafe")
             draw.text((direita - status_largura - 37, y + 19), status, fill=status_cor, font=fonte_label)
             y_linha = y + 57
+            for linha in linhas_descricao:
+                draw.text((x + 20, y_linha), linha, fill=suave, font=fonte_texto)
+                y_linha += 34
             for linha in linhas_meta:
                 draw.text((x + 20, y_linha), linha, fill=texto, font=fonte_texto)
                 y_linha += 34
