@@ -621,8 +621,10 @@ class SeparacaoVendaItem(models.Model):
     )
     item_venda = models.ForeignKey(
         ItemVenda,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="separacoes",
+        null=True,
+        blank=True,
     )
     produto_nome_snapshot = models.CharField(max_length=120)
     unidade_snapshot = models.CharField(max_length=20, blank=True)

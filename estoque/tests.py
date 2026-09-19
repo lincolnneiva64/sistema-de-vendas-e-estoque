@@ -28,6 +28,7 @@ from .forms import FornecedorForm, FuncionarioForm, PixRecebidoForm, ProdutoForm
 from .models import AjusteItemVendaQuitada, Categoria, Cliente, Compra, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, MovimentoFinanceiro, MovimentacaoEstoqueManual, OperacaoRecebimentoCliente, PagamentoContaPagar, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .services.avisos_fornecedores import DIAS_ANTECEDENCIA_AVISO_VISITA, ESTADO_LISTA_ALTERADA_FALTA_REENVIAR, ESTADO_LISTA_PREPARADA_FALTA_ENVIAR, ESTADO_PREPARAR_LISTA, data_ciclo_visita_valida, data_pertence_calendario_visita_fornecedor, datas_validas_ciclo_visita_fornecedor, obter_avisos_visitas_fornecedores
 from .services.fornecedor_contatos import telefone_principal_contato, telefones_ativos_contato, telefones_whatsapp_contato
+from .services.separacao_vendas import alteracoes_fisicas_apos_separacao, consolidar_alteracoes_fisicas_apos_separacao, eventos_fisicos_apos_separacao
 from .services.fornecedor_visitas import calcular_proxima_visita
 from .services.unificar_polpa_acerola import unificar_polpa_acerola
 from .utils_pix import analisar_comprovante_pix, analisar_comprovante_pix_google_vision, _preparar_recortes_ocr
@@ -36641,6 +36642,91 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(resposta_post.status_code, 200)
         self.assertEqual(resposta_post.json()["visualizar_url"], retorno)
 
+    def test_checklist_aberto_desatualizado_sincroniza_ao_abrir_tela(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        item_sep_a = separacao.itens.get(item_venda=self.item_a)
+        item_sep_b = separacao.itens.get(item_venda=self.item_b)
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item_sep_a,
+            SeparacaoVendaItem.STATUS_CONFERIDO,
+        )
+        self.assertEqual(resposta.status_code, 200)
+
+        # Simula um checklist antigo que ficou desatualizado antes da correcao.
+        self.item_b.quantidade = Decimal("0.500")
+        self.item_b.valor_total = Decimal("3.75")
+        self.item_b.save(update_fields=["quantidade", "valor_total"])
+
+        # Nenhuma rotina de sincronizacao e chamada antes de abrir a tela.
+        item_sep_b.refresh_from_db()
+        self.assertEqual(item_sep_b.quantidade_solicitada, Decimal("2.000"))
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_venda_detalhe", kwargs={"pk": separacao.pk})
+        )
+        self.assertEqual(resposta.status_code, 200)
+
+        separacao.refresh_from_db()
+        item_sep_a.refresh_from_db()
+        item_sep_b.refresh_from_db()
+
+        self.assertEqual(item_sep_a.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item_sep_a.quantidade_solicitada, Decimal("2.000"))
+
+        self.assertEqual(item_sep_b.status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self.assertEqual(item_sep_b.quantidade_solicitada, Decimal("0.500"))
+        self.assertIsNone(item_sep_b.quantidade_separada)
+
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertFalse(separacao.teve_revisao)
+        self.assertEqual(views.divergencias_separacao_venda(separacao), [])
+
+    def test_alteracao_durante_checklist_aberto_sincroniza_sem_criar_revisao(self):
+        self._enviar()
+        separacao = self._separacao()
+
+        item_sep_a = separacao.itens.get(item_venda=self.item_a)
+        item_sep_b = separacao.itens.get(item_venda=self.item_b)
+
+        resposta = self._post_item_checklist(
+            separacao,
+            item_sep_a,
+            SeparacaoVendaItem.STATUS_CONFERIDO,
+        )
+        self.assertEqual(resposta.status_code, 200)
+
+        item_sep_a.refresh_from_db()
+        item_sep_b.refresh_from_db()
+
+        self.assertEqual(item_sep_a.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item_sep_b.status, SeparacaoVendaItem.STATUS_PENDENTE)
+
+        self.item_b.quantidade = Decimal("0.500")
+        self.item_b.valor_total = Decimal("3.75")
+        self.item_b.save(update_fields=["quantidade", "valor_total"])
+
+        views._recalcular_status_separacao_da_venda(self.venda)
+
+        separacao.refresh_from_db()
+        item_sep_a.refresh_from_db()
+        item_sep_b.refresh_from_db()
+
+        self.assertEqual(item_sep_a.status, SeparacaoVendaItem.STATUS_CONFERIDO)
+        self.assertEqual(item_sep_a.quantidade_solicitada, Decimal("2.000"))
+
+        self.assertEqual(item_sep_b.status, SeparacaoVendaItem.STATUS_PENDENTE)
+        self.assertEqual(item_sep_b.quantidade_solicitada, Decimal("0.500"))
+        self.assertIsNone(item_sep_b.quantidade_separada)
+
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertFalse(separacao.teve_revisao)
+        self.assertEqual(views.divergencias_separacao_venda(separacao), [])
+
+
     def test_alteracao_posterior_do_item_e_detectada_e_nao_processa(self):
         self._enviar()
         separacao = self._separacao()
@@ -36682,7 +36768,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
         self.assertTrue(separacao.revisao_pendente)
-        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+        self.assertContains(resposta, "ALTERACAO APOS SEPARACAO")
         self.assertNotContains(resposta, "NOTA PRONTA PARA ENVIO")
 
     def test_revisao_da_alteracao_concluida_mostra_nota_pronta_revisada(self):
@@ -36724,7 +36810,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         separacao.refresh_from_db()
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
         self.assertTrue(separacao.revisao_pendente)
-        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+        self.assertContains(resposta, "ALTERACAO APOS SEPARACAO")
 
     def test_conclusao_antiga_anterior_a_alteracao_nao_satisfaz_revisao(self):
         self._enviar()
@@ -36834,6 +36920,295 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         self.assertFalse(separacao.revisao_pendente)
         self.assertEqual(views.divergencias_separacao_venda(separacao), [])
+
+    def test_alteracao_apos_checklist_concluido_nao_modifica_snapshot_original(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+
+        snapshot_original = {
+            item.produto_nome_snapshot: (
+                item.quantidade_solicitada,
+                item.status,
+            )
+            for item in separacao.itens.order_by("item_venda_id")
+        }
+
+        produto_c = Produto.objects.create(
+            nome="Produto C Pos Separacao",
+            quantidade=Decimal("20.000"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("8.00"),
+            preco_prazo=Decimal("8.00"),
+            unidade_compra="UN",
+        )
+        ItemVenda.objects.create(
+            venda=self.venda,
+            produto=produto_c,
+            quantidade=Decimal("5.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("40.00"),
+        )
+
+        self.item_a.quantidade = Decimal("3.000")
+        self.item_a.valor_total = Decimal("30.00")
+        self.item_a.save(update_fields=["quantidade", "valor_total"])
+        self.item_b.delete()
+
+        views._recalcular_status_separacao_da_venda(self.venda)
+        separacao.refresh_from_db()
+
+        self.assertTrue(separacao.revisao_pendente)
+
+        # Simula a acao que hoje corresponde a "Atualizar revisao".
+        self._enviar()
+
+        separacao.refresh_from_db()
+
+        snapshot_depois = {
+            item.produto_nome_snapshot: (
+                item.quantidade_solicitada,
+                item.status,
+            )
+            for item in separacao.itens.order_by("item_venda_id")
+        }
+
+        self.assertEqual(snapshot_depois, snapshot_original)
+
+    def test_alteracao_atendida_encerra_pendencia_sem_modificar_checklist(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        separacao.refresh_from_db()
+
+        snapshot_original = list(
+            separacao.itens.order_by("id").values_list(
+                "id",
+                "produto_nome_snapshot",
+                "quantidade_solicitada",
+                "status",
+            )
+        )
+
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="item_adicionado_na_nota",
+            descricao=(
+                "Item adicionado na nota: Produto Posterior, "
+                "quantidade 2.000 UN, preco unitario R$ 10.00, "
+                "valor acrescentado R$ 20.00."
+            ),
+            canal="sistema",
+        )
+
+        separacao.revisao_pendente = True
+        separacao.status = SeparacaoVenda.STATUS_EM_SEPARACAO
+        separacao.save(update_fields=["revisao_pendente", "status"])
+
+        response = self.client.post(
+            reverse(
+                "estoque:separacao_venda_alteracao_atendida",
+                args=[separacao.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        separacao.refresh_from_db()
+
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_SEPARADA)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=self.venda,
+                tipo_evento="alteracao_separacao_atendida",
+            ).exists()
+        )
+
+        snapshot_depois = list(
+            separacao.itens.order_by("id").values_list(
+                "id",
+                "produto_nome_snapshot",
+                "quantidade_solicitada",
+                "status",
+            )
+        )
+        self.assertEqual(snapshot_depois, snapshot_original)
+
+    def test_eventos_fisicos_apos_separacao_considera_somente_eventos_posteriores(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        separacao.refresh_from_db()
+
+        evento_anterior = EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="quantidade_item_alterada",
+            descricao="Evento anterior que nao deve aparecer.",
+            canal="sistema",
+        )
+        EventoVenda.objects.filter(pk=evento_anterior.pk).update(
+            criado_em=separacao.finalizado_em - timezone.timedelta(minutes=1)
+        )
+
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="cabecalho_nota_alterado",
+            descricao="Alteracao sem efeito fisico.",
+            canal="sistema",
+        )
+
+        evento_fisico = EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="item_adicionado_na_nota",
+            descricao=(
+                "Item adicionado na nota: Fanta Laranja Lta 12/350Ml, "
+                "quantidade 2 DZ."
+            ),
+            canal="sistema",
+        )
+
+        eventos = eventos_fisicos_apos_separacao(separacao)
+
+        self.assertEqual(
+            [evento.id for evento in eventos],
+            [evento_fisico.id],
+        )
+
+    def test_eventos_fisicos_usam_ultima_revisao_concluida_como_marco(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+        separacao.refresh_from_db()
+
+        finalizacao_original = separacao.finalizado_em
+        revisao_concluida = finalizacao_original + timedelta(minutes=10)
+
+        SeparacaoVenda.objects.filter(pk=separacao.pk).update(
+            revisao_concluida_em=revisao_concluida,
+            teve_revisao=True,
+        )
+        separacao.refresh_from_db()
+
+        evento_antes_revisao = EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="quantidade_item_alterada",
+            descricao="Alteracao anterior a ultima conferencia.",
+            canal="sistema",
+        )
+        EventoVenda.objects.filter(pk=evento_antes_revisao.pk).update(
+            criado_em=revisao_concluida - timedelta(minutes=1)
+        )
+
+        evento_depois_revisao = EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="item_adicionado_na_nota",
+            descricao=(
+                "Item adicionado na nota: Fanta Laranja Lta 12/350Ml, "
+                "quantidade 2 DZ."
+            ),
+            canal="sistema",
+        )
+        EventoVenda.objects.filter(pk=evento_depois_revisao.pk).update(
+            criado_em=revisao_concluida + timedelta(minutes=1)
+        )
+
+        eventos = eventos_fisicos_apos_separacao(separacao)
+
+        self.assertEqual(
+            [evento.id for evento in eventos],
+            [evento_depois_revisao.id],
+        )
+
+    def test_alteracao_fisica_identifica_item_adicionado_apos_separacao(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="item_adicionado_na_nota",
+            descricao=(
+                "Item adicionado na nota: Fanta Laranja Lta 12/350Ml, "
+                "quantidade 2 DZ, preco unitario R$ 44.00, "
+                "valor acrescentado R$ 88.00."
+            ),
+            canal="sistema",
+        )
+
+        alteracoes = alteracoes_fisicas_apos_separacao(separacao)
+
+        self.assertEqual(len(alteracoes), 1)
+        self.assertEqual(alteracoes[0]["tipo"], "adicionado")
+        self.assertEqual(
+            alteracoes[0]["produto"],
+            "Fanta Laranja Lta 12/350Ml",
+        )
+        self.assertEqual(alteracoes[0]["quantidade"], "2")
+        self.assertEqual(alteracoes[0]["unidade"], "DZ")
+
+    def test_alteracoes_fisicas_interpretam_quantidade_remocao_e_desfazer(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="quantidade_item_alterada",
+            descricao="Quantidade alterada na nota: Produto A. De 1 DZ para 3 DZ.",
+            canal="sistema",
+        )
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="item_removido_da_nota",
+            descricao="Item removido da nota: Produto B, quantidade 2 PCT.",
+            canal="sistema",
+        )
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="remocao_item_desfeita",
+            descricao="Remocao de item desfeita: Produto C, quantidade 4 UN.",
+            canal="sistema",
+        )
+
+        alteracoes = alteracoes_fisicas_apos_separacao(separacao)
+
+        self.assertEqual(len(alteracoes), 3)
+
+        self.assertEqual(alteracoes[0]["tipo"], "quantidade_alterada")
+        self.assertEqual(alteracoes[0]["produto"], "Produto A")
+        self.assertEqual(alteracoes[0]["quantidade_anterior"], "1")
+        self.assertEqual(alteracoes[0]["quantidade_nova"], "3")
+
+        self.assertEqual(alteracoes[1]["tipo"], "removido")
+        self.assertEqual(alteracoes[1]["produto"], "Produto B")
+        self.assertEqual(alteracoes[1]["quantidade"], "2")
+        self.assertEqual(alteracoes[1]["unidade"], "PCT")
+
+        self.assertEqual(alteracoes[2]["tipo"], "remocao_desfeita")
+        self.assertEqual(alteracoes[2]["produto"], "Produto C")
+        self.assertEqual(alteracoes[2]["quantidade"], "4")
+        self.assertEqual(alteracoes[2]["unidade"], "UN")
+
+    def test_alteracoes_de_quantidade_sao_consolidadas_em_delta_fisico(self):
+        self._enviar()
+        separacao = self._concluir_separacao()
+
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="quantidade_item_alterada",
+            descricao="Quantidade alterada na nota: Produto A. De 1 DZ para 2 DZ.",
+            canal="sistema",
+        )
+        EventoVenda.objects.create(
+            venda=self.venda,
+            tipo_evento="quantidade_item_alterada",
+            descricao="Quantidade alterada na nota: Produto A. De 2 DZ para 3 DZ.",
+            canal="sistema",
+        )
+
+        alteracoes = consolidar_alteracoes_fisicas_apos_separacao(separacao)
+
+        self.assertEqual(len(alteracoes), 1)
+        self.assertEqual(alteracoes[0]["tipo"], "acrescentar")
+        self.assertEqual(alteracoes[0]["produto"], "Produto A")
+        self.assertEqual(alteracoes[0]["quantidade"], Decimal("2"))
+        self.assertEqual(alteracoes[0]["unidade"], "DZ")
 
     def test_itens_adicionados_removidos_e_quantidade_alterada_entram_no_checklist_de_revisao(self):
         self._enviar()

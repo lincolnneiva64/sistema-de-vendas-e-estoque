@@ -1,9 +1,9 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from estoque.models import ItemVenda, SeparacaoVenda, SeparacaoVendaItem, Venda
+from estoque.models import EventoVenda, ItemVenda, SeparacaoVenda, SeparacaoVendaItem, Venda
 
 
 STATUS_ITENS_COM_PENDENCIA = {
@@ -13,6 +13,261 @@ STATUS_ITENS_COM_PENDENCIA = {
 
 
 UNIDADES_PESO_REAL = {"KG"}
+
+
+TIPOS_EVENTO_ALTERACAO_FISICA = {
+    "quantidade_item_alterada",
+    "item_removido_da_nota",
+    "produto_adicionado_na_nota",
+    "item_adicionado_na_nota",
+    "remocao_item_desfeita",
+}
+
+
+def marco_ultima_conferencia_separacao(separacao):
+    marcos = [
+        marco
+        for marco in (
+            separacao.finalizado_em,
+            separacao.revisao_concluida_em,
+        )
+        if marco is not None
+    ]
+
+    return max(marcos) if marcos else None
+
+
+def eventos_fisicos_apos_separacao(separacao):
+    marco = marco_ultima_conferencia_separacao(separacao)
+    if marco is None:
+        return []
+
+    ultimo_atendimento = (
+        EventoVenda.objects.filter(
+            venda_id=separacao.venda_id,
+            tipo_evento="alteracao_separacao_atendida",
+            criado_em__gt=marco,
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+    if ultimo_atendimento is not None:
+        marco = ultimo_atendimento.criado_em
+
+    return list(
+        EventoVenda.objects.filter(
+            venda_id=separacao.venda_id,
+            tipo_evento__in=TIPOS_EVENTO_ALTERACAO_FISICA,
+            criado_em__gt=marco,
+        ).order_by("criado_em", "id")
+    )
+
+
+def _separar_quantidade_unidade(texto):
+    partes = texto.strip().rsplit(" ", 1)
+    if len(partes) != 2:
+        return None, None
+    return partes[0].strip(), partes[1].strip()
+
+
+def _dados_evento_item_adicionado(evento):
+    descricao = (evento.descricao or "").strip()
+    prefixo = "Item adicionado na nota: "
+
+    if not descricao.startswith(prefixo):
+        return None
+
+    detalhe = descricao[len(prefixo):]
+    if ", quantidade " not in detalhe:
+        return None
+
+    produto, restante = detalhe.split(", quantidade ", 1)
+    quantidade_unidade = restante.split(",", 1)[0].rstrip(".").strip()
+    quantidade, unidade = _separar_quantidade_unidade(quantidade_unidade)
+
+    if quantidade is None:
+        return None
+
+    return {
+        "tipo": "adicionado",
+        "produto": produto.strip(),
+        "quantidade": quantidade,
+        "unidade": unidade,
+        "evento_id": evento.id,
+    }
+
+
+def _dados_evento_item_removido(evento):
+    descricao = (evento.descricao or "").strip()
+    prefixo = "Item removido da nota: "
+
+    if not descricao.startswith(prefixo):
+        return None
+
+    detalhe = descricao[len(prefixo):]
+    if ", quantidade " not in detalhe:
+        return None
+
+    produto, restante = detalhe.split(", quantidade ", 1)
+    quantidade_unidade = restante.split(",", 1)[0].rstrip(".").strip()
+    quantidade, unidade = _separar_quantidade_unidade(quantidade_unidade)
+
+    if quantidade is None:
+        return None
+
+    return {
+        "tipo": "removido",
+        "produto": produto.strip(),
+        "quantidade": quantidade,
+        "unidade": unidade,
+        "evento_id": evento.id,
+    }
+
+
+def _dados_evento_remocao_desfeita(evento):
+    descricao = (evento.descricao or "").strip()
+    prefixo = "Remocao de item desfeita: "
+
+    if not descricao.startswith(prefixo):
+        return None
+
+    detalhe = descricao[len(prefixo):]
+    if ", quantidade " not in detalhe:
+        return None
+
+    produto, restante = detalhe.split(", quantidade ", 1)
+    quantidade_unidade = restante.split(",", 1)[0].rstrip(".").strip()
+    quantidade, unidade = _separar_quantidade_unidade(quantidade_unidade)
+
+    if quantidade is None:
+        return None
+
+    return {
+        "tipo": "remocao_desfeita",
+        "produto": produto.strip(),
+        "quantidade": quantidade,
+        "unidade": unidade,
+        "evento_id": evento.id,
+    }
+
+
+def _dados_evento_quantidade_alterada(evento):
+    descricao = (evento.descricao or "").strip()
+    prefixo = "Quantidade alterada na nota: "
+
+    if not descricao.startswith(prefixo):
+        return None
+
+    detalhe = descricao[len(prefixo):]
+    if ". De " not in detalhe or " para " not in detalhe:
+        return None
+
+    produto, restante = detalhe.split(". De ", 1)
+    anterior_texto, novo_texto = restante.split(" para ", 1)
+    novo_texto = novo_texto.split(".", 1)[0].strip()
+
+    quantidade_anterior, unidade_anterior = _separar_quantidade_unidade(
+        anterior_texto
+    )
+    quantidade_nova, unidade_nova = _separar_quantidade_unidade(novo_texto)
+
+    if quantidade_anterior is None or quantidade_nova is None:
+        return None
+
+    return {
+        "tipo": "quantidade_alterada",
+        "produto": produto.strip(),
+        "quantidade_anterior": quantidade_anterior,
+        "unidade_anterior": unidade_anterior,
+        "quantidade_nova": quantidade_nova,
+        "unidade_nova": unidade_nova,
+        "evento_id": evento.id,
+    }
+
+
+def alteracoes_fisicas_apos_separacao(separacao):
+    alteracoes = []
+
+    for evento in eventos_fisicos_apos_separacao(separacao):
+        dados = None
+
+        if evento.tipo_evento in {
+            "produto_adicionado_na_nota",
+            "item_adicionado_na_nota",
+        }:
+            dados = _dados_evento_item_adicionado(evento)
+
+        elif evento.tipo_evento == "item_removido_da_nota":
+            dados = _dados_evento_item_removido(evento)
+
+        elif evento.tipo_evento == "remocao_item_desfeita":
+            dados = _dados_evento_remocao_desfeita(evento)
+
+        elif evento.tipo_evento == "quantidade_item_alterada":
+            dados = _dados_evento_quantidade_alterada(evento)
+
+        if dados:
+            alteracoes.append(dados)
+
+    return alteracoes
+
+
+
+def _decimal_quantidade(valor):
+    try:
+        return Decimal(str(valor).replace(",", "."))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def consolidar_alteracoes_fisicas_apos_separacao(separacao):
+    alteracoes = alteracoes_fisicas_apos_separacao(separacao)
+    quantidades = {}
+    outras = []
+
+    for alteracao in alteracoes:
+        if alteracao["tipo"] != "quantidade_alterada":
+            outras.append(alteracao)
+            continue
+
+        chave = (
+            alteracao["produto"],
+            alteracao["unidade_anterior"],
+            alteracao["unidade_nova"],
+        )
+
+        if chave not in quantidades:
+            quantidades[chave] = dict(alteracao)
+        else:
+            quantidades[chave]["quantidade_nova"] = alteracao["quantidade_nova"]
+            quantidades[chave]["evento_id"] = alteracao["evento_id"]
+
+    resultado = list(outras)
+
+    for alteracao in quantidades.values():
+        anterior = _decimal_quantidade(alteracao["quantidade_anterior"])
+        nova = _decimal_quantidade(alteracao["quantidade_nova"])
+
+        if anterior is None or nova is None:
+            resultado.append(alteracao)
+            continue
+
+        diferenca = nova - anterior
+
+        if diferenca == 0:
+            continue
+
+        resultado.append({
+            "tipo": "acrescentar" if diferenca > 0 else "retirar",
+            "produto": alteracao["produto"],
+            "quantidade": abs(diferenca),
+            "unidade": alteracao["unidade_nova"],
+            "evento_id": alteracao["evento_id"],
+        })
+
+    resultado.sort(key=lambda item: item["evento_id"])
+    return resultado
 
 
 def _normalizar_unidade(unidade):
@@ -54,29 +309,29 @@ def _item_separacao_igual_venda_atual(item_sep, item_venda):
     )
 
 
-def _resetar_item_separacao_para_reconferencia(item_sep):
-    item_sep.quantidade_separada = None
-    item_sep.status = SeparacaoVendaItem.STATUS_PENDENTE
-    item_sep.observacao = ""
-    item_sep.save(update_fields=["quantidade_separada", "status", "observacao", "atualizado_em"])
 
 
-def marcar_revisao_pendente_se_necessario(separacao):
-    if not separacao or not separacao.finalizado_em:
+def sincronizar_checklist_aberto_com_venda(separacao):
+    """
+    Sincroniza uma separacao que ainda nunca foi concluida com a venda atual.
+
+    Itens que nao mudaram preservam a conferencia.
+    Itens novos entram pendentes.
+    Itens alterados voltam para pendente.
+    Itens removidos saem do checklist.
+
+    Nao cria revisao.
+    """
+    if not separacao:
         return False
-    if separacao.revisao_pendente:
+
+    # Se ja houve conclusao/revisao, este nao e mais um checklist original aberto.
+    if separacao.finalizado_em or separacao.teve_revisao or separacao.revisao_pendente:
         return False
+
     if not divergencias_separacao_venda(separacao):
         return False
 
-    agora = timezone.now()
-    separacao.revisao_pendente = True
-    separacao.revisao_solicitada_em = agora
-    separacao.save(update_fields=["revisao_pendente", "revisao_solicitada_em", "atualizado_em"])
-    return True
-
-
-def atualizar_snapshot_separacao_para_revisao(separacao):
     with transaction.atomic():
         separacao = (
             SeparacaoVenda.objects
@@ -84,6 +339,11 @@ def atualizar_snapshot_separacao_para_revisao(separacao):
             .select_related("venda")
             .get(pk=separacao.pk)
         )
+
+        # Confere novamente depois do lock.
+        if separacao.finalizado_em or separacao.teve_revisao or separacao.revisao_pendente:
+            return False
+
         itens_atuais = {
             item.id: item
             for item in ItemVenda.objects.select_related("produto")
@@ -104,7 +364,8 @@ def atualizar_snapshot_separacao_para_revisao(separacao):
         if removidos:
             SeparacaoVendaItem.objects.filter(pk__in=removidos).delete()
 
-        alterou_checklist = bool(removidos)
+        alterou = bool(removidos)
+
         for item_id, item_venda in itens_atuais.items():
             item_sep = itens_snapshot.get(item_id)
             produto_nome = _produto_nome_item_venda(item_venda)
@@ -119,13 +380,10 @@ def atualizar_snapshot_separacao_para_revisao(separacao):
                     unidade_snapshot=unidade,
                     quantidade_solicitada=quantidade,
                 )
-                alterou_checklist = True
+                alterou = True
                 continue
 
             if _item_separacao_igual_venda_atual(item_sep, item_venda):
-                if removidos and item_sep.status != SeparacaoVendaItem.STATUS_PENDENTE:
-                    _resetar_item_separacao_para_reconferencia(item_sep)
-                    alterou_checklist = True
                 continue
 
             item_sep.produto_nome_snapshot = produto_nome
@@ -143,24 +401,29 @@ def atualizar_snapshot_separacao_para_revisao(separacao):
                 "observacao",
                 "atualizado_em",
             ])
-            alterou_checklist = True
+            alterou = True
 
-        campos = []
-        if not separacao.revisao_pendente:
-            separacao.revisao_pendente = True
-            separacao.revisao_solicitada_em = timezone.now()
-            campos.extend(["revisao_pendente", "revisao_solicitada_em"])
-        if alterou_checklist:
-            separacao.finalizado_em = None
-            separacao.separado_por = None
-            campos.extend(["finalizado_em", "separado_por"])
-        if campos:
-            campos.append("atualizado_em")
-            separacao.save(update_fields=list(dict.fromkeys(campos)))
+        if alterou:
+            recalcular_status_separacao(separacao)
 
-        recalcular_status_separacao(separacao)
-        separacao.refresh_from_db()
-        return separacao
+        return alterou
+
+
+def marcar_revisao_pendente_se_necessario(separacao):
+    if not separacao or not separacao.finalizado_em:
+        return False
+    if separacao.revisao_pendente:
+        return False
+    if not divergencias_separacao_venda(separacao):
+        return False
+
+    agora = timezone.now()
+    separacao.revisao_pendente = True
+    separacao.revisao_solicitada_em = agora
+    separacao.save(update_fields=["revisao_pendente", "revisao_solicitada_em", "atualizado_em"])
+    return True
+
+
 
 
 def _proximo_numero_sequencial_dia(data_sequencia):
@@ -194,8 +457,8 @@ def criar_ou_obter_separacao_venda(venda, usuario=None, responsavel=None):
                         separacao.responsavel = responsavel
                         separacao.save(update_fields=["responsavel", "atualizado_em"])
                         responsavel_atualizado = True
-                    if separacao.revisao_pendente or divergencias_separacao_venda(separacao):
-                        separacao = atualizar_snapshot_separacao_para_revisao(separacao)
+                    sincronizar_checklist_aberto_com_venda(separacao)
+                    separacao.refresh_from_db()
                     return separacao, False, responsavel_atualizado
 
                 data_sequencia = timezone.localdate()
@@ -297,7 +560,11 @@ def divergencias_separacao_venda(separacao):
             item.id: item
             for item in ItemVenda.objects.select_related("produto").filter(venda=separacao.venda)
         }
-    ids_snapshot = {item.item_venda_id for item in itens_separacao}
+    ids_snapshot = {
+        item.item_venda_id
+        for item in itens_separacao
+        if item.item_venda_id is not None
+    }
     ids_atuais = set(itens_atuais)
 
     for item_id in sorted(ids_snapshot - ids_atuais):

@@ -495,10 +495,19 @@
       focarItemBloqueado(itemComErro, "Corrija o item destacado antes de concluir a separacao.");
       return;
     }
-    const itemPendente = cards.find((card) => !card.classList.contains("is-done"));
-    if (itemPendente) {
+    const itensPendentes = cards.filter((card) => !card.classList.contains("is-done"));
+    if (itensPendentes.length) {
       event.preventDefault();
-      focarItemBloqueado(itemPendente, "Confira todos os itens antes de concluir a separacao.");
+
+      const nomesPendentes = itensPendentes
+        .map((card) => card.querySelector(".sep-prod")?.textContent?.trim())
+        .filter(Boolean);
+
+      const mensagem = nomesPendentes.length === 1
+        ? `Falta conferir: ${nomesPendentes[0]}.`
+        : `Faltam conferir: ${nomesPendentes.join(", ")}.`;
+
+      focarItemBloqueado(itensPendentes[0], mensagem);
     }
   });
 

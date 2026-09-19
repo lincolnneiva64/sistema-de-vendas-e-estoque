@@ -58,12 +58,14 @@ from .services.sincronizacao_firebird import (
 )
 from .services.estoque_manual import conferir_ou_ajustar_estoque
 from .services.separacao_vendas import (
+    consolidar_alteracoes_fisicas_apos_separacao,
     criar_ou_obter_separacao_venda,
     divergencias_separacao_venda,
     item_separacao_registra_peso_real,
     item_separacao_tem_pendencia,
     marcar_revisao_pendente_se_necessario,
     recalcular_status_separacao,
+    sincronizar_checklist_aberto_com_venda,
 )
 from .services.precos_antigo_snapshot import (
     buscar_registro_antigo_por_codigo,
@@ -13618,6 +13620,13 @@ def _recalcular_status_separacao_da_venda(venda, usuario=None):
     separacao = SeparacaoVenda.objects.filter(venda=venda).first()
     if not separacao:
         return None
+
+    sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
+
+    if sincronizou_checklist_aberto:
+        separacao.refresh_from_db()
+        return separacao
+
     recalcular_status_separacao(separacao, usuario)
     marcar_revisao_pendente_se_necessario(separacao)
     return separacao
@@ -22662,30 +22671,82 @@ def _resumo_item_pendencia_separacao(item):
 def _montar_grupos_rota_separacao(separacoes):
     grupos = {}
     for separacao in separacoes:
+        sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
+        if sincronizou_checklist_aberto:
+            separacao.refresh_from_db()
+
         itens = list(separacao.itens.all())
-        separacao.total_itens = len(itens)
+
+        separacao.divergencias_fila = divergencias_separacao_venda(separacao)
+        separacao.alteracoes_fisicas_fila = (
+            consolidar_alteracoes_fisicas_apos_separacao(separacao)
+        )
+        separacao.tem_alteracao_fisica_fila = bool(
+            separacao.alteracoes_fisicas_fila
+        )
+
+        acrescimos_apos_separacao = {
+            (
+                alteracao["produto"],
+                str(alteracao["quantidade"]).replace(",", "."),
+                alteracao["unidade"],
+            )
+            for alteracao in separacao.alteracoes_fisicas_fila
+            if alteracao["tipo"] in {"adicionado", "acrescentar"}
+        }
+
+        itens_checklist_fila = []
+        for item in itens:
+            chave_item = (
+                item.produto_nome_snapshot,
+                str(item.quantidade_solicitada).replace(",", "."),
+                item.unidade_snapshot,
+            )
+            item_legado_pos_separacao = (
+                item.status == SeparacaoVendaItem.STATUS_PENDENTE
+                and chave_item in acrescimos_apos_separacao
+            )
+            if not item_legado_pos_separacao:
+                itens_checklist_fila.append(item)
+
+        separacao.total_itens = len(itens_checklist_fila)
         separacao.total_conferidos = sum(
-            1 for item in itens if item.status == SeparacaoVendaItem.STATUS_CONFERIDO
+            1
+            for item in itens_checklist_fila
+            if item.status == SeparacaoVendaItem.STATUS_CONFERIDO
         )
         separacao.total_pendentes = sum(
-            1 for item in itens if item.status == SeparacaoVendaItem.STATUS_PENDENTE
+            1
+            for item in itens_checklist_fila
+            if item.status == SeparacaoVendaItem.STATUS_PENDENTE
         )
+        separacao.itens_pendentes = [
+            {
+                "produto": item.produto_nome_snapshot,
+                "quantidade": _formatar_quantidade(item.quantidade_solicitada),
+                "unidade": item.unidade_snapshot,
+            }
+            for item in itens_checklist_fila
+            if item.status == SeparacaoVendaItem.STATUS_PENDENTE
+        ]
         separacao.total_pendencias = sum(
             1
-            for item in itens
+            for item in itens_checklist_fila
             if item_separacao_tem_pendencia(item)
         )
         separacao.itens_com_pendencia = [
             _resumo_item_pendencia_separacao(item)
-            for item in itens
+            for item in itens_checklist_fila
             if item_separacao_tem_pendencia(item)
         ]
-        separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
-        separacao.tem_revisao_pendente_fila = bool(
-            separacao.revisao_pendente or separacao.divergencias_fila
+        separacao.tem_revisao_pendente_fila = bool(separacao.revisao_pendente)
+        separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
+        separacao.tipo_divergencia_fila = (
+            "apos_separacao"
+            if separacao.revisao_pendente or separacao.teve_revisao
+            else "durante_separacao"
         )
-        separacao.tem_divergencia_fila = separacao.tem_revisao_pendente_fila
         separacao.nota_pronta_fila = (
             separacao.status == SeparacaoVenda.STATUS_SEPARADA
             and separacao.total_pendentes == 0
@@ -23140,6 +23201,10 @@ def separacao_venda_item_salvar(request, pk, item_id):
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel"),
         pk=pk,
     )
+    sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
+    if sincronizou_checklist_aberto:
+        separacao.refresh_from_db()
+
     divergencias = divergencias_separacao_venda(separacao)
     if divergencias:
         marcar_revisao_pendente_se_necessario(separacao)
@@ -23178,12 +23243,56 @@ def separacao_venda_item_salvar(request, pk, item_id):
     })
 
 
+@require_POST
+def separacao_venda_alteracao_atendida(request, pk):
+    with transaction.atomic():
+        separacao = get_object_or_404(
+            SeparacaoVenda.objects.select_for_update().select_related("venda"),
+            pk=pk,
+        )
+
+        alteracoes = consolidar_alteracoes_fisicas_apos_separacao(separacao)
+        if not alteracoes:
+            messages.warning(
+                request,
+                "Nao existem alteracoes apos a separacao aguardando atendimento.",
+            )
+            return redirect("estoque:separacao_vendas_fila")
+
+        _registrar_evento_venda(
+            separacao.venda,
+            "alteracao_separacao_atendida",
+            "Alteracoes apos separacao atendidas.",
+            usuario=request.user,
+        )
+
+        # Compatibilidade com separacoes antigas que foram reabertas pelo
+        # fluxo de revisao. O checklist historico nao e refeito nem alterado.
+        if separacao.revisao_pendente:
+            separacao.revisao_pendente = False
+            separacao.status = SeparacaoVenda.STATUS_SEPARADA
+            separacao.save(
+                update_fields=[
+                    "revisao_pendente",
+                    "status",
+                    "atualizado_em",
+                ]
+            )
+
+    messages.success(request, "Alteracoes da nota marcadas como atendidas.")
+    return redirect("estoque:separacao_vendas_fila")
+
+
 def separacao_venda_detalhe(request, pk):
     separacao = get_object_or_404(
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
         .prefetch_related("itens__item_venda__produto"),
         pk=pk,
     )
+    sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
+    if sincronizou_checklist_aberto:
+        separacao.refresh_from_db()
+
     divergencias = divergencias_separacao_venda(separacao)
     if divergencias:
         marcar_revisao_pendente_se_necessario(separacao)

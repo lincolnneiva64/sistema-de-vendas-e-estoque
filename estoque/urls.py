@@ -197,6 +197,11 @@ urlpatterns = [
     path("entregas/<int:rota_id>/checklist/cliente/<int:venda_id>/", views.entrega_rota_checklist_cliente, name="entrega_rota_checklist_cliente"),
     path("separacao-vendas/", views.separacao_vendas_fila, name="separacao_vendas_fila"),
     path("separacao-vendas/<int:pk>/", views.separacao_venda_detalhe, name="separacao_venda_detalhe"),
+    path(
+        "separacao-vendas/<int:pk>/alteracao-atendida/",
+        views.separacao_venda_alteracao_atendida,
+        name="separacao_venda_alteracao_atendida",
+    ),
     path("separacao-vendas/<int:pk>/itens/<int:item_id>/salvar/", views.separacao_venda_item_salvar, name="separacao_venda_item_salvar"),
     path("vendas/<int:pk>/enviar-separacao/", views.venda_enviar_separacao, name="venda_enviar_separacao"),
     path("vendas/<int:pk>/editar/", views.venda_editar_revisao, name="venda_editar_revisao"),

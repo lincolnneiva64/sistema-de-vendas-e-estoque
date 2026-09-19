@@ -205,14 +205,49 @@
                   <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
                 </div>
 
-                {% if separacao.tem_divergencia_fila %}
-                  <div class="sep-alert">VENDA ALTERADA - REVISAO NECESSARIA</div>
+                {% if separacao.tem_alteracao_fisica_fila %}
+                  <div class="sep-alert">
+                    <strong>ALTERACAO APOS SEPARACAO</strong>
+                    {% for alteracao in separacao.alteracoes_fisicas_fila %}
+                      <div>
+                        {{ alteracao.produto }} -
+                        {% if alteracao.tipo == "adicionado" or alteracao.tipo == "acrescentar" %}
+                          ACRESCENTAR {{ alteracao.quantidade }} {{ alteracao.unidade }}
+                        {% elif alteracao.tipo == "removido" or alteracao.tipo == "retirar" %}
+                          RETIRAR {{ alteracao.quantidade }} {{ alteracao.unidade }}
+                        {% elif alteracao.tipo == "remocao_desfeita" %}
+                          ACRESCENTAR {{ alteracao.quantidade }} {{ alteracao.unidade }}
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                    <form class="sep-inline-form" method="post" action="{% url 'estoque:separacao_venda_alteracao_atendida' separacao.id %}">
+                      {% csrf_token %}
+                      <button class="sep-btn warning" type="submit">Alteração atendida</button>
+                    </form>
+                  </div>
+                {% elif separacao.tem_divergencia_fila %}
+                  <div class="sep-alert">
+                    <strong>VENDA ALTERADA DURANTE A SEPARACAO</strong>
+                    {% for divergencia in separacao.divergencias_fila %}
+                      <div>{{ divergencia }}</div>
+                    {% endfor %}
+                  </div>
                 {% elif separacao.nota_pronta_fila %}
                   <div class="sep-alert ok">{{ separacao.mensagem_pronta_fila }}</div>
                 {% endif %}
 
                 {% if separacao.tem_ajuste_nota and not separacao.itens_com_pendencia %}
                   <div class="sep-alert">AJUSTE DA NOTA PENDENTE - SEPARACAO FISICA CONCLUIDA</div>
+                {% endif %}
+
+                {% if separacao.itens_pendentes %}
+                  <div class="sep-alert">
+                    <strong>CHECKLIST INCOMPLETO</strong>
+                    <div>Falta conferir:</div>
+                    {% for item in separacao.itens_pendentes %}
+                      <div>{{ item.produto }} - {{ item.quantidade }} {{ item.unidade }}</div>
+                    {% endfor %}
+                  </div>
                 {% endif %}
 
                 {% if separacao.itens_com_pendencia %}
@@ -246,13 +281,6 @@
                 <div class="sep-actions">
                   <a class="sep-btn" href="{% url 'estoque:separacao_venda_detalhe' separacao.id %}">Abrir checklist</a>
                   <a class="sep-btn secondary" href="{% url 'estoque:venda_detalhe' separacao.venda.id %}?next={{ request.get_full_path|urlencode }}">Abrir nota</a>
-                  {% if separacao.tem_divergencia_fila %}
-                    <form class="sep-inline-form" method="post" action="{% url 'estoque:venda_enviar_separacao' separacao.venda.id %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <button class="sep-btn warning" type="submit">Atualizar revisao</button>
-                    </form>
-                  {% endif %}
                   <a class="sep-btn" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}&next={{ request.get_full_path|urlencode }}">Editar venda</a>
                   {% if separacao.tem_ajuste_nota or separacao.status == "com_pendencia" %}
                     <a class="sep-btn warning" href="{% url 'estoque:vendas' %}?editar={{ separacao.venda.id }}&ajuste_separacao={{ separacao.id }}&next={{ request.get_full_path|urlencode }}">Editar nota</a>
