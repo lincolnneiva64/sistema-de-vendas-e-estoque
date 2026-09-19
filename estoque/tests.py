@@ -13244,6 +13244,218 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         dados.update(alteracoes)
         return dados
 
+    def test_correcao_itens_e_boleto_unico_salva_financeiro_na_mesma_operacao(self):
+        lista, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+
+        parcelas[1].delete()
+        contas[1].delete()
+
+        lista.forma_cobranca_nota = ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO
+        lista.valor_nota_boleto = Decimal("1178.21")
+        lista.save(update_fields=["forma_cobranca_nota", "valor_nota_boleto", "atualizado_em"])
+
+        parcelas[0].valor = Decimal("1178.21")
+        parcelas[0].save(update_fields=["valor", "atualizado_em"])
+
+        contas[0].valor_original = Decimal("1178.21")
+        contas[0].valor_em_aberto = Decimal("1178.21")
+        contas[0].total_parcelas = 1
+        contas[0].save(
+            update_fields=[
+                "valor_original",
+                "valor_em_aberto",
+                "total_parcelas",
+                "atualizado_em",
+            ]
+        )
+
+        url_itens = f"/estoque/compras/{self.compra.id}/corrigir-itens/"
+        dados = {
+            "item_id[]": [str(self.item.id)],
+            "quantidade[]": ["2"],
+            "preco_unitario[]": ["600,00"],
+            "novo_produto_id[]": [""],
+            "nova_quantidade[]": [""],
+            "novo_preco_unitario[]": [""],
+            "tipo_pagamento_compra": "aprazo",
+            "confirmar": "1",
+            "conta_pagar_id_1": str(contas[0].id),
+            "parcela_nota_id_1": str(parcelas[0].id),
+            "parcela_valor_1": "1200,21",
+            "parcela_vencimento_1": "2026-10-25",
+        }
+
+        resposta = self.client.post(url_itens, dados, secure=True)
+
+        self.compra.refresh_from_db()
+        self.item.refresh_from_db()
+        lista.refresh_from_db()
+        parcelas[0].refresh_from_db()
+        contas[0].refresh_from_db()
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(
+            urlsplit(resposta.url).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertEqual(self.item.preco_unitario, Decimal("600.00"))
+        self.assertEqual(self.compra.total_produtos, Decimal("1200.00"))
+        self.assertEqual(self.compra.total, Decimal("1200.21"))
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1200.21"))
+        self.assertEqual(parcelas[0].valor, Decimal("1200.21"))
+        self.assertEqual(contas[0].valor_original, Decimal("1200.21"))
+        self.assertEqual(contas[0].valor_em_aberto, Decimal("1200.21"))
+        self.assertEqual(parcelas[0].data_vencimento, date(2026, 10, 25))
+        self.assertEqual(contas[0].data_vencimento, date(2026, 10, 25))
+
+    def test_correcao_itens_e_multiplos_boletos_salva_tudo_na_mesma_operacao(self):
+        lista, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        url_itens = f"/estoque/compras/{self.compra.id}/corrigir-itens/"
+
+        dados = {
+            "item_id[]": [str(self.item.id)],
+            "quantidade[]": ["2"],
+            "preco_unitario[]": ["600,00"],
+            "novo_produto_id[]": [""],
+            "nova_quantidade[]": [""],
+            "novo_preco_unitario[]": [""],
+            "tipo_pagamento_compra": "aprazo",
+        }
+        dados.update(
+            self.dados_correcao_parcelas(
+                parcelas,
+                contas,
+                parcela_valor_1="600,11",
+                parcela_valor_2="600,10",
+                parcela_vencimento_1="2026-10-10",
+                parcela_vencimento_2="2026-10-20",
+            )
+        )
+
+        resposta = self.client.post(url_itens, dados, secure=True)
+
+        self.compra.refresh_from_db()
+        self.item.refresh_from_db()
+        lista.refresh_from_db()
+        parcelas[0].refresh_from_db()
+        parcelas[1].refresh_from_db()
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(
+            urlsplit(resposta.url).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertEqual(self.item.preco_unitario, Decimal("600.00"))
+        self.assertEqual(self.item.valor_total, Decimal("1200.00"))
+        self.assertEqual(self.compra.total_produtos, Decimal("1200.00"))
+        self.assertEqual(self.compra.ajuste_total, Decimal("0.21"))
+        self.assertEqual(self.compra.total, Decimal("1200.21"))
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1200.21"))
+
+        self.assertEqual(
+            [parcelas[0].valor, parcelas[1].valor],
+            [Decimal("600.11"), Decimal("600.10")],
+        )
+        self.assertEqual(
+            [contas[0].valor_original, contas[1].valor_original],
+            [Decimal("600.11"), Decimal("600.10")],
+        )
+        self.assertEqual(
+            [contas[0].valor_em_aberto, contas[1].valor_em_aberto],
+            [Decimal("600.11"), Decimal("600.10")],
+        )
+        self.assertEqual(parcelas[0].data_vencimento, date(2026, 10, 10))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 10, 20))
+        self.assertEqual(contas[0].data_vencimento, date(2026, 10, 10))
+        self.assertEqual(contas[1].data_vencimento, date(2026, 10, 20))
+
+    def test_correcao_itens_com_boletos_sem_mudanca_nao_altera_dados(self):
+        lista, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+
+        self.compra.observacao = "Historico existente."
+        self.compra.save(update_fields=["observacao"])
+
+        dados = {
+            "item_id[]": [str(self.item.id)],
+            "quantidade[]": ["2"],
+            "preco_unitario[]": ["589,00"],
+            "novo_produto_id[]": [""],
+            "nova_quantidade[]": [""],
+            "novo_preco_unitario[]": [""],
+            "tipo_pagamento_compra": "aprazo",
+        }
+        dados.update(self.dados_correcao_parcelas(parcelas, contas))
+
+        resposta = self.client.post(
+            f"/estoque/compras/{self.compra.id}/corrigir-itens/",
+            dados,
+            secure=True,
+        )
+
+        self.compra.refresh_from_db()
+        lista.refresh_from_db()
+        parcelas[0].refresh_from_db()
+        parcelas[1].refresh_from_db()
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(
+            urlsplit(resposta.url).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertEqual(self.compra.total, Decimal("1178.21"))
+        self.assertEqual(self.compra.observacao, "Historico existente.")
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1178.21"))
+        self.assertEqual(parcelas[0].valor, Decimal("589.11"))
+        self.assertEqual(parcelas[1].valor, Decimal("589.10"))
+        self.assertEqual(contas[0].valor_original, Decimal("589.11"))
+        self.assertEqual(contas[1].valor_original, Decimal("589.10"))
+
+    def test_correcao_itens_permite_alterar_somente_vencimento_do_boleto(self):
+        lista, parcelas, contas = self.criar_compra_multiplos_boletos_finalizada()
+        url_itens = f"/estoque/compras/{self.compra.id}/corrigir-itens/"
+
+        dados = {
+            "item_id[]": [str(self.item.id)],
+            "quantidade[]": ["2"],
+            "preco_unitario[]": ["589,00"],
+            "novo_produto_id[]": [""],
+            "nova_quantidade[]": [""],
+            "novo_preco_unitario[]": [""],
+            "tipo_pagamento_compra": "aprazo",
+        }
+        dados.update(
+            self.dados_correcao_parcelas(
+                parcelas,
+                contas,
+                parcela_vencimento_2="2026-10-14",
+            )
+        )
+
+        resposta = self.client.post(url_itens, dados, secure=True)
+
+        self.compra.refresh_from_db()
+        lista.refresh_from_db()
+        parcelas[0].refresh_from_db()
+        parcelas[1].refresh_from_db()
+        contas[0].refresh_from_db()
+        contas[1].refresh_from_db()
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(
+            urlsplit(resposta.url).path,
+            reverse("estoque:compras_detalhe", kwargs={"pk": self.compra.id}),
+        )
+        self.assertEqual(self.compra.total, Decimal("1178.21"))
+        self.assertEqual(lista.valor_nota_boleto, Decimal("1178.21"))
+        self.assertEqual(parcelas[0].data_vencimento, date(2026, 10, 7))
+        self.assertEqual(contas[0].data_vencimento, date(2026, 10, 7))
+        self.assertEqual(parcelas[1].data_vencimento, date(2026, 10, 14))
+        self.assertEqual(contas[1].data_vencimento, date(2026, 10, 14))
+
     def test_sem_pagamento_ajusta_original_e_aberto(self):
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
         self.assertContains(detalhe, "Esta compra foi corrigida e o financeiro ainda está diferente.")

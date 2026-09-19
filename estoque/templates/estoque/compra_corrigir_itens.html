@@ -1,5 +1,5 @@
 {% extends 'estoque/base.html' %}
-{% block title %}Corrigir itens da Compra #{{ compra.id }}{% endblock %}
+{% block title %}Editar Compra #{{ compra.id }}{% endblock %}
 
 {% block content %}
 <style>
@@ -40,6 +40,14 @@
   .compra-correcao-remover input { width:auto; min-height:auto; }
   .compra-correcao-adicionar-acoes { padding:5px 9px; }
   .compra-correcao-adicionar .compra-correcao-table:has(#novosItensCorrecaoCompra:empty) { display:none; }
+  .compra-correcao-boletos { padding:6px 9px 9px; }
+  .compra-correcao-boletos-info { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:7px; }
+  .compra-correcao-boletos-info > div { padding:6px 8px; border:1px solid #dbeafe; border-radius:7px; background:#f8fafc; }
+  .compra-correcao-boletos-info span { display:block; color:#64748b; font-size:.62rem; font-weight:900; text-transform:uppercase; }
+  .compra-correcao-boletos-info strong { display:block; margin-top:1px; color:#164173; font-size:.88rem; font-weight:950; }
+  .campo-boleto-correcao { width:100%; min-height:30px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; font:inherit; font-weight:800; }
+  .campo-boleto-correcao[readonly] { background:#f1f5f9; color:#64748b; }
+  .motivo-boleto-correcao { display:block; margin-top:3px; color:#92400e; font-size:.68rem; font-weight:800; }
   .compra-correcao-totais { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:6px 9px; }
   .compra-correcao-total { padding:6px 8px; border:1px solid #dbeafe; border-radius:7px; background:#f8fafc; }
   .compra-correcao-total span { display:block; color:#64748b; font-size:.62rem; line-height:1.1; font-weight:900; text-transform:uppercase; }
@@ -62,6 +70,7 @@
     .compra-correcao-aviso { margin-bottom:10px; padding:9px 11px; font-size:.82rem; }
     .compra-correcao-dados { grid-template-columns:1fr 1fr; }
     .compra-correcao-totais { grid-template-columns:1fr; }
+    .compra-correcao-boletos-info { grid-template-columns:1fr; }
     .compra-correcao-table, .compra-correcao-table tbody, .compra-correcao-table tr, .compra-correcao-table td { display:block; width:100%; }
     .compra-correcao-table thead { display:none; }
     .compra-correcao-table tr { border-top:1px solid #dbe4ef; padding:8px; }
@@ -104,7 +113,7 @@
 <div class="compra-correcao-wrap">
   <div class="compra-correcao-topo">
     <div>
-      <h1>Corrigir itens da Compra #{{ compra.id }}</h1>
+      <h1>Editar Compra #{{ compra.id }}</h1>
       <p class="compra-correcao-sub">Edite, remova ou acrescente itens preservando o histórico da compra.</p>
     </div>
     <div class="compra-correcao-acoes">
@@ -145,6 +154,7 @@
 
   <form method="post" id="formCorrecaoItensCompra">
     {% csrf_token %}
+    <input type="hidden" name="confirmar" value="1">
     <section class="compra-correcao-card compra-correcao-itens">
       <h2>Itens da compra</h2>
       <table class="compra-correcao-table">
@@ -173,6 +183,82 @@
       <div class="compra-correcao-adicionar-acoes"><button type="button" class="compra-correcao-btn" id="btnAdicionarItemCorrecaoCompra">+ Adicionar produto</button></div>
     </section>
 
+    {% if correcao_parcelas %}
+    <section class="compra-correcao-card">
+      <h2>Boletos da compra</h2>
+
+      <div class="compra-correcao-boletos">
+        <div class="compra-correcao-boletos-info">
+          <div>
+            <span>Forma</span>
+            <strong>{% if correcao_parcelas.forma == "varios_boletos" %}Vários boletos{% else %}Boleto único{% endif %}</strong>
+          </div>
+          <div>
+            <span>Quantidade</span>
+            <strong>{{ correcao_parcelas.quantidade }}</strong>
+          </div>
+          <div>
+            <span>Total atual dos boletos</span>
+            <strong>R$ {{ correcao_parcelas.total_contas|floatformat:2 }}</strong>
+          </div>
+        </div>
+
+        <p class="compra-correcao-aviso">
+          Confira os valores e vencimentos junto com a correção da compra.
+          Parcelas que já tiveram movimentação financeira permanecem protegidas.
+        </p>
+
+        <table class="compra-correcao-table">
+          <thead>
+            <tr>
+              <th>Parcela</th>
+              <th>Status</th>
+              <th>Valor</th>
+              <th>Vencimento</th>
+              <th class="numero">Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in correcao_parcelas.linhas %}
+            <tr>
+              <td data-label="Parcela"><strong>{{ linha.rotulo }}</strong></td>
+              <td data-label="Status">{{ linha.status }}</td>
+              <td data-label="Valor">
+                <input type="hidden" name="conta_pagar_id_{{ linha.numero }}" value="{{ linha.conta.id }}">
+                <input type="hidden" name="parcela_nota_id_{{ linha.numero }}" value="{{ linha.parcela.id }}">
+                <input
+                  type="text"
+                  name="parcela_valor_{{ linha.numero }}"
+                  class="campo-boleto-correcao"
+                  inputmode="decimal"
+                  value="{{ linha.valor_input }}"
+                  {% if not linha.valor_editavel %}readonly{% endif %}
+                >
+                {% if linha.motivo_bloqueio_valor %}
+                  <span class="motivo-boleto-correcao">{{ linha.motivo_bloqueio_valor }}</span>
+                {% endif %}
+              </td>
+              <td data-label="Vencimento">
+                <input
+                  type="date"
+                  name="parcela_vencimento_{{ linha.numero }}"
+                  class="campo-boleto-correcao"
+                  value="{{ linha.vencimento }}"
+                  {% if not linha.data_editavel %}readonly{% endif %}
+                >
+                {% if not linha.data_editavel %}
+                  <span class="motivo-boleto-correcao">Parcela cancelada não pode ser alterada.</span>
+                {% endif %}
+              </td>
+              <td data-label="Pago" class="numero">R$ {{ linha.total_pago|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
     <section class="compra-correcao-card">
       <h2>Conferência da correção</h2>
       <div class="compra-correcao-totais">
@@ -185,7 +271,7 @@
         <span id="textoImpactoFinanceiroCorrecaoCompra">Sem impacto financeiro previsto.</span>
       </div>
       <div class="compra-correcao-rodape">
-        <label class="compra-correcao-confirmacao"><input type="checkbox" required> Confirmo os itens e valores corrigidos.</label>
+        <label class="compra-correcao-confirmacao"><input type="checkbox" required> Confirmo os itens, valores e boletos informados.</label>
         <button type="submit" class="compra-correcao-btn" id="btnSalvarCorrecaoItensCompra">Salvar correção dos itens</button>
       </div>
     </section>
@@ -251,9 +337,9 @@
       if(!mudou) {
         textoImpactoEl.textContent = "Sem impacto financeiro previsto.";
       } else if(["avista","pix","dinheiro","banco","cartao","cartao_credito","cartao_debito"].includes(pagamento)) {
-        textoImpactoEl.textContent = "Se salvar com diferen?a, os itens e o total ser?o corrigidos. Depois ser? necess?rio conferir a origem do pagamento em Caixa, Sangria/Reserva ou Banco/Pix.";
+        textoImpactoEl.textContent = "Se salvar com diferen\u00e7a, os itens e o total ser\u00e3o atualizados. O sistema solicitar\u00e1 o ajuste da origem do pagamento quando necess\u00e1rio.";
       } else {
-        textoImpactoEl.textContent = "Se salvar com diferen?a, os itens e o total ser?o corrigidos. Depois ser? necess?rio conferir a Conta a Pagar vinculada a esta compra.";
+        textoImpactoEl.textContent = "Se salvar com diferen\u00e7a, os itens, o total e os boletos informados ser\u00e3o atualizados juntos.";
       }
     }
   }

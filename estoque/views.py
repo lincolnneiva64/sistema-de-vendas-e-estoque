@@ -10542,7 +10542,7 @@ def _contexto_correcao_parcelas_compra(compra, contas_pagar=None):
     }
 
 
-def _corrigir_parcelas_financeiras_compra(request, compra):
+def _corrigir_parcelas_financeiras_compra(request, compra, valor_financeiro_esperado=None):
     if request.POST.get("confirmar") != "1":
         raise ValueError("Confirme a correcao das parcelas antes de continuar.")
 
@@ -10553,9 +10553,6 @@ def _corrigir_parcelas_financeiras_compra(request, compra):
         .prefetch_related("pagamentos")
         .order_by("numero_parcela", "data_vencimento", "id")
     )
-    if len(contas) <= 1:
-        raise ValueError("Esta correcao por parcelas exige multiplas Contas a Pagar.")
-
     lista_id = getattr(compra, "lista_fornecedor_id", None)
     if not lista_id:
         raise ValueError("Esta compra nao possui lista de fornecedor vinculada para sincronizar as parcelas.")
@@ -10612,7 +10609,13 @@ def _corrigir_parcelas_financeiras_compra(request, compra):
         })
 
     total_parcelas = sum((item["valor"] for item in novos_dados), Decimal("0.00")).quantize(Decimal("0.01"))
-    valor_financeiro = _financeiro_dinheiro(lista.valor_nota_boleto if lista.valor_nota_boleto is not None else compra.total).quantize(Decimal("0.01"))
+    if valor_financeiro_esperado is None:
+        valor_financeiro = _financeiro_dinheiro(
+            lista.valor_nota_boleto if lista.valor_nota_boleto is not None else compra.total
+        ).quantize(Decimal("0.01"))
+    else:
+        valor_financeiro = _financeiro_dinheiro(valor_financeiro_esperado).quantize(Decimal("0.01"))
+
     if total_parcelas != valor_financeiro:
         raise ValueError("A soma das parcelas precisa bater com o valor financeiro da compra.")
 
@@ -10916,7 +10919,18 @@ def compra_corrigir_itens(request, pk):
                     and _compra_pagamento_a_prazo(compra.tipo_pagamento)
                     != _compra_pagamento_a_prazo(novo_tipo_pagamento_compra)
                 )
-                if not rastros and diferenca == Decimal("0.00") and not pagamento_vai_mudar:
+                tem_parcelas_no_formulario = any(
+                    str(chave).startswith("parcela_vencimento_")
+                    or str(chave).startswith("parcela_valor_")
+                    for chave in request.POST.keys()
+                )
+
+                if (
+                    not rastros
+                    and diferenca == Decimal("0.00")
+                    and not pagamento_vai_mudar
+                    and not tem_parcelas_no_formulario
+                ):
                     messages.info(request, "Nenhuma alteração de itens foi feita.")
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
 
@@ -10962,18 +10976,38 @@ def compra_corrigir_itens(request, pk):
                     movimento_financeiro_correcao,
                 )
 
-                resumo_rastro = "; ".join(rastros) if rastros else "nenhuma alteracao de itens"
-                observacao_correcao = (
-                    "Correcao de itens/pagamento: " + resumo_rastro + ". "
-                    f"Total anterior {_financeiro_moeda_br(total_anterior)}; "
-                    f"novo total {_financeiro_moeda_br(novo_total)}; "
-                    f"diferenca {_financeiro_moeda_br(diferenca)}. "
-                    "Financeiro dos itens nao alterado nesta etapa."
-                )
-                if pagamento_alterado and resumo_pagamento:
-                    observacao_correcao += " " + resumo_pagamento
+                if rastros or pagamento_alterado:
+                    resumo_rastro = "; ".join(rastros) if rastros else "nenhuma alteracao de itens"
+                    observacao_correcao = (
+                        "Correcao de itens/pagamento: " + resumo_rastro + ". "
+                        f"Total anterior {_financeiro_moeda_br(total_anterior)}; "
+                        f"novo total {_financeiro_moeda_br(novo_total)}; "
+                        f"diferenca {_financeiro_moeda_br(diferenca)}. "
+                        "Financeiro dos itens nao alterado nesta etapa."
+                    )
+                    if pagamento_alterado and resumo_pagamento:
+                        observacao_correcao += " " + resumo_pagamento
 
-                _registrar_observacao_compra(compra, observacao_correcao)
+                    _registrar_observacao_compra(compra, observacao_correcao)
+
+                contas_pagar_correcao = _contas_pagar_da_compra(compra)
+                contexto_parcelas_correcao = (
+                    _contexto_correcao_parcelas_compra(compra, contas_pagar_correcao)
+                    if _compra_pagamento_a_prazo(compra.tipo_pagamento)
+                    else None
+                )
+                if contexto_parcelas_correcao:
+                    _corrigir_parcelas_financeiras_compra(
+                        request,
+                        compra,
+                        valor_financeiro_esperado=novo_total,
+                    )
+
+                    lista = getattr(compra, "lista_fornecedor", None)
+                    if lista and lista.valor_nota_boleto != novo_total:
+                        lista.valor_nota_boleto = novo_total
+                        lista.save(update_fields=["valor_nota_boleto", "atualizado_em"])
+
         except ValueError as exc:
             messages.error(request, str(exc))
             return redirect("estoque:compra_corrigir_itens", pk=compra.pk)
@@ -10986,11 +11020,17 @@ def compra_corrigir_itens(request, pk):
             return redirect("estoque:compra_corrigir_origem_pagamento", pk=compra.pk)
 
         if diferenca != Decimal("0.00") and _compra_pagamento_a_prazo(compra.tipo_pagamento):
-            messages.success(
-                request,
-                "Itens corrigidos. Agora ajuste a Conta a Pagar para bater com o novo total.",
+            contas_pagar_correcao = _contas_pagar_da_compra(compra)
+            contexto_parcelas_correcao = _contexto_correcao_parcelas_compra(
+                compra,
+                contas_pagar_correcao,
             )
-            return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
+            if not contexto_parcelas_correcao:
+                messages.success(
+                    request,
+                    "Itens corrigidos. Agora ajuste a Conta a Pagar para bater com o novo total.",
+                )
+                return redirect("estoque:compra_corrigir_financeiro", pk=compra.pk)
 
         mudou_somente_pagamento = (
             'pagamento_alterado' in locals()
@@ -11010,11 +11050,28 @@ def compra_corrigir_itens(request, pk):
                 if 'resumo_pagamento' in locals() and resumo_pagamento:
                     mensagem_final += " " + resumo_pagamento
             else:
-                mensagem_final += " Nenhum ajuste financeiro foi realizado."
+                contexto_financeiro_integrado = (
+                    _compra_pagamento_a_prazo(compra.tipo_pagamento)
+                    and _contexto_correcao_parcelas_compra(
+                        compra,
+                        _contas_pagar_da_compra(compra),
+                    )
+                )
+                if contexto_financeiro_integrado:
+                    mensagem_final += " Boletos e Conta a Pagar atualizados junto com a compra."
+                else:
+                    mensagem_final += " Nenhum ajuste financeiro foi realizado."
         messages.success(request, mensagem_final)
         return redirect("estoque:compras_detalhe", pk=compra.pk)
 
     itens = compra.itens.select_related("produto").all()
+    contas_pagar_correcao = _contas_pagar_da_compra(compra)
+    correcao_parcelas = (
+        _contexto_correcao_parcelas_compra(compra, contas_pagar_correcao)
+        if _compra_pagamento_a_prazo(compra.tipo_pagamento)
+        else None
+    )
+
     return render(
         request,
         "estoque/compra_corrigir_itens.html",
@@ -11022,6 +11079,7 @@ def compra_corrigir_itens(request, pk):
             "compra": compra,
             "itens": itens,
             "produtos": Produto.objects.filter(excluido=False, ativo=True).order_by("nome"),
+            "correcao_parcelas": correcao_parcelas,
         },
     )
 
