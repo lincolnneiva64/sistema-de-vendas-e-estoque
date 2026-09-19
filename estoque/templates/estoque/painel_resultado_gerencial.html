@@ -25,11 +25,23 @@
   .rg-muted { color:#64748b; font-weight:800; font-size:.86rem; }
   .rg-bars { padding:12px 14px 14px; display:grid; gap:10px; }
   .rg-group { border:1px solid #e1e7ef; border-radius:10px; overflow:hidden; background:#fff; }
-  .rg-group summary { list-style:none; cursor:pointer; padding:11px 12px; display:grid; grid-template-columns:minmax(180px, .8fr) minmax(180px, 1.6fr) auto auto; gap:12px; align-items:center; }
+  .rg-group summary { list-style:none; cursor:pointer; padding:11px 12px; display:grid; grid-template-columns:minmax(180px, .8fr) minmax(180px, 1.6fr) auto auto auto; gap:12px; align-items:center; }
   .rg-group summary::-webkit-details-marker { display:none; }
   .rg-group-name { font-weight:950; color:#172033; }
-  .rg-bar-track { height:14px; border-radius:999px; background:#eef2f7; overflow:hidden; }
-  .rg-bar-fill { height:100%; min-width:2px; border-radius:999px; background:#64748b; }
+  .rg-bar-track { display:block; height:16px; border-radius:999px; background:#e8edf4; overflow:hidden; }
+  .rg-bar-fill { display:block; height:100%; min-width:3px; border-radius:999px; background:#475569; }
+  .rg-group summary { transition:background .15s ease, opacity .15s ease; }
+  .rg-group summary:hover { background:#f8fafc; }
+  .rg-group.simulado-removido summary { background:#fef2f2; }
+  .rg-group.simulado-removido .rg-bar-fill { opacity:.25; }
+  .rg-group.simulado-removido .rg-group-name { text-decoration:line-through; }
+  .rg-sim-toggle { border:1px solid #cbd5e1; background:#fff; border-radius:8px; padding:6px 9px; font-weight:850; cursor:pointer; }
+  .rg-sim-toggle:hover { background:#f8fafc; }
+  .rg-sim-toggle.ativo { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+  .rg-quick-sim { border:1px solid #cbd5e1; background:#fff; border-radius:7px; padding:5px 8px; font-size:.75rem; font-weight:900; cursor:pointer; white-space:nowrap; }
+  .rg-quick-sim:hover { background:#f8fafc; }
+  .rg-quick-sim.ativo { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+  .rg-total-despesas { display:flex; justify-content:flex-end; gap:18px; align-items:center; padding:12px; border-top:2px solid #e2e8f0; font-weight:950; }
   .rg-money { font-weight:950; color:#172033; white-space:nowrap; }
   .rg-percent { color:#64748b; font-weight:850; white-space:nowrap; }
   .rg-drill { padding:0 12px 12px; display:grid; gap:8px; }
@@ -38,7 +50,7 @@
   .rg-launch { display:grid; grid-template-columns:96px 1fr auto; gap:8px; padding:6px 0; border-top:1px solid #e6edf7; font-size:.86rem; font-weight:760; color:#334155; }
   .rg-launch:first-of-type { border-top:0; }
   .rg-sim { padding:13px 14px; display:grid; gap:10px; }
-  .rg-sim-row { display:grid; grid-template-columns:minmax(180px, 1fr) 120px 150px 150px; gap:9px; align-items:center; }
+  .rg-sim-row { display:grid; grid-template-columns:minmax(180px, 1fr) 120px 130px 150px 150px; gap:9px; align-items:center; }
   .rg-sim-row input { width:100%; min-height:36px; border:1.5px solid #d3dbe8; border-radius:8px; padding:7px 9px; font-weight:850; }
   .rg-sim-total { display:grid; grid-template-columns:repeat(4, minmax(140px, 1fr)); gap:10px; margin-top:4px; }
   .rg-note { padding:10px 14px; color:#475569; font-weight:780; line-height:1.4; border-top:1px solid #eef2f7; background:#f8fafc; }
@@ -134,12 +146,13 @@
     </div>
     <div class="rg-bars">
       {% for grupo in grupos %}
-        <details class="rg-group" data-sim-group data-valor="{{ grupo.valor|stringformat:'s' }}">
+        <details class="rg-group" data-sim-group data-grupo="{{ forloop.counter0 }}" data-valor="{{ grupo.valor|stringformat:'s' }}">
           <summary>
             <span class="rg-group-name">{{ grupo.nome }}</span>
             <span class="rg-bar-track"><span class="rg-bar-fill" style="width:{{ grupo.largura_barra|stringformat:'s' }}%;"></span></span>
             <span class="rg-money">{{ grupo.valor_texto }}</span>
             <span class="rg-percent">{{ grupo.percentual_faturamento }}% do faturamento</span>
+            <button type="button" class="rg-quick-sim" data-quick-sim>Simular retirada</button>
           </summary>
           <div class="rg-drill">
             {% for categoria in grupo.categorias_lista %}
@@ -159,6 +172,13 @@
       {% empty %}
         <div class="rg-muted">Nenhum custo ou despesa confiavel encontrado neste periodo.</div>
       {% endfor %}
+      {% if grupos %}
+        <div class="rg-total-despesas">
+          <span>Total das despesas confiaveis</span>
+          <span>{{ despesas_total_texto }}</span>
+          <span>{{ despesas_percentual_faturamento }}% do faturamento</span>
+        </div>
+      {% endif %}
     </div>
   </section>
 
@@ -169,9 +189,10 @@
     </div>
     <div class="rg-sim">
       {% for grupo in grupos %}
-        <div class="rg-sim-row" data-sim-row data-atual="{{ grupo.valor|stringformat:'s' }}">
+        <div class="rg-sim-row" data-sim-row data-grupo="{{ forloop.counter0 }}" data-atual="{{ grupo.valor|stringformat:'s' }}">
           <strong>{{ grupo.nome }}</strong>
           <span class="rg-money">{{ grupo.valor_texto }}</span>
+          <button type="button" class="rg-sim-toggle" data-sim-toggle>Retirar 100%</button>
           <label>
             <span class="rg-muted">Simulado</span>
             <input type="number" min="0" step="0.01" value="{{ grupo.valor|stringformat:'s' }}" data-sim-input>
@@ -182,8 +203,14 @@
         <p class="rg-muted">Sem grupos para simular neste periodo.</p>
       {% endfor %}
       <div class="rg-sim-total">
-        <div class="rg-card"><span>Resultado atual</span><strong id="resultadoAtual" data-valor="{{ resultado_base_simulador|stringformat:'s' }}">{{ resultado_base_simulador_texto }}</strong></div>
-        <div class="rg-card resultado"><span>Resultado simulado</span><strong id="resultadoSimulado">{{ resultado_base_simulador_texto }}</strong></div>
+        <div class="rg-card">
+          <span>{% if cmv_disponivel %}Resultado atual{% else %}Resultado parcial atual (sem CMV){% endif %}</span>
+          <strong id="resultadoAtual" data-valor="{{ resultado_base_simulador|stringformat:'s' }}">{{ resultado_base_simulador_texto }}</strong>
+        </div>
+        <div class="rg-card resultado">
+          <span>{% if cmv_disponivel %}Resultado simulado{% else %}Resultado parcial simulado (sem CMV){% endif %}</span>
+          <strong id="resultadoSimulado">{{ resultado_base_simulador_texto }}</strong>
+        </div>
         <div class="rg-card"><span>Melhoria mensal</span><strong id="melhoriaMensal">R$ 0,00</strong></div>
         <div class="rg-card"><span>Impacto anualizado</span><strong id="impactoAnual">R$ 0,00</strong></div>
       </div>
@@ -231,13 +258,68 @@
     document.getElementById("melhoriaMensal").textContent = moeda(economia);
     document.getElementById("impactoAnual").textContent = moeda(economia * 12);
   }
+  function atualizarEstadoVisual(linha) {
+    const input = linha.querySelector("[data-sim-input]");
+    const botao = linha.querySelector("[data-sim-toggle]");
+    const grupo = document.querySelector('[data-sim-group][data-grupo="' + linha.dataset.grupo + '"]');
+    const botaoRapido = grupo?.querySelector("[data-quick-sim]");
+    const removido = numero(input?.value) === 0 && numero(linha.dataset.atual) > 0;
+
+    if (botao) {
+      botao.textContent = removido ? "Restaurar" : "Retirar 100%";
+      botao.classList.toggle("ativo", removido);
+    }
+    if (botaoRapido) {
+      botaoRapido.textContent = removido ? "Restaurar" : "Simular retirada";
+      botaoRapido.classList.toggle("ativo", removido);
+    }
+    grupo?.classList.toggle("simulado-removido", removido);
+  }
+
   linhas.forEach(function (linha) {
-    linha.querySelector("[data-sim-input]")?.addEventListener("input", recalcular);
+    const input = linha.querySelector("[data-sim-input]");
+    const botao = linha.querySelector("[data-sim-toggle]");
+
+    input?.addEventListener("input", function () {
+      atualizarEstadoVisual(linha);
+      recalcular();
+    });
+
+    botao?.addEventListener("click", function () {
+      if (!input) return;
+      const removido = numero(input.value) === 0;
+      input.value = removido ? (linha.dataset.atual || "0.00") : "0.00";
+      atualizarEstadoVisual(linha);
+      recalcular();
+    });
   });
+
+  document.querySelectorAll("[data-quick-sim]").forEach(function (botaoRapido) {
+    botaoRapido.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const grupo = botaoRapido.closest("[data-sim-group]");
+      const linha = document.querySelector(
+        '[data-sim-row][data-grupo="' + grupo?.dataset.grupo + '"]'
+      );
+      const input = linha?.querySelector("[data-sim-input]");
+
+      if (!linha || !input) return;
+
+      const removido = numero(input.value) === 0;
+      input.value = removido ? (linha.dataset.atual || "0.00") : "0.00";
+
+      atualizarEstadoVisual(linha);
+      recalcular();
+    });
+  });
+
   document.getElementById("limparSimulacao")?.addEventListener("click", function () {
     linhas.forEach(function (linha) {
       const input = linha.querySelector("[data-sim-input]");
       if (input) input.value = linha.dataset.atual || "0.00";
+      atualizarEstadoVisual(linha);
     });
     recalcular();
   });

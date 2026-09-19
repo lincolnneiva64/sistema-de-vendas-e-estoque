@@ -4751,6 +4751,12 @@ def _painel_resultado_gerencial_contexto(request):
         if resultado_gerencial is not None
         else resultado_parcial
     )
+    despesas_percentual_faturamento = Decimal("0.00")
+    if faturamento > Decimal("0.00"):
+        despesas_percentual_faturamento = (
+            (despesas_total / faturamento) * Decimal("100")
+        ).quantize(Decimal("0.01"))
+
     maior_valor = max([grupo["valor"] for grupo in grupos.values()] or [Decimal("0.00")])
     grupos_lista = []
     for grupo in sorted(grupos.values(), key=lambda item: item["valor"], reverse=True):
@@ -4795,6 +4801,7 @@ def _painel_resultado_gerencial_contexto(request):
         ),
         "despesas_total": despesas_total,
         "despesas_total_texto": _financeiro_moeda_br(despesas_total),
+        "despesas_percentual_faturamento": despesas_percentual_faturamento,
         "resultado_parcial": resultado_parcial,
         "resultado_parcial_texto": _financeiro_moeda_br(resultado_parcial),
         "resultado_base_simulador": resultado_base_simulador,
