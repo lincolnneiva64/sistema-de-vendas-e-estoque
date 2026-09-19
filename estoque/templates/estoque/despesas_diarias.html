@@ -546,10 +546,11 @@
     <form method="post" id="formDespesaDiaria">
       {% csrf_token %}
       <input type="hidden" name="acao" id="acaoDespesaDiaria" value="">
+      <input type="hidden" name="despesa_id" id="despesaEdicaoId" value="">
       <input type="hidden" name="catalogo_id" id="catalogoDespesaId" value="">
       <input type="hidden" name="categoria" id="categoriaDespesaDiaria" value="outros">
 
-      <div class="despesa-rapido-titulo">Nova despesa</div>
+      <div class="despesa-rapido-titulo" id="tituloFormularioDespesa">Nova despesa</div>
       <div class="despesa-rapido-ajuda">Informe o valor, toque no tipo de despesa e escolha de onde saiu o dinheiro.</div>
 
       <div class="despesa-valor-principal">
@@ -761,22 +762,29 @@
 
   <section class="despesa-resumo" aria-label="Resumo das despesas">
     <div class="despesa-resumo-card">
-      <div class="despesa-resumo-label">Total de hoje</div>
-      <div class="despesa-resumo-valor">R$ {{ total_hoje|floatformat:2 }}</div>
+      <div class="despesa-resumo-label">Empresa no mes</div>
+      <div class="despesa-resumo-valor">R$ {{ total_mes_empresa|floatformat:2 }}</div>
     </div>
     <div class="despesa-resumo-card">
-      <div class="despesa-resumo-label">Lancamentos hoje</div>
-      <div class="despesa-resumo-valor">{{ quantidade_hoje }}</div>
-    </div>
-    <div class="despesa-resumo-card">
-      <div class="despesa-resumo-label">Total do periodo</div>
-      <div class="despesa-resumo-valor">R$ {{ total_periodo|floatformat:2 }}</div>
+      <div class="despesa-resumo-label">Pessoal no mes</div>
+      <div class="despesa-resumo-valor">R$ {{ total_mes_pessoal|floatformat:2 }}</div>
     </div>
     <div class="despesa-resumo-card">
       <div class="despesa-resumo-label">Total do mes</div>
       <div class="despesa-resumo-valor">R$ {{ total_mes|floatformat:2 }}</div>
     </div>
+    <div class="despesa-resumo-card">
+      <div class="despesa-resumo-label">Total do periodo</div>
+      <div class="despesa-resumo-valor">R$ {{ total_periodo|floatformat:2 }}</div>
+      <div class="despesa-item-meta">{{ quantidade_periodo }} lancamento(s)</div>
+    </div>
   </section>
+
+  {% if total_mes_sem_classificacao %}
+    <div class="despesa-selecao-atual">
+      R$ {{ total_mes_sem_classificacao|floatformat:2 }} do mes pertencem a lancamentos antigos ainda sem classificacao Empresa/Pessoal.
+    </div>
+  {% endif %}
 
   <section class="despesa-filtros" id="filtrosDespesaDiaria">
     <form method="get" id="formFiltroDespesaDiaria">
@@ -785,10 +793,21 @@
           <label for="filtroDataInicio">Data inicial</label>
           <input id="filtroDataInicio" name="data_inicio" type="date" value="{{ data_inicio|date:'Y-m-d' }}">
         </div>
+
         <div class="despesa-field">
           <label for="filtroDataFim">Data final</label>
           <input id="filtroDataFim" name="data_fim" type="date" value="{{ data_fim|date:'Y-m-d' }}">
         </div>
+
+        <div class="despesa-field">
+          <label for="filtroTipo">Tipo</label>
+          <select id="filtroTipo" name="tipo">
+            <option value="">Empresa e pessoal</option>
+            <option value="empresa" {% if tipo_filtro == "empresa" %}selected{% endif %}>Empresa</option>
+            <option value="pessoal" {% if tipo_filtro == "pessoal" %}selected{% endif %}>Pessoal</option>
+          </select>
+        </div>
+
         <div class="despesa-field">
           <label for="filtroConta">Conta de saida</label>
           <select id="filtroConta" name="conta_saida">
@@ -798,8 +817,9 @@
             {% endfor %}
           </select>
         </div>
+
         <div class="despesa-field">
-          <label for="filtroCategoria">Categoria</label>
+          <label for="filtroCategoria">Categoria antiga</label>
           <select id="filtroCategoria" name="categoria">
             <option value="">Todas</option>
             {% for valor, texto in categorias %}
@@ -807,10 +827,12 @@
             {% endfor %}
           </select>
         </div>
+
         <div class="despesa-field">
           <label>&nbsp;</label>
           <button class="despesa-btn" type="submit">Filtrar historico</button>
         </div>
+
         <div class="despesa-field">
           <label>&nbsp;</label>
           <a class="despesa-btn despesa-btn-secondary" href="{% url 'estoque:despesas_diarias' %}#filtrosDespesaDiaria">Hoje</a>
@@ -821,22 +843,64 @@
 
   <section class="despesa-lista">
     <h2>Historico de {{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}</h2>
+
     {% for despesa in despesas_periodo %}
       <article class="despesa-item">
         <div class="despesa-item-main">
-          <strong>{{ despesa.get_categoria_display }}</strong>
-          <div class="despesa-item-meta">
-            {{ despesa.data_hora|date:"d/m/Y H:i" }} · Saiu de: {{ despesa.conta_saida_nome }} · Operador: {{ despesa.operador|default:"-" }}
-          </div>
-          {% if despesa.paga_com_dinheiro_rota %}
-            <div class="despesa-item-meta">Dinheiro em posse da rota: {{ despesa.rota_recebimento }} - {{ despesa.data_rota_recebimento|date:"d/m/Y" }}</div>
+
+          {% if despesa.catalogo %}
+            <strong>
+              {{ despesa.tipo_estruturado_nome }}
+              {% if despesa.pessoa_estruturada %} - {{ despesa.pessoa_estruturada }}{% endif %}
+              - {{ despesa.nome_estruturado }}
+            </strong>
+
+            <div class="despesa-item-meta">
+              {{ despesa.grupo_estruturado }} / {{ despesa.categoria_estruturada }}
+            </div>
+          {% else %}
+            <strong>{{ despesa.get_categoria_display }}</strong>
+            <div class="despesa-item-meta">Lancamento antigo sem classificacao estruturada</div>
           {% endif %}
+
+          <div class="despesa-item-meta">
+            {{ despesa.data_hora|date:"d/m/Y H:i" }} - Saiu de: {{ despesa.conta_saida_nome }} - Operador: {{ despesa.operador|default:"-" }}
+          </div>
+
+          {% if despesa.paga_com_dinheiro_rota %}
+            <div class="despesa-item-meta">
+              Dinheiro em posse da rota: {{ despesa.rota_recebimento }} - {{ despesa.data_rota_recebimento|date:"d/m/Y" }}
+            </div>
+          {% endif %}
+
           {% if despesa.observacao %}
             <div class="despesa-item-meta">{{ despesa.observacao }}</div>
           {% endif %}
         </div>
+
         <div>
           <div class="despesa-item-valor">R$ {{ despesa.valor|floatformat:2 }}</div>
+
+          {% if despesa.catalogo %}
+            <button type="button"
+                    class="despesa-btn despesa-btn-secondary despesa-editar"
+                    data-despesa-id="{{ despesa.id }}"
+                    data-valor="{{ despesa.valor|stringformat:'f' }}"
+                    data-catalogo-id="{{ despesa.catalogo_id }}"
+                    data-catalogo-nome="{{ despesa.nome_estruturado|escape }}"
+                    data-tipo="{{ despesa.tipo_estruturado }}"
+                    data-pessoa="{{ despesa.pessoa_estruturada|escape }}"
+                    data-conta-id="{{ despesa.conta_saida_id|default:'' }}"
+                    data-operador="{{ despesa.operador|default:''|escape }}"
+                    data-data="{{ despesa.data_hora|date:'Y-m-d' }}"
+                    data-observacao="{{ despesa.observacao|default:''|escape }}"
+                    data-rota-ativa="{% if despesa.paga_com_dinheiro_rota %}1{% else %}0{% endif %}"
+                    data-rota="{{ despesa.rota_recebimento|default:''|escape }}"
+                    data-data-rota="{{ despesa.data_rota_recebimento|date:'Y-m-d' }}">
+              Editar
+            </button>
+          {% endif %}
+
           <form method="post" onsubmit="return confirm('Excluir esta despesa e o movimento financeiro correspondente?');">
             {% csrf_token %}
             <input type="hidden" name="acao" value="excluir">
@@ -915,6 +979,9 @@
   const acao = document.getElementById("acaoDespesaDiaria");
   const btnSalvar = document.getElementById("btnSalvarDespesaDiaria");
   const btnLimpar = document.getElementById("btnLimparDespesaDiaria");
+  const despesaEdicaoId = document.getElementById("despesaEdicaoId");
+  const tituloFormulario = document.getElementById("tituloFormularioDespesa");
+  const botoesEditar = Array.from(document.querySelectorAll(".despesa-editar"));
 
   if (!form || !acao || !btnSalvar) return;
 
@@ -1136,6 +1203,13 @@
   function limparTudo() {
     envioEmAndamento = false;
 
+    if (despesaEdicaoId) despesaEdicaoId.value = "";
+    if (acao) acao.value = "";
+
+    if (tituloFormulario) {
+      tituloFormulario.textContent = "Nova despesa";
+    }
+
     if (valorCampo) valorCampo.value = "";
     if (contaCampo) contaCampo.value = "";
     if (operadorCampo) operadorCampo.value = "";
@@ -1155,6 +1229,112 @@
     if (valorCampo) valorCampo.focus();
   }
 
+  function editarDespesa(botao) {
+    limparTudo();
+
+    const tipo = botao.dataset.tipo || "";
+    const pessoa = botao.dataset.pessoa || "";
+    const catalogoId = botao.dataset.catalogoId || "";
+    const catalogoNome = botao.dataset.catalogoNome || "";
+
+    if (despesaEdicaoId) {
+      despesaEdicaoId.value = botao.dataset.despesaId || "";
+    }
+
+    if (tituloFormulario) {
+      tituloFormulario.textContent = "Editar despesa";
+    }
+
+    if (valorCampo) {
+      const numero = Number(
+        String(botao.dataset.valor || "0").replace(",", ".")
+      );
+
+      valorCampo.value = Number.isNaN(numero)
+        ? botao.dataset.valor
+        : numero.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+    }
+
+    escolherTipo(tipo);
+
+    if (tipo === "pessoal" && pessoa) {
+      escolherPessoa(pessoa);
+    }
+
+    selecionarCatalogo(catalogoId, catalogoNome);
+
+    if (tipo === "empresa" && selectEmpresa) {
+      selectEmpresa.value = String(catalogoId);
+    }
+
+    if (tipo === "pessoal" && selectPessoal) {
+      selectPessoal.value = String(catalogoId);
+    }
+
+    if (contaCampo) {
+      contaCampo.value = botao.dataset.contaId || "";
+    }
+
+    if (operadorCampo) {
+      operadorCampo.value = botao.dataset.operador || "";
+    }
+
+    if (dataCampo) {
+      dataCampo.value = botao.dataset.data || hojeISO();
+    }
+
+    if (observacaoCampo) {
+      observacaoCampo.value = botao.dataset.observacao || "";
+    }
+
+    if (dinheiroRotaCampo) {
+      dinheiroRotaCampo.checked = botao.dataset.rotaAtiva === "1";
+    }
+
+    if (dinheiroRotaCampo && dinheiroRotaCampo.checked) {
+      if (rotaCampo) {
+        rotaCampo.value = botao.dataset.rota || "";
+      }
+
+      if (dataRotaCampo) {
+        dataRotaCampo.value = botao.dataset.dataRota || "";
+      }
+    }
+
+    atualizarRota();
+
+    if (detalhes) {
+      detalhes.open =
+        Boolean(botao.dataset.observacao) ||
+        botao.dataset.rotaAtiva === "1";
+    }
+
+    envioEmAndamento = false;
+    btnSalvar.disabled = false;
+    btnSalvar.textContent = "Salvar alteracao";
+
+    form.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+
+    setTimeout(function () {
+      if (valorCampo) {
+        valorCampo.focus();
+        valorCampo.select();
+      }
+    }, 350);
+  }
+
+  botoesEditar.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      editarDespesa(botao);
+    });
+  });
+
   function prepararEnvio() {
     if (envioEmAndamento) return false;
 
@@ -1168,9 +1348,16 @@
     }
 
     envioEmAndamento = true;
-    acao.value = "salvar_despesa";
+
+    if (despesaEdicaoId && despesaEdicaoId.value) {
+      acao.value = "editar_despesa";
+      btnSalvar.textContent = "Salvando alteracao...";
+    } else {
+      acao.value = "salvar_despesa";
+      btnSalvar.textContent = "Salvando...";
+    }
+
     btnSalvar.disabled = true;
-    btnSalvar.textContent = "Salvando...";
     return true;
   }
 

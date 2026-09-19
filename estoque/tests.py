@@ -30639,6 +30639,199 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 0)
         self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("0.00"))
 
+    def test_editar_despesa_atualiza_mesmos_registros_sem_duplicar(self):
+        catalogo_original = CatalogoDespesa.objects.create(
+            nome="Despesa pessoal teste edicao",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            grupo="Pessoal",
+            categoria="Despesa pessoal",
+            pessoa="Roseli",
+            ativo=True,
+            ordem=900,
+        )
+        catalogo_novo = CatalogoDespesa.objects.create(
+            nome="Funcionario teste edicao",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Pessoal",
+            categoria="Funcionarios",
+            ativo=True,
+            ordem=901,
+        )
+
+        self._post_despesa(
+            self.conta_caixa,
+            valor="100,00",
+            catalogo_id=catalogo_original.id,
+            observacao="Antes da edicao",
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        movimento = self._movimento_unico()
+        despesa_id = despesa.id
+        movimento_id = movimento.id
+        horario_original = timezone.localtime(despesa.data_hora).time()
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "editar_despesa",
+                "despesa_id": str(despesa.id),
+                "data_lancamento": "2026-09-08",
+                "valor": "175,50",
+                "catalogo_id": str(catalogo_novo.id),
+                "categoria": DespesaDiaria.CATEGORIA_OUTROS,
+                "conta_saida": str(self.conta_banco.id),
+                "operador": self.operador.nome,
+                "observacao": "Depois da edicao",
+                "rota_recebimento": "",
+                "data_rota_recebimento": "",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Despesa alterada com sucesso.")
+
+        self.assertEqual(DespesaDiaria.objects.count(), 1)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            1,
+        )
+
+        despesa.refresh_from_db()
+        movimento.refresh_from_db()
+
+        self.assertEqual(despesa.id, despesa_id)
+        self.assertEqual(movimento.id, movimento_id)
+        self.assertEqual(despesa.valor, Decimal("175.50"))
+        self.assertEqual(despesa.catalogo, catalogo_novo)
+        self.assertEqual(despesa.categoria, DespesaDiaria.CATEGORIA_AJUDANTE_DIARIA)
+        self.assertEqual(despesa.observacao, "Depois da edicao")
+        self.assertEqual(timezone.localtime(despesa.data_hora).date(), date(2026, 9, 8))
+        self.assertEqual(timezone.localtime(despesa.data_hora).time(), horario_original)
+
+        self.assertEqual(movimento.valor, Decimal("175.50"))
+        self.assertEqual(movimento.conta, self.conta_banco)
+        self.assertEqual(movimento.data, date(2026, 9, 8))
+        self.assertEqual(movimento.operador, self.operador.nome)
+        self.assertIn(f"#{despesa.id}", movimento.descricao)
+
+    def test_editar_despesa_rejeita_catalogo_inativo(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Catalogo inativo teste",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Outras",
+            categoria="Outros",
+            ativo=True,
+            ordem=910,
+        )
+
+        self._post_despesa(
+            self.conta_caixa,
+            valor="50,00",
+            catalogo_id=catalogo.id,
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        movimento = self._movimento_unico()
+        catalogo.ativo = False
+        catalogo.save(update_fields=["ativo"])
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "editar_despesa",
+                "despesa_id": str(despesa.id),
+                "data_lancamento": "2026-09-08",
+                "valor": "999,00",
+                "catalogo_id": str(catalogo.id),
+                "categoria": DespesaDiaria.CATEGORIA_OUTROS,
+                "conta_saida": str(self.conta_banco.id),
+                "operador": self.operador.nome,
+                "observacao": "Nao deve gravar",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(
+            resposta,
+            "A despesa escolhida nao existe ou esta inativa.",
+        )
+
+        despesa.refresh_from_db()
+        movimento.refresh_from_db()
+        self.assertEqual(despesa.valor, Decimal("50.00"))
+        self.assertEqual(movimento.valor, Decimal("50.00"))
+        self.assertEqual(movimento.conta, self.conta_caixa)
+
+    def test_editar_despesa_confirmada_em_rota_e_bloqueado(self):
+        Cliente.objects.create(
+            nome="Cliente Genipauba Edicao",
+            bairro="Genipauba",
+            ativo=True,
+        )
+
+        self._post_despesa(
+            self.conta_caixa,
+            valor="154,00",
+            paga_com_dinheiro_rota=True,
+            rota_recebimento="Genipauba",
+            data_rota_recebimento="2026-09-09",
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        movimento = self._movimento_unico()
+
+        fechamento = FechamentoRotaRecebimento.objects.create(
+            rota="Genipauba",
+            data_referencia=date(2026, 9, 9),
+            total_sistema=Decimal("154.00"),
+            total_conferido=Decimal("154.00"),
+            diferenca=Decimal("0.00"),
+            status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
+        )
+        DespesaRotaConferencia.objects.create(
+            fechamento=fechamento,
+            despesa=despesa,
+            valor_justificado=Decimal("154.00"),
+        )
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "editar_despesa",
+                "despesa_id": str(despesa.id),
+                "data_lancamento": "2026-09-10",
+                "valor": "999,00",
+                "conta_saida": str(self.conta_banco.id),
+                "operador": self.operador.nome,
+                "categoria": DespesaDiaria.CATEGORIA_OUTROS,
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertContains(
+            resposta,
+            "Esta despesa ja foi confirmada em uma conferencia de rota e nao pode mais ser alterada.",
+        )
+
+        despesa.refresh_from_db()
+        movimento.refresh_from_db()
+
+        self.assertEqual(despesa.valor, Decimal("154.00"))
+        self.assertEqual(movimento.valor, Decimal("154.00"))
+        self.assertEqual(movimento.conta, self.conta_caixa)
+        self.assertEqual(
+            DespesaRotaConferencia.objects.filter(
+                fechamento=fechamento,
+                despesa=despesa,
+            ).count(),
+            1,
+        )
+
     def test_template_exige_escolha_explicita_e_nao_pre_seleciona_conta(self):
         resposta = self.client.get(self.url, secure=True)
         conteudo = resposta.content.decode()
