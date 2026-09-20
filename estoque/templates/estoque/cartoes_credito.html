@@ -175,7 +175,19 @@
                             </div>
 
                             {% if fatura.saldo_fatura > 0 %}
-                            <details class="mt-2">
+                            {% if fatura.pode_desfazer %}
+                            <form method="post" class="mb-2"
+                                  onsubmit="return confirm('Desfazer esta fatura? Os lancamentos voltarao para pendentes.');">
+                                {% csrf_token %}
+                                <input type="hidden" name="acao" value="desfazer_fatura">
+                                <input type="hidden" name="fatura_id" value="{{ fatura.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    Desfazer fatura
+                                </button>
+                            </form>
+                            {% endif %}
+
+<details class="mt-2">
                                 <summary class="btn btn-success w-100">
                                     Pagar fatura
                                 </summary>

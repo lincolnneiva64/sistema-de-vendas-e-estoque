@@ -5249,6 +5249,44 @@ def cartoes_credito(request):
     if request.method == "POST":
         acao = (request.POST.get("acao") or "").strip()
 
+        if acao == "desfazer_fatura":
+            fatura_id = request.POST.get("fatura_id")
+
+            try:
+                with transaction.atomic():
+                    fatura = (
+                        FaturaCartao.objects
+                        .select_for_update()
+                        .get(pk=fatura_id)
+                    )
+
+                    if fatura.pagamentos.exists():
+                        raise ValueError(
+                            "Esta fatura ja possui pagamento e nao pode ser desfeita."
+                        )
+
+                    LancamentoCartao.objects.filter(
+                        fatura=fatura
+                    ).update(fatura=None)
+
+                    cartao_nome = str(fatura.cartao)
+                    vencimento = fatura.data_vencimento
+                    fatura.delete()
+
+                messages.success(
+                    request,
+                    f"Fatura {cartao_nome} com vencimento em "
+                    f"{vencimento.strftime('%d/%m/%Y')} desfeita. "
+                    "Os lancamentos voltaram para pendentes.",
+                )
+
+            except FaturaCartao.DoesNotExist:
+                messages.error(request, "Fatura nao encontrada.")
+            except ValueError as exc:
+                messages.error(request, str(exc))
+
+            return redirect("estoque:cartoes_credito")
+
         if acao == "pagar_fatura":
             fatura_id = request.POST.get("fatura_id")
             conta_id = request.POST.get("conta_id")
@@ -5512,6 +5550,10 @@ def cartoes_credito(request):
         fatura.saldo_fatura = (
             fatura.total_fatura - fatura.total_pago_calculado
         ).quantize(Decimal("0.01"))
+
+        fatura.pode_desfazer = (
+            fatura.total_pago_calculado == Decimal("0.00")
+        )
 
         faturas_por_cartao.setdefault(
             fatura.cartao_id,
@@ -11917,6 +11959,14 @@ def compra_corrigir_itens(request, pk):
         try:
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
+
+                lancamento_cartao = (
+                    LancamentoCartao.objects
+                    .select_for_update()
+                    .filter(compra=compra)
+                    .first()
+                )
+
                 itens_atuais = list(
                     ItemCompra.objects.select_for_update()
                     .filter(compra=compra)
@@ -11997,6 +12047,17 @@ def compra_corrigir_itens(request, pk):
                 if novo_total < Decimal("0.00"):
                     raise ValueError("A correcao dos itens deixaria o valor cobrado da compra negativo.")
                 diferenca = (novo_total - total_anterior).quantize(Decimal("0.01"))
+
+                if (
+                    lancamento_cartao
+                    and lancamento_cartao.fatura_id
+                    and diferenca != Decimal("0.00")
+                ):
+                    raise ValueError(
+                        "Esta compra ja esta vinculada a uma fatura de cartao. "
+                        "Desfaca a fatura antes de alterar itens que mudem o total da compra."
+                    )
+
                 pagamento_vai_mudar = bool(
                     novo_tipo_pagamento_compra
                     and _compra_pagamento_a_prazo(compra.tipo_pagamento)
@@ -12051,6 +12112,18 @@ def compra_corrigir_itens(request, pk):
                 compra.total_produtos = novo_total_produtos
                 compra.total = novo_total
                 compra.save(update_fields=["total_produtos", "total", "atualizado_em"])
+
+                if lancamento_cartao and lancamento_cartao.fatura_id is None:
+                    descricao_cartao = f"Compra #{compra.id}"
+                    if compra.fornecedor_id:
+                        descricao_cartao = f"{descricao_cartao} - {compra.fornecedor}"
+
+                    lancamento_cartao.data = compra.data_compra
+                    lancamento_cartao.descricao = descricao_cartao[:255]
+                    lancamento_cartao.valor = compra.total
+                    lancamento_cartao.save(
+                        update_fields=["data", "descricao", "valor"]
+                    )
 
                 movimento_financeiro_correcao = request.POST.get("movimento_financeiro_correcao", "").strip()
                 pagamento_alterado, resumo_pagamento = _corrigir_pagamento_simples_compra(
