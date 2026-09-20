@@ -1,4 +1,5 @@
 {
+  "id": "/pwa-despesa",
   "name": "Despesa",
   "short_name": "Despesa",
   "start_url": "/despesas-diarias/",
