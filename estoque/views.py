@@ -12444,6 +12444,19 @@ def compra_excluir(request, pk):
 
         conta = getattr(compra, "conta_pagar", None)
 
+        lancamento_cartao = (
+            LancamentoCartao.objects
+            .select_related("fatura")
+            .filter(compra=compra)
+            .first()
+        )
+
+        if lancamento_cartao and lancamento_cartao.fatura_id:
+            messages.error(
+                request,
+                "Esta compra nao pode ser excluida porque ja esta vinculada a uma fatura de cartao. Ajuste a fatura antes de excluir a compra.",
+            )
+            return redirect("estoque:compras_detalhe", pk=compra.pk)
         if conta and conta.pagamentos.exists():
             messages.error(
                 request,
@@ -12467,6 +12480,8 @@ def compra_excluir(request, pk):
                 produto.quantidade = novo_estoque
                 produto.save(update_fields=["quantidade", "atualizado_em"])
 
+        if lancamento_cartao:
+            lancamento_cartao.delete()
         numero_compra = compra.pk
         compra.delete()
 
