@@ -1,0 +1,23 @@
+{
+  "name": "Despesa",
+  "short_name": "Despesa",
+  "start_url": "/despesas-diarias/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#198754",
+  "icons": [
+    {
+      "src": "/static/estoque/despesa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/estoque/despesa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
