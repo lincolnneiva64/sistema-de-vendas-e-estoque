@@ -2609,6 +2609,125 @@ class CatalogoDespesa(models.Model):
         return f"{self.nome} - {self.get_tipo_display()}"
 
 
+class CartaoCredito(models.Model):
+    nome = models.CharField(max_length=100)
+    titular = models.CharField(max_length=120)
+    dia_fechamento = models.PositiveSmallIntegerField(null=True, blank=True)
+    dia_vencimento = models.PositiveSmallIntegerField(null=True, blank=True)
+    ativo = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["titular", "nome"]
+
+    def __str__(self):
+        return f"{self.nome} - {self.titular}"
+
+
+class FaturaCartao(models.Model):
+    STATUS_ABERTA = "aberta"
+    STATUS_FECHADA = "fechada"
+    STATUS_PARCIAL = "parcial"
+    STATUS_PAGA = "paga"
+
+    STATUS_CHOICES = [
+        (STATUS_ABERTA, "Aberta"),
+        (STATUS_FECHADA, "Fechada"),
+        (STATUS_PARCIAL, "Parcial"),
+        (STATUS_PAGA, "Paga"),
+    ]
+
+    cartao = models.ForeignKey(
+        CartaoCredito,
+        on_delete=models.PROTECT,
+        related_name="faturas",
+    )
+    data_fechamento = models.DateField(null=True, blank=True)
+    data_vencimento = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ABERTA,
+    )
+    valor_pago = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["data_vencimento", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cartao", "data_vencimento"],
+                name="fatura_cartao_vencimento_unico",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.cartao} - vencimento {self.data_vencimento}"
+
+
+class LancamentoCartao(models.Model):
+    fatura = models.ForeignKey(
+        FaturaCartao,
+        on_delete=models.PROTECT,
+        related_name="lancamentos",
+    )
+    compra = models.ForeignKey(
+        Compra,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="lancamentos_cartao",
+    )
+    despesa = models.ForeignKey(
+        "DespesaDiaria",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="lancamentos_cartao",
+    )
+    data = models.DateField()
+    descricao = models.CharField(max_length=255)
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["data", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    (
+                        models.Q(compra__isnull=False)
+                        & models.Q(despesa__isnull=True)
+                    )
+                    | (
+                        models.Q(compra__isnull=True)
+                        & models.Q(despesa__isnull=False)
+                    )
+                ),
+                name="lancamento_cartao_uma_origem",
+            ),
+            models.UniqueConstraint(
+                fields=["compra"],
+                condition=models.Q(compra__isnull=False),
+                name="lancamento_cartao_compra_unica",
+            ),
+            models.UniqueConstraint(
+                fields=["despesa"],
+                condition=models.Q(despesa__isnull=False),
+                name="lancamento_cartao_despesa_unica",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.descricao} - R$ {self.valor}"
+
+
 class DespesaDiaria(models.Model):
     CATEGORIA_GASOLINA = "gasolina"
     CATEGORIA_ALIMENTACAO = "alimentacao"
@@ -2650,6 +2769,13 @@ class DespesaDiaria(models.Model):
         (FORMA_OUTRO, "Outro"),
     ]
 
+    cartao = models.ForeignKey(
+        CartaoCredito,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="despesas",
+    )
     data_hora = models.DateTimeField(default=timezone.now)
     valor = models.DecimalField(max_digits=12, decimal_places=2)
     catalogo = models.ForeignKey(

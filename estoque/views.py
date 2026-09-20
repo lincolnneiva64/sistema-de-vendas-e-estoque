@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -5095,6 +5095,9 @@ def despesas_diarias(request):
     inicio_mes = hoje.replace(day=1)
 
     contas_saida = _contas_saida_despesa_diaria()
+    cartoes_credito = CartaoCredito.objects.filter(
+        ativo=True,
+    ).order_by("titular", "nome")
 
     catalogo_despesas = CatalogoDespesa.objects.filter(
         ativo=True,
@@ -5115,20 +5118,30 @@ def despesas_diarias(request):
     if request.method == "POST":
         acao = request.POST.get("acao")
         if acao == "excluir":
-            despesa = get_object_or_404(DespesaDiaria, pk=request.POST.get("despesa_id"))
-            with transaction.atomic():
-                movimento = _movimento_despesa_diaria_correspondente(despesa)
-                try:
+            despesa = get_object_or_404(
+                DespesaDiaria,
+                pk=request.POST.get("despesa_id"),
+            )
+
+            movimento = _movimento_despesa_diaria_correspondente(despesa)
+
+            try:
+                with transaction.atomic():
+                    # Se a despesa ja estiver vinculada a uma fatura/cartao,
+                    # o PROTECT preserva o historico financeiro.
                     despesa.delete()
-                except ProtectedError:
-                    messages.warning(
-                        request,
-                        "Esta despesa nao pode ser excluida porque ja foi utilizada na conferencia de uma rota.",
-                    )
-                    return redirect("estoque:despesas_diarias")
-                if movimento:
-                    movimento.delete()
-            messages.success(request, "Despesa excluida junto com o movimento financeiro correspondente.")
+
+                    if movimento:
+                        movimento.delete()
+
+            except ProtectedError:
+                messages.warning(
+                    request,
+                    "Esta despesa nao pode ser excluida porque ja foi utilizada em outro registro.",
+                )
+                return redirect("estoque:despesas_diarias")
+
+            messages.success(request, "Despesa excluida com sucesso.")
             return redirect("estoque:despesas_diarias")
 
         if acao not in {"salvar_despesa", "editar_despesa"}:
@@ -5158,7 +5171,7 @@ def despesas_diarias(request):
                 despesa_edicao
             )
 
-            if not movimento_edicao:
+            if not despesa_edicao.cartao_id and not movimento_edicao:
                 messages.error(
                     request,
                     "Nao foi possivel localizar o movimento financeiro desta despesa. "
@@ -5209,7 +5222,7 @@ def despesas_diarias(request):
             funcionario_id_int = int(funcionario_id)
             funcionarios_validos = Funcionario.objects.filter(pk=funcionario_id_int)
 
-            # Novo lan?amento exige funcion?rio ativo. Na edi??o,
+            # Novo lançamento exige funcion?rio ativo. Na edi??o,
             # o mesmo funcion?rio hist?rico pode ser preservado
             # mesmo que tenha sido inativado posteriormente.
             if not (
@@ -5233,13 +5246,31 @@ def despesas_diarias(request):
         paga_com_dinheiro_rota = request.POST.get("paga_com_dinheiro_rota") == "1"
         rota_recebimento = (request.POST.get("rota_recebimento") or "").strip()
         data_rota_recebimento = parse_date(request.POST.get("data_rota_recebimento") or "")
+        modalidade_pagamento = (
+            request.POST.get("modalidade_pagamento") or "avista"
+        ).strip().lower()
+
+        if modalidade_pagamento not in {"avista", "cartao"}:
+            messages.error(request, "Forma de pagamento invalida.")
+            return redirect("estoque:despesas_diarias")
+
         conta_saida = None
-        conta_saida_id = request.POST.get("conta_saida")
-        if conta_saida_id and str(conta_saida_id).isdigit():
-            conta_saida = ContaFinanceira.objects.filter(
-                pk=conta_saida_id,
-                ativo=True,
-            ).first()
+        cartao = None
+
+        if modalidade_pagamento == "avista":
+            conta_saida_id = request.POST.get("conta_saida")
+            if conta_saida_id and str(conta_saida_id).isdigit():
+                conta_saida = ContaFinanceira.objects.filter(
+                    pk=conta_saida_id,
+                    ativo=True,
+                ).first()
+        else:
+            cartao_id = request.POST.get("cartao_id")
+            if cartao_id and str(cartao_id).isdigit():
+                cartao = CartaoCredito.objects.filter(
+                    pk=cartao_id,
+                    ativo=True,
+                ).first()
 
         categorias_validas = {opcao[0] for opcao in DespesaDiaria.CATEGORIA_CHOICES}
 
@@ -5263,9 +5294,12 @@ def despesas_diarias(request):
             else:
                 categoria = DespesaDiaria.CATEGORIA_OUTROS
 
-        forma_pagamento = DespesaDiaria.FORMA_PIX
-        if conta_saida and conta_saida.tipo == ContaFinanceira.TIPO_CAIXA:
-            forma_pagamento = DespesaDiaria.FORMA_DINHEIRO
+        if modalidade_pagamento == "cartao":
+            forma_pagamento = DespesaDiaria.FORMA_CARTAO
+        else:
+            forma_pagamento = DespesaDiaria.FORMA_PIX
+            if conta_saida and conta_saida.tipo == ContaFinanceira.TIPO_CAIXA:
+                forma_pagamento = DespesaDiaria.FORMA_DINHEIRO
 
         if valor <= 0:
             messages.error(request, "Informe um valor maior que zero.")
@@ -5279,13 +5313,28 @@ def despesas_diarias(request):
             messages.error(request, "Informe o operador da despesa.")
             return redirect("estoque:despesas_diarias")
 
-        if not conta_saida:
-            messages.error(request, "Escolha a conta de saida da despesa.")
-            return redirect("estoque:despesas_diarias")
+        if modalidade_pagamento == "avista":
+            if not conta_saida:
+                messages.error(request, "Escolha a conta de saida da despesa.")
+                return redirect("estoque:despesas_diarias")
 
-        if not _conta_saida_despesa_diaria_valida(conta_saida, contas_saida):
-            messages.error(request, "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.")
-            return redirect("estoque:despesas_diarias")
+            if not _conta_saida_despesa_diaria_valida(conta_saida, contas_saida):
+                messages.error(
+                    request,
+                    "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.",
+                )
+                return redirect("estoque:despesas_diarias")
+        else:
+            if not cartao:
+                messages.error(request, "Escolha o cartao usado na despesa.")
+                return redirect("estoque:despesas_diarias")
+
+            if paga_com_dinheiro_rota:
+                messages.error(
+                    request,
+                    "Uma despesa no cartao nao pode ser marcada como dinheiro em posse da rota.",
+                )
+                return redirect("estoque:despesas_diarias")
 
         if paga_com_dinheiro_rota:
             if not rota_recebimento:
@@ -5326,6 +5375,7 @@ def despesas_diarias(request):
                 despesa_edicao.funcionario = funcionario
                 despesa_edicao.categoria = categoria
                 despesa_edicao.forma_pagamento = forma_pagamento
+                despesa_edicao.cartao = cartao
                 despesa_edicao.operador = operador
                 despesa_edicao.observacao = observacao
                 despesa_edicao.paga_com_dinheiro_rota = paga_com_dinheiro_rota
@@ -5334,25 +5384,35 @@ def despesas_diarias(request):
                 despesa_edicao.save()
 
 
-                movimento_edicao.conta = conta_saida
-                movimento_edicao.valor = _financeiro_dinheiro(valor).quantize(
-                    Decimal("0.01")
-                )
-                movimento_edicao.data = data_lancamento
-                movimento_edicao.descricao = _descricao_movimento_despesa_diaria(
-                    despesa_edicao
-                )
-                movimento_edicao.operador = operador
-                movimento_edicao.save(
-                    update_fields=[
-                        "conta",
-                        "valor",
-                        "data",
-                        "descricao",
-                        "operador",
-                    ]
-                )
-
+                if modalidade_pagamento == "cartao":
+                    # Cartão cria dívida futura, não saída imediata de caixa/banco.
+                    if movimento_edicao:
+                        movimento_edicao.delete()
+                else:
+                    if movimento_edicao:
+                        movimento_edicao.conta = conta_saida
+                        movimento_edicao.valor = _financeiro_dinheiro(valor).quantize(
+                            Decimal("0.01")
+                        )
+                        movimento_edicao.data = data_lancamento
+                        movimento_edicao.descricao = _descricao_movimento_despesa_diaria(
+                            despesa_edicao
+                        )
+                        movimento_edicao.operador = operador
+                        movimento_edicao.save(
+                            update_fields=[
+                                "conta",
+                                "valor",
+                                "data",
+                                "descricao",
+                                "operador",
+                            ]
+                        )
+                    else:
+                        _registrar_movimento_despesa_diaria(
+                            despesa_edicao,
+                            conta_saida,
+                        )
 
                 messages.success(request, "Despesa alterada com sucesso.")
             else:
@@ -5363,13 +5423,16 @@ def despesas_diarias(request):
                     funcionario=funcionario,
                     categoria=categoria,
                     forma_pagamento=forma_pagamento,
+                    cartao=cartao,
                     operador=operador,
                     observacao=observacao,
                     paga_com_dinheiro_rota=paga_com_dinheiro_rota,
                     rota_recebimento=rota_recebimento,
                     data_rota_recebimento=data_rota_recebimento,
                 )
-                _registrar_movimento_despesa_diaria(despesa, conta_saida)
+                if modalidade_pagamento == "avista":
+                    _registrar_movimento_despesa_diaria(despesa, conta_saida)
+
                 messages.success(request, "Despesa salva com sucesso.")
 
         return redirect("estoque:despesas_diarias")
@@ -5385,7 +5448,7 @@ def despesas_diarias(request):
 
     despesas_periodo = (
         DespesaDiaria.objects
-        .select_related("catalogo", "funcionario")
+        .select_related("catalogo", "funcionario", "cartao")
         .filter(data_hora__date__gte=data_inicio, data_hora__date__lte=data_fim)
         .order_by("-data_hora", "-id")
     )
@@ -5510,12 +5573,19 @@ def despesas_diarias(request):
                     break
 
         despesa.movimento_financeiro = movimento
-        despesa.conta_saida_nome = (
-            movimento.conta.nome
-            if movimento and movimento.conta
-            else "Nao identificada"
-        )
-        despesa.conta_saida_id = movimento.conta_id if movimento else None
+
+        if despesa.cartao_id and despesa.cartao:
+            despesa.conta_saida_nome = (
+                f"Cartão: {despesa.cartao.nome} - {despesa.cartao.titular}"
+            )
+            despesa.conta_saida_id = None
+        else:
+            despesa.conta_saida_nome = (
+                movimento.conta.nome
+                if movimento and movimento.conta
+                else "Nao identificada"
+            )
+            despesa.conta_saida_id = movimento.conta_id if movimento else None
 
         if despesa.catalogo:
             despesa.tipo_estruturado = despesa.catalogo.tipo
@@ -5565,6 +5635,7 @@ def despesas_diarias(request):
             "formas_pagamento": DespesaDiaria.FORMA_PAGAMENTO_CHOICES,
             "forma_padrao": DespesaDiaria.FORMA_PIX,
             "contas_saida": contas_saida,
+            "cartoes_credito": cartoes_credito,
             "rotas_recebimento_opcoes": _rotas_clientes_opcoes(),
             "operadores_despesa_diaria": operadores_despesa_diaria,
             "funcionarios_despesa_empresa": funcionarios_despesa_empresa,

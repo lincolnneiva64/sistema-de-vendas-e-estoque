@@ -529,6 +529,13 @@
     }
   }
 
+
+.despesa-pagamento-opcao.ativo {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+}
+
 </style>
 
 <main class="despesa-page">
@@ -726,13 +733,48 @@
 
       <div class="despesa-grid despesa-grid-principal">
         <div class="despesa-field">
-          <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro?</label>
-          <select id="contaSaidaDespesaDiaria" name="conta_saida" required>
-            <option value="">Selecione</option>
-            {% for conta in contas_saida %}
-              <option value="{{ conta.id }}">{{ conta.nome }}</option>
-            {% endfor %}
-          </select>
+          <label>Como foi pago?</label>
+
+          <div class="despesa-pagamento-tipo">
+            <button type="button"
+                    class="despesa-btn despesa-btn-secondary despesa-pagamento-opcao ativo"
+                    data-modalidade="avista">
+              À vista
+            </button>
+
+            <button type="button"
+                    class="despesa-btn despesa-btn-secondary despesa-pagamento-opcao"
+                    data-modalidade="cartao">
+              Cartão
+            </button>
+          </div>
+
+          <input type="hidden"
+                 id="modalidadePagamentoDespesa"
+                 name="modalidade_pagamento"
+                 value="avista">
+
+          <div id="campoContaSaidaDespesa">
+            <label for="contaSaidaDespesaDiaria">De onde saiu o dinheiro?</label>
+            <select id="contaSaidaDespesaDiaria" name="conta_saida" required>
+              <option value="">Selecione</option>
+              {% for conta in contas_saida %}
+                <option value="{{ conta.id }}">{{ conta.nome }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div id="campoCartaoDespesa" hidden>
+            <label for="cartaoDespesaDiaria">Qual cartão?</label>
+            <select id="cartaoDespesaDiaria" name="cartao_id">
+              <option value="">Selecione</option>
+              {% for cartao in cartoes_credito %}
+                <option value="{{ cartao.id }}">
+                  {{ cartao.nome }} - {{ cartao.titular }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
 
         <div class="despesa-field">
@@ -946,6 +988,8 @@
                     data-funcionario-id="{{ despesa.funcionario_id|default:'' }}"
                     data-funcionario-nome="{% if despesa.funcionario %}{{ despesa.funcionario.nome|escape }}{% endif %}"
                     data-conta-id="{{ despesa.conta_saida_id|default:'' }}"
+                    data-cartao-id="{{ despesa.cartao_id|default:'' }}"
+                    data-modalidade="{% if despesa.cartao_id %}cartao{% else %}avista{% endif %}"
                     data-operador="{{ despesa.operador|default:''|escape }}"
                     data-data="{{ despesa.data_hora|date:'Y-m-d' }}"
                     data-observacao="{{ despesa.observacao|default:''|escape }}"
@@ -1092,6 +1136,13 @@
   let catalogoFuncionarioPendente = null;
 
   const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
+  const cartaoCampo = document.getElementById("cartaoDespesaDiaria");
+  const modalidadeCampo = document.getElementById("modalidadePagamentoDespesa");
+  const campoContaSaida = document.getElementById("campoContaSaidaDespesa");
+  const campoCartao = document.getElementById("campoCartaoDespesa");
+  const botoesPagamento = Array.from(
+    document.querySelectorAll(".despesa-pagamento-opcao")
+  );
   const operadorCampo = document.getElementById("operadorDespesaDiaria");
   const dataCampo = document.getElementById("dataDespesaDiaria");
   const detalhes = document.getElementById("detalhesDespesa");
@@ -1491,6 +1542,44 @@
 
 
 
+  function escolherModalidadePagamento(modalidade) {
+    const cartao = modalidade === "cartao";
+
+    if (modalidadeCampo) {
+      modalidadeCampo.value = cartao ? "cartao" : "avista";
+    }
+
+    botoesPagamento.forEach(function (botao) {
+      botao.classList.toggle(
+        "ativo",
+        botao.dataset.modalidade === (cartao ? "cartao" : "avista")
+      );
+    });
+
+    if (campoContaSaida) campoContaSaida.hidden = cartao;
+    if (campoCartao) campoCartao.hidden = !cartao;
+
+    if (contaCampo) {
+      contaCampo.required = !cartao;
+      if (cartao) contaCampo.value = "";
+    }
+
+    if (cartaoCampo) {
+      cartaoCampo.required = cartao;
+      if (!cartao) cartaoCampo.value = "";
+    }
+
+    if (dinheiroRotaCampo && cartao) {
+      dinheiroRotaCampo.checked = false;
+      dinheiroRotaCampo.disabled = true;
+    } else if (dinheiroRotaCampo) {
+      dinheiroRotaCampo.disabled = false;
+    }
+
+    atualizarRota();
+  }
+
+
   function atualizarRota() {
     const ativo = Boolean(dinheiroRotaCampo && dinheiroRotaCampo.checked);
 
@@ -1520,6 +1609,8 @@
 
     if (valorCampo) valorCampo.value = "";
     if (contaCampo) contaCampo.value = "";
+    if (cartaoCampo) cartaoCampo.value = "";
+    escolherModalidadePagamento("avista");
     if (operadorCampo) operadorCampo.value = "";
     if (dataCampo) dataCampo.value = hojeISO();
     if (observacaoCampo) observacaoCampo.value = "";
@@ -1641,7 +1732,17 @@
       }
     }
 
-    if (contaCampo) {
+    const modalidadeEdicao = botao.dataset.modalidade === "cartao"
+      ? "cartao"
+      : "avista";
+
+    escolherModalidadePagamento(modalidadeEdicao);
+
+    if (modalidadeEdicao === "cartao") {
+      if (cartaoCampo) {
+        cartaoCampo.value = botao.dataset.cartaoId || "";
+      }
+    } else if (contaCampo) {
       contaCampo.value = botao.dataset.contaId || "";
     }
 
@@ -1695,6 +1796,15 @@
       }
     }, 350);
   }
+
+  botoesPagamento.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherModalidadePagamento(botao.dataset.modalidade);
+    });
+  });
+
+  escolherModalidadePagamento("avista");
+
 
   botoesEditar.forEach(function (botao) {
     botao.addEventListener("click", function () {
