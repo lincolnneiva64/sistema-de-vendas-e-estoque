@@ -1,22 +1,22 @@
 {
   "name": "Sistema de Vendas",
-  "short_name": "Enviar Pix",
-  "start_url": "/pix/enviar/",
+  "short_name": "Vendas",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f8fafc",
-  "theme_color": "#16a34a",
+  "theme_color": "#2563EB",
   "icons": [
     {
-      "src": "/static/estoque/pix-icon-192.svg",
+      "src": "/static/estoque/sistema-icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/static/estoque/pix-icon-512.svg",
+      "src": "/static/estoque/sistema-icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
