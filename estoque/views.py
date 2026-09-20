@@ -5087,6 +5087,92 @@ def emprestimo_divida_baixar(request, pk):
     )
 
 
+def _data_segura_cartao(ano, mes, dia):
+    import calendar
+
+    ultimo_dia = calendar.monthrange(ano, mes)[1]
+    return date(ano, mes, min(dia, ultimo_dia))
+
+
+def _mes_seguinte_cartao(ano, mes):
+    if mes == 12:
+        return ano + 1, 1
+    return ano, mes + 1
+
+
+def _fatura_automatica_cartao(cartao, data_lancamento):
+    if not cartao.dia_fechamento or not cartao.dia_vencimento:
+        return None
+
+    fechamento_mes = _data_segura_cartao(
+        data_lancamento.year,
+        data_lancamento.month,
+        cartao.dia_fechamento,
+    )
+
+    if data_lancamento <= fechamento_mes:
+        ano_fechamento = data_lancamento.year
+        mes_fechamento = data_lancamento.month
+    else:
+        ano_fechamento, mes_fechamento = _mes_seguinte_cartao(
+            data_lancamento.year,
+            data_lancamento.month,
+        )
+
+    data_fechamento = _data_segura_cartao(
+        ano_fechamento,
+        mes_fechamento,
+        cartao.dia_fechamento,
+    )
+
+    ano_vencimento = ano_fechamento
+    mes_vencimento = mes_fechamento
+
+    # Quando o vencimento ocorre depois do fechamento dentro do mesmo
+    # ciclo mensal (ex.: Nubank fecha dia 1 e vence dia 8).
+    if cartao.dia_vencimento < cartao.dia_fechamento:
+        ano_vencimento, mes_vencimento = _mes_seguinte_cartao(
+            ano_fechamento,
+            mes_fechamento,
+        )
+
+    data_vencimento = _data_segura_cartao(
+        ano_vencimento,
+        mes_vencimento,
+        cartao.dia_vencimento,
+    )
+
+    fatura, criada = FaturaCartao.objects.get_or_create(
+        cartao=cartao,
+        data_vencimento=data_vencimento,
+        defaults={
+            "data_fechamento": data_fechamento,
+            "status": FaturaCartao.STATUS_ABERTA,
+        },
+    )
+
+    campos_atualizar = []
+
+    if not fatura.data_fechamento:
+        fatura.data_fechamento = data_fechamento
+        campos_atualizar.append("data_fechamento")
+
+    hoje = timezone.localdate()
+
+    if (
+        fatura.status == FaturaCartao.STATUS_ABERTA
+        and data_fechamento < hoje
+    ):
+        fatura.status = FaturaCartao.STATUS_FECHADA
+        campos_atualizar.append("status")
+
+    if campos_atualizar:
+        campos_atualizar.append("atualizado_em")
+        fatura.save(update_fields=campos_atualizar)
+
+    return fatura
+
+
 def _sincronizar_lancamento_cartao_despesa(despesa):
     lancamento = LancamentoCartao.objects.filter(despesa=despesa).first()
 
@@ -5095,14 +5181,20 @@ def _sincronizar_lancamento_cartao_despesa(despesa):
             lancamento.delete()
         return
 
+    data_lancamento = timezone.localdate(despesa.data_hora)
+    fatura = _fatura_automatica_cartao(
+        despesa.cartao,
+        data_lancamento,
+    )
+
     descricao = despesa.get_categoria_display()
     if despesa.catalogo_id:
         descricao = str(despesa.catalogo)
 
     defaults = {
         "cartao": despesa.cartao,
-        "fatura": None,
-        "data": timezone.localdate(despesa.data_hora),
+        "fatura": fatura,
+        "data": data_lancamento,
         "descricao": descricao[:255],
         "valor": despesa.valor,
     }
@@ -5112,7 +5204,13 @@ def _sincronizar_lancamento_cartao_despesa(despesa):
             for campo, valor in defaults.items():
                 setattr(lancamento, campo, valor)
             lancamento.save(
-                update_fields=["cartao", "fatura", "data", "descricao", "valor"]
+                update_fields=[
+                    "cartao",
+                    "fatura",
+                    "data",
+                    "descricao",
+                    "valor",
+                ]
             )
         return
 
@@ -5130,11 +5228,16 @@ def _criar_lancamento_cartao_compra(compra):
     if compra.fornecedor_id:
         descricao = f"{descricao} - {compra.fornecedor}"
 
+    fatura = _fatura_automatica_cartao(
+        compra.cartao,
+        compra.data_compra,
+    )
+
     LancamentoCartao.objects.get_or_create(
         compra=compra,
         defaults={
             "cartao": compra.cartao,
-            "fatura": None,
+            "fatura": fatura,
             "data": compra.data_compra,
             "descricao": descricao[:255],
             "valor": compra.total,
