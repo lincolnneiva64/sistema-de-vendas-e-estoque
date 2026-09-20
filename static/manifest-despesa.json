@@ -2,7 +2,7 @@
   "name": "Despesa",
   "short_name": "Despesa",
   "start_url": "/despesas-diarias/",
-  "scope": "/",
+  "scope": "/despesas-diarias/",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#198754",
