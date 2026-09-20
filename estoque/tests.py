@@ -30717,6 +30717,115 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertEqual(movimento.operador, self.operador.nome)
         self.assertIn(f"#{despesa.id}", movimento.descricao)
 
+    def test_catalogo_pessoal_hierarquico_grava_pessoa_grupo_e_subcategoria(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Pão / café da manhã",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            pessoa="Lincoln",
+            grupo="Alimentação",
+            categoria="Pão / café da manhã",
+            favorito=False,
+            ativo=True,
+            ordem=9990,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_caixa,
+            valor="6,00",
+            catalogo_id=catalogo.id,
+            observacao="Café da manhã teste",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertEqual(despesa.catalogo.tipo, CatalogoDespesa.TIPO_PESSOAL)
+        self.assertEqual(despesa.catalogo.pessoa, "Lincoln")
+        self.assertEqual(despesa.catalogo.grupo, "Alimentação")
+        self.assertEqual(
+            despesa.catalogo.categoria,
+            "Pão / café da manhã",
+        )
+        self.assertEqual(
+            despesa.categoria,
+            DespesaDiaria.CATEGORIA_PESSOAL,
+        )
+
+        movimentos = MovimentoFinanceiro.objects.filter(
+            origem="despesa_diaria"
+        )
+        self.assertEqual(movimentos.count(), 1)
+        self.assertEqual(movimentos.get().valor, Decimal("6.00"))
+
+    def test_editar_apenas_valor_preserva_catalogo_pessoal_e_movimento(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Pão / café da manhã",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            pessoa="Lincoln",
+            grupo="Alimentação",
+            categoria="Pão / café da manhã",
+            favorito=False,
+            ativo=True,
+            ordem=9991,
+        )
+
+        self._post_despesa(
+            self.conta_caixa,
+            valor="6,00",
+            catalogo_id=catalogo.id,
+            observacao="Café da manhã teste",
+        )
+
+        despesa = DespesaDiaria.objects.get()
+        movimento = self._movimento_unico()
+
+        despesa_id = despesa.id
+        movimento_id = movimento.id
+        catalogo_id = despesa.catalogo_id
+
+        resposta = self.client.post(
+            self.url,
+            {
+                "acao": "editar_despesa",
+                "despesa_id": str(despesa.id),
+                "data_lancamento": timezone.localdate().isoformat(),
+                "valor": "6,50",
+                "catalogo_id": str(catalogo.id),
+                "categoria": DespesaDiaria.CATEGORIA_PESSOAL,
+                "conta_saida": str(self.conta_caixa.id),
+                "operador": self.operador.nome,
+                "observacao": "Café da manhã teste",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        despesa.refresh_from_db()
+        movimento.refresh_from_db()
+
+        self.assertEqual(despesa.id, despesa_id)
+        self.assertEqual(despesa.valor, Decimal("6.50"))
+        self.assertEqual(despesa.catalogo_id, catalogo_id)
+        self.assertEqual(despesa.catalogo.pessoa, "Lincoln")
+        self.assertEqual(despesa.catalogo.grupo, "Alimentação")
+        self.assertEqual(
+            despesa.catalogo.categoria,
+            "Pão / café da manhã",
+        )
+
+        self.assertEqual(movimento.id, movimento_id)
+        self.assertEqual(movimento.valor, Decimal("6.50"))
+
+        self.assertEqual(DespesaDiaria.objects.count(), 1)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="despesa_diaria"
+            ).count(),
+            1,
+        )
+
     def test_editar_despesa_rejeita_catalogo_inativo(self):
         catalogo = CatalogoDespesa.objects.create(
             nome="Catalogo inativo teste",
