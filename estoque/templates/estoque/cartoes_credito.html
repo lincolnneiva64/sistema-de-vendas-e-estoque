@@ -57,36 +57,209 @@
                     {% endif %}
 
                     {% if cartao.lancamentos_pendentes %}
-                    <div class="list-group list-group-flush">
-                        {% for lancamento in cartao.lancamentos_pendentes %}
-                        <div class="list-group-item px-0">
-                            <div class="d-flex justify-content-between gap-3">
-                                <div>
-                                    <div class="fw-semibold">
-                                        {{ lancamento.descricao }}
-                                    </div>
+                    <form method="post">
+                        {% csrf_token %}
 
-                                    <div class="small text-muted">
-                                        {{ lancamento.data|date:"d/m/Y" }}
+                        <input type="hidden" name="acao" value="criar_fatura">
+                        <input type="hidden" name="cartao_id" value="{{ cartao.id }}">
 
-                                        {% if lancamento.compra_id %}
-                                            · Compra
-                                        {% elif lancamento.despesa_id %}
-                                            · Despesa
-                                        {% endif %}
+                        <div class="list-group list-group-flush mb-3">
+                            {% for lancamento in cartao.lancamentos_pendentes %}
+                            <label class="list-group-item px-0">
+                                <div class="d-flex align-items-start gap-2">
+                                    <input
+                                        class="form-check-input mt-1"
+                                        type="checkbox"
+                                        name="lancamento_id"
+                                        value="{{ lancamento.id }}"
+                                        checked
+                                    >
+
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between gap-3">
+                                            <div>
+                                                <div class="fw-semibold">
+                                                    {{ lancamento.descricao }}
+                                                </div>
+
+                                                <div class="small text-muted">
+                                                    {{ lancamento.data|date:"d/m/Y" }}
+
+                                                    {% if lancamento.compra_id %}
+                                                        · Compra
+                                                    {% elif lancamento.despesa_id %}
+                                                        · Despesa
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+
+                                            <div class="fw-bold text-nowrap">
+                                                R$ {{ lancamento.valor|floatformat:2 }}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-
-                                <div class="fw-bold text-nowrap">
-                                    R$ {{ lancamento.valor|floatformat:2 }}
-                                </div>
-                            </div>
+                            </label>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
-                    </div>
+
+                        <div class="border rounded p-3 bg-light">
+                            <label
+                                for="vencimento-cartao-{{ cartao.id }}"
+                                class="form-label fw-semibold"
+                            >
+                                Vencimento real da fatura
+                            </label>
+
+                            <input
+                                id="vencimento-cartao-{{ cartao.id }}"
+                                type="date"
+                                name="data_vencimento"
+                                class="form-control mb-2"
+                                required
+                            >
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                Criar fatura com os selecionados
+                            </button>
+                        </div>
+                    </form>
                     {% else %}
                     <div class="text-muted">
                         Nenhum lançamento pendente.
+                    </div>
+                    {% endif %}
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-bold">Faturas</div>
+                        <span class="badge bg-light text-dark border">
+                            {{ cartao.faturas_cartao|length }}
+                        </span>
+                    </div>
+
+                    {% if cartao.faturas_cartao %}
+                        {% for fatura in cartao.faturas_cartao %}
+                        <div class="border rounded p-3 mb-3">
+                            <div class="d-flex justify-content-between gap-2 mb-2">
+                                <div>
+                                    <div class="fw-semibold">
+                                        Vence {{ fatura.data_vencimento|date:"d/m/Y" }}
+                                    </div>
+                                    <div class="small text-muted">
+                                        {{ fatura.get_status_display }}
+                                    </div>
+                                </div>
+
+                                <div class="text-end">
+                                    <div class="small text-muted">Saldo</div>
+                                    <div class="fw-bold">
+                                        R$ {{ fatura.saldo_fatura|floatformat:2 }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="small">
+                                Total:
+                                <strong>
+                                    R$ {{ fatura.total_fatura|floatformat:2 }}
+                                </strong>
+                            </div>
+
+                            <div class="small mb-3">
+                                Pago:
+                                <strong>
+                                    R$ {{ fatura.total_pago_calculado|floatformat:2 }}
+                                </strong>
+                            </div>
+
+                            {% if fatura.saldo_fatura > 0 %}
+                            <details class="mt-2">
+                                <summary class="btn btn-success w-100">
+                                    Pagar fatura
+                                </summary>
+
+                                <form method="post" class="border rounded p-3 mt-2 bg-light">
+                                    {% csrf_token %}
+
+                                    <input
+                                        type="hidden"
+                                        name="acao"
+                                        value="pagar_fatura"
+                                    >
+                                    <input
+                                        type="hidden"
+                                        name="fatura_id"
+                                        value="{{ fatura.id }}"
+                                    >
+
+                                    <label class="form-label fw-semibold">
+                                        De onde saiu o dinheiro?
+                                    </label>
+
+                                    <select
+                                        name="conta_id"
+                                        class="form-select mb-3"
+                                        required
+                                    >
+                                        <option value="">Selecione</option>
+
+                                        {% for conta in contas_financeiras %}
+                                        <option value="{{ conta.id }}">
+                                            {{ conta.nome }} —
+                                            saldo {{ conta.saldo_atual_texto }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+
+                                    <label class="form-label fw-semibold">
+                                        Valor pago
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        name="valor"
+                                        class="form-control mb-3"
+                                        value="{{ fatura.saldo_fatura|floatformat:2 }}"
+                                        inputmode="decimal"
+                                        required
+                                    >
+
+                                    <label class="form-label fw-semibold">
+                                        Data do pagamento
+                                    </label>
+
+                                    <input
+                                        type="date"
+                                        name="data_pagamento"
+                                        class="form-control mb-3"
+                                        required
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-success w-100"
+                                    >
+                                        Confirmar pagamento
+                                    </button>
+
+                                    <div class="small text-muted mt-2">
+                                        O pagamento gera uma saída financeira
+                                        e não cria uma nova despesa.
+                                    </div>
+                                </form>
+                            </details>
+                            {% else %}
+                            <div class="alert alert-success py-2 mb-0 text-center">
+                                Fatura paga
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                    <div class="text-muted small">
+                        Nenhuma fatura criada.
                     </div>
                     {% endif %}
                 </div>

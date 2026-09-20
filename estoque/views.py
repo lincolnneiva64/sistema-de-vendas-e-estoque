@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoFaturaCartao, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -5143,9 +5143,277 @@ def _criar_lancamento_cartao_compra(compra):
 
 
 def cartoes_credito(request):
+    if request.method == "POST":
+        acao = (request.POST.get("acao") or "").strip()
+
+        if acao == "pagar_fatura":
+            fatura_id = request.POST.get("fatura_id")
+            conta_id = request.POST.get("conta_id")
+            data_pagamento = parse_date(
+                request.POST.get("data_pagamento") or ""
+            )
+
+            try:
+                valor = Decimal(
+                    (request.POST.get("valor") or "")
+                    .strip()
+                    .replace(".", "")
+                    .replace(",", ".")
+                ).quantize(Decimal("0.01"))
+            except Exception:
+                valor = Decimal("0.00")
+
+            conta = ContaFinanceira.objects.filter(
+                pk=conta_id,
+                ativo=True,
+            ).first()
+
+            if not conta:
+                messages.error(
+                    request,
+                    "Selecione a conta de onde saiu o dinheiro.",
+                )
+                return redirect("estoque:cartoes_credito")
+
+            if not data_pagamento:
+                messages.error(
+                    request,
+                    "Informe a data do pagamento.",
+                )
+                return redirect("estoque:cartoes_credito")
+
+            if valor <= Decimal("0.00"):
+                messages.error(
+                    request,
+                    "Informe um valor de pagamento maior que zero.",
+                )
+                return redirect("estoque:cartoes_credito")
+
+            operador = (
+                request.user.get_username()
+                if request.user.is_authenticated
+                else ""
+            )
+
+            try:
+                with transaction.atomic():
+                    fatura = (
+                        FaturaCartao.objects
+                        .select_for_update()
+                        .select_related("cartao")
+                        .get(pk=fatura_id)
+                    )
+
+                    total_fatura = (
+                        fatura.lancamentos.aggregate(
+                            total=Sum("valor")
+                        )["total"]
+                        or Decimal("0.00")
+                    ).quantize(Decimal("0.01"))
+
+                    total_pago = (
+                        fatura.pagamentos.aggregate(
+                            total=Sum("valor")
+                        )["total"]
+                        or Decimal("0.00")
+                    ).quantize(Decimal("0.01"))
+
+                    saldo_fatura = (
+                        total_fatura - total_pago
+                    ).quantize(Decimal("0.01"))
+
+                    if saldo_fatura <= Decimal("0.00"):
+                        raise ValueError(
+                            "Esta fatura ja esta totalmente paga."
+                        )
+
+                    if valor > saldo_fatura:
+                        raise ValueError(
+                            "O pagamento nao pode ser maior "
+                            "que o saldo da fatura."
+                        )
+
+                    saldo_conta = _saldo_conta_financeira(conta)
+
+                    if valor > saldo_conta:
+                        raise ValueError(
+                            f"Saldo insuficiente em {conta.nome}. "
+                            f"Disponivel: "
+                            f"{_financeiro_moeda_br(saldo_conta)}."
+                        )
+
+                    movimento = MovimentoFinanceiro.objects.create(
+                        conta=conta,
+                        tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                        valor=valor,
+                        data=data_pagamento,
+                        descricao=(
+                            f"Pagamento fatura "
+                            f"{fatura.cartao.nome} - "
+                            f"vencimento "
+                            f"{fatura.data_vencimento:%d/%m/%Y}"
+                        )[:255],
+                        operador=operador,
+                        origem="pagamento_fatura_cartao",
+                    )
+
+                    PagamentoFaturaCartao.objects.create(
+                        fatura=fatura,
+                        conta=conta,
+                        movimento=movimento,
+                        data_pagamento=data_pagamento,
+                        valor=valor,
+                        operador=operador,
+                    )
+
+                    novo_total_pago = (
+                        total_pago + valor
+                    ).quantize(Decimal("0.01"))
+
+                    fatura.valor_pago = novo_total_pago
+
+                    if novo_total_pago >= total_fatura:
+                        fatura.status = FaturaCartao.STATUS_PAGA
+                    else:
+                        fatura.status = FaturaCartao.STATUS_PARCIAL
+
+                    fatura.save(
+                        update_fields=[
+                            "valor_pago",
+                            "status",
+                            "atualizado_em",
+                        ]
+                    )
+
+            except FaturaCartao.DoesNotExist:
+                messages.error(
+                    request,
+                    "Fatura nao encontrada.",
+                )
+            except ValueError as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(
+                    request,
+                    "Pagamento da fatura registrado com sucesso.",
+                )
+
+            return redirect("estoque:cartoes_credito")
+        if acao == "criar_fatura":
+            cartao_id = request.POST.get("cartao_id")
+            data_vencimento = parse_date(
+                request.POST.get("data_vencimento") or ""
+            )
+            lancamento_ids = [
+                valor
+                for valor in request.POST.getlist("lancamento_id")
+                if str(valor).isdigit()
+            ]
+
+            cartao = CartaoCredito.objects.filter(
+                pk=cartao_id,
+                ativo=True,
+            ).first()
+
+            if not cartao:
+                messages.error(request, "Cartao invalido.")
+                return redirect("estoque:cartoes_credito")
+
+            if not data_vencimento:
+                messages.error(
+                    request,
+                    "Informe o vencimento real da fatura.",
+                )
+                return redirect("estoque:cartoes_credito")
+
+            if not lancamento_ids:
+                messages.error(
+                    request,
+                    "Selecione pelo menos um lancamento para a fatura.",
+                )
+                return redirect("estoque:cartoes_credito")
+
+            try:
+                with transaction.atomic():
+                    lancamentos = list(
+                        LancamentoCartao.objects
+                        .select_for_update()
+                        .filter(
+                            id__in=lancamento_ids,
+                            cartao=cartao,
+                            fatura__isnull=True,
+                        )
+                    )
+
+                    if len(lancamentos) != len(set(lancamento_ids)):
+                        raise ValueError(
+                            "Um ou mais lancamentos ja foram utilizados "
+                            "ou nao pertencem a este cartao."
+                        )
+
+                    fatura = FaturaCartao.objects.create(
+                        cartao=cartao,
+                        data_vencimento=data_vencimento,
+                        status=FaturaCartao.STATUS_FECHADA,
+                    )
+
+                    LancamentoCartao.objects.filter(
+                        id__in=[item.id for item in lancamentos]
+                    ).update(fatura=fatura)
+
+            except (ValueError, IntegrityError) as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(
+                    request,
+                    f"Fatura {cartao.nome} criada com sucesso.",
+                )
+
+            return redirect("estoque:cartoes_credito")
+
+        return redirect("estoque:cartoes_credito")
+
     cartoes = list(
-        CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")
+        CartaoCredito.objects.filter(ativo=True).order_by(
+            "titular",
+            "nome",
+        )
     )
+
+    faturas = list(
+        FaturaCartao.objects
+        .select_related("cartao")
+        .prefetch_related("lancamentos", "pagamentos")
+        .order_by("-data_vencimento", "-id")
+    )
+
+    faturas_por_cartao = {}
+
+    for fatura in faturas:
+        fatura.total_fatura = sum(
+            (
+                lancamento.valor
+                for lancamento in fatura.lancamentos.all()
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+        fatura.total_pago_calculado = sum(
+            (
+                pagamento.valor
+                for pagamento in fatura.pagamentos.all()
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
+        fatura.saldo_fatura = (
+            fatura.total_fatura - fatura.total_pago_calculado
+        ).quantize(Decimal("0.01"))
+
+        faturas_por_cartao.setdefault(
+            fatura.cartao_id,
+            [],
+        ).append(fatura)
 
     lancamentos_pendentes = list(
         LancamentoCartao.objects
@@ -5186,11 +5454,19 @@ def cartoes_credito(request):
             Decimal("0.00"),
         )
 
+        cartao.faturas_cartao = faturas_por_cartao.get(
+            cartao.id,
+            [],
+        )
+
+    contas_financeiras = _contas_financeiras_com_saldo()
+
     return render(
         request,
         "estoque/cartoes_credito.html",
         {
             "cartoes": cartoes,
+            "contas_financeiras": contas_financeiras,
         },
     )
 
