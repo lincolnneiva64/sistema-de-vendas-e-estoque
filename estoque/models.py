@@ -2678,6 +2678,34 @@ class FaturaCartao(models.Model):
         return f"{self.cartao} - vencimento {self.data_vencimento}"
 
 
+class PagamentoFaturaCartao(models.Model):
+    fatura = models.ForeignKey(
+        FaturaCartao,
+        on_delete=models.PROTECT,
+        related_name="pagamentos",
+    )
+    conta = models.ForeignKey(
+        ContaFinanceira,
+        on_delete=models.PROTECT,
+        related_name="pagamentos_fatura_cartao",
+    )
+    movimento = models.OneToOneField(
+        MovimentoFinanceiro,
+        on_delete=models.PROTECT,
+        related_name="pagamento_fatura_cartao",
+    )
+    data_pagamento = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    operador = models.CharField(max_length=120, blank=True)
+    observacao = models.TextField(blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-data_pagamento", "-id"]
+
+    def __str__(self):
+        return f"Pagamento R$ {self.valor} - {self.fatura}"
+
 class LancamentoCartao(models.Model):
     cartao = models.ForeignKey(
         CartaoCredito,
