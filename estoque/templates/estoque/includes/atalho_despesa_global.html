@@ -1,0 +1,61 @@
+{% if request.resolver_match.url_name != 'despesas_diarias' %}
+<style>
+.atalho-despesa-global {
+    position: fixed !important;
+    left: 16px !important;
+    bottom: calc(22px + env(safe-area-inset-bottom)) !important;
+    z-index: 2147483000 !important;
+
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 7px !important;
+
+    min-height: 48px !important;
+    padding: 0 18px !important;
+
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: #198754 !important;
+    color: #ffffff !important;
+
+    font-family: Arial, sans-serif !important;
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+
+    text-decoration: none !important;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, .22) !important;
+
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
+}
+
+.atalho-despesa-global:hover,
+.atalho-despesa-global:focus {
+    background: #157347 !important;
+    color: #ffffff !important;
+    text-decoration: none !important;
+}
+
+@media (max-width: 575.98px) {
+    .atalho-despesa-global {
+        left: 12px !important;
+        bottom: calc(18px + env(safe-area-inset-bottom)) !important;
+        min-height: 50px !important;
+        padding: 0 16px !important;
+    }
+}
+</style>
+
+<a
+    href="{% url 'estoque:despesas_diarias' %}"
+    class="atalho-despesa-global"
+    id="atalho-despesa-global"
+    aria-label="Lancar despesa"
+>
+    <span aria-hidden="true">+</span>
+    <span>Despesa</span>
+</a>
+{% endif %}
