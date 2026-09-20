@@ -15,6 +15,7 @@ urlpatterns = [
         name="caixa_banco_editar_descricao_movimento",
     ),
     path("despesas-diarias/", views.despesas_diarias, name="despesas_diarias"),
+    path("cartoes-faturas/", views.cartoes_credito, name="cartoes_credito"),
     path("cadastrar/", views.cadastrar_produto, name="cadastrar_produto"),
     path("cadastrar-unidade/", views.cadastrar_unidade, name="cadastrar_unidade"),
     path("unidades/", views.unidades_produto, name="unidades_produto"),

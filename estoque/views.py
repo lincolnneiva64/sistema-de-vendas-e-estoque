@@ -30,7 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
-from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
+from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
     contato_tem_telefone_no_post,
@@ -5141,6 +5141,59 @@ def _criar_lancamento_cartao_compra(compra):
         },
     )
 
+
+def cartoes_credito(request):
+    cartoes = list(
+        CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")
+    )
+
+    lancamentos_pendentes = list(
+        LancamentoCartao.objects
+        .filter(
+            fatura__isnull=True,
+            cartao__isnull=False,
+        )
+        .select_related(
+            "cartao",
+            "compra",
+            "compra__fornecedor",
+            "despesa",
+        )
+        .order_by("-data", "-id")
+    )
+
+    lancamentos_por_cartao = {}
+
+    for lancamento in lancamentos_pendentes:
+        lancamentos_por_cartao.setdefault(
+            lancamento.cartao_id,
+            [],
+        ).append(lancamento)
+
+    for cartao in cartoes:
+        cartao.lancamentos_pendentes = lancamentos_por_cartao.get(
+            cartao.id,
+            [],
+        )
+        cartao.quantidade_pendente = len(
+            cartao.lancamentos_pendentes
+        )
+        cartao.total_pendente = sum(
+            (
+                lancamento.valor
+                for lancamento in cartao.lancamentos_pendentes
+            ),
+            Decimal("0.00"),
+        )
+
+    return render(
+        request,
+        "estoque/cartoes_credito.html",
+        {
+            "cartoes": cartoes,
+        },
+    )
+
 def despesas_diarias(request):
 
     hoje = timezone.localdate()
@@ -5427,14 +5480,26 @@ def despesas_diarias(request):
                 ).first()
                 if lancamento_faturado:
                     mudou_para_avista = modalidade_pagamento != "cartao"
-                    mudou_cartao = cartao and lancamento_faturado.cartao_id != cartao.id
-                    if mudou_para_avista or mudou_cartao:
+                    mudou_cartao = bool(
+                        cartao and lancamento_faturado.cartao_id != cartao.id
+                    )
+                    mudou_valor = despesa_edicao.valor != valor
+                    mudou_data = (
+                        timezone.localdate(despesa_edicao.data_hora)
+                        != data_lancamento
+                    )
+
+                    if (
+                        mudou_para_avista
+                        or mudou_cartao
+                        or mudou_valor
+                        or mudou_data
+                    ):
                         messages.error(
                             request,
-                            "Esta despesa ja esta vinculada a uma fatura. Ajuste a fatura antes de alterar a forma de pagamento ou o cartao.",
+                            "Esta despesa ja esta vinculada a uma fatura. Ajuste a fatura antes de alterar valor, data, forma de pagamento ou cartao.",
                         )
                         return redirect("estoque:despesas_diarias")
-
             if despesa_edicao:
                 despesa_edicao.data_hora = data_hora
                 despesa_edicao.valor = valor

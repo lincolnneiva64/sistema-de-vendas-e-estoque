@@ -1,0 +1,104 @@
+{% extends "estoque/base.html" %}
+
+{% block title %}Cartões e faturas{% endblock %}
+
+{% block content %}
+<div class="container py-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            <h2 class="mb-1">Cartões e faturas</h2>
+            <div class="text-muted">
+                Compras e despesas feitas no cartão.
+            </div>
+        </div>
+
+        <a href="{% url 'estoque:despesas_diarias' %}" class="btn btn-outline-secondary">
+            Voltar para despesas
+        </a>
+    </div>
+
+    <div class="row g-3">
+        {% for cartao in cartoes %}
+        <div class="col-12 col-lg-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <h4 class="card-title mb-1">{{ cartao.nome }}</h4>
+                            <div class="text-muted">{{ cartao.titular }}</div>
+                        </div>
+
+                        <span class="badge bg-secondary">
+                            vence dia {{ cartao.dia_vencimento|default:"—" }}
+                        </span>
+                    </div>
+
+                    <hr>
+
+                    <div class="text-muted small">Lançamentos pendentes</div>
+                    <div class="fs-3 fw-bold mb-1">
+                        R$ {{ cartao.total_pendente|floatformat:2 }}
+                    </div>
+
+                    <div class="text-muted mb-3">
+                        {{ cartao.quantidade_pendente }}
+                        lançamento{{ cartao.quantidade_pendente|pluralize:"s" }}
+                    </div>
+
+                    {% if cartao.dia_fechamento %}
+                    <div class="small text-muted mb-3">
+                        Fechamento: dia {{ cartao.dia_fechamento }}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-light border py-2 small mb-3">
+                        Dia de fechamento ainda não informado.
+                        Os lançamentos ficam pendentes até serem vinculados à fatura.
+                    </div>
+                    {% endif %}
+
+                    {% if cartao.lancamentos_pendentes %}
+                    <div class="list-group list-group-flush">
+                        {% for lancamento in cartao.lancamentos_pendentes %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-semibold">
+                                        {{ lancamento.descricao }}
+                                    </div>
+
+                                    <div class="small text-muted">
+                                        {{ lancamento.data|date:"d/m/Y" }}
+
+                                        {% if lancamento.compra_id %}
+                                            · Compra
+                                        {% elif lancamento.despesa_id %}
+                                            · Despesa
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="fw-bold text-nowrap">
+                                    R$ {{ lancamento.valor|floatformat:2 }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-muted">
+                        Nenhum lançamento pendente.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-secondary">
+                Nenhum cartão ativo cadastrado.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
