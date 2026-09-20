@@ -1952,6 +1952,13 @@ class Compra(models.Model):
     data_compra = models.DateField()
     data_vencimento = models.DateField(blank=True, null=True)
     tipo_pagamento = models.CharField(max_length=40, blank=True)
+    cartao = models.ForeignKey(
+        "CartaoCredito",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="compras",
+    )
     operador = models.CharField(max_length=120, blank=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_produtos = models.DecimalField(max_digits=12, decimal_places=2, default=0)

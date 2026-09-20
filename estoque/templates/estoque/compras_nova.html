@@ -2438,7 +2438,7 @@
   </div>
 {% elif finalizando and compra and compra.tipo_pagamento == "cartao_credito" %}
   <div class="compras-alert success" style="border-color:#86efac; background:#ecfdf5; color:#166534;">
-    Esta etapa vai lancar estoque e criar a Conta a Pagar.
+    Esta etapa vai lancar o estoque e registrar a compra no cartao, sem movimentar Caixa/Banco.
   </div>
 {% elif finalizando %}
   <div class="compras-alert success" style="border-color:#bfdbfe; background:#eff6ff; color:#1d4ed8;">
@@ -2528,6 +2528,18 @@
               </div>
             {% endif %}
           </div>
+          <div class="compras-field" id="campoCartaoCreditoCompra" style="display:none;">
+            <label>Qual cartao?</label>
+            <select name="cartao_id" id="cartaoCreditoCompra">
+              <option value="">Selecione...</option>
+              {% for cartao in cartoes_credito %}
+                <option value="{{ cartao.id }}" {% if compra and compra.cartao_id == cartao.id %}selected{% endif %}>
+                  {{ cartao.nome }} - {{ cartao.titular }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
           <div class="compras-field" id="campoVencimentoCompra">
             <label id="labelVencimentoCompra">Vencimento</label>
             <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
@@ -3303,24 +3315,6 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-  }
-
-  function compraAPrazo() {
-    const valor = String(tipoPagamentoCompra ? tipoPagamentoCompra.value : "").toLowerCase().replace(/\s/g, "");
-    return valor === "aprazo" || valor === "prazo";
-  }
-
-  function compraCartaoCredito() {
-    const valor = String(tipoPagamentoCompra ? tipoPagamentoCompra.value : "").toLowerCase().replace(/\s/g, "");
-    return valor === "cartaocredito" || valor === "cartao_credito";
-  }
-
-  function compraContaFutura() {
-    return compraAPrazo() || compraCartaoCredito();
-  }
-
-  function compraAVista() {
-    return tipoPagamentoCompra && tipoPagamentoCompra.value && !compraContaFutura();
   }
 
   function definirCampoPorCentavos(campo, centavos) {
@@ -5776,7 +5770,7 @@
   }
 
   function pagamentoContaFutura() {
-    return pagamentoAPrazo() || pagamentoCartaoCredito();
+    return pagamentoAPrazo();
   }
 
   function escapeHtmlCompraBoletos(valor) {
@@ -5996,15 +5990,32 @@
   }
 
   function atualizarVencimentoCompra() {
-    const contaFutura = pagamentoContaFutura();
+    const contaFutura = pagamentoAPrazo();
+    const ehCartao = pagamentoCartaoCredito();
+    const campoCartao = document.getElementById("campoCartaoCreditoCompra");
+    const selectCartao = document.getElementById("cartaoCreditoCompra");
+
+    if (campoCartao) {
+      campoCartao.classList.toggle("oculto", !ehCartao);
+      campoCartao.style.display = ehCartao ? "" : "none";
+    }
+
+    if (selectCartao) {
+      selectCartao.required = ehCartao;
+    }
 
     if (campoVencimento) {
       campoVencimento.classList.toggle("oculto", !contaFutura);
+      campoVencimento.style.display = contaFutura ? "" : "none";
+    }
+
+    if (dataVencimento) {
+      dataVencimento.required = contaFutura;
     }
 
     const labelVencimento = document.getElementById("labelVencimentoCompra");
     if (labelVencimento) {
-      labelVencimento.textContent = pagamentoCartaoCredito() ? "Vencimento da fatura" : "Vencimento";
+      labelVencimento.textContent = "Vencimento";
     }
 
     if (pagamentoBotoes.length && tipoPagamento) {
