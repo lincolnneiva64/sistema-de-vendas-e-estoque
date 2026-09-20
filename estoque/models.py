@@ -2679,9 +2679,19 @@ class FaturaCartao(models.Model):
 
 
 class LancamentoCartao(models.Model):
+    cartao = models.ForeignKey(
+        CartaoCredito,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="lancamentos",
+    )
+
     fatura = models.ForeignKey(
         FaturaCartao,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="lancamentos",
     )
     compra = models.ForeignKey(
