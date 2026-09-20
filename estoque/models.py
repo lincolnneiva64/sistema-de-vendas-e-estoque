@@ -2659,6 +2659,13 @@ class DespesaDiaria(models.Model):
         blank=True,
         related_name="lancamentos",
     )
+    funcionario = models.ForeignKey(
+        "Funcionario",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="despesas_recebidas",
+    )
     categoria = models.CharField(max_length=40, choices=CATEGORIA_CHOICES)
     forma_pagamento = models.CharField(max_length=40, choices=FORMA_PAGAMENTO_CHOICES, default=FORMA_PIX)
     operador = models.CharField(max_length=120, blank=True)

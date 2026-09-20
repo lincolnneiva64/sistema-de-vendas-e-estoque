@@ -548,6 +548,7 @@
       <input type="hidden" name="acao" id="acaoDespesaDiaria" value="">
       <input type="hidden" name="despesa_id" id="despesaEdicaoId" value="">
       <input type="hidden" name="catalogo_id" id="catalogoDespesaId" value="">
+      <input type="hidden" name="funcionario_id" id="funcionarioDespesaId" value="">
       <input type="hidden" name="categoria" id="categoriaDespesaDiaria" value="outros">
 
       <div class="despesa-rapido-titulo" id="tituloFormularioDespesa">Nova despesa</div>
@@ -570,7 +571,7 @@
                 class="despesa-raiz"
                 data-tipo-despesa="empresa">
           <strong>Empresa</strong>
-          <small>Operação, veículos, funcionários e depósito</small>
+          <small>Despesas da empresa</small>
         </button>
 
         <button type="button"
@@ -587,28 +588,62 @@
           <button type="button" class="despesa-voltar-tipo">Trocar</button>
         </div>
 
-        <div class="despesa-atalhos">
-          {% for item in catalogo_empresa %}
-            {% if item.favorito %}
-              <button type="button"
-                      class="despesa-atalho"
-                      data-catalogo-id="{{ item.id }}"
-                      data-catalogo-nome="{{ item.nome }}">
-                <span>{{ item.nome }}</span>
-                <small>{{ item.grupo }} · {{ item.categoria }}</small>
-              </button>
-            {% endif %}
-          {% endfor %}
+        <div id="escolhaCategoriaEmpresa">
+          <div class="despesa-tipo-titulo">Categoria</div>
+
+          <div class="despesa-pessoas">
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="veiculos">Ve&iacute;culos</button>
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="funcionarios">Funcion&aacute;rios</button>
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="deposito">Dep&oacute;sito</button>
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="alimentacao">Alimenta&ccedil;&atilde;o</button>
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="terreno">Terreno</button>
+            <button type="button" class="despesa-categoria-empresa" data-grupo-chave="outros">Outros</button>
+          </div>
         </div>
 
-        <div class="despesa-field despesa-todos-tipos">
-          <label for="catalogoEmpresaSelect">Outras despesas da empresa</label>
-          <select id="catalogoEmpresaSelect">
-            <option value="">Ver todas...</option>
+        <div id="subcategoriasEmpresa" hidden>
+          <div class="despesa-nivel-cabecalho despesa-nivel-pessoa">
+            <strong id="nomeCategoriaEmpresa"></strong>
+            <button type="button" id="trocarCategoriaEmpresa">Trocar categoria</button>
+          </div>
+
+          <div class="despesa-atalhos">
             {% for item in catalogo_empresa %}
-              <option value="{{ item.id }}">{{ item.nome }}</option>
+              <button type="button"
+                      class="despesa-atalho despesa-atalho-empresa"
+                      data-catalogo-id="{{ item.id }}"
+                      data-catalogo-nome="{{ item.nome }}"
+                      data-grupo="{{ item.grupo }}"
+                      data-grupo-chave="{{ item.grupo|slugify }}"
+                      data-categoria="{{ item.categoria }}"
+                      hidden>
+                <span>{{ item.categoria }}</span>
+                {% if item.nome != item.categoria %}
+                  <small>{{ item.nome }}</small>
+                {% endif %}
+              </button>
             {% endfor %}
-          </select>
+          </div>
+        </div>
+
+        <div id="escolhaFuncionarioEmpresa" hidden>
+          <div class="despesa-nivel-cabecalho despesa-nivel-pessoa">
+            <strong id="nomeDespesaFuncionarioEmpresa"></strong>
+            <button type="button" id="trocarDespesaFuncionarioEmpresa">Trocar</button>
+          </div>
+
+          <div class="despesa-tipo-titulo">Para quem?</div>
+
+          <div class="despesa-pessoas">
+            {% for funcionario in funcionarios_despesa_empresa %}
+              <button type="button"
+                      class="despesa-funcionario-empresa"
+                      data-funcionario-id="{{ funcionario.id }}"
+                      data-funcionario-nome="{{ funcionario.nome }}">
+                {{ funcionario.nome }}
+              </button>
+            {% endfor %}
+          </div>
         </div>
       </div>
 
@@ -901,6 +936,8 @@
                     data-tipo="{{ despesa.tipo_estruturado }}"
                     data-pessoa="{{ despesa.pessoa_estruturada|escape }}"
                     data-grupo="{{ despesa.grupo_estruturado|escape }}" data-grupo-chave="{{ despesa.grupo_estruturado|slugify }}"
+                    data-funcionario-id="{{ despesa.funcionario_id|default:'' }}"
+                    data-funcionario-nome="{% if despesa.funcionario %}{{ despesa.funcionario.nome|escape }}{% endif %}"
                     data-conta-id="{{ despesa.conta_saida_id|default:'' }}"
                     data-operador="{{ despesa.operador|default:''|escape }}"
                     data-data="{{ despesa.data_hora|date:'Y-m-d' }}"
@@ -1022,7 +1059,30 @@
   const botoesCatalogo = Array.from(document.querySelectorAll(".despesa-atalho"));
   const botoesPessoais = Array.from(document.querySelectorAll(".despesa-atalho-pessoal"));
 
-  const selectEmpresa = document.getElementById("catalogoEmpresaSelect");
+  const escolhaCategoriaEmpresa = document.getElementById("escolhaCategoriaEmpresa");
+  const subcategoriasEmpresa = document.getElementById("subcategoriasEmpresa");
+  const nomeCategoriaEmpresa = document.getElementById("nomeCategoriaEmpresa");
+  const trocarCategoriaEmpresa = document.getElementById("trocarCategoriaEmpresa");
+
+  const botoesCategoriaEmpresa = Array.from(
+    document.querySelectorAll(".despesa-categoria-empresa")
+  );
+
+  const botoesEmpresa = Array.from(
+    document.querySelectorAll(".despesa-atalho-empresa")
+  );
+
+  const escolhaFuncionarioEmpresa = document.getElementById("escolhaFuncionarioEmpresa");
+  const nomeDespesaFuncionarioEmpresa = document.getElementById("nomeDespesaFuncionarioEmpresa");
+  const trocarDespesaFuncionarioEmpresa = document.getElementById("trocarDespesaFuncionarioEmpresa");
+
+  const botoesFuncionarioEmpresa = Array.from(
+    document.querySelectorAll(".despesa-funcionario-empresa")
+  );
+
+  const funcionarioCampo = document.getElementById("funcionarioDespesaId");
+
+  let catalogoFuncionarioPendente = null;
 
   const contaCampo = document.getElementById("contaSaidaDespesaDiaria");
   const operadorCampo = document.getElementById("operadorDespesaDiaria");
@@ -1054,8 +1114,6 @@
       botao.classList.remove("ativo");
     });
 
-    if (selectEmpresa) selectEmpresa.value = "";
-
     if (selecaoAtual) {
       selecaoAtual.hidden = true;
       selecaoAtual.textContent = "";
@@ -1085,6 +1143,164 @@
     }
   }
 
+  function chaveEmpresa(valor) {
+    return String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function limparFuncionarioEmpresa() {
+    catalogoFuncionarioPendente = null;
+
+    if (funcionarioCampo) {
+      funcionarioCampo.value = "";
+    }
+
+    botoesFuncionarioEmpresa.forEach(function (botao) {
+      botao.classList.remove("ativo");
+    });
+
+    if (escolhaFuncionarioEmpresa) {
+      escolhaFuncionarioEmpresa.hidden = true;
+    }
+  }
+
+  function resetarEmpresa() {
+    limparSelecaoCatalogo();
+    limparFuncionarioEmpresa();
+
+    botoesCategoriaEmpresa.forEach(function (botao) {
+      botao.classList.remove("ativo");
+    });
+
+    botoesEmpresa.forEach(function (botao) {
+      botao.hidden = true;
+    });
+
+    if (escolhaCategoriaEmpresa) {
+      escolhaCategoriaEmpresa.hidden = false;
+    }
+
+    if (subcategoriasEmpresa) {
+      subcategoriasEmpresa.hidden = true;
+    }
+
+    if (nomeCategoriaEmpresa) {
+      nomeCategoriaEmpresa.textContent = "";
+    }
+  }
+
+  function escolherCategoriaEmpresa(grupo) {
+    const chave = chaveEmpresa(grupo);
+
+    limparSelecaoCatalogo();
+    limparFuncionarioEmpresa();
+
+    botoesCategoriaEmpresa.forEach(function (botao) {
+      botao.classList.toggle(
+        "ativo",
+        botao.dataset.grupoChave === chave
+      );
+    });
+
+    if (escolhaCategoriaEmpresa) {
+      escolhaCategoriaEmpresa.hidden = Boolean(chave);
+    }
+
+    if (subcategoriasEmpresa) {
+      subcategoriasEmpresa.hidden = !chave;
+    }
+
+    const botaoGrupo = botoesCategoriaEmpresa.find(function (botao) {
+      return botao.dataset.grupoChave === chave;
+    });
+
+    if (nomeCategoriaEmpresa) {
+      nomeCategoriaEmpresa.textContent = botaoGrupo
+        ? botaoGrupo.textContent.trim()
+        : "";
+    }
+
+    botoesEmpresa.forEach(function (botao) {
+      botao.hidden = botao.dataset.grupoChave !== chave;
+    });
+  }
+
+  function selecionarDespesaEmpresa(botao) {
+    const grupo = chaveEmpresa(botao.dataset.grupo);
+    const categoria = botao.dataset.categoria || "";
+    const nome = botao.dataset.catalogoNome || categoria;
+
+    if (grupo === "funcionarios") {
+      limparSelecaoCatalogo();
+
+      catalogoFuncionarioPendente = {
+        id: botao.dataset.catalogoId,
+        nome: nome,
+        categoria: categoria
+      };
+
+      if (catalogoIdCampo) {
+        catalogoIdCampo.value = String(botao.dataset.catalogoId);
+      }
+
+      botoesEmpresa.forEach(function (item) {
+        item.classList.toggle("ativo", item === botao);
+      });
+
+      if (nomeDespesaFuncionarioEmpresa) {
+        nomeDespesaFuncionarioEmpresa.textContent = categoria;
+      }
+
+      if (subcategoriasEmpresa) {
+        subcategoriasEmpresa.hidden = true;
+      }
+
+      if (escolhaFuncionarioEmpresa) {
+        escolhaFuncionarioEmpresa.hidden = false;
+      }
+
+      return;
+    }
+
+    limparFuncionarioEmpresa();
+
+    selecionarCatalogo(
+      botao.dataset.catalogoId,
+      grupo === "veiculos"
+        ? categoria + " - " + nome
+        : categoria
+    );
+  }
+
+  function escolherFuncionarioEmpresa(botao) {
+    if (!catalogoFuncionarioPendente) return;
+
+    if (funcionarioCampo) {
+      funcionarioCampo.value = botao.dataset.funcionarioId || "";
+    }
+
+    botoesFuncionarioEmpresa.forEach(function (item) {
+      item.classList.toggle("ativo", item === botao);
+    });
+
+    if (selecaoAtual) {
+      selecaoAtual.textContent =
+        "Selecionado: " +
+        catalogoFuncionarioPendente.categoria +
+        " - " +
+        (botao.dataset.funcionarioNome || "");
+
+      selecaoAtual.hidden = false;
+    }
+
+    if (contaCampo && !contaCampo.value) {
+      contaCampo.focus();
+    }
+  }
+
   function escolherTipo(tipo) {
     limparSelecaoCatalogo();
 
@@ -1097,6 +1313,10 @@
 
     if (areaEmpresa) areaEmpresa.hidden = tipo !== "empresa";
     if (areaPessoal) areaPessoal.hidden = tipo !== "pessoal";
+
+    if (tipo === "empresa") {
+      resetarEmpresa();
+    }
 
     if (tipo === "pessoal") {
       escolherPessoa("");
@@ -1195,6 +1415,40 @@
     });
   });
 
+  botoesCategoriaEmpresa.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherCategoriaEmpresa(botao.dataset.grupoChave);
+    });
+  });
+
+  if (trocarCategoriaEmpresa) {
+    trocarCategoriaEmpresa.addEventListener("click", function () {
+      resetarEmpresa();
+    });
+  }
+
+  botoesEmpresa.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      selecionarDespesaEmpresa(botao);
+    });
+  });
+
+  botoesFuncionarioEmpresa.forEach(function (botao) {
+    botao.addEventListener("click", function () {
+      escolherFuncionarioEmpresa(botao);
+    });
+  });
+
+  if (trocarDespesaFuncionarioEmpresa) {
+    trocarDespesaFuncionarioEmpresa.addEventListener("click", function () {
+      limparFuncionarioEmpresa();
+
+      if (subcategoriasEmpresa) {
+        subcategoriasEmpresa.hidden = false;
+      }
+    });
+  }
+
   botoesPessoa.forEach(function (botao) {
     botao.addEventListener("click", function () {
       escolherPessoa(botao.dataset.pessoa);
@@ -1219,7 +1473,7 @@
     });
   }
 
-  botoesCatalogo.forEach(function (botao) {
+  botoesPessoais.forEach(function (botao) {
     botao.addEventListener("click", function () {
       selecionarCatalogo(
         botao.dataset.catalogoId,
@@ -1228,18 +1482,6 @@
     });
   });
 
-  if (selectEmpresa) {
-    selectEmpresa.addEventListener("change", function () {
-      if (!selectEmpresa.value) {
-        limparSelecaoCatalogo();
-        return;
-      }
-
-      const option = selectEmpresa.options[selectEmpresa.selectedIndex];
-      selecionarCatalogo(selectEmpresa.value, option.textContent.trim());
-      selectEmpresa.value = String(catalogoIdCampo.value);
-    });
-  }
 
 
   function atualizarRota() {
@@ -1274,6 +1516,9 @@
     if (operadorCampo) operadorCampo.value = "";
     if (dataCampo) dataCampo.value = hojeISO();
     if (observacaoCampo) observacaoCampo.value = "";
+
+    if (funcionarioCampo) funcionarioCampo.value = "";
+    catalogoFuncionarioPendente = null;
 
     if (dinheiroRotaCampo) dinheiroRotaCampo.checked = false;
 
@@ -1326,12 +1571,67 @@
       if (grupo) {
         escolherCategoriaPessoal(grupo);
       }
+
+      selecionarCatalogo(catalogoId, catalogoNome);
     }
 
-    selecionarCatalogo(catalogoId, catalogoNome);
+    if (tipo === "empresa") {
+      const grupoEmpresa = chaveEmpresa(botao.dataset.grupo || "");
 
-    if (tipo === "empresa" && selectEmpresa) {
-      selectEmpresa.value = String(catalogoId);
+      if (grupoEmpresa) {
+        escolherCategoriaEmpresa(grupoEmpresa);
+      }
+
+      const botaoCatalogoEmpresa = botoesEmpresa.find(function (item) {
+        return item.dataset.catalogoId === String(catalogoId);
+      });
+
+      if (botaoCatalogoEmpresa) {
+        selecionarDespesaEmpresa(botaoCatalogoEmpresa);
+
+        if (grupoEmpresa === "funcionarios") {
+          const funcionarioId = botao.dataset.funcionarioId || "";
+
+          const botaoFuncionario = botoesFuncionarioEmpresa.find(function (item) {
+            return item.dataset.funcionarioId === String(funcionarioId);
+          });
+
+          if (botaoFuncionario) {
+            escolherFuncionarioEmpresa(botaoFuncionario);
+          } else if (funcionarioId) {
+            /*
+             * Funcion?rio hist?rico pode estar inativo e, por isso,
+             * n?o aparecer entre os bot?es ativos. Mantemos o ID
+             * original para permitir editar outros campos sem perder
+             * o v?nculo hist?rico.
+             */
+            if (funcionarioCampo) {
+              funcionarioCampo.value = funcionarioId;
+            }
+
+            if (selecaoAtual) {
+              selecaoAtual.textContent =
+                "Selecionado: " +
+                (botaoCatalogoEmpresa.dataset.categoria || catalogoNome) +
+                " - " +
+                (botao.dataset.funcionarioNome || "Funcionario");
+
+              selecaoAtual.hidden = false;
+            }
+          }
+        }
+      } else {
+        /*
+         * Cat?logo hist?rico/inativo: o backend continuar? decidindo
+         * se essa edi??o pode ou n?o ser aceita. N?o fazemos remapeamento
+         * silencioso para uma categoria nova.
+         */
+        selecionarCatalogo(catalogoId, catalogoNome);
+
+        if (funcionarioCampo) {
+          funcionarioCampo.value = botao.dataset.funcionarioId || "";
+        }
+      }
     }
 
     if (contaCampo) {
@@ -1403,6 +1703,20 @@
       return false;
     }
 
+    if (
+      catalogoFuncionarioPendente &&
+      (!funcionarioCampo || !funcionarioCampo.value)
+    ) {
+      alert("Escolha o funcionario desta despesa.");
+
+      const primeiroFuncionario = primeiroVisivel(botoesFuncionarioEmpresa);
+      if (primeiroFuncionario) {
+        primeiroFuncionario.focus();
+      }
+
+      return false;
+    }
+
     if (form.reportValidity && !form.reportValidity()) {
       return false;
     }
@@ -1447,16 +1761,8 @@
   }
 
   function focarPrimeiraDespesaEmpresa() {
-    const botoes = botoesCatalogo.filter(function (botao) {
-      return !botao.classList.contains("despesa-atalho-pessoal");
-    });
-
-    const botao = primeiroVisivel(botoes);
-    if (botao) {
-      botao.focus();
-    } else if (selectEmpresa) {
-      selectEmpresa.focus();
-    }
+    const botao = primeiroVisivel(botoesCategoriaEmpresa);
+    if (botao) botao.focus();
   }
 
   function focarPrimeiraPessoa() {
@@ -1542,24 +1848,6 @@
       focarConta();
     });
   });
-
-  if (selectEmpresa) {
-    selectEmpresa.addEventListener("keydown", function (event) {
-      if (event.key !== "Enter") return;
-      if (!selectEmpresa.value) return;
-
-      event.preventDefault();
-
-      const option = selectEmpresa.options[selectEmpresa.selectedIndex];
-      selecionarCatalogo(
-        selectEmpresa.value,
-        option.textContent.trim()
-      );
-
-      focarConta();
-    });
-  }
-
 
   if (contaCampo) {
     contaCampo.addEventListener("keydown", function (event) {

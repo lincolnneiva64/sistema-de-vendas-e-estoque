@@ -4632,6 +4632,15 @@ def _painel_resultado_periodo(request):
     }
 
 
+def _chave_texto_despesa(valor):
+    texto = unicodedata.normalize("NFD", str(valor or ""))
+    return "".join(
+        caractere
+        for caractere in texto
+        if unicodedata.category(caractere) != "Mn"
+    ).strip().lower()
+
+
 def _painel_resultado_categoria_despesa(categoria):
     rotulos = dict(DespesaDiaria.CATEGORIA_CHOICES)
     categoria = (categoria or "").strip()
@@ -4659,13 +4668,22 @@ def _painel_resultado_catalogo_despesa(catalogo):
     """Classifica despesas estruturadas pelo catalogo, sem depender da categoria legada."""
     grupo = (catalogo.grupo or "").strip()
     categoria = (catalogo.categoria or "").strip()
+    grupo_chave = _chave_texto_despesa(grupo)
 
+    # Mantemos tamb?m os grupos hist?ricos para que lan?amentos antigos
+    # continuem aparecendo corretamente no painel.
     grupos = {
         "veiculos": ("veiculos", "Veiculos"),
+        "funcionarios": ("funcionarios", "Funcionarios"),
+        "deposito": ("deposito", "Deposito"),
+        "alimentacao": ("alimentacao", "Alimentacao"),
+        "terreno": ("terreno", "Terreno"),
+        "outros": ("outras", "Outras"),
+
+        # Estrutura hist?rica
         "estrutura": ("estrutura", "Estrutura"),
         "pessoal": ("pessoal", "Pessoal"),
         "operacionais": ("operacionais", "Operacionais"),
-        "alimentacao": ("alimentacao", "Alimentacao"),
         "mercadorias emergenciais": (
             "mercadorias_emergenciais",
             "Mercadorias emergenciais",
@@ -4674,7 +4692,7 @@ def _painel_resultado_catalogo_despesa(catalogo):
     }
 
     grupo_slug, grupo_nome = grupos.get(
-        grupo.lower(),
+        grupo_chave,
         ("nao_classificado", "Nao classificado"),
     )
 
@@ -5090,6 +5108,10 @@ def despesas_diarias(request):
         pode_operar_sistema=True,
     ).order_by("nome")
 
+    funcionarios_despesa_empresa = Funcionario.objects.filter(
+        ativo=True,
+    ).order_by("nome")
+
     if request.method == "POST":
         acao = request.POST.get("acao")
         if acao == "excluir":
@@ -5118,7 +5140,7 @@ def despesas_diarias(request):
         if acao == "editar_despesa":
 
             despesa_edicao = get_object_or_404(
-                DespesaDiaria.objects.select_related("catalogo"),
+                DespesaDiaria.objects.select_related("catalogo", "funcionario"),
                 pk=request.POST.get("despesa_id"),
             )
 
@@ -5168,6 +5190,43 @@ def despesas_diarias(request):
                 messages.error(request, "A despesa escolhida nao existe ou esta inativa.")
                 return redirect("estoque:despesas_diarias")
 
+        funcionario = None
+        funcionario_id = request.POST.get("funcionario_id")
+
+        catalogo_funcionario = bool(
+            catalogo
+            and catalogo.tipo == CatalogoDespesa.TIPO_EMPRESA
+            and _chave_texto_despesa(catalogo.grupo) == "funcionarios"
+            and _chave_texto_despesa(catalogo.categoria)
+            in {"pagamento", "vale", "adiantamento"}
+        )
+
+        if catalogo_funcionario:
+            if not funcionario_id or not str(funcionario_id).isdigit():
+                messages.error(request, "Escolha o funcionario desta despesa.")
+                return redirect("estoque:despesas_diarias")
+
+            funcionario_id_int = int(funcionario_id)
+            funcionarios_validos = Funcionario.objects.filter(pk=funcionario_id_int)
+
+            # Novo lan?amento exige funcion?rio ativo. Na edi??o,
+            # o mesmo funcion?rio hist?rico pode ser preservado
+            # mesmo que tenha sido inativado posteriormente.
+            if not (
+                despesa_edicao
+                and despesa_edicao.funcionario_id == funcionario_id_int
+            ):
+                funcionarios_validos = funcionarios_validos.filter(ativo=True)
+
+            funcionario = funcionarios_validos.first()
+
+            if not funcionario:
+                messages.error(
+                    request,
+                    "O funcionario escolhido nao existe ou esta inativo.",
+                )
+                return redirect("estoque:despesas_diarias")
+
         observacao = (request.POST.get("observacao") or "").strip()
         operador = (request.POST.get("operador") or "").strip()
         data_lancamento = parse_date(request.POST.get("data_lancamento") or "") or hoje
@@ -5188,8 +5247,8 @@ def despesas_diarias(request):
             # O catalogo estruturado e a fonte principal da classificacao.
             # A categoria legada continua preenchida apenas para manter
             # compatibilidade com relatorios e rotinas antigas.
-            grupo_catalogo = (catalogo.grupo or "").strip().lower()
-            categoria_catalogo = (catalogo.categoria or "").strip().lower()
+            grupo_catalogo = _chave_texto_despesa(catalogo.grupo)
+            categoria_catalogo = _chave_texto_despesa(catalogo.categoria)
 
             if catalogo.tipo == CatalogoDespesa.TIPO_PESSOAL:
                 categoria = DespesaDiaria.CATEGORIA_PESSOAL
@@ -5264,6 +5323,7 @@ def despesas_diarias(request):
                 despesa_edicao.data_hora = data_hora
                 despesa_edicao.valor = valor
                 despesa_edicao.catalogo = catalogo
+                despesa_edicao.funcionario = funcionario
                 despesa_edicao.categoria = categoria
                 despesa_edicao.forma_pagamento = forma_pagamento
                 despesa_edicao.operador = operador
@@ -5300,6 +5360,7 @@ def despesas_diarias(request):
                     data_hora=data_hora,
                     valor=valor,
                     catalogo=catalogo,
+                    funcionario=funcionario,
                     categoria=categoria,
                     forma_pagamento=forma_pagamento,
                     operador=operador,
@@ -5324,7 +5385,7 @@ def despesas_diarias(request):
 
     despesas_periodo = (
         DespesaDiaria.objects
-        .select_related("catalogo")
+        .select_related("catalogo", "funcionario")
         .filter(data_hora__date__gte=data_inicio, data_hora__date__lte=data_fim)
         .order_by("-data_hora", "-id")
     )
@@ -5340,7 +5401,7 @@ def despesas_diarias(request):
 
     despesas_hoje = (
         DespesaDiaria.objects
-        .select_related("catalogo")
+        .select_related("catalogo", "funcionario")
         .filter(data_hora__date=hoje)
         .order_by("-data_hora", "-id")
     )
@@ -5352,7 +5413,7 @@ def despesas_diarias(request):
 
     despesas_mes = (
         DespesaDiaria.objects
-        .select_related("catalogo")
+        .select_related("catalogo", "funcionario")
         .filter(data_hora__date__gte=inicio_mes, data_hora__date__lte=hoje)
     )
 
@@ -5506,6 +5567,7 @@ def despesas_diarias(request):
             "contas_saida": contas_saida,
             "rotas_recebimento_opcoes": _rotas_clientes_opcoes(),
             "operadores_despesa_diaria": operadores_despesa_diaria,
+            "funcionarios_despesa_empresa": funcionarios_despesa_empresa,
         },
     )
 

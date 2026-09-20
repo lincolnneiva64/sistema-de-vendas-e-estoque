@@ -30370,6 +30370,7 @@ class DespesaDiariaFinanceiroTests(TestCase):
         valor="50,00",
         categoria=None,
         catalogo_id=None,
+        funcionario_id=None,
         observacao="Despesa teste",
         follow=True,
         paga_com_dinheiro_rota=False,
@@ -30389,6 +30390,8 @@ class DespesaDiariaFinanceiroTests(TestCase):
         }
         if catalogo_id is not None:
             dados["catalogo_id"] = str(catalogo_id)
+        if funcionario_id is not None:
+            dados["funcionario_id"] = str(funcionario_id)
         if paga_com_dinheiro_rota:
             dados["paga_com_dinheiro_rota"] = "1"
         return self.client.post(
@@ -30431,6 +30434,129 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertEqual(movimento.tipo, MovimentoFinanceiro.TIPO_SAIDA)
         self.assertEqual(movimento.valor, Decimal("80.00"))
         self.assertEqual(movimento.conta, self.conta_caixa)
+
+    def test_catalogo_empresa_novo_com_acentos_classifica_combustivel(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Gol",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Ve\u00edculos",
+            categoria="Combust\u00edvel",
+            ativo=True,
+            ordem=1,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_caixa,
+            valor="80,00",
+            catalogo_id=catalogo.id,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertEqual(
+            despesa.categoria,
+            DespesaDiaria.CATEGORIA_GASOLINA,
+        )
+        self.assertIsNone(despesa.funcionario_id)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="despesa_diaria"
+            ).count(),
+            1,
+        )
+
+    def test_catalogo_funcionario_exige_funcionario(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Vale",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Funcion\u00e1rios",
+            categoria="Vale",
+            ativo=True,
+            ordem=1,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_caixa,
+            valor="30,00",
+            catalogo_id=catalogo.id,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(DespesaDiaria.objects.count(), 0)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="despesa_diaria"
+            ).count(),
+            0,
+        )
+
+    def test_catalogo_funcionario_grava_beneficiario_ativo(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Pagamento",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Funcion\u00e1rios",
+            categoria="Pagamento",
+            ativo=True,
+            ordem=1,
+        )
+        beneficiario = Funcionario.objects.create(
+            nome="Roseli Teste",
+            ativo=True,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_banco,
+            valor="150,00",
+            catalogo_id=catalogo.id,
+            funcionario_id=beneficiario.id,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertEqual(despesa.funcionario, beneficiario)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="despesa_diaria"
+            ).count(),
+            1,
+        )
+
+    def test_catalogo_nao_funcionario_ignora_funcionario_enviado(self):
+        catalogo = CatalogoDespesa.objects.create(
+            nome="Energia",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Dep\u00f3sito",
+            categoria="Energia",
+            ativo=True,
+            ordem=1,
+        )
+        beneficiario = Funcionario.objects.create(
+            nome="Funcionario indevido",
+            ativo=True,
+        )
+
+        resposta = self._post_despesa(
+            self.conta_caixa,
+            valor="90,00",
+            catalogo_id=catalogo.id,
+            funcionario_id=beneficiario.id,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        despesa = DespesaDiaria.objects.get()
+        self.assertEqual(despesa.catalogo, catalogo)
+        self.assertIsNone(despesa.funcionario_id)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="despesa_diaria"
+            ).count(),
+            1,
+        )
 
     def test_catalogo_pessoal_grava_classificacao_e_uma_unica_saida(self):
         catalogo = CatalogoDespesa.objects.create(
