@@ -395,83 +395,168 @@
     </div>
     <form id="formBaixaContaPagar">
       {% csrf_token %}
-      <div class="cp-modal-body">
-        <div class="cp-modal-summary">
-          <div class="cp-modal-info"><span class="cp-modal-label">Fornecedor</span><span class="cp-modal-value" id="baixaContaFornecedor">-</span></div>
-          <div class="cp-modal-info"><span class="cp-modal-label">Origem</span><span class="cp-modal-value" id="baixaContaCompra">-</span></div>
-          <div class="cp-modal-info"><span class="cp-modal-label">Vencimento</span><span class="cp-modal-value" id="baixaContaVencimento">-</span></div>
-          <div class="cp-modal-info"><span class="cp-modal-label">Valor original</span><span class="cp-modal-value" id="baixaContaOriginal">R$ 0,00</span></div>
-          <div class="cp-modal-info"><span class="cp-modal-label">Saldo principal</span><span class="cp-modal-value" id="baixaContaAberto">R$ 0,00</span></div>
+      <div class="cp-modal-body cp-baixa-redesign">
+        <div class="cp-modal-summary cp-baixa-summary">
+          <div class="cp-modal-info cp-info-fornecedor">
+            <span class="cp-modal-label">Fornecedor</span>
+            <span class="cp-modal-value" id="baixaContaFornecedor">-</span>
+          </div>
+          <div class="cp-modal-info cp-info-origem">
+            <span class="cp-modal-label">Origem</span>
+            <span class="cp-modal-value" id="baixaContaCompra">-</span>
+          </div>
+          <div class="cp-modal-info cp-info-vencimento">
+            <span class="cp-modal-label">Vencimento</span>
+            <span class="cp-modal-value" id="baixaContaVencimento">-</span>
+
+            <label class="cp-data-pagamento-label" for="dataPagamentoContaPagar">
+              Data do pagamento
+            </label>
+            <input
+              id="dataPagamentoContaPagar"
+              name="data_pagamento"
+              type="date"
+              class="cp-data-pagamento-input"
+            >
+          </div>
+          <div class="cp-modal-info">
+            <span class="cp-modal-label">Valor original</span>
+            <span class="cp-modal-value" id="baixaContaOriginal">R$ 0,00</span>
+          </div>
+          <div class="cp-modal-info">
+            <span class="cp-modal-label">Saldo principal</span>
+            <span class="cp-modal-value" id="baixaContaAberto">R$ 0,00</span>
+          </div>
         </div>
-        <div class="cp-modal-form">
-          <div>
-            <label for="valorPagoContaPagar">Principal que sera pago</label>
-            <input id="valorPagoContaPagar" name="valor_pago" type="text" inputmode="decimal" autocomplete="off">
+
+        <div class="cp-baixa-divider"></div>
+
+        <div class="cp-baixa-valores">
+          <div class="cp-baixa-field">
+            <label for="valorPagoContaPagar">Principal que será pago</label>
+            <input id="valorPagoContaPagar" name="valor_pago" type="text"
+                   inputmode="decimal" autocomplete="off">
           </div>
-          <div>
+
+          <div class="cp-baixa-field">
             <label for="jurosBancariosContaPagar">Juros/multa/encargos</label>
-            <input id="jurosBancariosContaPagar" name="juros_bancarios" type="text" inputmode="decimal" autocomplete="off" value="0,00">
+            <input id="jurosBancariosContaPagar" name="juros_bancarios" type="text"
+                   inputmode="decimal" autocomplete="off" value="0,00">
           </div>
 
-          <div>
+          <div class="cp-baixa-total">
             <label for="totalEfetivoContaPagar">Total efetivamente pago</label>
-            <input id="totalEfetivoContaPagar" type="text" inputmode="decimal" autocomplete="off" value="0,00">
-            <small style="display:block; margin-top:5px;">
-              Informe aqui o total final do boleto/comprovante para calcular os encargos automaticamente.
-            </small>
+            <input id="totalEfetivoContaPagar" type="text"
+                   inputmode="decimal" autocomplete="off" value="0,00">
           </div>
+        </div>
 
-          <div class="cp-debit-preview">
-            <div>Principal<strong id="previewPrincipalContaPagar">R$ 0,00</strong></div>
-            <div>Juros/multa/encargos<strong id="previewJurosContaPagar">R$ 0,00</strong></div>
-            <div>Total a debitar<strong id="previewTotalContaPagar">R$ 0,00</strong></div>
-          </div>
+        <div class="cp-baixa-info">
+          <span class="cp-baixa-info-icon">i</span>
+          <span>Informe aqui o total final do boleto/comprovante para calcular os encargos automaticamente.</span>
+        </div>
 
-          <div>
-            <label>De onde saiu o dinheiro?</label>
+        <div class="cp-debit-preview cp-preview-hidden">
+          <div>Principal<strong id="previewPrincipalContaPagar">R$ 0,00</strong></div>
+          <div>Juros/multa/encargos<strong id="previewJurosContaPagar">R$ 0,00</strong></div>
+          <div>Total a debitar<strong id="previewTotalContaPagar">R$ 0,00</strong></div>
+        </div>
 
-            <div style="display:grid; gap:10px; margin-top:7px;">
-              <div>
-                <label for="valorSaidaCaixaContaPagar">Caixa em especie</label>
-                <small style="display:block;">Saldo: {{ saldos_pagamento.caixa.texto }}</small>
+        <section class="cp-origens-section">
+          <h3>De onde saiu o dinheiro?</h3>
+          <p>Distribua o total do pagamento entre as contas abaixo.</p>
+
+          <div class="cp-origens-grid">
+            <div class="cp-origem-card cp-origem-caixa">
+              <div class="cp-origem-title">
+                <span class="cp-origem-icon">▣</span>
+                <strong>CAIXA EM ESPÉCIE</strong>
+              </div>
+
+              <div class="cp-origem-saldo">
+                <span>Saldo atual</span>
+                <strong>{{ saldos_pagamento.caixa.texto }}</strong>
+              </div>
+
+              <div class="cp-origem-saida">
+                <label for="valorSaidaCaixaContaPagar">VAI SAIR</label>
                 <input id="valorSaidaCaixaContaPagar" name="valor_saida_caixa"
                        type="text" inputmode="decimal" autocomplete="off" value="0,00">
               </div>
 
-              <div>
-                <label for="valorSaidaReservaContaPagar">Sangria/Reserva em maos</label>
-                <small style="display:block;">Saldo: {{ saldos_pagamento.reserva.texto }}</small>
+              <div class="cp-origem-saldo cp-saldo-depois">
+                <span>Saldo depois</span>
+                <strong id="saldoDepoisCaixaContaPagar">{{ saldos_pagamento.caixa.texto }}</strong>
+              </div>
+            </div>
+
+            <div class="cp-origem-card cp-origem-reserva">
+              <div class="cp-origem-title">
+                <span class="cp-origem-icon">▣</span>
+                <strong>SANGRIA/RESERVA EM MÃOS</strong>
+              </div>
+
+              <div class="cp-origem-saldo">
+                <span>Saldo atual</span>
+                <strong>{{ saldos_pagamento.reserva.texto }}</strong>
+              </div>
+
+              <div class="cp-origem-saida">
+                <label for="valorSaidaReservaContaPagar">VAI SAIR</label>
                 <input id="valorSaidaReservaContaPagar" name="valor_saida_reserva"
                        type="text" inputmode="decimal" autocomplete="off" value="0,00">
               </div>
 
-              <div>
-                <label for="valorSaidaBancoContaPagar">Banco/Pix</label>
-                <small style="display:block;">Saldo: {{ saldos_pagamento.banco.texto }}</small>
-                <input id="valorSaidaBancoContaPagar" name="valor_saida_banco"
-                       type="text" inputmode="decimal" autocomplete="off" value="0,00">
+              <div class="cp-origem-saldo cp-saldo-depois">
+                <span>Saldo depois</span>
+                <strong id="saldoDepoisReservaContaPagar">{{ saldos_pagamento.reserva.texto }}</strong>
               </div>
             </div>
 
-            <small style="display:block; margin-top:8px; font-weight:800;">
-              Falta distribuir:
-              <strong id="faltaDistribuirContaPagar">R$ 0,00</strong>
-            </small>
+            <div class="cp-origem-card cp-origem-banco">
+              <div class="cp-origem-title">
+                <span class="cp-origem-icon">▣</span>
+                <strong>BANCO/PIX</strong>
+              </div>
+
+              <div class="cp-origem-saldo">
+                <span>Saldo atual</span>
+                <strong>{{ saldos_pagamento.banco.texto }}</strong>
+              </div>
+
+              <div class="cp-origem-saida">
+                <label for="valorSaidaBancoContaPagar">VAI SAIR</label>
+                <input id="valorSaidaBancoContaPagar" name="valor_saida_banco"
+                       type="text" inputmode="decimal" autocomplete="off" value="0,00">
+              </div>
+
+              <div class="cp-origem-saldo cp-saldo-depois">
+                <span>Saldo depois</span>
+                <strong id="saldoDepoisBancoContaPagar">{{ saldos_pagamento.banco.texto }}</strong>
+              </div>
+            </div>
           </div>
-          <div>
-            <label for="dataPagamentoContaPagar">Data do pagamento</label>
-            <input id="dataPagamentoContaPagar" name="data_pagamento" type="date">
-            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros/multa/encargos ou o total efetivamente pago.</small>
+
+          <div class="cp-distribuicao-status" id="statusDistribuicaoContaPagar">
+            <strong>Falta distribuir:</strong>
+            <strong id="faltaDistribuirContaPagar">R$ 0,00</strong>
           </div>
-          <div>
-            <label for="formaPagamentoContaPagar">Forma de pagamento</label>
-            <input id="formaPagamentoContaPagar" name="forma_pagamento" type="text" autocomplete="off" value="Pix" placeholder="Pix, dinheiro, banco, boleto">
-            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">O saldo da conta baixa apenas pelo principal. A saida financeira considera principal + encargos.</small>
-          </div>
-          <div>
-            <label for="observacaoContaPagar">Observacao</label>
-            <textarea id="observacaoContaPagar" name="observacao" placeholder="Opcional"></textarea>
-          </div>
+
+          <small class="cp-distribuicao-help">
+            O valor distribuído deve ser exatamente igual ao total efetivamente pago.
+          </small>
+        </section>
+
+        <input
+          id="formaPagamentoContaPagar"
+          name="forma_pagamento"
+          type="hidden"
+          value="Pix"
+        >
+
+        <div class="cp-baixa-regra">
+          <span class="cp-baixa-info-icon">i</span>
+          <span>O saldo da conta baixa apenas pelo principal. A saída financeira considera principal + encargos.</span>
         </div>
       </div>
       <div class="cp-modal-actions">
@@ -481,6 +566,364 @@
     </form>
   </div>
 </div>
+
+
+<style>
+#modalBaixaContaPagar .cp-modal-box{
+  width:min(1180px,96vw);
+  max-width:1180px;
+  max-height:94vh;
+  border-radius:18px;
+  overflow:auto;
+}
+
+#modalBaixaContaPagar .cp-modal-top{
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:#fff;
+}
+
+#modalBaixaContaPagar .cp-baixa-redesign{
+  padding:20px 24px 14px;
+}
+
+#modalBaixaContaPagar .cp-baixa-summary{
+  display:grid;
+  grid-template-columns:repeat(6,1fr);
+  gap:12px;
+}
+
+#modalBaixaContaPagar .cp-baixa-summary .cp-modal-info{
+  grid-column:span 2;
+  min-height:74px;
+}
+
+#modalBaixaContaPagar .cp-baixa-summary .cp-info-fornecedor,
+#modalBaixaContaPagar .cp-baixa-summary .cp-info-origem{
+  grid-column:span 3;
+}
+
+
+#modalBaixaContaPagar .cp-info-vencimento{
+  display:flex;
+  flex-direction:column;
+}
+
+#modalBaixaContaPagar .cp-data-pagamento-label{
+  display:block;
+  margin-top:15px;
+  margin-bottom:6px;
+  color:#60708b;
+  font-size:12px;
+  font-weight:900;
+  text-transform:uppercase;
+}
+
+#modalBaixaContaPagar .cp-data-pagamento-input{
+  width:100%;
+  box-sizing:border-box;
+  padding:9px 11px;
+  border:1px solid #c9d6e7;
+  border-radius:8px;
+  background:#fff;
+  color:#102347;
+  font-size:15px;
+  font-weight:700;
+}
+
+#modalBaixaContaPagar .cp-observacao-final{
+  margin-top:17px;
+}
+
+#modalBaixaContaPagar .cp-observacao-final label{
+  display:block;
+  margin-bottom:7px;
+  color:#172b4d;
+  font-weight:800;
+}
+
+#modalBaixaContaPagar .cp-observacao-final input{
+  width:100%;
+  box-sizing:border-box;
+  padding:11px 13px;
+  border:1px solid #c9d6e7;
+  border-radius:9px;
+  background:#fff;
+}
+
+#modalBaixaContaPagar .cp-baixa-divider{
+  height:1px;
+  background:#dbe4ef;
+  margin:18px 0;
+}
+
+#modalBaixaContaPagar .cp-baixa-valores{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:16px;
+  align-items:end;
+}
+
+#modalBaixaContaPagar .cp-baixa-field label,
+#modalBaixaContaPagar .cp-baixa-total label,
+#modalBaixaContaPagar .cp-baixa-rodape-campos label{
+  display:block;
+  margin-bottom:7px;
+  font-weight:800;
+  color:#172b4d;
+}
+
+#modalBaixaContaPagar .cp-baixa-field input,
+#modalBaixaContaPagar .cp-baixa-total input,
+#modalBaixaContaPagar .cp-baixa-rodape-campos input{
+  width:100%;
+  box-sizing:border-box;
+}
+
+#modalBaixaContaPagar .cp-baixa-total{
+  padding:11px 14px;
+  border:1px solid #bfd7ff;
+  border-radius:12px;
+  background:#eef5ff;
+}
+
+#modalBaixaContaPagar .cp-baixa-total input{
+  border:0;
+  padding:3px 0;
+  background:transparent;
+  color:#1246a3;
+  font-size:22px;
+  font-weight:900;
+  outline:none;
+}
+
+#modalBaixaContaPagar .cp-baixa-info{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:14px;
+  padding:10px 14px;
+  border:1px solid #b9dcff;
+  border-radius:10px;
+  background:#edf7ff;
+  color:#164173;
+  font-weight:600;
+}
+
+#modalBaixaContaPagar .cp-baixa-info-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 22px;
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  background:#1769e0;
+  color:#fff;
+  font-weight:900;
+}
+
+#modalBaixaContaPagar .cp-preview-hidden{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  overflow:hidden !important;
+  clip:rect(0,0,0,0) !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+}
+
+#modalBaixaContaPagar .cp-origens-section{
+  margin-top:20px;
+}
+
+#modalBaixaContaPagar .cp-origens-section h3{
+  margin:0 0 3px;
+  font-size:21px;
+  color:#102347;
+}
+
+#modalBaixaContaPagar .cp-origens-section > p{
+  margin:0 0 13px;
+  color:#60708b;
+}
+
+#modalBaixaContaPagar .cp-origens-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+
+#modalBaixaContaPagar .cp-origem-card{
+  border:1px solid;
+  border-left-width:5px;
+  border-radius:12px;
+  padding:15px 16px;
+}
+
+#modalBaixaContaPagar .cp-origem-caixa{
+  border-color:#6ba7ff;
+  border-left-color:#1769e0;
+  background:#f4f8ff;
+}
+
+#modalBaixaContaPagar .cp-origem-reserva{
+  border-color:#f6c65b;
+  border-left-color:#f3a400;
+  background:#fffaf0;
+}
+
+#modalBaixaContaPagar .cp-origem-banco{
+  border-color:#7bdba2;
+  border-left-color:#16a052;
+  background:#f2fff7;
+}
+
+#modalBaixaContaPagar .cp-origem-title{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-height:32px;
+  margin-bottom:12px;
+  font-size:14px;
+}
+
+#modalBaixaContaPagar .cp-origem-caixa .cp-origem-title{color:#1456b8;}
+#modalBaixaContaPagar .cp-origem-reserva .cp-origem-title{color:#9a6100;}
+#modalBaixaContaPagar .cp-origem-banco .cp-origem-title{color:#087d3a;}
+
+#modalBaixaContaPagar .cp-origem-icon{
+  font-size:20px;
+}
+
+#modalBaixaContaPagar .cp-origem-saldo{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin:8px 0;
+  color:#536785;
+}
+
+#modalBaixaContaPagar .cp-origem-saldo strong{
+  color:#102347;
+  font-size:16px;
+}
+
+#modalBaixaContaPagar .cp-origem-saida{
+  display:grid;
+  grid-template-columns:90px 1fr;
+  align-items:center;
+  gap:12px;
+  margin:13px 0;
+}
+
+#modalBaixaContaPagar .cp-origem-saida label{
+  margin:0;
+  color:#536785;
+  font-size:12px;
+  font-weight:900;
+}
+
+#modalBaixaContaPagar .cp-origem-saida input{
+  width:100%;
+  box-sizing:border-box;
+  padding:11px 12px;
+  border:1px solid #c9d6e7;
+  border-radius:10px;
+  background:#fff;
+  font-weight:800;
+}
+
+#modalBaixaContaPagar .cp-saldo-depois{
+  margin-top:12px;
+}
+
+#modalBaixaContaPagar .cp-origem-banco .cp-saldo-depois strong{
+  color:#087d3a;
+}
+
+#modalBaixaContaPagar .cp-distribuicao-status{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:15px;
+  margin-top:15px;
+  padding:12px 16px;
+  border:1px solid #f1a524;
+  border-radius:10px;
+  background:#fff9ed;
+  color:#b23a19;
+  font-size:16px;
+}
+
+#modalBaixaContaPagar .cp-distribuicao-status strong:last-child{
+  font-size:20px;
+}
+
+#modalBaixaContaPagar .cp-distribuicao-status.completo{
+  border-color:#72d39b;
+  background:#f0fff6;
+  color:#087d3a;
+}
+
+#modalBaixaContaPagar .cp-distribuicao-help{
+  display:block;
+  margin-top:6px;
+  color:#65748b;
+}
+
+#modalBaixaContaPagar .cp-baixa-rodape-campos{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:16px;
+  margin-top:22px;
+}
+
+#modalBaixaContaPagar .cp-aviso-atraso{
+  display:none;
+  margin-top:10px;
+  color:#92400e;
+  font-weight:800;
+}
+
+#modalBaixaContaPagar .cp-baixa-regra{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:17px;
+  color:#536785;
+  font-size:13px;
+}
+
+#modalBaixaContaPagar .cp-modal-actions{
+  position:sticky;
+  bottom:0;
+  z-index:5;
+  background:#fff;
+  border-top:1px solid #e5ebf3;
+}
+
+@media (max-width:800px){
+  #modalBaixaContaPagar .cp-baixa-summary,
+  #modalBaixaContaPagar .cp-baixa-valores,
+  #modalBaixaContaPagar .cp-origens-grid,
+  #modalBaixaContaPagar .cp-baixa-rodape-campos{
+    grid-template-columns:1fr;
+  }
+
+  #modalBaixaContaPagar .cp-baixa-summary .cp-modal-info,
+  #modalBaixaContaPagar .cp-baixa-summary .cp-info-fornecedor,
+  #modalBaixaContaPagar .cp-baixa-summary .cp-info-origem{
+    grid-column:auto;
+  }
+
+  #modalBaixaContaPagar .cp-baixa-redesign{
+    padding:15px;
+  }
+}
+</style>
 
 <script>
 (function () {
@@ -497,6 +940,13 @@
   const valorSaidaReserva = document.getElementById("valorSaidaReservaContaPagar");
   const valorSaidaBanco = document.getElementById("valorSaidaBancoContaPagar");
   const faltaDistribuir = document.getElementById("faltaDistribuirContaPagar");
+  const statusDistribuicao = document.getElementById("statusDistribuicaoContaPagar");
+  const saldoDepoisCaixa = document.getElementById("saldoDepoisCaixaContaPagar");
+  const saldoDepoisReserva = document.getElementById("saldoDepoisReservaContaPagar");
+  const saldoDepoisBanco = document.getElementById("saldoDepoisBancoContaPagar");
+  const saldoAtualCaixa = numero("{{ saldos_pagamento.caixa.texto|escapejs }}");
+  const saldoAtualReserva = numero("{{ saldos_pagamento.reserva.texto|escapejs }}");
+  const saldoAtualBanco = numero("{{ saldos_pagamento.banco.texto|escapejs }}");
   const dataPagamento = document.getElementById("dataPagamentoContaPagar");
   const avisoAtraso = document.getElementById("avisoAtrasoContaPagar");
   const formaPagamento = document.getElementById("formaPagamentoContaPagar");
@@ -581,14 +1031,21 @@
   function atualizarDistribuicao() {
     const diferenca = totalCalculado() - totalDistribuido();
 
+    if (saldoDepoisCaixa) saldoDepoisCaixa.textContent = moeda(saldoAtualCaixa - numero(valorSaidaCaixa?.value));
+    if (saldoDepoisReserva) saldoDepoisReserva.textContent = moeda(saldoAtualReserva - numero(valorSaidaReserva?.value));
+    if (saldoDepoisBanco) saldoDepoisBanco.textContent = moeda(saldoAtualBanco - numero(valorSaidaBanco?.value));
+
     if (!faltaDistribuir) return;
 
     if (Math.abs(diferenca) < 0.005) {
       faltaDistribuir.textContent = "R$ 0,00";
+      statusDistribuicao?.classList.add("completo");
     } else if (diferenca > 0) {
       faltaDistribuir.textContent = moeda(diferenca);
+      statusDistribuicao?.classList.remove("completo");
     } else {
       faltaDistribuir.textContent = moeda(Math.abs(diferenca)) + " acima";
+      statusDistribuicao?.classList.remove("completo");
     }
   }
 
