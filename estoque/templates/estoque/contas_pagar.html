@@ -1049,6 +1049,38 @@
     }
   }
 
+  function limitarOrigem(valor, saldo) {
+    return Math.max(0, Math.min(valor, Math.max(0, saldo)));
+  }
+
+  function distribuirAutomaticamenteAPartirDe(indice) {
+    const total = Math.max(0, totalCalculado());
+
+    const campos = [
+      { campo: valorSaidaCaixa, saldo: saldoAtualCaixa },
+      { campo: valorSaidaReserva, saldo: saldoAtualReserva },
+      { campo: valorSaidaBanco, saldo: saldoAtualBanco },
+    ];
+
+    let jaDistribuido = 0;
+
+    for (let i = 0; i < indice; i++) {
+      jaDistribuido += Math.max(0, numero(campos[i].campo?.value));
+    }
+
+    let restante = Math.max(0, total - jaDistribuido);
+
+    for (let i = indice; i < campos.length; i++) {
+      if (!campos[i].campo) continue;
+
+      const aplicar = limitarOrigem(restante, campos[i].saldo);
+      campos[i].campo.value = valorInput(aplicar);
+      restante = Math.max(0, restante - aplicar);
+    }
+
+    atualizarDistribuicao();
+  }
+
   function atualizarPreview() {
     const principal = numero(valorPago?.value);
     const juros = numero(jurosBancarios?.value);
@@ -1062,7 +1094,7 @@
       totalEfetivo.value = valorInput(total);
     }
 
-    atualizarDistribuicao();
+    distribuirAutomaticamenteAPartirDe(0);
   }
 
   function atualizarAvisoAtraso() {
@@ -1096,6 +1128,7 @@
     if (observacao) observacao.value = "";
     atualizarAvisoAtraso();
     atualizarPreview();
+    distribuirAutomaticamenteAPartirDe(0);
     modal?.classList.add("aberto");
     modal?.setAttribute("aria-hidden", "false");
     window.setTimeout(function () {
@@ -1167,12 +1200,34 @@
     atualizarPreview();
   });
 
-  [valorSaidaCaixa, valorSaidaReserva, valorSaidaBanco].forEach(function (campo) {
-    campo?.addEventListener("input", atualizarDistribuicao);
+  [
+    { campo: valorSaidaCaixa, indiceSeguinte: 1 },
+    { campo: valorSaidaReserva, indiceSeguinte: 2 },
+    { campo: valorSaidaBanco, indiceSeguinte: 3 },
+  ].forEach(function (item) {
+    item.campo?.addEventListener("input", function () {
+      if (item.indiceSeguinte < 3) {
+        distribuirAutomaticamenteAPartirDe(item.indiceSeguinte);
+      } else {
+        atualizarDistribuicao();
+      }
+    });
 
-    campo?.addEventListener("blur", function () {
-      campo.value = valorInput(numero(campo.value));
-      atualizarDistribuicao();
+    item.campo?.addEventListener("blur", function () {
+      const saldo =
+        item.campo === valorSaidaCaixa ? saldoAtualCaixa :
+        item.campo === valorSaidaReserva ? saldoAtualReserva :
+        saldoAtualBanco;
+
+      item.campo.value = valorInput(
+        limitarOrigem(numero(item.campo.value), saldo)
+      );
+
+      if (item.indiceSeguinte < 3) {
+        distribuirAutomaticamenteAPartirDe(item.indiceSeguinte);
+      } else {
+        atualizarDistribuicao();
+      }
     });
   });
 
