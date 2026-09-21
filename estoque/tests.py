@@ -34438,7 +34438,31 @@ class CentralContasPagarTests(TestCase):
             status=status,
         )
 
-    def _baixar(self, conta, valor, juros="0,00", data_pagamento=None):
+    def _baixar(
+        self,
+        conta,
+        valor,
+        juros="0,00",
+        data_pagamento=None,
+        saida_caixa="0,00",
+        saida_reserva="0,00",
+        saida_banco=None,
+    ):
+        if saida_banco is None:
+            principal = views._decimal_compra(valor, casas=2)
+            encargos = views._decimal_compra(juros, casas=2)
+            total_desembolso = principal + encargos
+            saida_banco = str(total_desembolso).replace(".", ",")
+
+            conta_banco = views._conta_financeira_por_forma_pagamento(
+                "Pix",
+                cartao_para_receber=False,
+            )
+            saldo_atual = views._saldo_conta_financeira(conta_banco)
+            if saldo_atual < total_desembolso:
+                conta_banco.saldo_inicial += total_desembolso - saldo_atual
+                conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+
         return self.client.post(
             reverse("estoque:conta_pagar_baixar", kwargs={"pk": conta.pk}),
             {
@@ -34447,6 +34471,9 @@ class CentralContasPagarTests(TestCase):
                 "data_pagamento": (data_pagamento or self.hoje).isoformat(),
                 "forma_pagamento": "Pix",
                 "observacao": "Baixa pela central",
+                "valor_saida_caixa": saida_caixa,
+                "valor_saida_reserva": saida_reserva,
+                "valor_saida_banco": saida_banco,
             },
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
             secure=True,
@@ -34537,6 +34564,52 @@ class CentralContasPagarTests(TestCase):
         self.assertEqual(movimento.valor, Decimal("45.00"))
         self.assertEqual(movimento.conta, conta_banco)
         self.assertEqual(views._saldo_conta_financeira(conta_banco), saldo_antes - Decimal("45.00"))
+
+    def test_baixa_com_encargos_divide_saida_entre_caixa_e_banco_sem_aumentar_principal(self):
+        conta = self._conta(valor="1000.00")
+
+        conta_caixa = views._conta_financeira_saida_pagar_fornecedor("caixa")
+        conta_banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+
+        conta_caixa.saldo_inicial = Decimal("1000.00")
+        conta_caixa.save(update_fields=["saldo_inicial", "atualizado_em"])
+        conta_banco.saldo_inicial = Decimal("1000.00")
+        conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+
+        resposta = self._baixar(
+            conta,
+            "400,00",
+            juros="20,00",
+            saida_caixa="100,00",
+            saida_banco="320,00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+
+        conta.refresh_from_db()
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimentos = MovimentoFinanceiro.objects.filter(
+            origem="conta_pagar_fornecedor"
+        )
+
+        self.assertEqual(conta.valor_original, Decimal("1000.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("600.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PARCIAL)
+
+        self.assertEqual(pagamento.valor, Decimal("400.00"))
+        self.assertEqual(pagamento.juros_bancarios, Decimal("20.00"))
+
+        self.assertEqual(movimentos.count(), 2)
+        self.assertEqual(
+            sum((m.valor for m in movimentos), Decimal("0.00")),
+            Decimal("420.00"),
+        )
+
+        movimento_caixa = movimentos.get(conta=conta_caixa)
+        movimento_banco = movimentos.get(conta=conta_banco)
+
+        self.assertEqual(movimento_caixa.valor, Decimal("100.00"))
+        self.assertEqual(movimento_banco.valor, Decimal("320.00"))
 
     def test_baixa_de_uma_parcela_nao_altera_outra_parcela_da_mesma_compra(self):
         compra = self._compra(total="1000.00")
@@ -34866,10 +34939,10 @@ class CentralContasPagarTests(TestCase):
         conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
         saldo_antes = views._saldo_conta_financeira(conta_banco)
 
-        with patch("estoque.views._registrar_movimento_conta_pagar_fornecedor", return_value=None):
-            resposta = self._baixar(conta, "260,00", juros="15,00")
+        with patch("estoque.views.MovimentoFinanceiro.objects.create", side_effect=RuntimeError("falha simulada")):
+            with self.assertRaises(RuntimeError):
+                self._baixar(conta, "260,00", juros="15,00")
 
-        self.assertEqual(resposta.status_code, 400)
         conta.refresh_from_db()
         self.assertEqual(PagamentoContaPagar.objects.count(), 0)
         self.assertEqual(MovimentoFinanceiro.objects.count(), 0)

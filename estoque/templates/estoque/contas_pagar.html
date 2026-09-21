@@ -409,23 +409,64 @@
             <input id="valorPagoContaPagar" name="valor_pago" type="text" inputmode="decimal" autocomplete="off">
           </div>
           <div>
-            <label for="jurosBancariosContaPagar">Juros/multa bancaria</label>
+            <label for="jurosBancariosContaPagar">Juros/multa/encargos</label>
             <input id="jurosBancariosContaPagar" name="juros_bancarios" type="text" inputmode="decimal" autocomplete="off" value="0,00">
           </div>
+
+          <div>
+            <label for="totalEfetivoContaPagar">Total efetivamente pago</label>
+            <input id="totalEfetivoContaPagar" type="text" inputmode="decimal" autocomplete="off" value="0,00">
+            <small style="display:block; margin-top:5px;">
+              Informe aqui o total final do boleto/comprovante para calcular os encargos automaticamente.
+            </small>
+          </div>
+
           <div class="cp-debit-preview">
             <div>Principal<strong id="previewPrincipalContaPagar">R$ 0,00</strong></div>
-            <div>Juros/multa<strong id="previewJurosContaPagar">R$ 0,00</strong></div>
+            <div>Juros/multa/encargos<strong id="previewJurosContaPagar">R$ 0,00</strong></div>
             <div>Total a debitar<strong id="previewTotalContaPagar">R$ 0,00</strong></div>
+          </div>
+
+          <div>
+            <label>De onde saiu o dinheiro?</label>
+
+            <div style="display:grid; gap:10px; margin-top:7px;">
+              <div>
+                <label for="valorSaidaCaixaContaPagar">Caixa em especie</label>
+                <small style="display:block;">Saldo: {{ saldos_pagamento.caixa.texto }}</small>
+                <input id="valorSaidaCaixaContaPagar" name="valor_saida_caixa"
+                       type="text" inputmode="decimal" autocomplete="off" value="0,00">
+              </div>
+
+              <div>
+                <label for="valorSaidaReservaContaPagar">Sangria/Reserva em maos</label>
+                <small style="display:block;">Saldo: {{ saldos_pagamento.reserva.texto }}</small>
+                <input id="valorSaidaReservaContaPagar" name="valor_saida_reserva"
+                       type="text" inputmode="decimal" autocomplete="off" value="0,00">
+              </div>
+
+              <div>
+                <label for="valorSaidaBancoContaPagar">Banco/Pix</label>
+                <small style="display:block;">Saldo: {{ saldos_pagamento.banco.texto }}</small>
+                <input id="valorSaidaBancoContaPagar" name="valor_saida_banco"
+                       type="text" inputmode="decimal" autocomplete="off" value="0,00">
+              </div>
+            </div>
+
+            <small style="display:block; margin-top:8px; font-weight:800;">
+              Falta distribuir:
+              <strong id="faltaDistribuirContaPagar">R$ 0,00</strong>
+            </small>
           </div>
           <div>
             <label for="dataPagamentoContaPagar">Data do pagamento</label>
             <input id="dataPagamentoContaPagar" name="data_pagamento" type="date">
-            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros bancarios exatamente como apareceram no banco ou boleto.</small>
+            <small id="avisoAtrasoContaPagar" style="display:none; margin-top:5px; color:#92400e; font-weight:800;">Pagamento apos o vencimento. Informe os juros/multa/encargos ou o total efetivamente pago.</small>
           </div>
           <div>
             <label for="formaPagamentoContaPagar">Forma de pagamento</label>
             <input id="formaPagamentoContaPagar" name="forma_pagamento" type="text" autocomplete="off" value="Pix" placeholder="Pix, dinheiro, banco, boleto">
-            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">O saldo da conta baixa apenas pelo principal. Caixa/Banco sai pelo total a debitar.</small>
+            <small style="display:block; margin-top:5px; color:#164173; font-weight:800;">O saldo da conta baixa apenas pelo principal. A saida financeira considera principal + encargos.</small>
           </div>
           <div>
             <label for="observacaoContaPagar">Observacao</label>
@@ -451,6 +492,11 @@
   const feedback = document.getElementById("contasPagarFeedback");
   const valorPago = document.getElementById("valorPagoContaPagar");
   const jurosBancarios = document.getElementById("jurosBancariosContaPagar");
+  const totalEfetivo = document.getElementById("totalEfetivoContaPagar");
+  const valorSaidaCaixa = document.getElementById("valorSaidaCaixaContaPagar");
+  const valorSaidaReserva = document.getElementById("valorSaidaReservaContaPagar");
+  const valorSaidaBanco = document.getElementById("valorSaidaBancoContaPagar");
+  const faltaDistribuir = document.getElementById("faltaDistribuirContaPagar");
   const dataPagamento = document.getElementById("dataPagamentoContaPagar");
   const avisoAtraso = document.getElementById("avisoAtrasoContaPagar");
   const formaPagamento = document.getElementById("formaPagamentoContaPagar");
@@ -522,12 +568,44 @@
     return new Date(hoje.getTime() - offset).toISOString().slice(0, 10);
   }
 
+  function totalCalculado() {
+    return numero(valorPago?.value) + numero(jurosBancarios?.value);
+  }
+
+  function totalDistribuido() {
+    return numero(valorSaidaCaixa?.value)
+      + numero(valorSaidaReserva?.value)
+      + numero(valorSaidaBanco?.value);
+  }
+
+  function atualizarDistribuicao() {
+    const diferenca = totalCalculado() - totalDistribuido();
+
+    if (!faltaDistribuir) return;
+
+    if (Math.abs(diferenca) < 0.005) {
+      faltaDistribuir.textContent = "R$ 0,00";
+    } else if (diferenca > 0) {
+      faltaDistribuir.textContent = moeda(diferenca);
+    } else {
+      faltaDistribuir.textContent = moeda(Math.abs(diferenca)) + " acima";
+    }
+  }
+
   function atualizarPreview() {
     const principal = numero(valorPago?.value);
     const juros = numero(jurosBancarios?.value);
+    const total = principal + juros;
+
     if (previewPrincipal) previewPrincipal.textContent = moeda(principal);
     if (previewJuros) previewJuros.textContent = moeda(juros);
-    if (previewTotal) previewTotal.textContent = moeda(principal + juros);
+    if (previewTotal) previewTotal.textContent = moeda(total);
+
+    if (totalEfetivo && document.activeElement !== totalEfetivo) {
+      totalEfetivo.value = valorInput(total);
+    }
+
+    atualizarDistribuicao();
   }
 
   function atualizarAvisoAtraso() {
@@ -552,6 +630,10 @@
     document.getElementById("baixaContaAberto").textContent = "R$ " + (botao.dataset.aberto || "0,00");
     if (valorPago) valorPago.value = valorInput(numero(botao.dataset.aberto || ""));
     if (jurosBancarios) jurosBancarios.value = "0,00";
+    if (totalEfetivo) totalEfetivo.value = valorInput(numero(botao.dataset.aberto || ""));
+    if (valorSaidaCaixa) valorSaidaCaixa.value = "0,00";
+    if (valorSaidaReserva) valorSaidaReserva.value = "0,00";
+    if (valorSaidaBanco) valorSaidaBanco.value = "0,00";
     if (dataPagamento) dataPagamento.value = hojeISO();
     if (formaPagamento && !formaPagamento.value) formaPagamento.value = "Pix";
     if (observacao) observacao.value = "";
@@ -579,15 +661,62 @@
   });
   valorPago?.addEventListener("input", atualizarPreview);
   jurosBancarios?.addEventListener("input", atualizarPreview);
+
   jurosBancarios?.addEventListener("blur", function () {
     if (!jurosBancarios.value.trim()) jurosBancarios.value = "0,00";
     jurosBancarios.value = valorInput(numero(jurosBancarios.value));
     atualizarPreview();
   });
+
   valorPago?.addEventListener("blur", function () {
-    if (!valorPago.value.trim()) valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
+    if (!valorPago.value.trim()) {
+      valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
+    }
     valorPago.value = valorInput(numero(valorPago.value));
     atualizarPreview();
+  });
+
+  totalEfetivo?.addEventListener("input", function () {
+    const principal = numero(valorPago?.value);
+    const total = numero(totalEfetivo.value);
+
+    if (total >= principal && jurosBancarios) {
+      jurosBancarios.value = valorInput(total - principal);
+    }
+
+    const encargos = numero(jurosBancarios?.value);
+
+    if (previewPrincipal) previewPrincipal.textContent = moeda(principal);
+    if (previewJuros) previewJuros.textContent = moeda(encargos);
+    if (previewTotal) previewTotal.textContent = moeda(principal + encargos);
+
+    atualizarDistribuicao();
+  });
+
+  totalEfetivo?.addEventListener("blur", function () {
+    const principal = numero(valorPago?.value);
+    let total = numero(totalEfetivo.value);
+
+    if (total < principal) {
+      total = principal;
+    }
+
+    totalEfetivo.value = valorInput(total);
+
+    if (jurosBancarios) {
+      jurosBancarios.value = valorInput(total - principal);
+    }
+
+    atualizarPreview();
+  });
+
+  [valorSaidaCaixa, valorSaidaReserva, valorSaidaBanco].forEach(function (campo) {
+    campo?.addEventListener("input", atualizarDistribuicao);
+
+    campo?.addEventListener("blur", function () {
+      campo.value = valorInput(numero(campo.value));
+      atualizarDistribuicao();
+    });
   });
 
   function camposNavegaveisModal() {
@@ -649,6 +778,32 @@
     if (confirmar) {
       confirmar.disabled = true;
       confirmar.textContent = "Baixando...";
+    }
+
+    const principal = numero(valorPago?.value);
+    const encargos = numero(jurosBancarios?.value);
+    const total = principal + encargos;
+    const distribuido = totalDistribuido();
+
+    if (principal <= 0) {
+      mostrarFeedback("erro", "Informe o principal que sera pago.");
+      if (confirmar) {
+        confirmar.disabled = false;
+        confirmar.textContent = "Confirmar baixa";
+      }
+      return;
+    }
+
+    if (Math.abs(total - distribuido) >= 0.005) {
+      mostrarFeedback(
+        "erro",
+        "Distribua o total efetivamente pago entre Caixa, Sangria/Reserva e Banco/Pix."
+      );
+      if (confirmar) {
+        confirmar.disabled = false;
+        confirmar.textContent = "Confirmar baixa";
+      }
+      return;
     }
 
     const dados = new FormData(form);

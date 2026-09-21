@@ -7227,8 +7227,13 @@ def conta_pagar_baixar(request, pk):
         try:
             valor = _decimal_compra(request.POST.get("valor_pago") or request.POST.get("valor"), casas=2)
             juros_bancarios = _decimal_compra(request.POST.get("juros_bancarios"), casas=2)
+            distribuicao_saida = {
+                "caixa": _decimal_compra(request.POST.get("valor_saida_caixa"), casas=2),
+                "reserva": _decimal_compra(request.POST.get("valor_saida_reserva"), casas=2),
+                "banco": _decimal_compra(request.POST.get("valor_saida_banco"), casas=2),
+            }
         except ValueError:
-            return JsonResponse({"ok": False, "erro": "Informe valores validos para a baixa."}, status=400)
+            return JsonResponse({"ok": False, "erro": "Informe valores validos para a baixa e para a origem do dinheiro."}, status=400)
 
         data_pagamento = parse_date(request.POST.get("data_pagamento") or "") or timezone.localdate()
         forma_pagamento = (request.POST.get("forma_pagamento") or "").strip()
@@ -7238,10 +7243,40 @@ def conta_pagar_baixar(request, pk):
             return JsonResponse({"ok": False, "erro": "Informe um valor maior que zero."}, status=400)
 
         if juros_bancarios < 0:
-            return JsonResponse({"ok": False, "erro": "Juros bancarios nao podem ser negativos."}, status=400)
+            return JsonResponse({"ok": False, "erro": "Juros/multa/encargos nao podem ser negativos."}, status=400)
 
         if valor > conta.valor_em_aberto:
-            valor = conta.valor_em_aberto
+            return JsonResponse({
+                "ok": False,
+                "erro": f"O principal informado e maior que o saldo da conta ({_financeiro_moeda_br(conta.valor_em_aberto)})."
+            }, status=400)
+
+        if any(valor_saida < Decimal("0.00") for valor_saida in distribuicao_saida.values()):
+            return JsonResponse({"ok": False, "erro": "A origem do dinheiro nao pode ter valor negativo."}, status=400)
+
+        total_desembolso = (valor + juros_bancarios).quantize(Decimal("0.01"))
+        total_distribuido = sum(distribuicao_saida.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+
+        if total_distribuido != total_desembolso:
+            diferenca = (total_desembolso - total_distribuido).quantize(Decimal("0.01"))
+            if diferenca > Decimal("0.00"):
+                erro = f"Falta distribuir {_financeiro_moeda_br(diferenca)} entre Caixa, Reserva e Banco/Pix."
+            else:
+                erro = f"A distribuicao esta {_financeiro_moeda_br(abs(diferenca))} acima do total efetivamente pago."
+            return JsonResponse({"ok": False, "erro": erro}, status=400)
+
+        for chave, valor_saida in distribuicao_saida.items():
+            if valor_saida <= Decimal("0.00"):
+                continue
+            conta_financeira = _conta_financeira_saida_pagar_fornecedor(chave)
+            if not conta_financeira:
+                return JsonResponse({"ok": False, "erro": "Nao foi possivel localizar uma das contas de saida financeira."}, status=400)
+            saldo_disponivel = _saldo_conta_financeira(conta_financeira).quantize(Decimal("0.01"))
+            if valor_saida > saldo_disponivel:
+                return JsonResponse({
+                    "ok": False,
+                    "erro": f"Saldo insuficiente em {conta_financeira.nome}. Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                }, status=400)
 
         PagamentoContaPagar.objects.create(
             conta=conta,
@@ -7255,15 +7290,39 @@ def conta_pagar_baixar(request, pk):
         conta.valor_em_aberto = (conta.valor_em_aberto - valor).quantize(Decimal("0.01"))
         conta.status = ContaPagar.STATUS_PAGA if conta.valor_em_aberto <= 0 else ContaPagar.STATUS_PARCIAL
         conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
-        movimento = _registrar_movimento_conta_pagar_fornecedor(
-            conta,
-            (valor + juros_bancarios).quantize(Decimal("0.01")),
-            data_pagamento,
-            forma_pagamento,
-        )
-        if movimento is None:
-            transaction.set_rollback(True)
-            return JsonResponse({"ok": False, "erro": "Nao foi possivel registrar a saida financeira do pagamento."}, status=400)
+        for chave, valor_saida in distribuicao_saida.items():
+            if valor_saida <= Decimal("0.00"):
+                continue
+
+            conta_financeira = _conta_financeira_saida_pagar_fornecedor(chave)
+            if not conta_financeira:
+                transaction.set_rollback(True)
+                return JsonResponse({
+                    "ok": False,
+                    "erro": "Nao foi possivel localizar uma das contas de saida financeira."
+                }, status=400)
+
+            fornecedor_nome = conta.fornecedor.nome if conta.fornecedor else ""
+            descricao = (
+                f"Pagamento de fornecedor: {fornecedor_nome}"
+                if fornecedor_nome
+                else "Pagamento de conta a pagar"
+            )
+            if conta.compra_id:
+                descricao = f"{descricao} - Compra #{conta.compra_id}"
+
+            movimento = MovimentoFinanceiro.objects.create(
+                conta=conta_financeira,
+                tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                valor=valor_saida,
+                data=data_pagamento or timezone.localdate(),
+                descricao=descricao,
+                origem="conta_pagar_fornecedor",
+            )
+
+            if movimento is None:
+                transaction.set_rollback(True)
+                return JsonResponse({"ok": False, "erro": "Nao foi possivel registrar a saida financeira do pagamento."}, status=400)
 
     return JsonResponse({
         "ok": True,
@@ -7372,7 +7431,9 @@ def pagar_fornecedor(request):
             return resposta_erro("Fornecedor nao encontrado para o pagamento.")
 
         try:
-            valor_total = _decimal_compra(valor_recebido, casas=2)
+            valor_principal = _decimal_compra(valor_recebido, casas=2)
+            juros_bancarios = _decimal_compra(request.POST.get("juros_bancarios"), casas=2)
+            valor_total = (valor_principal + juros_bancarios).quantize(Decimal("0.01"))
             distribuicao_saida = {
                 "caixa": _decimal_compra(request.POST.get("valor_saida_caixa"), casas=2),
                 "reserva": _decimal_compra(request.POST.get("valor_saida_reserva"), casas=2),
@@ -7385,8 +7446,10 @@ def pagar_fornecedor(request):
         forma_pagamento = (request.POST.get("forma_pagamento") or "").strip()
         observacao = (request.POST.get("observacao") or "").strip()
 
-        if valor_total <= Decimal("0.00"):
-            return resposta_erro("Informe um valor maior que zero.")
+        if valor_principal <= Decimal("0.00"):
+            return resposta_erro("Informe um valor principal maior que zero.")
+        if juros_bancarios < Decimal("0.00"):
+            return resposta_erro("Juros/multa/encargos nao podem ser negativos.")
         if not forma_pagamento:
             return resposta_erro("Informe a forma de pagamento.")
         if any(valor < Decimal("0.00") for valor in distribuicao_saida.values()):
@@ -7424,12 +7487,13 @@ def pagar_fornecedor(request):
                     return resposta_erro("Este fornecedor nao tem contas em aberto.")
 
                 total_aberto = sum((conta.valor_em_aberto for conta in contas), Decimal("0.00")).quantize(Decimal("0.01"))
-                if valor_total > total_aberto:
+                if valor_principal > total_aberto:
                     return resposta_erro(
-                        f"O valor informado supera o total em aberto do fornecedor ({_financeiro_moeda_br(total_aberto)})."
+                        f"O principal informado supera o total em aberto do fornecedor ({_financeiro_moeda_br(total_aberto)})."
                     )
 
-                restante = valor_total
+                restante = valor_principal
+                juros_restantes = juros_bancarios
                 aplicacoes = []
                 for conta in contas:
                     if restante <= Decimal("0.00"):
@@ -7443,11 +7507,23 @@ def pagar_fornecedor(request):
                         if observacao
                         else "Pagamento geral em Pagar fornecedor."
                     )
+                    if juros_bancarios <= Decimal("0.00"):
+                        juros_aplicar = Decimal("0.00")
+                    elif restante == valor_aplicar:
+                        juros_aplicar = juros_restantes
+                    else:
+                        juros_aplicar = (
+                            juros_bancarios * valor_aplicar / valor_principal
+                        ).quantize(Decimal("0.01"))
+                        juros_aplicar = min(juros_aplicar, juros_restantes)
+
+                    juros_restantes = (juros_restantes - juros_aplicar).quantize(Decimal("0.01"))
+
                     PagamentoContaPagar.objects.create(
                         conta=conta,
                         data_pagamento=data_pagamento,
                         valor=valor_aplicar,
-                        juros_bancarios=Decimal("0.00"),
+                        juros_bancarios=juros_aplicar,
                         forma_pagamento=forma_pagamento,
                         observacao=obs_conta,
                     )
@@ -7461,6 +7537,7 @@ def pagar_fornecedor(request):
                         "vencimento": conta.data_vencimento.strftime("%d/%m/%Y") if conta.data_vencimento else "-",
                         "saldo_antes": str(saldo_antes),
                         "valor_aplicado": str(valor_aplicar),
+                        "juros_encargos": str(juros_aplicar),
                         "saldo_depois": str(conta.valor_em_aberto.quantize(Decimal("0.01"))),
                         "status": conta.get_status_display(),
                     })
@@ -7485,6 +7562,8 @@ def pagar_fornecedor(request):
             "mensagem": f"Pagamento de {_financeiro_moeda_br(valor_total)} confirmado para {fornecedor.nome}.",
             "fornecedor_id": fornecedor.id,
             "fornecedor_nome": fornecedor.nome,
+            "valor_principal": str(valor_principal.quantize(Decimal("0.01"))),
+            "juros_bancarios": str(juros_bancarios.quantize(Decimal("0.01"))),
             "valor_pago": str(valor_total.quantize(Decimal("0.01"))),
             "aplicacoes": aplicacoes,
         })
@@ -27057,6 +27136,24 @@ def contas_pagar(request):
     periodo_label = "data de pagamento" if periodo_tipo == "pagamento" else "vencimento"
     total_desembolsado_periodo = (principal_pago_periodo + juros_pagos_periodo).quantize(Decimal("0.01"))
 
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldos_pagamento = {
+        "caixa": {
+            "valor": str((_saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")),
+        },
+        "reserva": {
+            "valor": str((_saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")),
+        },
+        "banco": {
+            "valor": str((_saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")),
+        },
+    }
+
     return render(
         request,
         "estoque/contas_pagar.html",
@@ -27083,6 +27180,7 @@ def contas_pagar(request):
             "status_choices": ContaPagar.STATUS_CHOICES,
             "situacao_choices": situacao_choices,
             "fornecedores": fornecedores,
+            "saldos_pagamento": saldos_pagamento,
         },
     )
 

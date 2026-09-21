@@ -330,8 +330,19 @@ input[placeholder*="fornecedor" i]:focus {
           {% csrf_token %}
           <input type="hidden" id="fornecedorIdPagar" name="fornecedor_id">
           <div class="pf-field">
-            <label for="valorPagoFornecedor">Valor pago</label>
+            <label for="valorPagoFornecedor">Principal que sera pago</label>
             <input id="valorPagoFornecedor" class="pf-input" name="valor_pago" type="text" inputmode="decimal" placeholder="0,00">
+          </div>
+
+          <div class="pf-form-grid">
+            <div class="pf-field">
+              <label for="jurosBancariosFornecedor">Juros/multa/encargos</label>
+              <input id="jurosBancariosFornecedor" class="pf-input" name="juros_bancarios" type="text" inputmode="decimal" value="0,00">
+            </div>
+            <div class="pf-field">
+              <label for="totalEfetivoFornecedor">Total efetivamente pago</label>
+              <input id="totalEfetivoFornecedor" class="pf-input" type="text" inputmode="decimal" value="0,00">
+            </div>
           </div>
           <div class="pf-form-grid">
             <div class="pf-field">
@@ -410,6 +421,8 @@ input[placeholder*="fornecedor" i]:focus {
   const form = document.getElementById("formPagarFornecedor");
   const fornecedorId = document.getElementById("fornecedorIdPagar");
   const valorInput = document.getElementById("valorPagoFornecedor");
+  const jurosInput = document.getElementById("jurosBancariosFornecedor");
+  const totalEfetivoInput = document.getElementById("totalEfetivoFornecedor");
   const dataInput = document.getElementById("dataPagamentoFornecedor");
   const formaInput = document.getElementById("formaPagamentoFornecedor");
   const saidaCaixaInput = document.getElementById("valorSaidaCaixaFornecedor");
@@ -471,6 +484,20 @@ input[placeholder*="fornecedor" i]:focus {
     }
   }
 
+  function totalDesembolso() {
+    return Math.round((numero(valorInput.value) + numero(jurosInput.value)) * 100) / 100;
+  }
+
+  function sincronizarTotalPelosEncargos() {
+    totalEfetivoInput.value = moedaCampo(totalDesembolso());
+  }
+
+  function sincronizarEncargosPeloTotal() {
+    const principal = numero(valorInput.value);
+    const total = numero(totalEfetivoInput.value);
+    jurosInput.value = moedaCampo(Math.max(0, total - principal));
+  }
+
   function valoresSaida() {
     return {
       caixa: numero(saidaCaixaInput.value),
@@ -497,7 +524,7 @@ input[placeholder*="fornecedor" i]:focus {
   }
 
   function preencherDepoisDoCaixa() {
-    const valor = numero(valorInput.value);
+    const valor = totalDesembolso();
     const caixa = numero(saidaCaixaInput.value);
     if (saidaAutomatica.reserva || !saidaReservaInput.value.trim()) {
       definirSaidaAutomatica(saidaReservaInput, "reserva", valor - caixa);
@@ -510,7 +537,7 @@ input[placeholder*="fornecedor" i]:focus {
   }
 
   function preencherDepoisDaReserva() {
-    const valor = numero(valorInput.value);
+    const valor = totalDesembolso();
     const caixa = numero(saidaCaixaInput.value);
     const reserva = numero(saidaReservaInput.value);
     if (saidaAutomatica.banco || !saidaBancoInput.value.trim()) {
@@ -521,7 +548,8 @@ input[placeholder*="fornecedor" i]:focus {
   }
 
   function distribuicaoSaidaValida() {
-    const valor = numero(valorInput.value);
+    const principal = numero(valorInput.value);
+    const valor = totalDesembolso();
     const saidas = valoresSaida();
     const total = Math.round((saidas.caixa + saidas.reserva + saidas.banco) * 100) / 100;
     const saldos = {
@@ -531,8 +559,9 @@ input[placeholder*="fornecedor" i]:focus {
     };
     return Boolean(
       fornecedorAtual &&
-      valor > 0 &&
-      valor <= Number(fornecedorAtual.total_aberto || 0) &&
+      principal > 0 &&
+      principal <= Number(fornecedorAtual.total_aberto || 0) &&
+      valor >= principal &&
       Math.abs(total - valor) < 0.005 &&
       saidas.caixa >= 0 &&
       saidas.reserva >= 0 &&
@@ -544,7 +573,7 @@ input[placeholder*="fornecedor" i]:focus {
   }
 
   function atualizarDistribuicaoSaida() {
-    const valor = numero(valorInput.value);
+    const valor = totalDesembolso();
     const saidas = valoresSaida();
     const saldos = {
       caixa: Number((saldosPagamento.caixa || {}).valor || 0),
@@ -598,6 +627,8 @@ input[placeholder*="fornecedor" i]:focus {
     fornecedorId.value = "";
     busca.value = "";
     valorInput.value = "0,00";
+    jurosInput.value = "0,00";
+    totalEfetivoInput.value = "0,00";
     zerarOrigensSaida();
     observacaoInput.value = "";
     fecharSugestoes();
@@ -700,6 +731,7 @@ input[placeholder*="fornecedor" i]:focus {
 
   function formatarValorPago() {
     valorInput.value = moedaCampo(numero(valorInput.value));
+    sincronizarTotalPelosEncargos();
     atualizarPrevia();
     atualizarDistribuicaoSaida();
   }
@@ -783,6 +815,8 @@ input[placeholder*="fornecedor" i]:focus {
     valorPagoEdicaoManual = false;
     valorPagoSelecaoPendente = false;
     valorInput.value = moedaCampo(fornecedorAtual.total_aberto || 0);
+    jurosInput.value = "0,00";
+    totalEfetivoInput.value = moedaCampo(fornecedorAtual.total_aberto || 0);
     zerarOrigensSaida();
     fecharSugestoes();
     renderizarContas();
@@ -881,6 +915,33 @@ input[placeholder*="fornecedor" i]:focus {
   });
   valorInput.addEventListener("change", formatarValorPago);
   valorInput.addEventListener("blur", formatarValorPago);
+
+  jurosInput.addEventListener("input", function() {
+    sincronizarTotalPelosEncargos();
+    atualizarDistribuicaoSaida();
+  });
+
+  jurosInput.addEventListener("blur", function() {
+    jurosInput.value = moedaCampo(numero(jurosInput.value));
+    sincronizarTotalPelosEncargos();
+    atualizarDistribuicaoSaida();
+  });
+
+  totalEfetivoInput.addEventListener("input", function() {
+    const principal = numero(valorInput.value);
+    const total = numero(totalEfetivoInput.value);
+    if (total >= principal) sincronizarEncargosPeloTotal();
+    atualizarDistribuicaoSaida();
+  });
+
+  totalEfetivoInput.addEventListener("blur", function() {
+    const principal = numero(valorInput.value);
+    let total = numero(totalEfetivoInput.value);
+    if (total < principal) total = principal;
+    totalEfetivoInput.value = moedaCampo(total);
+    sincronizarEncargosPeloTotal();
+    atualizarDistribuicaoSaida();
+  });
   [saidaCaixaInput, saidaReservaInput, saidaBancoInput].forEach((campo) => {
     campo.addEventListener("focus", function() {
       rolarOrigemParaCampo(campo);
@@ -914,7 +975,7 @@ input[placeholder*="fornecedor" i]:focus {
     saidaAutomatica.banco = !saidaBancoInput.value.trim();
     atualizarDistribuicaoSaida();
   });
-  [[valorInput, dataInput], [dataInput, formaInput], [formaInput, saidaCaixaInput], [saidaCaixaInput, saidaReservaInput], [saidaReservaInput, saidaBancoInput], [saidaBancoInput, observacaoInput], [observacaoInput, confirmar]].forEach(([campo, proximo]) => {
+  [[valorInput, jurosInput], [jurosInput, totalEfetivoInput], [totalEfetivoInput, dataInput], [dataInput, formaInput], [formaInput, saidaCaixaInput], [saidaCaixaInput, saidaReservaInput], [saidaReservaInput, saidaBancoInput], [saidaBancoInput, observacaoInput], [observacaoInput, confirmar]].forEach(([campo, proximo]) => {
     campo.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
@@ -941,7 +1002,7 @@ input[placeholder*="fornecedor" i]:focus {
     }
     if (!distribuicaoSaidaValida()) {
       atualizarDistribuicaoSaida();
-      mostrarFeedback("erro", "Distribua o valor pago entre Caixa, Reserva e Banco/Pix antes de confirmar.");
+      mostrarFeedback("erro", "Distribua o total efetivamente pago entre Caixa, Reserva e Banco/Pix antes de confirmar.");
       return;
     }
     confirmar.disabled = true;
@@ -950,6 +1011,7 @@ input[placeholder*="fornecedor" i]:focus {
       const dados = new FormData(form);
       dados.set("fornecedor_id", String(fornecedorAtual.id));
       dados.set("valor_pago", valor.toFixed(2).replace(".", ","));
+      dados.set("juros_bancarios", numero(jurosInput.value).toFixed(2).replace(".", ","));
       dados.set("data_pagamento", dataInput.value || "");
       dados.set("forma_pagamento", formaInput.value || "");
       dados.set("valor_saida_caixa", valoresSaida().caixa.toFixed(2).replace(".", ","));
