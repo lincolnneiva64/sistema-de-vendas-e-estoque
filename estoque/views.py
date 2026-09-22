@@ -7504,7 +7504,11 @@ def pagar_fornecedor(request):
                 contas = list(
                     ContaPagar.objects
                     .select_for_update()
-                    .filter(fornecedor=fornecedor, valor_em_aberto__gt=0)
+                    .filter(
+                        fornecedor=fornecedor,
+                        valor_em_aberto__gt=0,
+                        data_emissao__lte=data_pagamento,
+                    )
                     .exclude(status__in=[ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA])
                     .order_by("data_vencimento", "id")
                 )

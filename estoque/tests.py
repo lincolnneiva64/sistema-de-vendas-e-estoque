@@ -35377,6 +35377,80 @@ class PagarFornecedorTests(TestCase):
         self.assertEqual(movimento.valor, Decimal("260.00"))
         self.assertEqual(movimento.conta, self.conta_banco)
 
+    def test_pagamento_retroativo_nao_pode_usar_conta_emitida_depois(self):
+        data_pagamento = timezone.localdate()
+
+        self.conta.data_emissao = data_pagamento + timedelta(days=4)
+        self.conta.data_vencimento = data_pagamento + timedelta(days=10)
+        self.conta.save(update_fields=["data_emissao", "data_vencimento"])
+
+        resposta = self._post_pagamento()
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertEqual(PagamentoContaPagar.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+        self.conta.refresh_from_db()
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("260.00"))
+        self.assertEqual(self.conta.status, ContaPagar.STATUS_ABERTA)
+
+    def test_pagamento_retroativo_nao_excede_saldo_existente_na_data(self):
+        data_pagamento = timezone.localdate()
+
+        self.conta.valor_original = Decimal("100.00")
+        self.conta.valor_em_aberto = Decimal("100.00")
+        self.conta.data_emissao = data_pagamento - timedelta(days=10)
+        self.conta.data_vencimento = data_pagamento - timedelta(days=1)
+        self.conta.save()
+
+        conta_antiga_2 = ContaPagar.objects.create(
+            compra=None,
+            fornecedor=self.fornecedor,
+            data_emissao=data_pagamento - timedelta(days=5),
+            data_vencimento=data_pagamento,
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("100.00"),
+            status=ContaPagar.STATUS_ABERTA,
+        )
+
+        conta_futura = ContaPagar.objects.create(
+            compra=None,
+            fornecedor=self.fornecedor,
+            data_emissao=data_pagamento + timedelta(days=4),
+            data_vencimento=data_pagamento + timedelta(days=10),
+            valor_original=Decimal("100.00"),
+            valor_em_aberto=Decimal("100.00"),
+            status=ContaPagar.STATUS_ABERTA,
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:pagar_fornecedor"),
+            {
+                "fornecedor_id": str(self.fornecedor.id),
+                "valor_pago": "250,00",
+                "data_pagamento": data_pagamento.isoformat(),
+                "forma_pagamento": "Pix",
+                "valor_saida_caixa": "0,00",
+                "valor_saida_reserva": "0,00",
+                "valor_saida_banco": "250,00",
+                "observacao": "",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertEqual(PagamentoContaPagar.objects.count(), 0)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+
+        self.conta.refresh_from_db()
+        conta_antiga_2.refresh_from_db()
+        conta_futura.refresh_from_db()
+
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta_antiga_2.valor_em_aberto, Decimal("100.00"))
+        self.assertEqual(conta_futura.valor_em_aberto, Decimal("100.00"))
+
     def test_pagamento_geral_rollback_quando_movimento_falha(self):
         with self.assertRaises(RuntimeError):
             with patch(
