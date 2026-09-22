@@ -1103,6 +1103,56 @@ select {
     padding: 18px;
     box-shadow: 0 24px 50px rgba(15, 23, 42, 0.2);
 }
+.venda-erro-card {
+    width: min(460px, calc(100vw - 32px));
+    border-radius: 16px;
+    border: 2px solid #ef4444;
+    background: #ffffff;
+    padding: 22px;
+    box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25);
+}
+.venda-erro-titulo {
+    margin: 0 0 8px;
+    color: #b91c1c;
+    font-size: 21px;
+    font-weight: 950;
+}
+.venda-erro-aviso {
+    margin: 0 0 14px;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 750;
+}
+.venda-erro-mensagem {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: #fef2f2;
+    color: #7f1d1d;
+    font-size: 16px;
+    font-weight: 850;
+    line-height: 1.4;
+}
+.venda-erro-acoes {
+    display: flex;
+    justify-content: flex-end;
+}
+.venda-erro-ok {
+    min-width: 130px;
+    height: 40px;
+    border: 0;
+    border-radius: 10px;
+    background: #b91c1c;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+}
+.venda-erro-ok:focus {
+    outline: 3px solid #fca5a5;
+    outline-offset: 2px;
+}
+
 .venda-confirmacao-texto {
     margin: 0 0 14px;
     color: #0f172a;
@@ -3159,6 +3209,16 @@ td:first-child {
 
 </div>
 <div id="vendaToast" class="venda-toast" role="status" aria-live="polite"></div>
+<div id="vendaErroOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
+    <div class="venda-erro-card" role="alertdialog" aria-modal="true" aria-labelledby="vendaErroTitulo" aria-describedby="vendaErroMensagem">
+        <h3 id="vendaErroTitulo" class="venda-erro-titulo">VENDA N?O GRAVADA</h3>
+        <p class="venda-erro-aviso">A venda n?o foi registrada no sistema.</p>
+        <p id="vendaErroMensagem" class="venda-erro-mensagem"></p>
+        <div class="venda-erro-acoes">
+            <button type="button" id="btnVendaErroOk" class="venda-erro-ok">OK, ENTENDI</button>
+        </div>
+    </div>
+</div>
 <div id="vendaConfirmacaoOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
     <div class="venda-confirmacao-card" role="dialog" aria-modal="true" aria-labelledby="vendaConfirmacaoTexto">
         <p id="vendaConfirmacaoTexto" class="venda-confirmacao-texto"></p>
@@ -3306,6 +3366,9 @@ const btnEnviarSeparacaoVendaGravada = document.getElementById("btnEnviarSeparac
 const btnAbrirNotaSeparacaoVendaGravada = document.getElementById("btnAbrirNotaSeparacaoVendaGravada");
 const responsavelSeparacaoVendaGravada = document.getElementById("responsavelSeparacaoVendaGravada");
 const btnWhatsappSeparacaoVendaGravada = document.getElementById("btnWhatsappSeparacaoVendaGravada");
+const vendaErroOverlay = document.getElementById("vendaErroOverlay");
+const vendaErroMensagem = document.getElementById("vendaErroMensagem");
+const btnVendaErroOk = document.getElementById("btnVendaErroOk");
 const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay");
 const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
 const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
@@ -4150,6 +4213,20 @@ async function atualizarResponsavelSeparacaoVendaGravada() {
         responsavelSeparacaoVendaGravada.disabled = false;
     }
 }
+
+function mostrarErroGravacaoVenda(mensagem) {
+    vendaErroMensagem.textContent = mensagem || "N?o foi poss?vel gravar a venda.";
+    vendaErroOverlay.classList.add("visivel");
+    vendaErroOverlay.setAttribute("aria-hidden", "false");
+    requestAnimationFrame(() => btnVendaErroOk.focus());
+}
+
+function fecharErroGravacaoVenda() {
+    vendaErroOverlay.classList.remove("visivel");
+    vendaErroOverlay.setAttribute("aria-hidden", "true");
+}
+
+btnVendaErroOk.addEventListener("click", fecharErroGravacaoVenda);
 
 function confirmarAcaoVenda(mensagem, opcoes = {}) {
     return new Promise((resolve) => {
@@ -6346,8 +6423,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     const textoBotaoPadrao = vendaEdicaoVenda?.id ? "Salvar Alterações" : "Gravar Venda";
 
     if (!dadosVenda.itens.length) {
-        window.alert(
-            "VENDA NAO GRAVADA\n\n" +
+        mostrarErroGravacaoVenda(
             "Inclua pelo menos 1 item antes de gravar a venda."
         );
         focarProximoCampo(produtoBusca);
@@ -6376,9 +6452,8 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         const retorno = await resposta.json();
 
         if (!resposta.ok || !retorno.sucesso) {
-            window.alert(
-                "VENDA NAO GRAVADA\n\n" +
-                (retorno.mensagem || "Nao foi possivel gravar a venda.")
+            mostrarErroGravacaoVenda(
+                retorno.mensagem || "N?o foi poss?vel gravar a venda."
             );
             return;
         }
@@ -6401,9 +6476,8 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             limparVendaAposGravacao();
         }
     } catch (erro) {
-        window.alert(
-            "VENDA NAO GRAVADA\n\n" +
-            (erro?.message || "Falha de comunicacao ao gravar a venda.")
+        mostrarErroGravacaoVenda(
+            erro?.message || "Falha de comunica??o ao gravar a venda."
         );
     } finally {
         if (!vendaSalvaComSucesso) {
