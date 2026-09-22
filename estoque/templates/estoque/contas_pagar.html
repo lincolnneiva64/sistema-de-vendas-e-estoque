@@ -8,6 +8,7 @@
   .cp-subtitle { margin:3px 0 0; color:#64748b; font-weight:750; }
   .cp-actions, .cp-quick { display:flex; gap:8px; flex-wrap:wrap; }
   .cp-actions { justify-content:flex-end; }
+
   .cp-btn { border:0; border-radius:8px; padding:9px 13px; font-weight:850; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; min-height:38px; cursor:pointer; transition:transform .08s ease, filter .08s ease; }
   .cp-btn:active { transform:scale(.97); filter:brightness(.94); }
   .cp-btn.primary { background:#2563eb; color:#fff; }
@@ -132,6 +133,7 @@
     <div class="cp-actions">
       <a href="{% url 'estoque:compras_nova' %}" class="cp-btn primary">Nova compra</a>
       <a href="{% url 'estoque:compras_lista' %}" class="cp-btn secondary">Compras</a>
+      <a href="{% url 'estoque:contas_pagar_pagamentos' %}" class="cp-btn success">Pagamentos realizados</a>
       <a href="{% url 'estoque:painel_financeiro' %}" class="cp-btn secondary">Central Financeira</a>
     </div>
   </header>
@@ -932,6 +934,7 @@
   const fechar = document.getElementById("fecharModalBaixaContaPagar");
   const cancelar = document.getElementById("cancelarBaixaContaPagar");
   const confirmar = document.getElementById("confirmarBaixaContaPagar");
+  const tituloModal = document.getElementById("modalBaixaContaPagarTitulo");
   const feedback = document.getElementById("contasPagarFeedback");
   const valorPago = document.getElementById("valorPagoContaPagar");
   const jurosBancarios = document.getElementById("jurosBancariosContaPagar");
@@ -956,6 +959,15 @@
   const previewJuros = document.getElementById("previewJurosContaPagar");
   const previewTotal = document.getElementById("previewTotalContaPagar");
   let urlBaixaAtual = "";
+  let modoCorrecaoPagamento = false;
+
+  function restaurarBotaoConfirmacao() {
+    if (!confirmar) return;
+    confirmar.disabled = false;
+    confirmar.textContent = modoCorrecaoPagamento
+      ? "Salvar corre\u00e7\u00e3o"
+      : "Confirmar baixa";
+  }
   let vencimentoIsoAtual = "";
   let focoAnterior = null;
 
@@ -1028,12 +1040,34 @@
       + numero(valorSaidaBanco?.value);
   }
 
+  let distribuicaoAtualEdicao = {
+    caixa: 0,
+    reserva: 0,
+    banco: 0
+  };
+
   function atualizarDistribuicao() {
     const diferenca = totalCalculado() - totalDistribuido();
 
-    if (saldoDepoisCaixa) saldoDepoisCaixa.textContent = moeda(saldoAtualCaixa - numero(valorSaidaCaixa?.value));
-    if (saldoDepoisReserva) saldoDepoisReserva.textContent = moeda(saldoAtualReserva - numero(valorSaidaReserva?.value));
-    if (saldoDepoisBanco) saldoDepoisBanco.textContent = moeda(saldoAtualBanco - numero(valorSaidaBanco?.value));
+    const creditoCaixa = modoCorrecaoPagamento ? distribuicaoAtualEdicao.caixa : 0;
+    const creditoReserva = modoCorrecaoPagamento ? distribuicaoAtualEdicao.reserva : 0;
+    const creditoBanco = modoCorrecaoPagamento ? distribuicaoAtualEdicao.banco : 0;
+
+    if (saldoDepoisCaixa) {
+      saldoDepoisCaixa.textContent = moeda(
+        saldoAtualCaixa + creditoCaixa - numero(valorSaidaCaixa?.value)
+      );
+    }
+    if (saldoDepoisReserva) {
+      saldoDepoisReserva.textContent = moeda(
+        saldoAtualReserva + creditoReserva - numero(valorSaidaReserva?.value)
+      );
+    }
+    if (saldoDepoisBanco) {
+      saldoDepoisBanco.textContent = moeda(
+        saldoAtualBanco + creditoBanco - numero(valorSaidaBanco?.value)
+      );
+    }
 
     if (!faltaDistribuir) return;
 
@@ -1081,7 +1115,7 @@
     atualizarDistribuicao();
   }
 
-  function atualizarPreview() {
+  function atualizarPreview(redistribuir = true) {
     const principal = numero(valorPago?.value);
     const juros = numero(jurosBancarios?.value);
     const total = principal + juros;
@@ -1094,7 +1128,11 @@
       totalEfetivo.value = valorInput(total);
     }
 
-    distribuirAutomaticamenteAPartirDe(0);
+    if (redistribuir) {
+      distribuirAutomaticamenteAPartirDe(0);
+    } else {
+      atualizarDistribuicao();
+    }
   }
 
   function atualizarAvisoAtraso() {
@@ -1109,6 +1147,8 @@
   }
 
   function abrirModal(botao) {
+    modoCorrecaoPagamento = false;
+    distribuicaoAtualEdicao = { caixa: 0, reserva: 0, banco: 0 };
     urlBaixaAtual = botao.dataset.url || "";
     vencimentoIsoAtual = botao.dataset.vencimentoIso || "";
     focoAnterior = document.activeElement;
@@ -1137,6 +1177,73 @@
     }, 0);
   }
 
+  function abrirModalEdicao(pagamento) {
+    modoCorrecaoPagamento = true;
+    distribuicaoAtualEdicao = {
+      caixa: numero(pagamento.saida_caixa),
+      reserva: numero(pagamento.saida_reserva),
+      banco: numero(pagamento.saida_banco)
+    };
+    if (!pagamento || !modal) return;
+
+    focoAnterior = document.activeElement;
+    urlBaixaAtual = pagamento.url_correcao || "";
+    vencimentoIsoAtual = pagamento.vencimento || "";
+
+    if (tituloModal) tituloModal.textContent = "Editar pagamento";
+
+    document.getElementById("baixaContaFornecedor").textContent =
+      pagamento.fornecedor || "-";
+
+    document.getElementById("baixaContaCompra").textContent =
+      pagamento.documento
+        ? "Documento " + pagamento.documento
+        : (pagamento.compra_id ? "Compra #" + pagamento.compra_id : "Conta #" + pagamento.conta_id);
+
+    document.getElementById("baixaContaVencimento").textContent =
+      pagamento.vencimento
+        ? pagamento.vencimento.split("-").reverse().join("/")
+        : "-";
+
+    document.getElementById("baixaContaOriginal").textContent =
+      "R$ " + valorInput(numero(pagamento.valor_principal));
+
+    document.getElementById("baixaContaAberto").textContent =
+      "R$ " + valorInput(numero(pagamento.valor_principal));
+
+    if (dataPagamento) dataPagamento.value = pagamento.data_pagamento || "";
+    if (valorPago) valorPago.value = valorInput(numero(pagamento.valor_principal));
+    if (jurosBancarios) jurosBancarios.value = valorInput(numero(pagamento.juros_bancarios));
+    if (totalEfetivo) totalEfetivo.value = valorInput(numero(pagamento.total_pago));
+
+    if (valorSaidaCaixa) {
+      valorSaidaCaixa.value = valorInput(numero(pagamento.saida_caixa));
+    }
+    if (valorSaidaReserva) {
+      valorSaidaReserva.value = valorInput(numero(pagamento.saida_reserva));
+    }
+    if (valorSaidaBanco) {
+      valorSaidaBanco.value = valorInput(numero(pagamento.saida_banco));
+    }
+
+    atualizarAvisoAtraso();
+    atualizarPreview(false);
+    atualizarDistribuicao();
+
+    if (confirmar) {
+      confirmar.disabled = false;
+      confirmar.textContent = "Salvar corre\u00e7\u00e3o";
+      confirmar.title = "";
+    }
+
+    modal.classList.add("aberto");
+    modal.setAttribute("aria-hidden", "false");
+
+    window.setTimeout(function () {
+      dataPagamento?.focus();
+    }, 0);
+  }
+
   function fecharModal() {
     modal?.classList.remove("aberto");
     modal?.setAttribute("aria-hidden", "true");
@@ -1147,15 +1254,21 @@
 
   dataPagamento?.addEventListener("change", function () {
     atualizarAvisoAtraso();
-    atualizarPreview();
+    atualizarPreview(!modoCorrecaoPagamento);
   });
-  valorPago?.addEventListener("input", atualizarPreview);
-  jurosBancarios?.addEventListener("input", atualizarPreview);
+
+  valorPago?.addEventListener("input", function () {
+    atualizarPreview(!modoCorrecaoPagamento);
+  });
+
+  jurosBancarios?.addEventListener("input", function () {
+    atualizarPreview(!modoCorrecaoPagamento);
+  });
 
   jurosBancarios?.addEventListener("blur", function () {
     if (!jurosBancarios.value.trim()) jurosBancarios.value = "0,00";
     jurosBancarios.value = valorInput(numero(jurosBancarios.value));
-    atualizarPreview();
+    atualizarPreview(!modoCorrecaoPagamento);
   });
 
   valorPago?.addEventListener("blur", function () {
@@ -1276,6 +1389,25 @@
     }
   });
 
+  {% if pagamento_edicao %}
+  abrirModalEdicao({
+    id: {{ pagamento_edicao.id }},
+    url_correcao: "{% url 'estoque:conta_pagar_pagamento_corrigir' pagamento_edicao.id %}",
+    conta_id: {{ pagamento_edicao.conta_id }},
+    fornecedor: "{{ pagamento_edicao.fornecedor|escapejs }}",
+    compra_id: {% if pagamento_edicao.compra_id %}{{ pagamento_edicao.compra_id }}{% else %}null{% endif %},
+    documento: "{{ pagamento_edicao.documento|escapejs }}",
+    vencimento: "{{ pagamento_edicao.vencimento|escapejs }}",
+    data_pagamento: "{{ pagamento_edicao.data_pagamento|escapejs }}",
+    valor_principal: "{{ pagamento_edicao.valor_principal|escapejs }}",
+    juros_bancarios: "{{ pagamento_edicao.juros_bancarios|escapejs }}",
+    total_pago: "{{ pagamento_edicao.total_pago|escapejs }}",
+    saida_caixa: "{{ pagamento_edicao.saida_caixa|escapejs }}",
+    saida_reserva: "{{ pagamento_edicao.saida_reserva|escapejs }}",
+    saida_banco: "{{ pagamento_edicao.saida_banco|escapejs }}"
+  });
+  {% endif %}
+
   fechar?.addEventListener("click", fecharModal);
   cancelar?.addEventListener("click", fecharModal);
   document.addEventListener("keydown", function (event) {
@@ -1289,7 +1421,7 @@
     if (!urlBaixaAtual) return;
     if (confirmar) {
       confirmar.disabled = true;
-      confirmar.textContent = "Baixando...";
+      confirmar.textContent = modoCorrecaoPagamento ? "Salvando..." : "Baixando...";
     }
 
     const principal = numero(valorPago?.value);
@@ -1300,8 +1432,7 @@
     if (principal <= 0) {
       mostrarFeedback("erro", "Informe o principal que sera pago.");
       if (confirmar) {
-        confirmar.disabled = false;
-        confirmar.textContent = "Confirmar baixa";
+        restaurarBotaoConfirmacao();
       }
       return;
     }
@@ -1312,8 +1443,7 @@
         "Distribua o total efetivamente pago entre Caixa, Sangria/Reserva e Banco/Pix."
       );
       if (confirmar) {
-        confirmar.disabled = false;
-        confirmar.textContent = "Confirmar baixa";
+        restaurarBotaoConfirmacao();
       }
       return;
     }
@@ -1332,17 +1462,24 @@
       if (!resposta.ok || !retorno.ok) {
         throw new Error(retorno.erro || "Nao foi possivel baixar a conta.");
       }
-      mostrarFeedback("sucesso", "Baixa registrada com sucesso.");
-      fecharModal();
+      mostrarFeedback("sucesso", modoCorrecaoPagamento ? "Pagamento corrigido com sucesso." : "Baixa registrada com sucesso.");
+      if (!modoCorrecaoPagamento) {
+        fecharModal();
+      }
       window.setTimeout(function () {
-        window.location.reload();
-      }, 450);
+        if (modoCorrecaoPagamento) {
+          const parametros = new URLSearchParams(window.location.search);
+          const retorno = parametros.get("retorno");
+          window.location.href = retorno || "{% url 'estoque:contas_pagar_pagamentos' %}";
+        } else {
+          window.location.reload();
+        }
+      }, modoCorrecaoPagamento ? 1200 : 450);
     } catch (erro) {
       mostrarFeedback("erro", erro.message || "Erro ao baixar a conta.");
     } finally {
       if (confirmar) {
-        confirmar.disabled = false;
-        confirmar.textContent = "Confirmar baixa";
+        restaurarBotaoConfirmacao();
       }
     }
   });

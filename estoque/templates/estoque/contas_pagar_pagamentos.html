@@ -1,0 +1,497 @@
+{% extends 'estoque/base.html' %}
+{% block title %}Pagamentos realizados{% endblock %}
+
+{% block content %}
+<style>
+  .pp-page {
+    max-width:1280px;
+    margin:18px auto 90px;
+    padding:0 14px;
+    color:#172033;
+  }
+
+  .pp-header {
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:14px;
+    margin-bottom:14px;
+  }
+
+  .pp-title {
+    margin:0;
+    font-size:1.55rem;
+    font-weight:950;
+  }
+
+  .pp-subtitle {
+    margin:3px 0 0;
+    color:#64748b;
+    font-weight:750;
+  }
+
+  .pp-back {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:39px;
+    padding:8px 14px;
+    border-radius:9px;
+    border:1px solid #b7ccec;
+    background:#e8f1ff;
+    color:#164173;
+    text-decoration:none;
+    font-weight:900;
+  }
+
+  .pp-periods {
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-bottom:12px;
+  }
+
+  .pp-period {
+    display:inline-flex;
+    padding:8px 13px;
+    border-radius:9px;
+    border:1px solid #d7dee9;
+    background:#fff;
+    color:#334155;
+    text-decoration:none;
+    font-weight:900;
+  }
+
+  .pp-period.active {
+    background:#172033;
+    color:#fff;
+    border-color:#172033;
+  }
+
+  .pp-card {
+    background:#fff;
+    border:1px solid #e1e7ef;
+    border-radius:12px;
+    box-shadow:0 12px 28px rgba(15,23,42,.06);
+    margin-bottom:12px;
+    overflow:hidden;
+  }
+
+  .pp-filters {
+    display:grid;
+    grid-template-columns:1.2fr 1fr .8fr .8fr auto;
+    gap:9px;
+    align-items:end;
+    padding:14px;
+  }
+
+  .pp-field label {
+    display:block;
+    margin-bottom:4px;
+    color:#334155;
+    font-size:.78rem;
+    font-weight:850;
+  }
+
+  .pp-field input,
+  .pp-field select {
+    width:100%;
+    min-height:39px;
+    padding:8px 10px;
+    border:1.5px solid #d3dbe8;
+    border-radius:8px;
+    background:#fff;
+    font-weight:750;
+  }
+
+  .pp-btn {
+    min-height:39px;
+    padding:8px 14px;
+    border:0;
+    border-radius:8px;
+    background:#2563eb;
+    color:#fff;
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .pp-summary {
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+    margin-bottom:12px;
+  }
+
+  .pp-summary-card {
+    padding:12px 14px;
+    border:1px solid #bbf7d0;
+    border-radius:10px;
+    background:#f0fdf4;
+  }
+
+  .pp-summary-card span {
+    display:block;
+    color:#64748b;
+    font-size:.72rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+
+  .pp-summary-card strong {
+    display:block;
+    margin-top:3px;
+    color:#14532d;
+    font-size:1.18rem;
+    font-weight:950;
+  }
+
+  .pp-table-wrap {
+    overflow-x:auto;
+  }
+
+  .pp-table {
+    width:100%;
+    min-width:950px;
+    border-collapse:collapse;
+  }
+
+  .pp-table th {
+    padding:10px 11px;
+    background:#eef6ff;
+    border-bottom:1px solid #dbeafe;
+    color:#164173;
+    text-align:left;
+    font-size:.7rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+
+  .pp-table td {
+    padding:11px;
+    border-bottom:1px solid #edf1f6;
+    font-weight:780;
+  }
+
+  .pp-provider {
+    font-weight:950;
+  }
+
+  .pp-money {
+    white-space:nowrap;
+    font-weight:900;
+  }
+
+  .pp-interest {
+    color:#92400e;
+  }
+
+  .pp-total {
+    color:#166534;
+    font-weight:950;
+  }
+
+  .pp-empty {
+    padding:30px 15px;
+    text-align:center;
+    color:#64748b;
+    font-weight:850;
+  }
+
+  @media (max-width:760px) {
+    .pp-header {
+      flex-direction:column;
+      align-items:stretch;
+    }
+
+    .pp-filters {
+      grid-template-columns:1fr;
+    }
+
+    .pp-summary {
+      grid-template-columns:1fr;
+    }
+
+    .pp-period {
+      flex:1 1 calc(50% - 8px);
+      justify-content:center;
+    }
+  }
+
+.pp-filter-actions {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  width:auto;
+}
+
+.pp-filter-actions .pp-btn {
+  width:auto;
+  min-width:82px;
+  white-space:nowrap;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.pp-btn-clear {
+  background:#2563eb;
+  color:#fff;
+  border:0;
+  text-decoration:none;
+}
+
+.pp-btn-clear:hover {
+  background:#1d4ed8;
+}
+</style>
+
+<div class="pp-page">
+
+  <header class="pp-header">
+    <div>
+      <h1 class="pp-title">Pagamentos realizados</h1>
+      <p class="pp-subtitle">Historico de contas pagas a fornecedores.</p>
+    </div>
+
+    <a href="{% url 'estoque:contas_pagar' %}" class="pp-back">
+      Voltar para Contas a Pagar
+    </a>
+  </header>
+
+  <div class="pp-periods">
+    <a href="?periodo=hoje" class="pp-period{% if periodo == 'hoje' %} active{% endif %}">Hoje</a>
+    <a href="?periodo=ontem" class="pp-period{% if periodo == 'ontem' %} active{% endif %}">Ontem</a>
+    <a href="?periodo=7" class="pp-period{% if periodo == '7' %} active{% endif %}">7 dias</a>
+    <a href="?periodo=30" class="pp-period{% if periodo == '30' %} active{% endif %}">30 dias</a>
+    <a href="?periodo=personalizado" class="pp-period{% if periodo == 'personalizado' %} active{% endif %}">Periodo</a>
+  </div>
+
+  <section class="pp-card">
+    <form method="get" class="pp-filters" id="pagamentosFiltros">
+      <input type="hidden" name="periodo" value="{{ periodo }}">
+
+      <div class="pp-field">
+        <label>Fornecedor</label>
+        <select name="fornecedor" id="pagamentoFornecedor">
+          <option value="">Todos</option>
+          {% for fornecedor in fornecedores %}
+            <option value="{{ fornecedor.id }}"
+              {% if fornecedor_id == fornecedor.id|stringformat:"s" %}selected{% endif %}>
+              {{ fornecedor.nome }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="pp-field">
+        <label>Documento / compra</label>
+        <input type="search" name="documento" id="pagamentoDocumento" value="{{ documento }}" placeholder="Documento ou compra">
+      </div>
+
+      <div class="pp-field">
+        <label>Inicio</label>
+        <input type="date" name="data_inicio" id="pagamentoInicio" value="{{ data_inicio }}">
+      </div>
+
+      <div class="pp-field">
+        <label>Fim</label>
+        <input type="date" name="data_fim" id="pagamentoFim" value="{{ data_fim }}">
+      </div>
+      <div class="pp-filter-actions">
+        <button type="submit" class="pp-btn" id="pagamentoFiltrar">Filtrar</button>
+        <a href="?periodo=hoje" class="pp-btn pp-btn-clear" id="pagamentoLimpar">Limpar</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="pp-summary">
+    <div class="pp-summary-card">
+      <span>Principal pago</span>
+      <strong>R$ {{ total_principal|floatformat:2 }}</strong>
+    </div>
+
+    <div class="pp-summary-card">
+      <span>Encargos</span>
+      <strong>R$ {{ total_encargos|floatformat:2 }}</strong>
+    </div>
+
+    <div class="pp-summary-card">
+      <span>Total desembolsado</span>
+      <strong>R$ {{ total_desembolsado|floatformat:2 }}</strong>
+    </div>
+  </section>
+
+  <section class="pp-card pp-table-wrap">
+    <table class="pp-table">
+      <thead>
+        <tr>
+          <th>Dt. pagamento</th>
+          <th>Fornecedor</th>
+          <th>Documento</th>
+          <th>Vencimento</th>
+          <th>Principal</th>
+          <th>Encargos</th>
+          <th>Total pago</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for pagamento in pagamentos %}
+          <tr>
+            <td>{{ pagamento.data_pagamento|date:"d/m/Y" }}</td>
+
+            <td class="pp-provider">
+              {% if pagamento.conta.fornecedor %}
+                {{ pagamento.conta.fornecedor.nome }}
+              {% else %}
+                Fornecedor nao informado
+              {% endif %}
+            </td>
+
+            <td>{{ pagamento.documento_exibicao }}</td>
+
+            <td>
+              {% if pagamento.conta.data_vencimento %}
+                {{ pagamento.conta.data_vencimento|date:"d/m/Y" }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td class="pp-money">R$ {{ pagamento.valor|floatformat:2 }}</td>
+
+            <td class="pp-money pp-interest">
+              R$ {{ pagamento.juros_bancarios|floatformat:2 }}
+            </td>
+
+            <td class="pp-money pp-total">
+              R$ {{ pagamento.total_desembolsado|floatformat:2 }}
+            </td>
+
+            <td>
+              <a
+                href="{% url 'estoque:contas_pagar' %}?editar_pagamento={{ pagamento.id }}&retorno={{ request.get_full_path|urlencode }}"
+                class="pp-edit"
+              >
+                Editar
+              </a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="8" class="pp-empty">
+              Nenhum pagamento encontrado neste periodo.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById('pagamentosFiltros');
+  if (!form) return;
+
+  const fornecedor = document.getElementById('pagamentoFornecedor');
+  const documento = document.getElementById('pagamentoDocumento');
+  const inicio = document.getElementById('pagamentoInicio');
+  const fim = document.getElementById('pagamentoFim');
+  const periodo = form.querySelector('input[name="periodo"]');
+  const filtrar = document.getElementById('pagamentoFiltrar');
+  const limpar = document.getElementById('pagamentoLimpar');
+
+  function enviar() {
+    form.requestSubmit();
+  }
+
+  function enviarPeriodoPersonalizado() {
+    if (periodo) {
+      periodo.value = 'personalizado';
+    }
+    enviar();
+  }
+
+  if (fornecedor) {
+    fornecedor.addEventListener('change', function () {
+      sessionStorage.setItem('pagamentosFoco', 'fornecedor');
+      enviar();
+    });
+  }
+
+  const focoRestaurar = sessionStorage.getItem('pagamentosFoco');
+
+  if (focoRestaurar === 'fim' && fim) {
+    sessionStorage.removeItem('pagamentosFoco');
+
+    window.setTimeout(function () {
+      fim.focus();
+    }, 0);
+  } else if (fornecedor) {
+    if (focoRestaurar === 'fornecedor') {
+      sessionStorage.removeItem('pagamentosFoco');
+    }
+
+    window.setTimeout(function () {
+      fornecedor.focus();
+    }, 0);
+  }
+
+  if (inicio) {
+    inicio.addEventListener('change', enviarPeriodoPersonalizado);
+  }
+
+  if (fim) {
+    fim.addEventListener('change', enviarPeriodoPersonalizado);
+  }
+
+
+  form.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') return;
+
+    const fluxo = [
+      fornecedor,
+      documento,
+      inicio,
+      fim,
+      filtrar,
+      limpar
+    ].filter(Boolean);
+
+    const indice = fluxo.indexOf(event.target);
+
+    if (indice === -1) return;
+
+    event.preventDefault();
+
+    if (event.target === fim) {
+      if (periodo) {
+        periodo.value = 'personalizado';
+      }
+
+      sessionStorage.setItem('pagamentosFoco', 'fim');
+      enviar();
+      return;
+    }
+
+    if (indice < fluxo.length - 1) {
+      fluxo[indice + 1].focus();
+      return;
+    }
+
+    limpar.click();
+  });
+  form.addEventListener('submit', function () {
+    const botao = form.querySelector('button[type="submit"]');
+    if (botao) {
+      botao.disabled = true;
+      botao.textContent = 'Filtrando...';
+    }
+  });
+})();
+</script>
+
+{% endblock %}

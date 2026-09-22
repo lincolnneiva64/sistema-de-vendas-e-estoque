@@ -2421,6 +2421,13 @@ class MovimentoFinanceiro(models.Model):
         null=True,
         related_name="movimentos_financeiros",
     )
+    pagamento_conta_pagar = models.ForeignKey(
+        PagamentoContaPagar,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="movimentos_financeiros",
+    )
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:

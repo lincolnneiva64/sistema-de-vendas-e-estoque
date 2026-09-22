@@ -7278,7 +7278,7 @@ def conta_pagar_baixar(request, pk):
                     "erro": f"Saldo insuficiente em {conta_financeira.nome}. Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
                 }, status=400)
 
-        PagamentoContaPagar.objects.create(
+        pagamento = PagamentoContaPagar.objects.create(
             conta=conta,
             data_pagamento=data_pagamento,
             valor=valor,
@@ -7318,6 +7318,7 @@ def conta_pagar_baixar(request, pk):
                 data=data_pagamento or timezone.localdate(),
                 descricao=descricao,
                 origem="conta_pagar_fornecedor",
+                pagamento_conta_pagar=pagamento,
             )
 
             if movimento is None:
@@ -26790,6 +26791,23 @@ def pedido_detalhe(request, pk):
 
 
 def contas_pagar(request):
+    editar_pagamento_id = (request.GET.get("editar_pagamento") or "").strip()
+    pagamento_edicao = None
+
+    if editar_pagamento_id:
+        try:
+            editar_pagamento_pk = int(editar_pagamento_id)
+        except (TypeError, ValueError):
+            editar_pagamento_pk = None
+
+        if editar_pagamento_pk:
+            pagamento_edicao = (
+                PagamentoContaPagar.objects
+                .select_related("conta", "conta__fornecedor", "conta__compra")
+                .filter(pk=editar_pagamento_pk)
+                .first()
+            )
+
     termo = request.GET.get("q", "").strip()
     fornecedor_id = request.GET.get("fornecedor", "").strip()
     compra_documento = request.GET.get("compra", "").strip()
@@ -26934,6 +26952,7 @@ def contas_pagar(request):
     )
     principal_pago_periodo = resumo_pagamentos.get("principal") or Decimal("0.00")
     juros_pagos_periodo = resumo_pagamentos.get("juros") or Decimal("0.00")
+
     resumo_cards["juros"] = {
         "valor": juros_pagos_periodo,
         "quantidade": resumo_juros.get("quantidade") or 0,
@@ -27154,6 +27173,54 @@ def contas_pagar(request):
         },
     }
 
+    pagamento_edicao_contexto = None
+    if pagamento_edicao:
+        conta_edicao = pagamento_edicao.conta
+
+        distribuicao_edicao = {
+            "caixa": Decimal("0.00"),
+            "reserva": Decimal("0.00"),
+            "banco": Decimal("0.00"),
+        }
+
+        movimentos_pagamento = pagamento_edicao.movimentos_financeiros.select_related("conta")
+
+        for movimento in movimentos_pagamento:
+            valor_movimento = _financeiro_dinheiro(movimento.valor)
+
+            if movimento.tipo == MovimentoFinanceiro.TIPO_ENTRADA:
+                valor_movimento = -valor_movimento
+            elif movimento.tipo != MovimentoFinanceiro.TIPO_SAIDA:
+                continue
+
+            if conta_caixa and movimento.conta_id == conta_caixa.id:
+                distribuicao_edicao["caixa"] += valor_movimento
+            elif conta_reserva and movimento.conta_id == conta_reserva.id:
+                distribuicao_edicao["reserva"] += valor_movimento
+            elif conta_banco and movimento.conta_id == conta_banco.id:
+                distribuicao_edicao["banco"] += valor_movimento
+
+        pagamento_edicao_contexto = {
+            "id": pagamento_edicao.id,
+            "conta_id": conta_edicao.id,
+            "fornecedor": conta_edicao.fornecedor.nome if conta_edicao.fornecedor else "Fornecedor nao informado",
+            "compra_id": conta_edicao.compra_id,
+            "documento": conta_edicao.documento_legado or "",
+            "vencimento": conta_edicao.data_vencimento.isoformat() if conta_edicao.data_vencimento else "",
+            "data_pagamento": pagamento_edicao.data_pagamento.isoformat(),
+            "valor_principal": str(_financeiro_dinheiro(pagamento_edicao.valor).quantize(Decimal("0.01"))),
+            "juros_bancarios": str(_financeiro_dinheiro(pagamento_edicao.juros_bancarios).quantize(Decimal("0.01"))),
+            "total_pago": str(
+                (
+                    _financeiro_dinheiro(pagamento_edicao.valor)
+                    + _financeiro_dinheiro(pagamento_edicao.juros_bancarios)
+                ).quantize(Decimal("0.01"))
+            ),
+            "saida_caixa": str(distribuicao_edicao["caixa"].quantize(Decimal("0.01"))),
+            "saida_reserva": str(distribuicao_edicao["reserva"].quantize(Decimal("0.01"))),
+            "saida_banco": str(distribuicao_edicao["banco"].quantize(Decimal("0.01"))),
+        }
+
     return render(
         request,
         "estoque/contas_pagar.html",
@@ -27177,10 +27244,415 @@ def contas_pagar(request):
             "juros_pagos_periodo": juros_pagos_periodo,
             "total_desembolsado_periodo": total_desembolsado_periodo,
             "pagamentos_com_juros_quantidade": resumo_juros.get("quantidade") or 0,
+            "pagamento_edicao": pagamento_edicao_contexto,
             "status_choices": ContaPagar.STATUS_CHOICES,
             "situacao_choices": situacao_choices,
             "fornecedores": fornecedores,
             "saldos_pagamento": saldos_pagamento,
+        },
+    )
+
+
+
+
+@require_POST
+@transaction.atomic
+def conta_pagar_pagamento_corrigir(request, pk):
+    pagamento = (
+        PagamentoContaPagar.objects
+        .select_for_update()
+        .filter(pk=pk)
+        .first()
+    )
+
+    if not pagamento:
+        return JsonResponse({"erro": "Pagamento nao encontrado."}, status=404)
+
+    conta = (
+        ContaPagar.objects
+        .select_for_update()
+        .get(pk=pagamento.conta_id)
+    )
+
+    data_pagamento = parse_date((request.POST.get("data_pagamento") or "").strip())
+    if not data_pagamento:
+        return JsonResponse({"erro": "Informe uma data de pagamento valida."}, status=400)
+
+    valor_novo = _financeiro_dinheiro(
+        _parse_decimal_financeiro(request.POST.get("valor_pago"))
+    )
+    juros_novos = _financeiro_dinheiro(
+        _parse_decimal_financeiro(request.POST.get("juros_bancarios"))
+    )
+
+    if valor_novo <= Decimal("0.00"):
+        return JsonResponse({"erro": "O principal deve ser maior que zero."}, status=400)
+
+    if juros_novos < Decimal("0.00"):
+        return JsonResponse({"erro": "Os encargos nao podem ser negativos."}, status=400)
+
+    valor_antigo = _financeiro_dinheiro(pagamento.valor)
+    juros_antigos = _financeiro_dinheiro(pagamento.juros_bancarios)
+
+    principal_disponivel = (
+        _financeiro_dinheiro(conta.valor_em_aberto) + valor_antigo
+    ).quantize(Decimal("0.01"))
+
+    if valor_novo > principal_disponivel:
+        return JsonResponse(
+            {
+                "erro": (
+                    "O principal corrigido nao pode ultrapassar "
+                    f"{_financeiro_moeda_br(principal_disponivel)}."
+                )
+            },
+            status=400,
+        )
+
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+
+    contas_origem = {
+        "caixa": conta_caixa,
+        "reserva": conta_reserva,
+        "banco": conta_banco,
+    }
+
+    nova_distribuicao = {
+        "caixa": _financeiro_dinheiro(
+            _parse_decimal_financeiro(request.POST.get("valor_saida_caixa"))
+        ),
+        "reserva": _financeiro_dinheiro(
+            _parse_decimal_financeiro(request.POST.get("valor_saida_reserva"))
+        ),
+        "banco": _financeiro_dinheiro(
+            _parse_decimal_financeiro(request.POST.get("valor_saida_banco"))
+        ),
+    }
+
+    if any(valor < Decimal("0.00") for valor in nova_distribuicao.values()):
+        return JsonResponse({"erro": "A distribuicao financeira nao pode ser negativa."}, status=400)
+
+    total_novo = (valor_novo + juros_novos).quantize(Decimal("0.01"))
+    total_distribuido = sum(
+        nova_distribuicao.values(),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+    if total_distribuido != total_novo:
+        return JsonResponse(
+            {
+                "erro": (
+                    "A soma de Caixa, Sangria/Reserva e Banco/Pix deve ser "
+                    f"exatamente {_financeiro_moeda_br(total_novo)}."
+                )
+            },
+            status=400,
+        )
+
+    movimentos_pagamento = list(
+        pagamento.movimentos_financeiros
+        .select_for_update()
+        .select_related("conta")
+    )
+
+    if not movimentos_pagamento:
+        return JsonResponse(
+            {
+                "erro": (
+                    "Este pagamento antigo ainda nao possui a origem financeira "
+                    "vinculada. A correcao foi bloqueada para evitar alterar saldo incorretamente."
+                )
+            },
+            status=409,
+        )
+
+    distribuicao_antiga = {
+        "caixa": Decimal("0.00"),
+        "reserva": Decimal("0.00"),
+        "banco": Decimal("0.00"),
+    }
+
+    for movimento in movimentos_pagamento:
+        if conta_caixa and movimento.conta_id == conta_caixa.id:
+            chave = "caixa"
+        elif conta_reserva and movimento.conta_id == conta_reserva.id:
+            chave = "reserva"
+        elif conta_banco and movimento.conta_id == conta_banco.id:
+            chave = "banco"
+        else:
+            return JsonResponse(
+                {"erro": "O pagamento possui uma origem financeira nao reconhecida."},
+                status=409,
+            )
+
+        valor_movimento = _financeiro_dinheiro(movimento.valor)
+
+        if movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA:
+            distribuicao_antiga[chave] += valor_movimento
+        elif movimento.tipo == MovimentoFinanceiro.TIPO_ENTRADA:
+            distribuicao_antiga[chave] -= valor_movimento
+        else:
+            return JsonResponse(
+                {"erro": "O pagamento possui um movimento financeiro de tipo nao reconhecido."},
+                status=409,
+            )
+
+    for chave in distribuicao_antiga:
+        distribuicao_antiga[chave] = distribuicao_antiga[chave].quantize(
+            Decimal("0.01")
+        )
+        if distribuicao_antiga[chave] < Decimal("0.00"):
+            return JsonResponse(
+                {
+                    "erro": (
+                        "O historico financeiro deste pagamento ficou inconsistente. "
+                        "Nenhuma alteracao foi feita."
+                    )
+                },
+                status=409,
+            )
+
+    total_antigo_movimentos = sum(
+        distribuicao_antiga.values(),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+    total_antigo_pagamento = (
+        valor_antigo + juros_antigos
+    ).quantize(Decimal("0.01"))
+
+    if total_antigo_movimentos != total_antigo_pagamento:
+        return JsonResponse(
+            {
+                "erro": (
+                    "Os movimentos financeiros vinculados nao conferem com o "
+                    "valor atual do pagamento. Nenhuma alteracao foi feita."
+                )
+            },
+            status=409,
+        )
+
+    sem_alteracoes = (
+        data_pagamento == pagamento.data_pagamento
+        and valor_novo == valor_antigo
+        and juros_novos == juros_antigos
+        and nova_distribuicao == distribuicao_antiga
+    )
+
+    if sem_alteracoes:
+        return JsonResponse(
+            {
+                "ok": True,
+                "mensagem": "Nenhuma alteracao foi necessaria.",
+                "pagamento_id": pagamento.id,
+                "sem_alteracoes": True,
+            }
+        )
+
+    # Reabre o principal anteriormente baixado e aplica o principal corrigido.
+    novo_em_aberto = (
+        _financeiro_dinheiro(conta.valor_em_aberto)
+        + valor_antigo
+        - valor_novo
+    ).quantize(Decimal("0.01"))
+
+    if novo_em_aberto < Decimal("0.00"):
+        return JsonResponse({"erro": "A correcao deixaria a conta com saldo negativo."}, status=400)
+
+    conta.valor_em_aberto = novo_em_aberto
+
+    if novo_em_aberto == Decimal("0.00"):
+        conta.status = ContaPagar.STATUS_PAGA
+    elif novo_em_aberto < _financeiro_dinheiro(conta.valor_original):
+        conta.status = ContaPagar.STATUS_PARCIAL
+    else:
+        conta.status = ContaPagar.STATUS_ABERTA
+
+    conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
+    data_antiga = pagamento.data_pagamento
+
+    pagamento.data_pagamento = data_pagamento
+    pagamento.valor = valor_novo
+    pagamento.juros_bancarios = juros_novos
+    pagamento.save(
+        update_fields=[
+            "data_pagamento",
+            "valor",
+            "juros_bancarios",
+        ]
+    )
+
+    fornecedor_nome = (
+        conta.fornecedor.nome
+        if conta.fornecedor
+        else f"Conta #{conta.id}"
+    )
+
+    # Anula financeiramente a distribuicao anterior.
+    for chave, valor in distribuicao_antiga.items():
+        if valor <= Decimal("0.00"):
+            continue
+
+        conta_financeira = contas_origem[chave]
+        if not conta_financeira:
+            raise ValueError(f"Conta financeira {chave} nao encontrada.")
+
+        MovimentoFinanceiro.objects.create(
+            conta=conta_financeira,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=valor,
+            data=data_antiga,
+            descricao=f"Correcao de pagamento de fornecedor: {fornecedor_nome} - estorno",
+            origem="conta_pagar_correcao",
+            pagamento_conta_pagar=pagamento,
+        )
+
+    # Aplica a nova distribuicao na data corrigida.
+    for chave, valor in nova_distribuicao.items():
+        if valor <= Decimal("0.00"):
+            continue
+
+        conta_financeira = contas_origem[chave]
+        if not conta_financeira:
+            raise ValueError(f"Conta financeira {chave} nao encontrada.")
+
+        saldo_disponivel = _saldo_conta_financeira(conta_financeira)
+
+        if saldo_disponivel < valor:
+            transaction.set_rollback(True)
+            return JsonResponse(
+                {
+                    "erro": (
+                        f"Saldo insuficiente em {conta_financeira.nome}. "
+                        f"Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                    )
+                },
+                status=400,
+            )
+
+        MovimentoFinanceiro.objects.create(
+            conta=conta_financeira,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=valor,
+            data=data_pagamento,
+            descricao=f"Correcao de pagamento de fornecedor: {fornecedor_nome}",
+            origem="conta_pagar_correcao",
+            pagamento_conta_pagar=pagamento,
+        )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "mensagem": "Pagamento corrigido com sucesso.",
+            "pagamento_id": pagamento.id,
+        }
+    )
+
+
+
+def contas_pagar_pagamentos(request):
+    hoje = timezone.localdate()
+
+    periodo = (request.GET.get("periodo") or "hoje").strip()
+    fornecedor_id = (request.GET.get("fornecedor") or "").strip()
+    documento = (request.GET.get("documento") or "").strip()
+    data_inicio_txt = (request.GET.get("data_inicio") or "").strip()
+    data_fim_txt = (request.GET.get("data_fim") or "").strip()
+
+    if periodo == "ontem":
+        data_inicio = hoje - timedelta(days=1)
+        data_fim = data_inicio
+    elif periodo == "7":
+        data_inicio = hoje - timedelta(days=6)
+        data_fim = hoje
+    elif periodo == "30":
+        data_inicio = hoje - timedelta(days=29)
+        data_fim = hoje
+    elif periodo == "personalizado":
+        try:
+            data_inicio = datetime.strptime(data_inicio_txt, "%Y-%m-%d").date() if data_inicio_txt else None
+        except ValueError:
+            data_inicio = None
+        try:
+            data_fim = datetime.strptime(data_fim_txt, "%Y-%m-%d").date() if data_fim_txt else None
+        except ValueError:
+            data_fim = None
+    else:
+        periodo = "hoje"
+        data_inicio = hoje
+        data_fim = hoje
+
+    pagamentos = (
+        PagamentoContaPagar.objects
+        .select_related("conta", "conta__fornecedor", "conta__compra")
+        .order_by("-data_pagamento", "-id")
+    )
+
+    if data_inicio:
+        pagamentos = pagamentos.filter(data_pagamento__gte=data_inicio)
+
+    if data_fim:
+        pagamentos = pagamentos.filter(data_pagamento__lte=data_fim)
+
+    if fornecedor_id:
+        pagamentos = pagamentos.filter(conta__fornecedor_id=fornecedor_id)
+
+    if documento:
+        pagamentos = pagamentos.filter(
+            Q(conta__documento_legado__icontains=documento)
+            | (Q(conta__compra_id=int(documento)) if documento.isdigit() else Q(pk__isnull=True))
+        )
+
+    pagamentos = list(pagamentos)
+
+    total_principal = Decimal("0.00")
+    total_encargos = Decimal("0.00")
+
+    for pagamento in pagamentos:
+        pagamento.total_desembolsado = (
+            _financeiro_dinheiro(pagamento.valor)
+            + _financeiro_dinheiro(pagamento.juros_bancarios)
+        ).quantize(Decimal("0.01"))
+
+        total_principal += _financeiro_dinheiro(pagamento.valor)
+        total_encargos += _financeiro_dinheiro(pagamento.juros_bancarios)
+
+        conta = pagamento.conta
+        if conta.documento_legado:
+            pagamento.documento_exibicao = conta.documento_legado
+        elif conta.compra_id:
+            pagamento.documento_exibicao = f"Compra #{conta.compra_id}"
+        else:
+            pagamento.documento_exibicao = f"Conta #{conta.id}"
+
+    total_principal = total_principal.quantize(Decimal("0.01"))
+    total_encargos = total_encargos.quantize(Decimal("0.01"))
+    total_desembolsado = (total_principal + total_encargos).quantize(Decimal("0.01"))
+
+    fornecedores = (
+        Fornecedor.objects
+        .filter(contas_pagar__pagamentos__isnull=False)
+        .distinct()
+        .order_by("nome")
+    )
+
+    return render(
+        request,
+        "estoque/contas_pagar_pagamentos.html",
+        {
+            "pagamentos": pagamentos,
+            "periodo": periodo,
+            "fornecedor_id": fornecedor_id,
+            "documento": documento,
+            "data_inicio": data_inicio.isoformat() if data_inicio else "",
+            "data_fim": data_fim.isoformat() if data_fim else "",
+            "fornecedores": fornecedores,
+            "total_principal": total_principal,
+            "total_encargos": total_encargos,
+            "total_desembolsado": total_desembolsado,
         },
     )
 
