@@ -6317,6 +6317,11 @@ def cadastrar_unidade(request):
 
 def unidades_produto(request):
     termo = request.GET.get("q", "").strip()
+    sigla_sugerida = request.GET.get("sigla", "").strip().upper()
+    retorno_produto = (
+        request.GET.get("retorno_produto") == "1"
+        or request.POST.get("retorno_produto") == "1"
+    )
     unidade_selecionada = None
 
     unidades = Unidade.objects.all().order_by("-ativa", "sigla")
@@ -6392,6 +6397,11 @@ def unidades_produto(request):
                 messages.success(request, f'Unidade "{unidade.sigla}" atualizada com sucesso.')
             else:
                 messages.success(request, f'Unidade "{unidade.sigla}" cadastrada com sucesso.')
+                if retorno_produto:
+                    params = urlencode({"unidade_criada": unidade.sigla})
+                    return redirect(
+                        f"{reverse('estoque:cadastrar_produto')}?{params}"
+                    )
             return redirect(f"{reverse('estoque:unidades_produto')}?unidade={unidade.id}")
         messages.error(request, "Revise os campos destacados para salvar a unidade.")
     else:
@@ -6400,7 +6410,12 @@ def unidades_produto(request):
             unidade_selecionada = get_object_or_404(Unidade, pk=unidade_id)
             form = UnidadeForm(instance=unidade_selecionada)
         else:
-            form = UnidadeForm(initial={"ativa": True})
+            form = UnidadeForm(
+                initial={
+                    "ativa": True,
+                    "sigla": sigla_sugerida,
+                }
+            )
 
     unidades = list(unidades)
     for unidade in unidades:
@@ -6419,6 +6434,7 @@ def unidades_produto(request):
             "termo": termo,
             "unidade_selecionada": unidade_selecionada,
             "total_unidades": len(unidades),
+            "retorno_produto": retorno_produto,
         },
     )
 

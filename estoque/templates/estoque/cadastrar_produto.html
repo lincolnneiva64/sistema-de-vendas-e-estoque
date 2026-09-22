@@ -444,6 +444,95 @@ select.campo-obrigatorio-piscando:focus,
     transform: translateY(-1px);
 }
 
+
+.bloco-estoque-item {
+    align-self: start;
+}
+
+.btn-unidade-nao-encontrada {
+    display: block;
+    margin-top: 5px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    cursor: pointer;
+}
+
+.btn-unidade-nao-encontrada:hover {
+    text-decoration: underline;
+}
+
+.unidade-inteligente-corpo {
+    padding: 8px 18px 14px;
+}
+
+.unidade-inteligente-input {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid #b7c6dc;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 16px;
+    text-transform: uppercase;
+}
+
+.unidade-inteligente-input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 0.18rem rgba(37, 99, 235, 0.16);
+}
+
+.unidade-inteligente-resultado {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: #172033;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.unidade-inteligente-resultado.visivel {
+    display: block;
+}
+
+.unidade-inteligente-acoes {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.unidade-inteligente-acao {
+    width: 100%;
+    min-height: 44px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.unidade-inteligente-usar {
+    border: 1px solid #2563eb;
+    background: #dbeafe;
+    color: #164173;
+}
+
+.unidade-inteligente-cadastrar {
+    border: 1px solid #7ea6d9;
+    background: #ffffff;
+    color: #164173;
+}
+
 .linha-identificacao-produto {
     align-items: flex-start;
 }
@@ -851,6 +940,48 @@ select.campo-obrigatorio-piscando:focus,
     </div>
 </div>
 
+
+<div class="produto-mobile-modal" id="unidade-inteligente-modal">
+    <div class="produto-mobile-modal-content">
+        <div class="produto-mobile-modal-header">
+            <div class="produto-mobile-modal-title">Localizar unidade</div>
+            <div class="produto-mobile-modal-message">
+                Digite a sigla da unidade que você procura.
+            </div>
+        </div>
+
+        <div class="unidade-inteligente-corpo">
+            <input
+                type="text"
+                id="unidade-inteligente-input"
+                class="unidade-inteligente-input"
+                maxlength="20"
+                autocomplete="off"
+                placeholder="Ex.: PC"
+            >
+
+            <div
+                id="unidade-inteligente-resultado"
+                class="unidade-inteligente-resultado">
+            </div>
+
+            <div
+                id="unidade-inteligente-acoes"
+                class="unidade-inteligente-acoes">
+            </div>
+        </div>
+
+        <div class="produto-mobile-modal-actions">
+            <button
+                type="button"
+                class="produto-mobile-modal-cancelar"
+                id="unidade-inteligente-cancelar">
+                Voltar ao cadastro do produto
+            </button>
+        </div>
+    </div>
+</div>
+
   <nav class="navbar navbar-expand-lg bg-white border-bottom">
     <div class="container">
       <span class="navbar-brand fw-semibold"></span>
@@ -1071,7 +1202,7 @@ select.campo-obrigatorio-piscando:focus,
         <div class="flex-grow-1">
             {{ form.unidade_compra }}
         </div>
-        <a href="{% url 'estoque:unidades_produto' %}" class="btn-gerenciar-unidades">Gerenciar unidades</a>
+        <a href="{% url 'estoque:unidades_produto' %}" id="btn-gerenciar-unidades-produto" class="btn-gerenciar-unidades">Gerenciar unidades</a>
     </div>
 </div>
 
@@ -2265,6 +2396,305 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+
+<script>
+/* LOCALIZACAO INTELIGENTE DE UNIDADES - CADASTRO PRODUTO */
+(function () {
+  const modal = document.getElementById("unidade-inteligente-modal");
+  const input = document.getElementById("unidade-inteligente-input");
+  const resultado = document.getElementById("unidade-inteligente-resultado");
+  const acoes = document.getElementById("unidade-inteligente-acoes");
+  const cancelar = document.getElementById("unidade-inteligente-cancelar");
+
+  if (!modal || !input || !resultado || !acoes || !cancelar) return;
+
+  let campoDestinoId = null;
+  let elementoRetornoFoco = null;
+
+  function normalizar(valor) {
+    return String(valor || "")
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function distanciaLevenshtein(a, b) {
+    a = normalizar(a);
+    b = normalizar(b);
+
+    const matriz = Array.from(
+      { length: a.length + 1 },
+      function () {
+        return Array(b.length + 1).fill(0);
+      }
+    );
+
+    for (let i = 0; i <= a.length; i++) matriz[i][0] = i;
+    for (let j = 0; j <= b.length; j++) matriz[0][j] = j;
+
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const custo = a[i - 1] === b[j - 1] ? 0 : 1;
+
+        matriz[i][j] = Math.min(
+          matriz[i - 1][j] + 1,
+          matriz[i][j - 1] + 1,
+          matriz[i - 1][j - 1] + custo
+        );
+      }
+    }
+
+    return matriz[a.length][b.length];
+  }
+
+  function unidadesDisponiveis() {
+    const select = document.getElementById("unidade_compra_visual")
+      || document.getElementById("id_unidade_compra");
+
+    if (!select) return [];
+
+    return Array.from(select.options)
+      .filter(function (opcao) {
+        return normalizar(opcao.value) !== "";
+      })
+      .map(function (opcao) {
+        return {
+          sigla: String(opcao.value || "").trim(),
+          texto: String(opcao.textContent || "").trim()
+        };
+      });
+  }
+
+  function encontrarExata(sigla) {
+    const procurada = normalizar(sigla);
+
+    return unidadesDisponiveis().find(function (unidade) {
+      return normalizar(unidade.sigla) === procurada;
+    }) || null;
+  }
+
+  function encontrarSemelhante(sigla) {
+    const procurada = normalizar(sigla);
+
+    if (!procurada) return null;
+
+    const candidatas = unidadesDisponiveis()
+      .map(function (unidade) {
+        const candidata = normalizar(unidade.sigla);
+        let pontos = distanciaLevenshtein(procurada, candidata);
+
+        if (
+          candidata.startsWith(procurada) ||
+          procurada.startsWith(candidata)
+        ) {
+          pontos -= 0.75;
+        }
+
+        return {
+          unidade: unidade,
+          pontos: pontos,
+          distancia: distanciaLevenshtein(procurada, candidata)
+        };
+      })
+      .filter(function (item) {
+        /*
+         * Conservador: apenas siglas realmente proximas.
+         * PC -> PCT entra; PC -> KG nao entra.
+         */
+        return item.distancia <= 1;
+      })
+      .sort(function (a, b) {
+        return a.pontos - b.pontos;
+      });
+
+    return candidatas.length ? candidatas[0].unidade : null;
+  }
+
+  function limparResultado() {
+    resultado.classList.remove("visivel");
+    resultado.textContent = "";
+    acoes.innerHTML = "";
+  }
+
+  function fecharModal() {
+    const elementoParaFocar = elementoRetornoFoco;
+
+    modal.classList.remove("visivel");
+    campoDestinoId = null;
+    elementoRetornoFoco = null;
+    input.value = "";
+    limparResultado();
+
+    if (elementoParaFocar) {
+      setTimeout(function () {
+        elementoParaFocar.focus();
+      }, 50);
+    }
+  }
+
+  function selecionarUnidade(unidade) {
+    const visual = document.getElementById(campoDestinoId);
+
+    if (!visual) return;
+
+    const opcao = Array.from(visual.options).find(function (item) {
+      return normalizar(item.value) === normalizar(unidade.sigla);
+    });
+
+    if (!opcao) return;
+
+    visual.value = opcao.value;
+    visual.dispatchEvent(new Event("change", { bubbles: true }));
+
+    if (typeof window.atualizarTriggerSelectProduto === "function") {
+      window.atualizarTriggerSelectProduto(visual);
+    }
+
+    fecharModal();
+  }
+
+  function botao(texto, classe, aoClicar) {
+    const elemento = document.createElement("button");
+    elemento.type = "button";
+    elemento.className = "unidade-inteligente-acao " + classe;
+    elemento.textContent = texto;
+    elemento.addEventListener("click", aoClicar);
+    return elemento;
+  }
+
+  function cadastrarNova(sigla) {
+    sigla = normalizar(sigla);
+
+    if (!sigla || !campoDestinoId) return;
+
+    if (typeof window.salvarRascunhoProdutoParaUnidade !== "function") {
+      return;
+    }
+
+    window.salvarRascunhoProdutoParaUnidade(campoDestinoId);
+
+    const url = new URL(
+      "{% url 'estoque:unidades_produto' %}",
+      window.location.origin
+    );
+
+    url.searchParams.set("retorno_produto", "1");
+    url.searchParams.set("sigla", sigla);
+
+    window.location.href = url.toString();
+  }
+
+  function analisar() {
+    const sigla = normalizar(input.value);
+    limparResultado();
+
+    if (!sigla) return;
+
+    const exata = encontrarExata(sigla);
+
+    if (exata) {
+      resultado.textContent =
+        'A unidade "' + exata.sigla + '" j\u00e1 est\u00e1 cadastrada.';
+      resultado.classList.add("visivel");
+
+      acoes.appendChild(
+        botao(
+          "Usar " + exata.sigla,
+          "unidade-inteligente-usar",
+          function () {
+            selecionarUnidade(exata);
+          }
+        )
+      );
+
+      return;
+    }
+
+    const semelhante = encontrarSemelhante(sigla);
+
+    if (semelhante) {
+      resultado.textContent =
+        'A unidade "' + sigla +
+        '" n\u00e3o existe. Encontramos uma unidade semelhante: ' +
+        semelhante.texto + ".";
+      resultado.classList.add("visivel");
+
+      acoes.appendChild(
+        botao(
+          "Usar " + semelhante.sigla,
+          "unidade-inteligente-usar",
+          function () {
+            selecionarUnidade(semelhante);
+          }
+        )
+      );
+
+      acoes.appendChild(
+        botao(
+          "Cadastrar nova unidade " + sigla,
+          "unidade-inteligente-cadastrar",
+          function () {
+            cadastrarNova(sigla);
+          }
+        )
+      );
+
+      return;
+    }
+
+    resultado.textContent =
+      'A unidade "' + sigla + '" n\u00e3o est\u00e1 cadastrada.';
+    resultado.classList.add("visivel");
+
+    acoes.appendChild(
+      botao(
+        "Cadastrar unidade " + sigla,
+        "unidade-inteligente-cadastrar",
+        function () {
+          cadastrarNova(sigla);
+        }
+      )
+    );
+  }
+
+  document.addEventListener("click", function (event) {
+    const gatilho = event.target.closest(".btn-unidade-nao-encontrada");
+    if (!gatilho) return;
+
+    campoDestinoId = gatilho.dataset.unidadeDestino || null;
+    elementoRetornoFoco = campoDestinoId
+      ? document.getElementById(campoDestinoId)
+      : gatilho;
+
+    input.value = "";
+    limparResultado();
+    modal.classList.add("visivel");
+
+    setTimeout(function () {
+      input.focus();
+    }, 50);
+  });
+
+  input.addEventListener("input", analisar);
+
+  input.addEventListener("keydown", function (event) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      analisar();
+    }
+  });
+
+  cancelar.addEventListener("click", fecharModal);
+
+  modal.addEventListener("click", function (event) {
+    if (event.target === modal) {
+      fecharModal();
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
 
@@ -2484,6 +2914,11 @@ document.addEventListener("DOMContentLoaded", function () {
         <div class="bloco-estoque-item">
           <label for="unidade_compra_visual">Unidade de compra</label>
           <select id="unidade_compra_visual"></select>
+          <button type="button"
+                  class="btn-unidade-nao-encontrada"
+                  data-unidade-destino="unidade_compra_visual">
+            Não encontrou a unidade?
+          </button>
         </div>
 
         <div class="bloco-estoque-item" id="item-minimo-fracionado">
@@ -2499,6 +2934,11 @@ document.addEventListener("DOMContentLoaded", function () {
         <div class="bloco-estoque-item" id="item-unidade-fracionada">
           <label for="unidade_fracionada_visual">Unidade fracionada</label>
           <select id="unidade_fracionada_visual"></select>
+          <button type="button"
+                  class="btn-unidade-nao-encontrada"
+                  data-unidade-destino="unidade_fracionada_visual">
+            Não encontrou a unidade?
+          </button>
         </div>
 
         <div class="bloco-estoque-item">
@@ -2936,5 +3376,162 @@ document.addEventListener("DOMContentLoaded", function () {
     if (vendeFracionado !== "") e.formData.set("vende_fracionado", vendeFracionado);
     if (unidadeFracionada !== "") e.formData.set("unidade_venda_2", unidadeFracionada);
   });
+})();
+
+/* Preserva o cadastro do produto ao abrir o gerenciamento de unidades. */
+(function () {
+  const CHAVE_RASCUNHO = "cadastro_produto_rascunho_unidade_v1";
+  const form = document.getElementById("form-produto");
+  const botaoUnidades = document.getElementById("btn-gerenciar-unidades-produto");
+
+  if (!form) return;
+
+  function salvarRascunhoProduto(campoUnidadeDestino = null) {
+    const campos = [];
+
+    form.querySelectorAll("input, select, textarea").forEach(function (elemento) {
+      if (!elemento.id) return;
+      if (elemento.type === "file") return;
+      if (elemento.name === "csrfmiddlewaretoken") return;
+
+      const registro = {
+        id: elemento.id,
+        tipo: elemento.type,
+        valor: elemento.value
+      };
+
+      if (elemento.type === "checkbox" || elemento.type === "radio") {
+        registro.marcado = elemento.checked;
+      }
+
+      if (elemento.multiple) {
+        registro.valores = Array.from(elemento.selectedOptions).map(function (opcao) {
+          return opcao.value;
+        });
+      }
+
+      campos.push(registro);
+    });
+
+    sessionStorage.setItem(
+      CHAVE_RASCUNHO,
+      JSON.stringify({
+        campos: campos,
+        campoUnidadeDestino: campoUnidadeDestino
+      })
+    );
+  }
+
+  function restaurarRascunhoProduto() {
+    const bruto = sessionStorage.getItem(CHAVE_RASCUNHO);
+    if (!bruto) return false;
+
+    let rascunho;
+
+    try {
+      rascunho = JSON.parse(bruto);
+    } catch (erro) {
+      sessionStorage.removeItem(CHAVE_RASCUNHO);
+      return false;
+    }
+
+    (rascunho.campos || []).forEach(function (registro) {
+      const elemento = document.getElementById(registro.id);
+      if (!elemento) return;
+
+      if (elemento.type === "checkbox" || elemento.type === "radio") {
+        elemento.checked = Boolean(registro.marcado);
+      } else if (elemento.multiple && Array.isArray(registro.valores)) {
+        Array.from(elemento.options).forEach(function (opcao) {
+          opcao.selected = registro.valores.includes(opcao.value);
+        });
+      } else {
+        elemento.value = registro.valor ?? "";
+      }
+
+      elemento.dispatchEvent(new Event("input", { bubbles: true }));
+      elemento.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    return true;
+  }
+
+  window.salvarRascunhoProdutoParaUnidade = salvarRascunhoProduto;
+
+  if (botaoUnidades) {
+    botaoUnidades.addEventListener("click", function (event) {
+      event.preventDefault();
+
+      salvarRascunhoProduto();
+
+      const destino = new URL(botaoUnidades.href, window.location.origin);
+      destino.searchParams.set("retorno_produto", "1");
+
+      window.location.href = destino.toString();
+    });
+  }
+
+  const parametros = new URLSearchParams(window.location.search);
+  const unidadeCriada = parametros.get("unidade_criada");
+
+  if (unidadeCriada) {
+    let campoUnidadeDestino = null;
+
+    try {
+      const bruto = sessionStorage.getItem(CHAVE_RASCUNHO);
+      const rascunho = bruto ? JSON.parse(bruto) : null;
+      campoUnidadeDestino = rascunho?.campoUnidadeDestino || null;
+    } catch (erro) {
+      campoUnidadeDestino = null;
+    }
+
+    if (restaurarRascunhoProduto()) {
+      const sigla = unidadeCriada.toUpperCase();
+
+      const mapaDestinos = {
+        unidade_compra_visual: [
+          "id_unidade_compra",
+          "unidade_compra_visual"
+        ],
+        unidade_fracionada_visual: [
+          "id_unidade_venda_2",
+          "unidade_fracionada_visual"
+        ]
+      };
+
+      const idsDestino =
+        mapaDestinos[campoUnidadeDestino] ||
+        mapaDestinos.unidade_compra_visual;
+
+      idsDestino.forEach(function (id) {
+        const select = document.getElementById(id);
+        if (!select) return;
+
+        const opcao = Array.from(select.options).find(function (item) {
+          return item.value.toUpperCase() === sigla;
+        });
+
+        if (!opcao) return;
+
+        select.value = opcao.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        if (typeof window.atualizarTriggerSelectProduto === "function") {
+          window.atualizarTriggerSelectProduto(select);
+        }
+      });
+    }
+
+    sessionStorage.removeItem(CHAVE_RASCUNHO);
+
+    parametros.delete("unidade_criada");
+    const query = parametros.toString();
+
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (query ? "?" + query : "") + window.location.hash
+    );
+  }
 })();
 </script>

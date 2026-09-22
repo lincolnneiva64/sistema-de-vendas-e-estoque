@@ -561,6 +561,9 @@
 
         <form method="post" class="unidades-form" novalidate>
           {% csrf_token %}
+          {% if retorno_produto %}
+            <input type="hidden" name="retorno_produto" value="1">
+          {% endif %}
           {% if unidade_selecionada %}
             <input type="hidden" name="unidade_id" value="{{ unidade_selecionada.id }}">
           {% endif %}
