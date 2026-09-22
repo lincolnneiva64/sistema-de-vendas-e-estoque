@@ -1276,7 +1276,7 @@
       valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
     }
     valorPago.value = valorInput(numero(valorPago.value));
-    atualizarPreview();
+    atualizarPreview(!modoCorrecaoPagamento);
   });
 
   totalEfetivo?.addEventListener("input", function () {
@@ -1310,7 +1310,7 @@
       jurosBancarios.value = valorInput(total - principal);
     }
 
-    atualizarPreview();
+    atualizarPreview(!modoCorrecaoPagamento);
   });
 
   [
@@ -1319,7 +1319,7 @@
     { campo: valorSaidaBanco, indiceSeguinte: 3 },
   ].forEach(function (item) {
     item.campo?.addEventListener("input", function () {
-      if (item.indiceSeguinte < 3) {
+      if (!modoCorrecaoPagamento && item.indiceSeguinte < 3) {
         distribuirAutomaticamenteAPartirDe(item.indiceSeguinte);
       } else {
         atualizarDistribuicao();
@@ -1336,7 +1336,7 @@
         limitarOrigem(numero(item.campo.value), saldo)
       );
 
-      if (item.indiceSeguinte < 3) {
+      if (!modoCorrecaoPagamento && item.indiceSeguinte < 3) {
         distribuirAutomaticamenteAPartirDe(item.indiceSeguinte);
       } else {
         atualizarDistribuicao();
