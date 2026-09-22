@@ -6346,7 +6346,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     const textoBotaoPadrao = vendaEdicaoVenda?.id ? "Salvar Alterações" : "Gravar Venda";
 
     if (!dadosVenda.itens.length) {
-        mostrarToastVenda("Inclua pelo menos 1 item antes de gravar a venda.");
+        window.alert(
+            "VENDA NAO GRAVADA\n\n" +
+            "Inclua pelo menos 1 item antes de gravar a venda."
+        );
         focarProximoCampo(produtoBusca);
         return;
     }
@@ -6373,9 +6376,9 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         const retorno = await resposta.json();
 
         if (!resposta.ok || !retorno.sucesso) {
-            mostrarToastVenda(
-                retorno.mensagem || "Nao foi possivel gravar a venda.",
-                { duracaoMs: retorno.toast_duracao_ms }
+            window.alert(
+                "VENDA NAO GRAVADA\n\n" +
+                (retorno.mensagem || "Nao foi possivel gravar a venda.")
             );
             return;
         }
@@ -6398,7 +6401,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             limparVendaAposGravacao();
         }
     } catch (erro) {
-        mostrarToastVenda(erro?.message || "Falha de comunicacao ao gravar a venda.");
+        window.alert(
+            "VENDA NAO GRAVADA\n\n" +
+            (erro?.message || "Falha de comunicacao ao gravar a venda.")
+        );
     } finally {
         if (!vendaSalvaComSucesso) {
             btnGravarVenda.disabled = false;
