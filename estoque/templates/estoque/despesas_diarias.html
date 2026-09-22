@@ -792,7 +792,7 @@
       </div>
 
       <details class="despesa-detalhes" id="detalhesDespesa">
-        <summary>Adicionar detalhes</summary>
+        <summary>Dinheiro gasto durante a rota</summary>
 
         <div class="despesa-grid despesa-detalhes-grid">
           <div class="despesa-field">
@@ -1589,6 +1589,12 @@
     if (camposDinheiroRota) camposDinheiroRota.hidden = !ativo;
     if (rotaCampo) rotaCampo.required = ativo;
     if (dataRotaCampo) dataRotaCampo.required = ativo;
+
+    if (contaCampo) {
+      contaCampo.required = !ativo;
+      contaCampo.disabled = ativo;
+      if (ativo) contaCampo.value = "";
+    }
 
     if (!ativo) {
       if (rotaCampo) rotaCampo.value = "";

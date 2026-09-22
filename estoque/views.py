@@ -5697,7 +5697,11 @@ def despesas_diarias(request):
                 despesa_edicao
             )
 
-            if not despesa_edicao.cartao_id and not movimento_edicao:
+            if (
+                not despesa_edicao.cartao_id
+                and not despesa_edicao.paga_com_dinheiro_rota
+                and not movimento_edicao
+            ):
                 messages.error(
                     request,
                     "Nao foi possivel localizar o movimento financeiro desta despesa. "
@@ -5822,6 +5826,8 @@ def despesas_diarias(request):
 
         if modalidade_pagamento == "cartao":
             forma_pagamento = DespesaDiaria.FORMA_CARTAO
+        elif paga_com_dinheiro_rota:
+            forma_pagamento = DespesaDiaria.FORMA_DINHEIRO
         else:
             forma_pagamento = DespesaDiaria.FORMA_PIX
             if conta_saida and conta_saida.tipo == ContaFinanceira.TIPO_CAIXA:
@@ -5840,11 +5846,14 @@ def despesas_diarias(request):
             return redirect("estoque:despesas_diarias")
 
         if modalidade_pagamento == "avista":
-            if not conta_saida:
+            if not paga_com_dinheiro_rota and not conta_saida:
                 messages.error(request, "Escolha a conta de saida da despesa.")
                 return redirect("estoque:despesas_diarias")
 
-            if not _conta_saida_despesa_diaria_valida(conta_saida, contas_saida):
+            if (
+                not paga_com_dinheiro_rota
+                and not _conta_saida_despesa_diaria_valida(conta_saida, contas_saida)
+            ):
                 messages.error(
                     request,
                     "Escolha Caixa em especie, Banco/Pix ou Sangria/Reserva em maos.",
@@ -5938,7 +5947,7 @@ def despesas_diarias(request):
                 _sincronizar_lancamento_cartao_despesa(despesa_edicao)
 
 
-                if modalidade_pagamento == "cartao":
+                if modalidade_pagamento == "cartao" or paga_com_dinheiro_rota:
                     # Cartão cria dívida futura, não saída imediata de caixa/banco.
                     if movimento_edicao:
                         movimento_edicao.delete()
@@ -5986,7 +5995,7 @@ def despesas_diarias(request):
                 )
                 if modalidade_pagamento == "cartao":
                     _sincronizar_lancamento_cartao_despesa(despesa)
-                else:
+                elif not paga_com_dinheiro_rota:
                     _registrar_movimento_despesa_diaria(despesa, conta_saida)
 
                 messages.success(request, "Despesa salva com sucesso.")

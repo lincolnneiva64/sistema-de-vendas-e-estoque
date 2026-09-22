@@ -30635,11 +30635,11 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertContains(resposta_sem_data, "Informe a data da rota do dinheiro em posse da rota.")
         self.assertEqual(DespesaDiaria.objects.count(), 0)
 
-    def test_despesa_com_dinheiro_rota_gera_uma_unica_saida_financeira(self):
+    def test_despesa_com_dinheiro_rota_nao_movimenta_conta_financeira(self):
         Cliente.objects.create(nome="Cliente Genipauba", bairro="Genipauba", ativo=True)
 
         self._post_despesa(
-            self.conta_caixa,
+            None,
             valor="154,00",
             observacao="Pagamento Souza Cruz",
             paga_com_dinheiro_rota=True,
@@ -30651,10 +30651,14 @@ class DespesaDiariaFinanceiroTests(TestCase):
         self.assertTrue(despesa.paga_com_dinheiro_rota)
         self.assertEqual(despesa.rota_recebimento, "Genipauba")
         self.assertEqual(despesa.data_rota_recebimento, date(2026, 9, 9))
-        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 1)
-        movimento = self._movimento_unico()
-        self.assertEqual(movimento.valor, Decimal("154.00"))
-        self.assertEqual(movimento.conta, self.conta_caixa)
+        self.assertEqual(despesa.forma_pagamento, DespesaDiaria.FORMA_DINHEIRO)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            0,
+        )
+        self.assertEqual(views._saldo_conta_financeira(self.conta_caixa), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_banco), Decimal("0.00"))
+        self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("0.00"))
 
     def test_excluir_despesa_usada_em_conferencia_mostra_mensagem_e_preserva_registros(self):
         Cliente.objects.create(nome="Cliente Genipauba", bairro="Genipauba", ativo=True)
@@ -30666,7 +30670,10 @@ class DespesaDiariaFinanceiroTests(TestCase):
             data_rota_recebimento="2026-09-09",
         )
         despesa = DespesaDiaria.objects.get()
-        movimento_id = self._movimento_unico().id
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            0,
+        )
         fechamento = FechamentoRotaRecebimento.objects.create(
             rota="Genipauba",
             data_referencia=date(2026, 9, 9),
@@ -30691,11 +30698,14 @@ class DespesaDiariaFinanceiroTests(TestCase):
             follow=True,
         )
 
-        self.assertContains(resposta, "Esta despesa nao pode ser excluida porque ja foi utilizada na conferencia de uma rota.")
+        self.assertContains(resposta, "Esta despesa nao pode ser excluida porque ja foi utilizada em outro registro.")
         self.assertTrue(DespesaDiaria.objects.filter(pk=despesa.id).exists())
         self.assertTrue(DespesaRotaConferencia.objects.filter(fechamento=fechamento, despesa=despesa).exists())
         self.assertTrue(FechamentoRotaRecebimento.objects.filter(pk=fechamento.id).exists())
-        self.assertTrue(MovimentoFinanceiro.objects.filter(pk=movimento_id).exists())
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            0,
+        )
 
     def test_despesa_com_sangria_reserva_debita_reserva(self):
         self._post_despesa(self.conta_reserva)
@@ -30760,7 +30770,7 @@ class DespesaDiariaFinanceiroTests(TestCase):
             follow=True,
         )
 
-        self.assertContains(resposta, "Despesa excluida junto com o movimento financeiro correspondente.")
+        self.assertContains(resposta, "Despesa excluida com sucesso.")
         self.assertEqual(DespesaDiaria.objects.count(), 0)
         self.assertEqual(MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(), 0)
         self.assertEqual(views._saldo_conta_financeira(self.conta_reserva), Decimal("0.00"))
@@ -31017,7 +31027,10 @@ class DespesaDiariaFinanceiroTests(TestCase):
         )
 
         despesa = DespesaDiaria.objects.get()
-        movimento = self._movimento_unico()
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            0,
+        )
 
         fechamento = FechamentoRotaRecebimento.objects.create(
             rota="Genipauba",
@@ -31054,11 +31067,15 @@ class DespesaDiariaFinanceiroTests(TestCase):
         )
 
         despesa.refresh_from_db()
-        movimento.refresh_from_db()
 
         self.assertEqual(despesa.valor, Decimal("154.00"))
-        self.assertEqual(movimento.valor, Decimal("154.00"))
-        self.assertEqual(movimento.conta, self.conta_caixa)
+        self.assertTrue(despesa.paga_com_dinheiro_rota)
+        self.assertEqual(despesa.rota_recebimento, "Genipauba")
+        self.assertEqual(despesa.data_rota_recebimento, date(2026, 9, 9))
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="despesa_diaria").count(),
+            0,
+        )
         self.assertEqual(
             DespesaRotaConferencia.objects.filter(
                 fechamento=fechamento,
