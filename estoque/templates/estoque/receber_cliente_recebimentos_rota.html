@@ -452,6 +452,38 @@
         width: 100%;
       }
     }
+
+    .rcr-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 18px 0;
+      border-bottom: 1px solid #dfe3e8;
+    }
+
+    .rcr-tab {
+      border: 0;
+      background: transparent;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      color: #5f6b7a;
+      border-bottom: 3px solid transparent;
+    }
+
+    .rcr-tab.ativo {
+      color: #1f4f8a;
+      border-bottom-color: #1f4f8a;
+    }
+
+    .rcr-tab-panel {
+      display: none;
+    }
+
+    .rcr-tab-panel.ativo {
+      display: block;
+    }
+
   </style>
 </head>
 <body>
@@ -501,22 +533,16 @@
         </div>
       </form>
 
-      {% if historico_recente_datas %}
-        <section class="rcr-recent" aria-label="Histórico recente da rota">
-          <h2 class="rcr-recent-title">Histórico recente por data</h2>
-          <div class="rcr-recent-list">
-            {% for item in historico_recente_datas %}
-              <a class="rcr-recent-item{% if item.ativo %} ativo{% endif %}" href="{{ item.url }}">
-                <span>{{ item.data_formatada }}</span>
-                <span>{{ item.recebimentos }} recebimento{{ item.recebimentos|pluralize }}</span>
-                <span>{{ item.total_formatado }}</span>
-                <span>{{ item.status }}</span>
-              </a>
-            {% endfor %}
-          </div>
-        </section>
-      {% endif %}
+      <div class="rcr-tabs" role="tablist" aria-label="Visualiza&ccedil;&atilde;o dos recebimentos">
+        <button type="button" class="rcr-tab ativo" id="rcrTabConferencia" data-rcr-tab="conferencia">
+          Confer&ecirc;ncia do dia
+        </button>
+        <button type="button" class="rcr-tab" id="rcrTabHistorico" data-rcr-tab="historico">
+          Hist&oacute;rico
+        </button>
+      </div>
 
+      <div id="rcrPainelConferencia" class="rcr-tab-panel ativo">
       <section class="rcr-summary" aria-label="Resumo dos recebimentos da rota">
         <div class="rcr-card">
           <span class="rcr-label">Data consultada</span>
@@ -640,7 +666,48 @@
       {% else %}
         <div class="rcr-empty">Nenhum recebimento registrado para esta rota nesta data</div>
       {% endif %}
+      </div>
+
+      <div id="rcrPainelHistorico" class="rcr-tab-panel">
+      {% if historico_recente_datas %}
+        <section class="rcr-recent" aria-label="Histórico recente da rota">
+          <h2 class="rcr-recent-title">Histórico recente por data</h2>
+          <div class="rcr-recent-list">
+            {% for item in historico_recente_datas %}
+              <a class="rcr-recent-item{% if item.ativo %} ativo{% endif %}" href="{{ item.url }}">
+                <span>{{ item.data_formatada }}</span>
+                <span>{{ item.recebimentos }} recebimento{{ item.recebimentos|pluralize }}</span>
+                <span>{{ item.total_formatado }}</span>
+                <span>{{ item.status }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      </div>
+
     </div>
   </main>
+
+  <script>
+    (function () {
+      const tabs = document.querySelectorAll("[data-rcr-tab]");
+      const painelConferencia = document.getElementById("rcrPainelConferencia");
+      const painelHistorico = document.getElementById("rcrPainelHistorico");
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          const historico = tab.dataset.rcrTab === "historico";
+
+          document.getElementById("rcrTabConferencia").classList.toggle("ativo", !historico);
+          document.getElementById("rcrTabHistorico").classList.toggle("ativo", historico);
+
+          painelConferencia.classList.toggle("ativo", !historico);
+          painelHistorico.classList.toggle("ativo", historico);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
