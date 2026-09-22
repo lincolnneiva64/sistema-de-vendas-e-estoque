@@ -2949,6 +2949,10 @@
   const acoesItensCompra = document.getElementById("acoesItensCompra");
   const acoesAdicionarMobile = document.getElementById("acoesAdicionarProdutoMobile");
   const tipoPagamentoCompra = document.getElementById("tipoPagamentoCompra");
+
+  function compraAVista() {
+    return tipoPagamentoCompra && tipoPagamentoCompra.value === "avista";
+  }
   const origemDinheiroCompra = document.getElementById("origemDinheiroCompra");
   const origemCaixaCompra = document.getElementById("origemCaixaCompra");
   const origemReservaCompra = document.getElementById("origemReservaCompra");
@@ -5411,7 +5415,7 @@
       if (proximo) {
         focarSelecionando(proximo);
       } else if (btnConfirmarFechamentoCompra && !btnConfirmarFechamentoCompra.disabled && !estado.invalido && estado.diferenca === 0) {
-        btnConfirmarFechamentoCompra.focus();
+        btnConfirmarFechamentoCompra.click();
       } else {
         mostrarErroOrigem(validarOrigemDinheiroCompra());
       }
