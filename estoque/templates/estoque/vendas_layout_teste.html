@@ -3211,8 +3211,8 @@ td:first-child {
 <div id="vendaToast" class="venda-toast" role="status" aria-live="polite"></div>
 <div id="vendaErroOverlay" class="venda-confirmacao-overlay" aria-hidden="true">
     <div class="venda-erro-card" role="alertdialog" aria-modal="true" aria-labelledby="vendaErroTitulo" aria-describedby="vendaErroMensagem">
-        <h3 id="vendaErroTitulo" class="venda-erro-titulo">VENDA N?O GRAVADA</h3>
-        <p class="venda-erro-aviso">A venda n?o foi registrada no sistema.</p>
+        <h3 id="vendaErroTitulo" class="venda-erro-titulo">VENDA NÃO GRAVADA</h3>
+        <p class="venda-erro-aviso">A venda não foi registrada no sistema.</p>
         <p id="vendaErroMensagem" class="venda-erro-mensagem"></p>
         <div class="venda-erro-acoes">
             <button type="button" id="btnVendaErroOk" class="venda-erro-ok">OK, ENTENDI</button>
@@ -4215,7 +4215,7 @@ async function atualizarResponsavelSeparacaoVendaGravada() {
 }
 
 function mostrarErroGravacaoVenda(mensagem) {
-    vendaErroMensagem.textContent = mensagem || "N?o foi poss?vel gravar a venda.";
+    vendaErroMensagem.textContent = mensagem || "Não foi possível gravar a venda.";
     vendaErroOverlay.classList.add("visivel");
     vendaErroOverlay.setAttribute("aria-hidden", "false");
     requestAnimationFrame(() => btnVendaErroOk.focus());
@@ -6453,7 +6453,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 
         if (!resposta.ok || !retorno.sucesso) {
             mostrarErroGravacaoVenda(
-                retorno.mensagem || "N?o foi poss?vel gravar a venda."
+                retorno.mensagem || "Não foi possível gravar a venda."
             );
             return;
         }
@@ -6477,7 +6477,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         }
     } catch (erro) {
         mostrarErroGravacaoVenda(
-            erro?.message || "Falha de comunica??o ao gravar a venda."
+            erro?.message || "Falha de comunicação ao gravar a venda."
         );
     } finally {
         if (!vendaSalvaComSucesso) {
