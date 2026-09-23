@@ -18221,6 +18221,47 @@ def _resumo_fechamento_rota(fechamento):
     }
 
 
+def _total_despesas_rota_confirmadas(fechamento):
+    if not fechamento:
+        return Decimal("0.00")
+    return sum(
+        (
+            confirmacao.valor_justificado or Decimal("0.00")
+            for confirmacao in fechamento.despesas_rota_confirmadas.all()
+        ),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+
+def _mensagem_conferencia_recebimentos_rota(
+    rota,
+    data_referencia,
+    fechamento_resumo,
+    detalhes_rota_url,
+):
+    return "\n".join([
+        "Confira os recebimentos desta rota:",
+        detalhes_rota_url,
+    ])
+
+
+def _funcionarios_whatsapp_conferencia_rota():
+    funcionarios = []
+    for funcionario in Funcionario.habilitados_para_checklist():
+        telefone = Funcionario.normalizar_whatsapp(
+            funcionario.telefone_whatsapp_normalizado or funcionario.telefone_whatsapp
+        )
+        if not telefone:
+            continue
+        funcionarios.append({
+            "id": funcionario.id,
+            "nome": funcionario.nome,
+            "telefone_whatsapp": funcionario.telefone_whatsapp,
+            "telefone_whatsapp_normalizado": telefone,
+        })
+    return funcionarios
+
+
 def _historico_recebimentos_dia_rota(cliente, operacao, contexto_rota):
     data_referencia = operacao.data_recebimento or timezone.localdate()
     rota = contexto_rota["nome"] if contexto_rota["tipo"] in {"rota", "bairro"} else ""
@@ -18565,42 +18606,29 @@ def receber_cliente_recebimentos_rota(request):
     fechamento = _fechamento_rota_data(rota_filtro, data_referencia)
     fechamento_resumo = _resumo_fechamento_rota(fechamento)
 
-    despesas_rota_total_confirmado = Decimal("0.00")
-    if fechamento:
-        despesas_rota_total_confirmado = sum(
-            (
-                confirmacao.valor_justificado or Decimal("0.00")
-                for confirmacao in fechamento.despesas_rota_confirmadas.all()
-            ),
-            Decimal("0.00"),
-        ).quantize(Decimal("0.01"))
+    despesas_rota_total_confirmado = _total_despesas_rota_confirmadas(fechamento)
 
     tem_recebimentos = bool(resumo["itens"])
 
     whatsapp_conferencia_url = ""
+    mensagem_conferencia = ""
+    conferencia_imagem_url = ""
+    funcionarios_whatsapp_conferencia = []
     if fechamento and fechamento_resumo:
-        detalhes_rota_url = request.build_absolute_uri(
-            f"{url_base}?{urlencode({'rota': rota_filtro, 'data': data_referencia.isoformat()})}"
+        detalhes_rota_path = f"{url_base}?{urlencode({'rota': rota_filtro, 'data': data_referencia.isoformat()})}"
+        detalhes_rota_url = montar_url_publica(request, detalhes_rota_path)
+        mensagem_conferencia = _mensagem_conferencia_recebimentos_rota(
+            rota_filtro,
+            data_referencia,
+            fechamento_resumo,
+            detalhes_rota_url,
         )
-
-        linhas_whatsapp = [
-            f"Conferência — {rota_filtro} — {data_referencia.strftime('%d/%m/%Y')}",
-            "",
-            f"Total recebido: {_formatar_moeda(resumo_conferencia['total_recebido'])}",
-            f"PIX: {_formatar_moeda(resumo_conferencia['total_pix'])}",
-            f"Dinheiro recebido: {_formatar_moeda(resumo_conferencia['total_dinheiro'])}",
-            f"Despesas pagas na rota: {_formatar_moeda(despesas_rota_total_confirmado)}",
-            f"Dinheiro esperado: {fechamento_resumo['valor_esperado_formatado']}",
-            f"Dinheiro contado: {fechamento_resumo['valor_contado_formatado']}",
-            f"{fechamento_resumo['diferenca_tipo']}: {fechamento_resumo['diferenca_formatada']}",
-            "",
-            "Confira os recebimentos desta rota para verificar a conferência.",
-            "",
-            f"Abrir detalhes da rota: {detalhes_rota_url}",
-        ]
-        mensagem_whatsapp = "\n".join(linhas_whatsapp)
-        whatsapp_conferencia_url = f"https://wa.me/?text={quote(mensagem_whatsapp)}"
-
+        whatsapp_conferencia_url = f"https://wa.me/?text={quote(mensagem_conferencia)}"
+        funcionarios_whatsapp_conferencia = _funcionarios_whatsapp_conferencia_rota()
+        conferencia_imagem_url = (
+            f"{reverse('estoque:conferencia_recebimentos_rota_imagem')}?"
+            f"{urlencode({'rota': rota_filtro, 'data': data_referencia.isoformat()})}"
+        )
     usuario_consulta_nome = (
         _nome_usuario_recebimento(request.user)
         if getattr(request.user, "is_authenticated", False)
@@ -18640,10 +18668,42 @@ def receber_cliente_recebimentos_rota(request):
             "conferencia_concluida": bool(fechamento),
             "fechamento_resumo": fechamento_resumo,
             "whatsapp_conferencia_url": whatsapp_conferencia_url,
+            "mensagem_conferencia": mensagem_conferencia,
+            "conferencia_imagem_url": conferencia_imagem_url,
+            "funcionarios_whatsapp_conferencia": funcionarios_whatsapp_conferencia,
             "conferir_recebimentos_url": _url_conferencia_recebimentos_rota(rota_filtro, data_referencia, request.get_full_path()),
             "historico_recente_datas": _historico_recente_recebimentos_rota(rota_filtro, data_referencia, next_param),
         },
     )
+
+
+def conferencia_recebimentos_rota_imagem(request):
+    rota_filtro = request.GET.get("rota", "").strip()
+    data_texto = request.GET.get("data", "").strip()
+    data_referencia = parse_date(data_texto) if data_texto else timezone.localdate()
+    if not rota_filtro or not data_referencia:
+        raise Http404("Conferência não encontrada.")
+
+    fechamento = _fechamento_rota_data(rota_filtro, data_referencia)
+    if not fechamento:
+        raise Http404("Conferência não encontrada.")
+
+    resumo_conferencia = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
+    fechamento_resumo = _resumo_fechamento_rota(fechamento)
+    despesas_rota_total_confirmado = _total_despesas_rota_confirmadas(fechamento)
+    buffer = _gerar_conferencia_recebimentos_rota_imagem(
+        rota_filtro,
+        data_referencia,
+        resumo_conferencia,
+        fechamento_resumo,
+        despesas_rota_total_confirmado,
+    )
+    nome_rota = re.sub(r"[^a-z0-9]+", "-", _texto_sem_acentos(rota_filtro).lower()).strip("-") or "rota"
+    response = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["Content-Disposition"] = (
+        f'inline; filename="conferencia-{nome_rota}-{data_referencia.isoformat()}.png"'
+    )
+    return response
 
 
 @ensure_csrf_cookie
@@ -25669,6 +25729,135 @@ def _gerar_cobranca_cliente_imagem(cliente, financeiro, cobranca):
             y += altura_card + 12
 
     draw.text((direita - _texto_largura(draw, "LA Neiva", fonte_rodape), altura - margem - 62), "LA Neiva", fill=azul, font=fonte_rodape)
+
+    png = BytesIO()
+    imagem.save(png, format="PNG")
+    png.seek(0)
+    return png
+
+
+def _gerar_conferencia_recebimentos_rota_imagem(
+    rota,
+    data_referencia,
+    resumo_conferencia,
+    fechamento_resumo,
+    despesas_rota_total_confirmado,
+):
+    largura = 1080
+    altura = 1240
+    margem = 30
+
+    fundo = "#f4f6f8"
+    card = "#ffffff"
+    texto = "#101827"
+    suave = "#334155"
+    azul = "#1e3a8a"
+    borda = "#cbd5e1"
+    vermelho = "#991b1b"
+    verde = "#166534"
+    amarelo = "#92400e"
+
+    fonte_empresa = _fonte_nota_whatsapp(30, True)
+    fonte_titulo = _fonte_nota_whatsapp(46, True)
+    fonte_subtitulo = _fonte_nota_whatsapp(30, True)
+    fonte_label = _fonte_nota_whatsapp(19, True)
+    fonte_texto = _fonte_nota_whatsapp(26)
+    fonte_texto_negrito = _fonte_nota_whatsapp(28, True)
+    fonte_valor = _fonte_nota_whatsapp(34, True)
+    fonte_resultado = _fonte_nota_whatsapp(42, True)
+    fonte_rodape = _fonte_nota_whatsapp(24, True)
+
+    imagem = Image.new("RGB", (largura, altura), fundo)
+    draw = ImageDraw.Draw(imagem)
+
+    draw.rounded_rectangle(
+        (margem, margem, largura - margem, altura - margem),
+        radius=28,
+        fill=card,
+        outline=borda,
+        width=3,
+    )
+
+    x = margem + 30
+    direita = largura - margem - 30
+    y = margem + 28
+
+    draw.text((x, y), "LA Neiva", fill=azul, font=fonte_empresa)
+    y += 44
+    draw.text((x, y), "Conferência da rota", fill=texto, font=fonte_titulo)
+    y += 68
+
+    draw.rounded_rectangle((x, y, direita, y + 122), radius=18, fill="#eff6ff", outline="#60a5fa", width=3)
+    draw.text((x + 22, y + 18), f"Rota: {rota}", fill=texto, font=fonte_texto_negrito)
+    draw.text((x + 22, y + 66), f"Data: {data_referencia.strftime('%d/%m/%Y')}", fill=texto, font=fonte_texto)
+    y += 146
+
+    def desenhar_resumo(x_campo, y_campo, largura_campo, label, valor, destaque=False):
+        draw.rounded_rectangle(
+            (x_campo, y_campo, x_campo + largura_campo, y_campo + 94),
+            radius=15,
+            fill="#eff6ff" if destaque else "#f8fafc",
+            outline="#60a5fa" if destaque else borda,
+            width=3 if destaque else 2,
+        )
+        draw.text((x_campo + 15, y_campo + 12), label.upper(), fill=azul if destaque else suave, font=fonte_label)
+        draw.text((x_campo + 15, y_campo + 44), valor, fill=texto, font=fonte_valor)
+
+    largura_campo = (direita - x - 20) // 2
+    x2 = x + largura_campo + 20
+    desenhar_resumo(
+        x,
+        y,
+        largura_campo,
+        "Total recebido",
+        _formatar_moeda(resumo_conferencia["total_recebido"]),
+        True,
+    )
+    desenhar_resumo(x2, y, largura_campo, "PIX", _formatar_moeda(resumo_conferencia["total_pix"]))
+    y += 114
+    desenhar_resumo(x, y, largura_campo, "Dinheiro recebido", _formatar_moeda(resumo_conferencia["total_dinheiro"]))
+    desenhar_resumo(x2, y, largura_campo, "Despesas pagas na rota", _formatar_moeda(despesas_rota_total_confirmado))
+    y += 136
+
+    draw.text((x, y), "Dinheiro da conferência", fill=texto, font=fonte_subtitulo)
+    y += 48
+    desenhar_resumo(x, y, largura_campo, "Dinheiro esperado", fechamento_resumo["valor_esperado_formatado"])
+    desenhar_resumo(x2, y, largura_campo, "Dinheiro contado", fechamento_resumo["valor_contado_formatado"])
+    y += 134
+
+    diferenca_valor = fechamento_resumo["diferenca_valor"]
+    if diferenca_valor < Decimal("0.00"):
+        resultado_label = f"FALTOU: {fechamento_resumo['diferenca_formatada']}"
+        resultado_fill = "#fef2f2"
+        resultado_outline = "#ef4444"
+        resultado_cor = vermelho
+    elif diferenca_valor > Decimal("0.00"):
+        resultado_label = f"SOBROU: {fechamento_resumo['diferenca_formatada']}"
+        resultado_fill = "#fffbeb"
+        resultado_outline = "#f59e0b"
+        resultado_cor = amarelo
+    else:
+        resultado_label = "SEM DIFERENÇA"
+        resultado_fill = "#ecfdf5"
+        resultado_outline = "#22c55e"
+        resultado_cor = verde
+
+    draw.text((x, y), "Resultado", fill=texto, font=fonte_subtitulo)
+    y += 46
+    draw.rounded_rectangle((x, y, direita, y + 132), radius=20, fill=resultado_fill, outline=resultado_outline, width=4)
+    draw.text((x + 24, y + 34), resultado_label, fill=resultado_cor, font=fonte_resultado)
+    y += 158
+
+    draw.rounded_rectangle((x, y, direita, y + 96), radius=16, fill="#f8fafc", outline=borda, width=2)
+    draw.text((x + 20, y + 14), "CONFERIDO POR", fill=suave, font=fonte_label)
+    draw.text((x + 20, y + 48), fechamento_resumo["usuario_nome"], fill=texto, font=fonte_texto_negrito)
+
+    draw.text(
+        (direita - _texto_largura(draw, "LA Neiva", fonte_rodape), altura - margem - 62),
+        "LA Neiva",
+        fill=azul,
+        font=fonte_rodape,
+    )
 
     png = BytesIO()
     imagem.save(png, format="PNG")

@@ -73,11 +73,14 @@
       min-height: 42px;
       padding: 10px 14px;
       border-radius: 8px;
+      border: 0;
       background: var(--rc-primary);
       color: #fff;
+      font: inherit;
       font-weight: 800;
       text-decoration: none;
       white-space: nowrap;
+      cursor: pointer;
     }
 
     .rcr-btn:hover,
@@ -255,7 +258,36 @@
     }
 
     .rcr-conferencia-action {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
       margin-bottom: 12px;
+    }
+
+    .rcr-copy-feedback {
+      color: var(--rc-green);
+      font-weight: 900;
+    }
+
+    .rcr-whatsapp-target {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 900;
+      color: #334155;
+    }
+
+    .rcr-whatsapp-target select {
+      height: 39px;
+      max-width: 240px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 0 10px;
+      background: #fff;
+      color: #111827;
+      font: inherit;
+      font-weight: 800;
     }
 
     .rcr-empty {
@@ -593,11 +625,27 @@
           </div>
           <div class="rcr-conferencia-action">
             <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Ver conferência</a>
-            {% if whatsapp_conferencia_url %}
-              <a class="rcr-btn" href="{{ whatsapp_conferencia_url }}" target="_blank" rel="noopener">
-                Enviar conferência pelo WhatsApp
-              </a>
+            {% if mensagem_conferencia %}
+              <button type="button" class="rcr-btn secondary" id="btnCopiarMensagemConferencia">Copiar mensagem</button>
             {% endif %}
+            <a class="rcr-btn" href="{% url 'estoque:conferencia_recebimentos_rota_imagem' %}?rota={{ rota_filtro|urlencode }}&data={{ data_referencia_iso|urlencode }}" target="_blank" rel="noopener">
+              Abrir imagem da confer&ecirc;ncia
+            </a>
+            {% if funcionarios_whatsapp_conferencia %}
+              <label class="rcr-whatsapp-target" for="funcionarioWhatsappConferencia">
+                <span>Enviar para:</span>
+                <select id="funcionarioWhatsappConferencia">
+                  {% for funcionario in funcionarios_whatsapp_conferencia %}
+                    <option value="{{ funcionario.id }}" data-whatsapp="{{ funcionario.telefone_whatsapp_normalizado }}" title="{{ funcionario.nome }}">{{ funcionario.nome }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <button type="button" class="rcr-btn" id="btnEnviarConferenciaWhatsapp">Enviar pelo WhatsApp</button>
+            {% else %}
+              <span class="rcr-copy-feedback" role="status">Nenhum funcion&aacute;rio com WhatsApp habilitado.</span>
+            {% endif %}
+            <span class="rcr-copy-feedback" id="mensagemConferenciaCopiada" role="status" aria-live="polite" hidden>Mensagem copiada.</span>
+            <span class="rcr-copy-feedback" id="mensagemConferenciaWhatsappStatus" role="status" aria-live="polite" hidden></span>
           </div>
         {% elif tem_recebimentos %}
           <div class="rcr-conferencia-action">
@@ -695,11 +743,108 @@
     </div>
   </main>
 
+  {{ mensagem_conferencia|json_script:"mensagemConferenciaTexto" }}
+
   <script>
     (function () {
+      const btnCopiarMensagem = document.getElementById("btnCopiarMensagemConferencia");
+      const btnEnviarWhatsapp = document.getElementById("btnEnviarConferenciaWhatsapp");
+      const funcionarioWhatsapp = document.getElementById("funcionarioWhatsappConferencia");
+      const mensagemScript = document.getElementById("mensagemConferenciaTexto");
+      const feedbackCopiado = document.getElementById("mensagemConferenciaCopiada");
+      const feedbackWhatsapp = document.getElementById("mensagemConferenciaWhatsappStatus");
       const tabs = document.querySelectorAll("[data-rcr-tab]");
       const painelConferencia = document.getElementById("rcrPainelConferencia");
       const painelHistorico = document.getElementById("rcrPainelHistorico");
+
+      function mensagemConferenciaTexto() {
+        if (!mensagemScript) return "";
+        try {
+          return JSON.parse(mensagemScript.textContent || "\"\"");
+        } catch (erro) {
+          return "";
+        }
+      }
+
+      function mostrarFeedbackCopiado(texto) {
+        if (!feedbackCopiado) return;
+        feedbackCopiado.textContent = texto;
+        feedbackCopiado.hidden = false;
+        window.setTimeout(function () {
+          feedbackCopiado.hidden = true;
+        }, 2600);
+      }
+
+      function mostrarFeedbackWhatsapp(texto) {
+        if (!feedbackWhatsapp) return;
+        feedbackWhatsapp.textContent = texto;
+        feedbackWhatsapp.hidden = false;
+        window.setTimeout(function () {
+          feedbackWhatsapp.hidden = true;
+        }, 3200);
+      }
+
+      function copiarViaFallback(texto) {
+        const area = document.createElement("textarea");
+        area.value = texto;
+        area.setAttribute("readonly", "readonly");
+        area.style.position = "fixed";
+        area.style.left = "-9999px";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        document.body.removeChild(area);
+      }
+
+      if (btnCopiarMensagem) {
+        btnCopiarMensagem.addEventListener("click", function () {
+          const texto = mensagemConferenciaTexto();
+          if (!texto) {
+            mostrarFeedbackCopiado("Mensagem indisponivel.");
+            return;
+          }
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(texto)
+              .then(function () { mostrarFeedbackCopiado("Mensagem copiada."); })
+              .catch(function () {
+                copiarViaFallback(texto);
+                mostrarFeedbackCopiado("Mensagem copiada.");
+              });
+            return;
+          }
+          copiarViaFallback(texto);
+          mostrarFeedbackCopiado("Mensagem copiada.");
+        });
+      }
+
+      if (btnEnviarWhatsapp) {
+        btnEnviarWhatsapp.addEventListener("click", function () {
+          const texto = mensagemConferenciaTexto();
+          const opcao = funcionarioWhatsapp
+            ? funcionarioWhatsapp.options[funcionarioWhatsapp.selectedIndex]
+            : null;
+          const telefone = opcao ? (opcao.dataset.whatsapp || "") : "";
+
+          if (!opcao || !funcionarioWhatsapp.value) {
+            mostrarFeedbackWhatsapp("Selecione um funcionario para enviar.");
+            return;
+          }
+          if (!telefone) {
+            mostrarFeedbackWhatsapp("Funcionario sem WhatsApp disponivel.");
+            return;
+          }
+          if (!texto) {
+            mostrarFeedbackWhatsapp("Mensagem indisponivel.");
+            return;
+          }
+
+          const url = "https://web.whatsapp.com/send?phone="
+            + encodeURIComponent(telefone)
+            + "&text="
+            + encodeURIComponent(texto);
+          window.open(url, "_blank", "noopener");
+        });
+      }
 
       tabs.forEach(function (tab) {
         tab.addEventListener("click", function () {

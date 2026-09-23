@@ -164,6 +164,11 @@ urlpatterns = [
         views.conferencia_recebimentos_rota,
         name="conferencia_recebimentos_rota",
     ),
+    path(
+        "receber-cliente/recebimentos-rota/conferencia-imagem/",
+        views.conferencia_recebimentos_rota_imagem,
+        name="conferencia_recebimentos_rota_imagem",
+    ),
     path("central-pix/", views.central_pix, name="central_pix"),
     path("pix/enviar/", views.pix_enviar_inteligente, name="pix_enviar_inteligente"),
     path("central-pix/enviar-comprovante/", views.central_pix_enviar_comprovante, name="central_pix_enviar_comprovante"),
