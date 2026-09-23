@@ -3315,11 +3315,13 @@ def _alocacao_financeira_venda(venda):
     alocacao = {chave: Decimal("0.00") for chave in contas}
     conta_para_chave = {conta.pk: chave for chave, conta in contas.items() if conta}
 
-    for movimento in _movimentos_financeiros_venda_ativos(venda):
-        chave = conta_para_chave.get(movimento.conta_id)
+    saldos = _saldo_financeiro_venda_a_vista_por_conta(venda)
+
+    for conta_id, valor in saldos.items():
+        chave = conta_para_chave.get(conta_id)
         if not chave:
             continue
-        alocacao[chave] += _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        alocacao[chave] = valor.quantize(Decimal("0.01"))
 
     return alocacao
 

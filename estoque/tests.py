@@ -34508,6 +34508,19 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(saidas, Decimal("9.80"))
         self.assertEqual(entradas - saidas, Decimal("30.00"))
 
+        resposta_nota = self.client.get(
+            reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}),
+            secure=True,
+        )
+
+        self.assertEqual(resposta_nota.status_code, 200)
+        self.assertEqual(
+            resposta_nota.context["alocacao_financeira_venda"]["caixa"],
+            Decimal("30.00"),
+        )
+        conteudo_nota = resposta_nota.content.decode()
+        self.assertRegex(conteudo_nota, r"Caixa:\s*R\$\s*30[,.]00")
+
     def test_edicao_unificada_a_vista_aumenta_total_recebendo_apenas_diferenca(self):
         cliente, produto, venda, item, conta = self.preparar_venda_a_vista_com_movimentos(
             caixa="20.00",

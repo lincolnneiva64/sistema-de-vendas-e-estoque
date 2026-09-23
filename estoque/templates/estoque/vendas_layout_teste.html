@@ -6244,12 +6244,12 @@ function abrirFechamentoVenda(dadosVenda) {
 
     if (contextoFinanceiro.tipo === "acrescimo") {
         if (titulo) titulo.textContent = "De onde veio o valor adicional?";
-        if (rotulo) rotulo.textContent = "Acr?scimo da venda";
-        if (nota) nota.textContent = "Informe onde entrou o valor adicional. A soma precisa bater com o acr?scimo.";
+        if (rotulo) rotulo.textContent = "Acréscimo da venda";
+        if (nota) nota.textContent = "Informe onde entrou o valor adicional. A soma precisa bater com o acréscimo.";
     } else if (contextoFinanceiro.tipo === "reducao") {
-        if (titulo) titulo.textContent = "De onde ser? estornado o valor?";
-        if (rotulo) rotulo.textContent = "Redu??o da venda";
-        if (nota) nota.textContent = "Informe de onde ser? retirado o valor da redu??o. A soma precisa bater com a redu??o.";
+        if (titulo) titulo.textContent = "De onde será estornado o valor?";
+        if (rotulo) rotulo.textContent = "Redução da venda";
+        if (nota) nota.textContent = "Informe de onde será retirado o valor da redução. A soma precisa bater com a redução.";
     } else {
         if (titulo) titulo.textContent = "De onde veio o recebimento?";
         if (rotulo) rotulo.textContent = "Total da venda";
