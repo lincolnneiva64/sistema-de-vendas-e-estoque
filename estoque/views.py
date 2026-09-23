@@ -20987,7 +20987,7 @@ def _devolver_estoque_produto(
     )
     quantidade_movimento = (
         quantidade_base
-        if produto.vende_fracionado
+        if produto.vende_fracionado or not validar_quantidade
         else _quantidade_estoque_inteira(quantidade_base, nome, _unidade_base)
     )
     estoque_atual = _quantidade_decimal_estoque(produto.quantidade)
@@ -21079,6 +21079,7 @@ def _devolver_estoque_item_removido(item_removido):
         item_removido.quantidade_snapshot,
         item_removido.produto_nome_snapshot,
         item_removido.unidade_snapshot,
+        validar_quantidade=False,
     )
     item_removido.estoque_devolvido = True
     item_removido.estoque_devolvido_em = timezone.now()
@@ -21095,7 +21096,13 @@ def _devolver_estoque_cancelamento_venda(venda):
         if not item.produto_id:
             continue
         produto_nome = item.produto.nome if item.produto else "Produto nao identificado"
-        _devolver_estoque_produto(item.produto_id, item.quantidade, produto_nome, item.unidade)
+        _devolver_estoque_produto(
+            item.produto_id,
+            item.quantidade,
+            produto_nome,
+            item.unidade,
+            validar_quantidade=False,
+        )
         devolvidos.append(f"{produto_nome}: {_formatar_quantidade(item.quantidade)} {item.unidade or ''}".strip())
 
     venda.estoque_devolvido_cancelamento = True

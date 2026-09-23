@@ -31711,6 +31711,74 @@ class VendaEdicaoUnificadaTests(TestCase):
 
         return cliente, produto, venda, item
 
+    def criar_produto_dz_sem_fracionamento(self, nome="Skol Lata 12/350ML Teste", estoque="5.000"):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal(str(estoque)),
+            preco_venda=Decimal("10.00"),
+            preco_compra=Decimal("5.00"),
+            preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("10.00"),
+            unidade_venda_1="DZ",
+            vende_fracionado=False,
+            ativo=True,
+            excluido=False,
+        )
+
+    def criar_venda_historica_dz_fracionada(self, quantidade="1.830", estoque="5.000", com_item_extra=False):
+        cliente = Cliente.objects.create(
+            nome="Cliente Historico DZ Fracionado",
+            ativo=True,
+        )
+        produto = self.criar_produto_dz_sem_fracionamento(estoque=estoque)
+        quantidade_decimal = Decimal(quantidade)
+        preco = Decimal("10.00")
+        total_item = (quantidade_decimal * preco).quantize(Decimal("0.01"))
+        total_venda = total_item
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            data_vencimento=timezone.localdate() + timedelta(days=7),
+            tipo_pagamento="A prazo",
+            operador="Teste",
+            total=total_venda,
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=quantidade_decimal,
+            unidade="DZ",
+            preco_unitario=preco,
+            valor_total=total_item,
+            estoque_antes=(Decimal(estoque) + quantidade_decimal).quantize(Decimal("0.001")),
+            estoque_movimentado=quantidade_decimal,
+            estoque_depois=Decimal(estoque).quantize(Decimal("0.001")),
+            estoque_unidade_snapshot="DZ",
+        )
+        if com_item_extra:
+            produto_extra = self.criar_produto("Produto Mantido Venda DZ", "9.000")
+            ItemVenda.objects.create(
+                venda=venda,
+                produto=produto_extra,
+                quantidade=Decimal("1.000"),
+                unidade="UN",
+                preco_unitario=Decimal("10.00"),
+                valor_total=Decimal("10.00"),
+            )
+            total_venda = (total_venda + Decimal("10.00")).quantize(Decimal("0.01"))
+            venda.total = total_venda
+            venda.save(update_fields=["total", "atualizado_em"])
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=venda.data_venda,
+            data_vencimento=venda.data_vencimento,
+            valor_original=total_venda,
+            valor_em_aberto=total_venda,
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        return cliente, produto, venda, item
+
     def payload_edicao(self, venda, item, quantidade, preco):
         return {
             "venda_id": venda.id,
@@ -31735,6 +31803,104 @@ class VendaEdicaoUnificadaTests(TestCase):
                 }
             ],
         }
+
+    def test_remover_item_historico_dz_fracionado_devolve_estoque_e_recalcula_financeiro(self):
+        cliente, produto, venda, item = self.criar_venda_historica_dz_fracionada(com_item_extra=True)
+
+        resposta = self.client.post(
+            reverse("estoque:venda_revisar_remocao_item", kwargs={"pk": venda.id, "item_id": item.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        conta = ContaReceber.objects.get(venda=venda)
+        remocao = ItemVendaRemovido.objects.get(venda=venda, produto=produto)
+        self.assertEqual(produto.quantidade, Decimal("6.830"))
+        self.assertEqual(remocao.quantidade_snapshot, Decimal("1.830"))
+        self.assertEqual(remocao.unidade_snapshot, "DZ")
+        self.assertTrue(remocao.estoque_devolvido)
+        self.assertIsNotNone(remocao.estoque_devolvido_em)
+        self.assertFalse(ItemVenda.objects.filter(pk=item.pk).exists())
+        self.assertEqual(venda.total, Decimal("10.00"))
+        self.assertEqual(conta.valor_original, Decimal("10.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("10.00"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+
+    def test_nova_venda_dz_fracionada_invalida_continua_bloqueada(self):
+        produto = self.criar_produto_dz_sem_fracionamento()
+        cliente = Cliente.objects.create(nome="Cliente Nova Venda DZ Invalida", ativo=True)
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps({
+                "cliente_id": cliente.id,
+                "data_venda": timezone.localdate().isoformat(),
+                "data_vencimento": (timezone.localdate() + timedelta(days=7)).isoformat(),
+                "tipo_pagamento": "A prazo",
+                "operador": "Teste",
+                "itens": [{
+                    "produto_id": produto.id,
+                    "produto_nome": produto.nome,
+                    "quantidade": "1.830",
+                    "unidade": "DZ",
+                    "preco_unitario": "10.00",
+                    "valor_total": "18.30",
+                }],
+            }),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("nao permite venda fracionada", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+
+    def test_edicao_para_nova_quantidade_dz_fracionada_invalida_continua_bloqueada(self):
+        cliente, produto, venda, item = self.criar_venda_historica_dz_fracionada(
+            quantidade="1.000",
+            estoque="5.000",
+        )
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_edicao(venda, item, quantidade="1.830", preco="10.00")),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertIn("nao permite venda fracionada", resposta.json()["mensagem"])
+        produto.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(item.quantidade, Decimal("1.000"))
+
+    def test_cancelamento_devolve_item_historico_dz_fracionado_sem_validacao_comercial(self):
+        cliente, produto, venda, item = self.criar_venda_historica_dz_fracionada()
+
+        resposta = self.client.post(
+            reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}),
+            {
+                "motivo_padrao": "Cliente desistiu da compra",
+                "observacao_cancelamento": "",
+                "confirmacao_cancelamento": "CANCELAR",
+                "ciencia_cancelamento": "1",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        produto.refresh_from_db()
+        venda.refresh_from_db()
+        self.assertEqual(produto.quantidade, Decimal("6.830"))
+        self.assertTrue(venda.cancelada)
+        self.assertTrue(venda.estoque_devolvido_cancelamento)
+        self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
 
     def preparar_venda_a_vista_com_movimentos(self, caixa="0.00", banco="0.00", criar_movimentos=True):
         cliente, produto, venda, item = self.criar_venda_base(
