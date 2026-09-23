@@ -3232,7 +3232,7 @@ td:first-child {
     <div class="venda-confirmacao-card venda-fechamento-card" role="dialog" aria-modal="true" aria-labelledby="vendaFechamentoTitulo">
         <h3 id="vendaFechamentoTitulo" class="venda-fechamento-titulo">De onde veio o recebimento?</h3>
         <div class="venda-fechamento-total">
-            <span>Total da venda</span>
+            <span id="vendaFechamentoRotulo">Total da venda</span>
             <strong id="vendaFechamentoTotal">R$ 0,00</strong>
         </div>
         <div class="venda-fechamento-grid">
@@ -3245,7 +3245,7 @@ td:first-child {
                 <input type="text" id="vendaOrigemBanco" inputmode="decimal" value="0,00" autocomplete="off">
             </div>
         </div>
-        <p class="venda-fechamento-nota">A soma precisa bater com o total da venda. Campos vazios contam como zero.</p>
+        <p id="vendaFechamentoNota" class="venda-fechamento-nota">A soma precisa bater com o total da venda. Campos vazios contam como zero.</p>
         <div id="vendaFechamentoErro" class="venda-fechamento-erro"></div>
         <div class="venda-confirmacao-acoes">
             <button type="button" id="btnVoltarEditarVendaFechamento" class="venda-cancelar-btn">Voltar para editar venda</button>
@@ -6105,6 +6105,58 @@ function moedaVenda(valor) {
     return "R$ " + Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+
+function contextoFinanceiroFechamentoVenda(dadosVenda) {
+    const totalNovo = Math.round(Number(dadosVenda?.total || 0) * 100);
+
+    if (
+        vendaEdicaoVenda?.id
+        && pagamentoVendaAVista()
+        && normalizarTextoCliente(vendaEdicaoVenda.tipo_pagamento || "").replace(/\s/g, "") !== ""
+    ) {
+        const pagamentoAnterior = normalizarTextoCliente(
+            vendaEdicaoVenda.tipo_pagamento || ""
+        ).replace(/\s/g, "");
+
+        const anteriorAVista = [
+            "avista", "dinheiro", "especie", "pix", "banco",
+            "transferencia", "cartao", "debito", "credito",
+            "boleto", "deposito"
+        ].includes(pagamentoAnterior);
+
+        if (anteriorAVista) {
+            const totalAnterior = Math.round(
+                Number(vendaEdicaoVenda.total || 0) * 100
+            );
+            const diferenca = totalNovo - totalAnterior;
+
+            if (diferenca > 0) {
+                return {
+                    tipo: "acrescimo",
+                    valor: diferenca / 100,
+                };
+            }
+
+            if (diferenca < 0) {
+                return {
+                    tipo: "reducao",
+                    valor: Math.abs(diferenca) / 100,
+                };
+            }
+
+            return {
+                tipo: "sem_alteracao",
+                valor: 0,
+            };
+        }
+    }
+
+    return {
+        tipo: "normal",
+        valor: totalNovo / 100,
+    };
+}
+
 function numeroMoedaVenda(valor) {
     let texto = String(valor || "0").trim().replace("R$", "").replace(/\s/g, "");
     if (!texto) return 0;
@@ -6159,45 +6211,75 @@ function mostrarErroFechamentoVenda(mensagem) {
 }
 
 function validarFechamentoVenda(dadosVenda) {
-    const total = Math.round(parseFloat(dadosVenda.total || "0") * 100);
+    const contextoFinanceiro = contextoFinanceiroFechamentoVenda(dadosVenda);
+    const total = Math.round(Number(contextoFinanceiro.valor || 0) * 100);
     const caixa = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemCaixa ? vendaOrigemCaixa.value : "0")) * 100);
     const banco = Math.round(parseFloat(normalizarNumeroVenda(vendaOrigemBanco ? vendaOrigemBanco.value : "0")) * 100);
     const soma = caixa + banco;
 
     if (caixa < 0 || banco < 0) {
-        return "Os valores de recebimento nao podem ser negativos.";
+        return "Os valores nao podem ser negativos.";
     }
     if (total <= 0) {
         return "Inclua itens na venda antes de finalizar.";
     }
     if (soma !== total) {
-        return "A soma das origens precisa bater com o total da venda. Soma: " + moedaVenda(soma / 100) + ". Total: " + moedaVenda(total / 100) + ".";
+        return "A soma das origens precisa bater com o valor informado. Soma: " + moedaVenda(soma / 100) + ". Valor: " + moedaVenda(total / 100) + ".";
     }
     return "";
 }
 
 function abrirFechamentoVenda(dadosVenda) {
     if (!vendaFechamentoOverlay) return;
-    const totalNumero = parseFloat(dadosVenda.total || "0");
-    if (vendaFechamentoTotal) vendaFechamentoTotal.textContent = moedaVenda(totalNumero);
-    const pagamento = normalizarTextoCliente(tipoVenda ? tipoVenda.value : "").replace(/\s/g, "");
-    const caixaAtual = parseFloat(normalizarNumeroVenda(vendaOrigemCaixa ? vendaOrigemCaixa.value : "0"));
-    const bancoAtual = parseFloat(normalizarNumeroVenda(vendaOrigemBanco ? vendaOrigemBanco.value : "0"));
-    if ((caixaAtual || 0) === 0 && (bancoAtual || 0) === 0) {
-        if (["pix", "banco", "transferencia", "cartao", "debito", "credito", "boleto", "deposito"].includes(pagamento)) {
-            if (vendaOrigemCaixa) vendaOrigemCaixa.value = "0,00";
-            if (vendaOrigemBanco) vendaOrigemBanco.value = moedaVenda(totalNumero).replace("R$ ", "");
-        } else {
-            if (vendaOrigemCaixa) vendaOrigemCaixa.value = moedaVenda(totalNumero).replace("R$ ", "");
-            if (vendaOrigemBanco) vendaOrigemBanco.value = "0,00";
+
+    const contextoFinanceiro = contextoFinanceiroFechamentoVenda(dadosVenda);
+    const totalNumero = Number(contextoFinanceiro.valor || 0);
+    const titulo = document.getElementById("vendaFechamentoTitulo");
+    const rotulo = document.getElementById("vendaFechamentoRotulo");
+    const nota = document.getElementById("vendaFechamentoNota");
+
+    if (vendaFechamentoTotal) {
+        vendaFechamentoTotal.textContent = moedaVenda(totalNumero);
+    }
+
+    if (contextoFinanceiro.tipo === "acrescimo") {
+        if (titulo) titulo.textContent = "De onde veio o valor adicional?";
+        if (rotulo) rotulo.textContent = "Acr?scimo da venda";
+        if (nota) nota.textContent = "Informe onde entrou o valor adicional. A soma precisa bater com o acr?scimo.";
+    } else if (contextoFinanceiro.tipo === "reducao") {
+        if (titulo) titulo.textContent = "De onde ser? estornado o valor?";
+        if (rotulo) rotulo.textContent = "Redu??o da venda";
+        if (nota) nota.textContent = "Informe de onde ser? retirado o valor da redu??o. A soma precisa bater com a redu??o.";
+    } else {
+        if (titulo) titulo.textContent = "De onde veio o recebimento?";
+        if (rotulo) rotulo.textContent = "Total da venda";
+        if (nota) nota.textContent = "A soma precisa bater com o total da venda. Campos vazios contam como zero.";
+    }
+
+    const pagamento = normalizarTextoCliente(
+        tipoVenda ? tipoVenda.value : ""
+    ).replace(/\s/g, "");
+
+    // Sempre reinicia os campos para nao reaproveitar valores
+    // de uma abertura anterior do modal.
+    if (vendaOrigemCaixa) vendaOrigemCaixa.value = "0,00";
+    if (vendaOrigemBanco) vendaOrigemBanco.value = "0,00";
+
+    if (["pix", "banco", "transferencia", "cartao", "debito", "credito", "boleto", "deposito"].includes(pagamento)) {
+        if (vendaOrigemBanco) {
+            vendaOrigemBanco.value = moedaVenda(totalNumero).replace("R$ ", "");
+        }
+    } else {
+        if (vendaOrigemCaixa) {
+            vendaOrigemCaixa.value = moedaVenda(totalNumero).replace("R$ ", "");
         }
     }
+
     mostrarErroFechamentoVenda("");
     vendaFechamentoOverlay.classList.add("visivel");
     vendaFechamentoOverlay.setAttribute("aria-hidden", "false");
     focarSelecionandoVenda(vendaOrigemCaixa);
 }
-
 function fecharFechamentoVenda() {
     if (!vendaFechamentoOverlay) return;
     vendaFechamentoOverlay.classList.remove("visivel");
@@ -6431,8 +6513,12 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     }
 
     if (!dadosVendaConfirmados && pagamentoVendaAVista()) {
-        abrirFechamentoVenda(dadosVenda);
-        return;
+        const contextoFinanceiro = contextoFinanceiroFechamentoVenda(dadosVenda);
+
+        if (contextoFinanceiro.tipo !== "sem_alteracao") {
+            abrirFechamentoVenda(dadosVenda);
+            return;
+        }
     }
 
     btnGravarVenda.disabled = true;

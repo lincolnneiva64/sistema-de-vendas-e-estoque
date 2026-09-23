@@ -3324,6 +3324,136 @@ def _alocacao_financeira_venda(venda):
     return alocacao
 
 
+
+def _movimentos_ajuste_edicao_venda_a_vista(venda):
+    return (
+        MovimentoFinanceiro.objects
+        .select_related("conta", "conta_destino")
+        .filter(
+            origem="venda_edicao_ajuste",
+            descricao__startswith=f"Ajuste edicao venda a vista #{venda.id}",
+        )
+        .order_by("id")
+    )
+
+
+def _saldo_financeiro_venda_a_vista_por_conta(venda):
+    saldos = {}
+
+    def aplicar(movimento):
+        valor = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if valor <= Decimal("0.00"):
+            return
+
+        atual = saldos.get(movimento.conta_id, Decimal("0.00"))
+
+        if movimento.tipo == MovimentoFinanceiro.TIPO_ENTRADA:
+            atual += valor
+        elif movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA:
+            atual -= valor
+
+        saldos[movimento.conta_id] = atual.quantize(Decimal("0.01"))
+
+    for movimento in _movimentos_financeiros_venda(venda):
+        aplicar(movimento)
+
+    for movimento in _movimentos_estorno_venda_a_vista(venda):
+        aplicar(movimento)
+
+    for movimento in _movimentos_ajuste_edicao_venda_a_vista(venda):
+        aplicar(movimento)
+
+    return saldos
+
+
+def _ajustar_movimentos_edicao_venda_a_vista(
+    venda,
+    total_anterior,
+    valores_origem=None,
+):
+    total_anterior = _financeiro_dinheiro(total_anterior).quantize(Decimal("0.01"))
+    total_novo = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    diferenca = (total_novo - total_anterior).quantize(Decimal("0.01"))
+
+    saldos = _saldo_financeiro_venda_a_vista_por_conta(venda)
+    total_financeiro_atual = sum(
+        saldos.values(),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+
+    if total_financeiro_atual != total_anterior:
+        raise ValueError(
+            "O financeiro atual da venda nao corresponde ao total anterior. "
+            "A edicao foi bloqueada para evitar inconsistencia."
+        )
+
+    if diferenca == Decimal("0.00"):
+        if valores_origem is not None:
+            raise ValueError(
+                "Nao informe origem financeira quando o total da venda nao mudou."
+            )
+        return []
+
+    if valores_origem is None:
+        raise ValueError(
+            "Informe a origem financeira da diferenca desta edicao."
+        )
+
+    valor_diferenca = abs(diferenca).quantize(Decimal("0.01"))
+    _validar_origem_venda_a_vista(valores_origem, valor_diferenca)
+
+    contas = {
+        "caixa": _conta_financeira_padrao("caixa"),
+        "banco": _conta_financeira_padrao("banco"),
+        "cartoes": _conta_financeira_padrao("cartoes"),
+    }
+
+    movimentos = []
+
+    for chave, valor_origem in valores_origem.items():
+        valor_origem = _financeiro_dinheiro(valor_origem).quantize(Decimal("0.01"))
+        if valor_origem <= Decimal("0.00"):
+            continue
+
+        conta = contas.get(chave)
+        if not conta:
+            raise ValueError(
+                "Conta financeira nao encontrada para registrar o ajuste da venda."
+            )
+
+        if diferenca < Decimal("0.00"):
+            saldo_conta = saldos.get(conta.pk, Decimal("0.00")).quantize(Decimal("0.01"))
+            if valor_origem > saldo_conta:
+                raise ValueError(
+                    "O valor informado para estorno supera o valor recebido "
+                    "nessa origem financeira."
+                )
+
+        tipo = (
+            MovimentoFinanceiro.TIPO_ENTRADA
+            if diferenca > Decimal("0.00")
+            else MovimentoFinanceiro.TIPO_SAIDA
+        )
+
+        movimentos.append(
+            MovimentoFinanceiro.objects.create(
+                conta=conta,
+                tipo=tipo,
+                valor=valor_origem,
+                data=timezone.localdate(),
+                descricao=(
+                    f"Ajuste edicao venda a vista #{venda.id} - "
+                    f"total anterior {_financeiro_moeda_br(total_anterior)} - "
+                    f"novo total {_financeiro_moeda_br(total_novo)}"
+                ),
+                operador=venda.operador or "",
+                origem="venda_edicao_ajuste",
+            )
+        )
+
+    return movimentos
+
+
 def _valores_origem_venda_post(dados):
     origem = dados.get("origem_recebimento") or {}
     valores = {
@@ -3432,6 +3562,12 @@ def _validar_itens_edicao_inalterados(venda, itens_validados):
 
 
 def _estornar_movimentos_venda_a_vista_para_prazo(venda):
+    if _movimentos_ajuste_edicao_venda_a_vista(venda).exists():
+        raise ValueError(
+            "Esta venda possui ajuste financeiro de edicao e nao pode ser "
+            "convertida automaticamente de A vista para A prazo."
+        )
+
     movimentos = list(
         MovimentoFinanceiro.objects
         .select_for_update()
@@ -14940,6 +15076,7 @@ def vendas(request):
                 "data_vencimento": venda_para_editar.data_vencimento.isoformat() if venda_para_editar.data_vencimento else "",
                 "tipo_pagamento": _tipo_pagamento_venda_formulario(venda_para_editar.tipo_pagamento),
                 "operador": venda_para_editar.operador or "",
+                "total": str(venda_para_editar.total),
                 "separacao": _separacao_venda_payload(venda_para_editar, request),
                 "itens": [
                     {
@@ -21015,10 +21152,15 @@ def gravar_venda(request):
     ):
         try:
             valores_origem_venda = _valores_origem_venda_post(dados)
-            _validar_origem_venda_a_vista(
-                valores_origem_venda,
-                total_calculado.quantize(Decimal("0.01")),
-            )
+            if not (
+                venda_em_edicao
+                and _venda_pagamento_imediato(venda_em_edicao.tipo_pagamento)
+                and _venda_pagamento_imediato(tipo_pagamento_venda)
+            ):
+                _validar_origem_venda_a_vista(
+                    valores_origem_venda,
+                    total_calculado.quantize(Decimal("0.01")),
+                )
         except ValueError as exc:
             return erro_gravar_venda(str(exc))
 
@@ -21035,7 +21177,29 @@ def gravar_venda(request):
             and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
         )
         contexto_quitada = _contexto_venda_quitada(venda_em_edicao)
-        if contexto_quitada.get("quitada") and not conversao_vista_para_prazo_pre:
+        edicao_vista_para_vista_pre = (
+            pagamento_antigo_imediato_pre
+            and pagamento_novo_imediato_pre
+        )
+        if (
+            edicao_vista_para_vista_pre
+            and valores_origem_venda is not None
+            and total_calculado.quantize(Decimal("0.01"))
+            == (venda_em_edicao.total or Decimal("0.00")).quantize(Decimal("0.01"))
+        ):
+            return erro_gravar_venda(
+                (
+                    "Esta venda ja possui pagamento/baixa financeira e nao pode "
+                    "receber novamente a mesma origem financeira."
+                ),
+                status=409,
+            )
+
+        if (
+            contexto_quitada.get("quitada")
+            and not conversao_vista_para_prazo_pre
+            and not edicao_vista_para_vista_pre
+        ):
             return erro_gravar_venda(
                 (
                     "Esta venda ja possui pagamento/baixa financeira e nao pode ser "
@@ -21063,7 +21227,15 @@ def gravar_venda(request):
                     and _tipo_pagamento_a_prazo_texto(tipo_pagamento_venda)
                 )
                 contexto_quitada_atual = _contexto_venda_quitada(venda)
-                if contexto_quitada_atual.get("quitada") and not conversao_vista_para_prazo:
+                edicao_vista_para_vista = (
+                    pagamento_antigo_imediato
+                    and pagamento_novo_imediato
+                )
+                if (
+                    contexto_quitada_atual.get("quitada")
+                    and not conversao_vista_para_prazo
+                    and not edicao_vista_para_vista
+                ):
                     raise ValueError(
                         "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
                     )
@@ -21463,6 +21635,12 @@ def gravar_venda(request):
                 elif conversao_vista_para_prazo:
                     _estornar_movimentos_venda_a_vista_para_prazo(venda)
                     _abrir_conta_receber_conversao_venda_a_prazo(venda)
+                elif edicao_vista_para_vista:
+                    _ajustar_movimentos_edicao_venda_a_vista(
+                        venda,
+                        total_anterior,
+                        valores_origem_venda,
+                    )
                 else:
                     _sincronizar_conta_receber(
                         venda,
