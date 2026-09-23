@@ -968,6 +968,13 @@ class FechamentoRotaRecebimento(models.Model):
         blank=True,
         related_name="fechamentos_rota_recebimento",
     )
+    conferido_por_funcionario = models.ForeignKey(
+        "Funcionario",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="fechamentos_rota_conferidos",
+    )
     metodo_conferencia = models.CharField(max_length=20, choices=METODO_CHOICES, default=METODO_DIRETA)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTO)
     total_sistema = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))

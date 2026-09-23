@@ -22281,6 +22281,33 @@ class PixRecebidoTests(TestCase):
     def _url_recibos_pendentes(self):
         return reverse("estoque:recebimentos_recibos_pendentes")
 
+    def _criar_funcionario_conferente(self, nome="Conferente Teste"):
+        return Funcionario.objects.create(
+            nome=nome,
+            ativo=True,
+            pode_operar_sistema=True,
+        )
+
+    def _post_conferencia_recebimentos_rota(
+        self,
+        url,
+        dados,
+        conferente=None,
+        **kwargs,
+    ):
+        if conferente is None:
+            conferente = self._criar_funcionario_conferente()
+
+        dados = dict(dados)
+        dados.setdefault("conferido_por_funcionario", str(conferente.id))
+
+        kwargs.setdefault("secure", True)
+        return self.client.post(
+            url,
+            dados,
+            **kwargs,
+        )
+
     def _url_recebimentos_rota(self, rota, next_url="", data_referencia=None):
         parametros = {"rota": rota}
         if data_referencia:
@@ -24216,6 +24243,141 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Conferência de Recebimentos")
         self.assertContains(resposta, "Jardim")
 
+    def test_conferencia_recebimentos_rota_lista_somente_funcionarios_autorizados(self):
+        autorizado = self._criar_funcionario_conferente(nome="Conferente Autorizado")
+        Funcionario.objects.create(
+            nome="Conferente Sem Permissao",
+            ativo=True,
+            pode_operar_sistema=False,
+        )
+        Funcionario.objects.create(
+            nome="Conferente Inativo",
+            ativo=False,
+            pode_operar_sistema=True,
+        )
+        cliente = Cliente.objects.create(
+            nome="Cliente Lista Conferentes",
+            bairro="Jardim",
+            ativo=True,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, autorizado.nome)
+        self.assertNotContains(resposta, "Conferente Sem Permissao")
+        self.assertNotContains(resposta, "Conferente Inativo")
+
+    def test_conferencia_recebimentos_rota_exige_funcionario_responsavel(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Sem Conferente",
+            bairro="Jardim",
+            ativo=True,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "50,00",
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            "Selecione o funcionário responsável pela conferência.",
+        )
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_rejeita_funcionario_sem_permissao(self):
+        funcionario = Funcionario.objects.create(
+            nome="Conferente Nao Autorizado",
+            ativo=True,
+            pode_operar_sistema=False,
+        )
+        cliente = Cliente.objects.create(
+            nome="Cliente Conferente Nao Autorizado",
+            bairro="Jardim",
+            ativo=True,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self.client.post(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "50,00",
+                "conferido_por_funcionario": str(funcionario.id),
+            },
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(
+            resposta,
+            "Selecione o funcionário responsável pela conferência.",
+        )
+        self.assertEqual(FechamentoRotaRecebimento.objects.count(), 0)
+
+    def test_conferencia_recebimentos_rota_grava_funcionario_e_usuario_separadamente(self):
+        usuario = get_user_model().objects.create_user(
+            username="usuario-conferencia-auditoria",
+            password="senha",
+        )
+        self.client.force_login(usuario)
+        conferente = self._criar_funcionario_conferente(nome="Lincoln Conferente Teste")
+        cliente = Cliente.objects.create(
+            nome="Cliente Auditoria Conferencia",
+            bairro="Jardim",
+            ativo=True,
+        )
+        self._criar_operacao_recebimento_cliente(
+            cliente,
+            rota="Jardim",
+            valor="50.00",
+            forma_pagamento="Dinheiro",
+        )
+        url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
+
+        resposta = self._post_conferencia_recebimentos_rota(
+            url,
+            {
+                "metodo_conferencia_visual": "direta",
+                "valor_conferencia_direta": "50,00",
+            },
+            conferente=conferente,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        fechamento = FechamentoRotaRecebimento.objects.get()
+        self.assertEqual(fechamento.conferido_por_funcionario, conferente)
+        self.assertEqual(fechamento.usuario, usuario)
+        self.assertEqual(fechamento.criado_por, usuario)
+
     def test_conferencia_recebimentos_rota_exibe_resumo_por_forma_pagamento(self):
         cliente_dinheiro = Cliente.objects.create(nome="Cliente Conferencia Dinheiro", bairro="Jardim", ativo=True)
         cliente_pix = Cliente.objects.create(nome="Cliente Conferencia Pix", bairro="Jardim", ativo=True)
@@ -24414,7 +24576,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, '<span class="conf-value money">R$ 1.298,65</span>', html=True)
         self.assertNotContains(resposta, 'data-valor-esperado-centavos="129865"')
 
-        resposta_post = self.client.post(
+        resposta_post = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24455,7 +24617,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_get, "R$ 500,00")
         self.assertContains(resposta_get, "R$ 1.298,65")
 
-        resposta_post = self.client.post(
+        resposta_post = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24488,7 +24650,7 @@ class PixRecebidoTests(TestCase):
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
         for despesa_id in (despesa_outra_rota.id, despesa_outra_data.id, 999999):
-            resposta = self.client.post(
+            resposta = self._post_conferencia_recebimentos_rota(
                 url,
                 {
                     "metodo_conferencia_visual": "direta",
@@ -24508,7 +24670,7 @@ class PixRecebidoTests(TestCase):
         despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24536,7 +24698,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_get, "R$ 500,00")
         self.assertContains(resposta_get, "R$ 1.298,65")
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24569,7 +24731,7 @@ class PixRecebidoTests(TestCase):
         )
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24591,7 +24753,7 @@ class PixRecebidoTests(TestCase):
         despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
-        self.client.post(
+        self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24615,7 +24777,7 @@ class PixRecebidoTests(TestCase):
         despesa = self._criar_despesa_dinheiro_rota(valor="154.00")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24640,7 +24802,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_get, 'data-valor-esperado-centavos="0"')
         self.assertContains(resposta_get, "R$ 500,00")
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24675,7 +24837,7 @@ class PixRecebidoTests(TestCase):
         )
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Genipauba', 'data': data_rota.isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24697,7 +24859,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "direta",
@@ -24724,7 +24886,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24750,7 +24912,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24768,7 +24930,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24788,7 +24950,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="2463.80", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",
@@ -24820,7 +24982,7 @@ class PixRecebidoTests(TestCase):
         self._criar_operacao_recebimento_cliente(cliente, rota="Jardim", valor="50.00", forma_pagamento="Dinheiro")
         url = f"{reverse('estoque:conferencia_recebimentos_rota')}?{urlencode({'rota': 'Jardim', 'data': timezone.localdate().isoformat()})}"
 
-        resposta = self.client.post(
+        resposta = self._post_conferencia_recebimentos_rota(
             url,
             {
                 "metodo_conferencia_visual": "cedulas",

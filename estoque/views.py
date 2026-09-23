@@ -18176,7 +18176,14 @@ def _desfazer_operacao_recebimento_cliente(operacao_id, usuario=None):
 def _resumo_fechamento_rota(fechamento):
     if not fechamento:
         return None
-    diferenca_absoluta = abs((fechamento.diferenca or Decimal("0.00")).quantize(Decimal("0.01")))
+    diferenca_original = (fechamento.diferenca or Decimal("0.00")).quantize(Decimal("0.01"))
+    diferenca_absoluta = abs(diferenca_original)
+    if diferenca_original < Decimal("0.00"):
+        diferenca_tipo = "Faltou"
+    elif diferenca_original > Decimal("0.00"):
+        diferenca_tipo = "Sobrou"
+    else:
+        diferenca_tipo = "Sem diferença"
     valor_regularizado = Decimal("0.00")
     saldo_pendente = diferenca_absoluta
     if diferenca_absoluta <= Decimal("0.00"):
@@ -18188,14 +18195,21 @@ def _resumo_fechamento_rota(fechamento):
     else:
         situacao_texto = "Diferença regularizada"
     usuario = fechamento.usuario or fechamento.criado_por
+    conferente_nome = (
+        fechamento.conferido_por_funcionario.nome
+        if fechamento.conferido_por_funcionario
+        else (_nome_usuario_recebimento(usuario) or "-")
+    )
     return {
         "obj": fechamento,
-        "usuario_nome": _nome_usuario_recebimento(usuario) or "-",
+        "usuario_nome": conferente_nome,
         "finalizado_em": timezone.localtime(fechamento.created_at) if fechamento.created_at else None,
         "valor_esperado_formatado": _formatar_moeda(fechamento.total_sistema),
         "valor_contado_formatado": _formatar_moeda(fechamento.total_conferido),
         "diferenca_formatada": _formatar_moeda(diferenca_absoluta),
         "diferenca_original_formatada": _formatar_moeda(diferenca_absoluta),
+        "diferenca_tipo": diferenca_tipo,
+        "diferenca_valor": diferenca_original,
         "valor_regularizado_formatado": _formatar_moeda(valor_regularizado),
         "saldo_pendente_formatado": _formatar_moeda(saldo_pendente),
         "tem_diferenca": diferenca_absoluta > Decimal("0.00"),
@@ -18550,7 +18564,43 @@ def receber_cliente_recebimentos_rota(request):
     resumo_conferencia = _resumo_conferencia_recebimentos_rota(rota_filtro, data_referencia)
     fechamento = _fechamento_rota_data(rota_filtro, data_referencia)
     fechamento_resumo = _resumo_fechamento_rota(fechamento)
+
+    despesas_rota_total_confirmado = Decimal("0.00")
+    if fechamento:
+        despesas_rota_total_confirmado = sum(
+            (
+                confirmacao.valor_justificado or Decimal("0.00")
+                for confirmacao in fechamento.despesas_rota_confirmadas.all()
+            ),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+
     tem_recebimentos = bool(resumo["itens"])
+
+    whatsapp_conferencia_url = ""
+    if fechamento and fechamento_resumo:
+        detalhes_rota_url = request.build_absolute_uri(
+            f"{url_base}?{urlencode({'rota': rota_filtro, 'data': data_referencia.isoformat()})}"
+        )
+
+        linhas_whatsapp = [
+            f"Conferência — {rota_filtro} — {data_referencia.strftime('%d/%m/%Y')}",
+            "",
+            f"Total recebido: {_formatar_moeda(resumo_conferencia['total_recebido'])}",
+            f"PIX: {_formatar_moeda(resumo_conferencia['total_pix'])}",
+            f"Dinheiro recebido: {_formatar_moeda(resumo_conferencia['total_dinheiro'])}",
+            f"Despesas pagas na rota: {_formatar_moeda(despesas_rota_total_confirmado)}",
+            f"Dinheiro esperado: {fechamento_resumo['valor_esperado_formatado']}",
+            f"Dinheiro contado: {fechamento_resumo['valor_contado_formatado']}",
+            f"{fechamento_resumo['diferenca_tipo']}: {fechamento_resumo['diferenca_formatada']}",
+            "",
+            "Confira os recebimentos desta rota para verificar a conferência.",
+            "",
+            f"Abrir detalhes da rota: {detalhes_rota_url}",
+        ]
+        mensagem_whatsapp = "\n".join(linhas_whatsapp)
+        whatsapp_conferencia_url = f"https://wa.me/?text={quote(mensagem_whatsapp)}"
+
     usuario_consulta_nome = (
         _nome_usuario_recebimento(request.user)
         if getattr(request.user, "is_authenticated", False)
@@ -18582,12 +18632,14 @@ def receber_cliente_recebimentos_rota(request):
             "total_dinheiro_formatado": _formatar_moeda(resumo_conferencia["total_dinheiro"]),
             "total_pix_formatado": _formatar_moeda(resumo_conferencia["total_pix"]),
             "total_cartao_formatado": _formatar_moeda(resumo_conferencia["total_cartao"]),
+            "despesas_rota_total_confirmado_formatado": _formatar_moeda(despesas_rota_total_confirmado),
             "credito_gerado_formatado": _formatar_moeda(resumo_conferencia["credito_gerado"]),
             "voltar_receber_url": voltar_url,
             "tem_recebimentos": tem_recebimentos,
             "status_conferencia": "Conferido" if fechamento else "Não conferido",
             "conferencia_concluida": bool(fechamento),
             "fechamento_resumo": fechamento_resumo,
+            "whatsapp_conferencia_url": whatsapp_conferencia_url,
             "conferir_recebimentos_url": _url_conferencia_recebimentos_rota(rota_filtro, data_referencia, request.get_full_path()),
             "historico_recente_datas": _historico_recente_recebimentos_rota(rota_filtro, data_referencia, next_param),
         },
@@ -18930,6 +18982,11 @@ def conferencia_recebimentos_rota(request):
     metodo_selecionado = FechamentoRotaRecebimento.METODO_CEDULAS
     valor_direto_inicial = ""
     observacao_inicial = ""
+    funcionarios_conferentes = Funcionario.objects.filter(
+        ativo=True,
+        pode_operar_sistema=True,
+    ).order_by("nome")
+    conferido_por_funcionario_id = ""
 
     if request.method == "POST":
         if fechamento_existente:
@@ -18941,6 +18998,16 @@ def conferencia_recebimentos_rota(request):
         metodo_selecionado = request.POST.get("metodo_conferencia_visual", "").strip()
         valor_direto_inicial = request.POST.get("valor_conferencia_direta", "").strip()
         observacao_inicial = request.POST.get("observacao_conferencia", "").strip()
+        conferido_por_funcionario_id = request.POST.get("conferido_por_funcionario", "").strip()
+        conferido_por_funcionario = (
+            funcionarios_conferentes.filter(pk=conferido_por_funcionario_id).first()
+            if conferido_por_funcionario_id
+            else None
+        )
+        if not conferido_por_funcionario:
+            messages.warning(request, "Selecione o funcionário responsável pela conferência.")
+            return redirect(request.get_full_path())
+
         try:
             total_conferido = _total_conferido_post(request.POST, metodo_selecionado)
             despesas_confirmadas, despesas_rota_total_confirmado = _despesas_rota_confirmadas_post(
@@ -18980,6 +19047,7 @@ def conferencia_recebimentos_rota(request):
                         data_referencia=data_referencia,
                         usuario=usuario,
                         criado_por=usuario,
+                        conferido_por_funcionario=conferido_por_funcionario,
                         metodo_conferencia=metodo_selecionado,
                         status=FechamentoRotaRecebimento.STATUS_FINALIZADO,
                         total_sistema=total_sistema,
@@ -19030,6 +19098,8 @@ def conferencia_recebimentos_rota(request):
             "metodo_selecionado": metodo_selecionado,
             "valor_direto_inicial": valor_direto_inicial,
             "observacao_inicial": observacao_inicial,
+            "funcionarios_conferentes": funcionarios_conferentes,
+            "conferido_por_funcionario_id": conferido_por_funcionario_id,
             "conferencia_concluida": bool(fechamento_existente),
             "fechamento_resumo": fechamento_resumo,
             "tem_recebimentos": bool(resumo["itens"]),

@@ -589,10 +589,15 @@
             <span>Finalizado em: {{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</span>
             <span>Esperado: {{ fechamento_resumo.valor_esperado_formatado }}</span>
             <span>Contado: {{ fechamento_resumo.valor_contado_formatado }}</span>
-            <span>Diferença: {{ fechamento_resumo.diferenca_formatada }}</span>
+            <span>{{ fechamento_resumo.diferenca_tipo }}: {{ fechamento_resumo.diferenca_formatada }}</span>
           </div>
           <div class="rcr-conferencia-action">
             <a class="rcr-btn" href="{{ conferir_recebimentos_url }}">Ver conferência</a>
+            {% if whatsapp_conferencia_url %}
+              <a class="rcr-btn" href="{{ whatsapp_conferencia_url }}" target="_blank" rel="noopener">
+                Enviar conferência pelo WhatsApp
+              </a>
+            {% endif %}
           </div>
         {% elif tem_recebimentos %}
           <div class="rcr-conferencia-action">

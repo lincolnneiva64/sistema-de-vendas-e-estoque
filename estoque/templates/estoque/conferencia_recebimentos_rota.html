@@ -736,6 +736,22 @@
             <textarea id="observacaoConferencia" name="observacao_conferencia" rows="3">{{ observacao_inicial }}</textarea>
           </div>
 
+          <div class="conf-observation">
+            <label for="conferidoPorFuncionario">Conferido por</label>
+            <select
+              id="conferidoPorFuncionario"
+              name="conferido_por_funcionario"
+              required
+            >
+              <option value="">Selecione o funcionario</option>
+              {% for funcionario in funcionarios_conferentes %}
+                <option value="{{ funcionario.id }}" {% if conferido_por_funcionario_id == funcionario.id|stringformat:"s" %}selected{% endif %}>
+                  {{ funcionario.nome }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
           <div class="conf-actions">
             <button type="submit" id="botaoFinalizarConferencia" class="conf-submit">Finalizar conferência</button>
           </div>
