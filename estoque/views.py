@@ -24397,8 +24397,10 @@ def _montar_grupos_rota_separacao(separacoes):
         separacao.alteracoes_fisicas_fila = (
             consolidar_alteracoes_fisicas_apos_separacao(separacao)
         )
-        separacao.tem_alteracao_fisica_fila = bool(
-            separacao.alteracoes_fisicas_fila
+        separacao.tem_revisao_pendente_fila = bool(separacao.revisao_pendente)
+        separacao.tem_alteracao_fisica_fila = (
+            bool(separacao.alteracoes_fisicas_fila)
+            and separacao.tem_revisao_pendente_fila
         )
 
         acrescimos_apos_separacao = {
@@ -24456,8 +24458,10 @@ def _montar_grupos_rota_separacao(separacoes):
             if item_separacao_tem_pendencia(item)
         ]
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
-        separacao.tem_revisao_pendente_fila = bool(separacao.revisao_pendente)
-        separacao.tem_divergencia_fila = bool(separacao.divergencias_fila)
+        separacao.tem_divergencia_fila = (
+            bool(separacao.divergencias_fila)
+            and separacao.tem_revisao_pendente_fila
+        )
         separacao.tipo_divergencia_fila = (
             "apos_separacao"
             if separacao.revisao_pendente or separacao.teve_revisao
@@ -24968,7 +24972,8 @@ def separacao_venda_alteracao_atendida(request, pk):
         )
 
         alteracoes = consolidar_alteracoes_fisicas_apos_separacao(separacao)
-        if not alteracoes:
+        divergencias = divergencias_separacao_venda(separacao)
+        if not alteracoes and not divergencias:
             messages.warning(
                 request,
                 "Nao existem alteracoes apos a separacao aguardando atendimento.",
@@ -24985,11 +24990,16 @@ def separacao_venda_alteracao_atendida(request, pk):
         # Compatibilidade com separacoes antigas que foram reabertas pelo
         # fluxo de revisao. O checklist historico nao e refeito nem alterado.
         if separacao.revisao_pendente:
+            agora = timezone.now()
             separacao.revisao_pendente = False
+            separacao.teve_revisao = True
+            separacao.revisao_concluida_em = agora
             separacao.status = SeparacaoVenda.STATUS_SEPARADA
             separacao.save(
                 update_fields=[
                     "revisao_pendente",
+                    "teve_revisao",
+                    "revisao_concluida_em",
                     "status",
                     "atualizado_em",
                 ]

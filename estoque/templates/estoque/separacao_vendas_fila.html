@@ -231,6 +231,10 @@
                     {% for divergencia in separacao.divergencias_fila %}
                       <div>{{ divergencia }}</div>
                     {% endfor %}
+                    <form class="sep-inline-form" method="post" action="{% url 'estoque:separacao_venda_alteracao_atendida' separacao.id %}">
+                      {% csrf_token %}
+                      <button class="sep-btn warning" type="submit">Alteração atendida</button>
+                    </form>
                   </div>
                 {% elif separacao.nota_pronta_fila %}
                   <div class="sep-alert ok">{{ separacao.mensagem_pronta_fila }}</div>
