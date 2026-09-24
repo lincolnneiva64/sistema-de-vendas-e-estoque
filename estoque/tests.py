@@ -14078,6 +14078,18 @@ class PixRecebidoTests(TestCase):
             follow=True,
         )
 
+    def _registrar_movimento_venda_a_vista_teste(self, venda, valor=None, conta=None, descricao=None):
+        conta = conta or views._conta_financeira_padrao("caixa")
+        return MovimentoFinanceiro.objects.create(
+            conta=conta,
+            tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+            valor=(valor if valor is not None else venda.total),
+            data=venda.data_venda or timezone.localdate(),
+            descricao=descricao or views._descricao_venda_a_vista(venda, conta),
+            operador=venda.operador or "",
+            origem="venda",
+        )
+
     def _post_gravar_venda(self, produto, quantidade="1", unidade="un", preco="2.00"):
         return self.client.post(
             reverse("estoque:gravar_venda"),
@@ -14118,6 +14130,7 @@ class PixRecebidoTests(TestCase):
             preco_unitario=Decimal("21.25"),
             valor_total=Decimal("42.50"),
         )
+        self._registrar_movimento_venda_a_vista_teste(venda)
 
         resposta = self._post_cancelar_venda(venda)
 
@@ -14155,6 +14168,7 @@ class PixRecebidoTests(TestCase):
             preco_unitario=Decimal("18.00"),
             valor_total=Decimal("36.00"),
         )
+        self._registrar_movimento_venda_a_vista_teste(venda)
         rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
         item_rota = EntregaRotaItem.objects.create(
             rota=rota,
@@ -14207,6 +14221,7 @@ class PixRecebidoTests(TestCase):
             preco_unitario=Decimal("12.00"),
             valor_total=Decimal("24.00"),
         )
+        self._registrar_movimento_venda_a_vista_teste(venda)
         rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
         item_rota = EntregaRotaItem.objects.create(
             rota=rota,
@@ -14267,6 +14282,7 @@ class PixRecebidoTests(TestCase):
             preco_unitario=Decimal("12.00"),
             valor_total=Decimal("24.00"),
         )
+        self._registrar_movimento_venda_a_vista_teste(venda_cancelada)
         rota = EntregaRota.objects.create(data=data_entrega, tipo=EntregaRota.TIPO_ROTA)
         item_ativo = EntregaRotaItem.objects.create(
             rota=rota,
@@ -14458,6 +14474,421 @@ class PixRecebidoTests(TestCase):
         self.assertEqual(conta.valor_original, Decimal("75.00"))
         self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
         self.assertIn("Cancelada por venda nao realizada", conta.observacao)
+
+    def test_cancelamento_manual_cancela_separacao_existente(self):
+        cliente = Cliente.objects.create(nome="Cliente Separacao Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Separacao Cancelamento", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("30.00"),
+        )
+        item = ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("15.00"),
+            valor_total=Decimal("30.00"),
+        )
+        separacao = SeparacaoVenda.objects.create(
+            venda=venda,
+            status=SeparacaoVenda.STATUS_EM_SEPARACAO,
+        )
+        SeparacaoVendaItem.objects.create(
+            separacao=separacao,
+            item_venda=item,
+            produto_nome_snapshot=produto.nome,
+            unidade_snapshot="un",
+            quantidade_solicitada=Decimal("2.000"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("30.00"),
+            valor_em_aberto=Decimal("30.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        separacao.refresh_from_db()
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_CANCELADA)
+        self.assertFalse(separacao.revisao_pendente)
+        self.assertIsNotNone(separacao.finalizado_em)
+        self.assertIn("Separacao cancelada pelo cancelamento", separacao.observacao)
+
+    def test_cancelamento_manual_registra_usuario_autenticado_como_responsavel(self):
+        usuario = get_user_model().objects.create_user(username="cancelador-real", password="senha")
+        self.client.force_login(usuario)
+        cliente = Cliente.objects.create(nome="Cliente Responsavel Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Responsavel Cancelamento", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            operador="Vendedor Original",
+            total=Decimal("10.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("10.00"),
+            valor_total=Decimal("10.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("10.00"),
+            valor_em_aberto=Decimal("10.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        evento = EventoVenda.objects.get(venda=venda, tipo_evento="venda_cancelada")
+        self.assertEqual(evento.usuario, "Cancelador-Real")
+
+    def test_cancelamento_manual_venda_a_vista_estorna_movimento_financeiro_rastreavel(self):
+        cliente = Cliente.objects.create(nome="Cliente Avista Estorno Cancelamento", ativo=True)
+        produto = self._produto_teste("Produto Avista Estorno Cancelamento", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("25.00"),
+        )
+        movimento_entrada = views._registrar_movimentos_venda_a_vista(venda)[0]
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        self.assertTrue(venda.cancelada)
+        estorno = MovimentoFinanceiro.objects.get(origem="venda_estorno")
+        self.assertEqual(estorno.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(estorno.conta, movimento_entrada.conta)
+        self.assertEqual(estorno.valor, Decimal("25.00"))
+        self.assertIn(f"Estorno venda a vista #{venda.id}", estorno.descricao)
+        self.assertTrue(
+            EventoVenda.objects.filter(
+                venda=venda,
+                tipo_evento="venda_cancelada",
+                descricao__icontains="Financeiro a vista estornado",
+            ).exists()
+        )
+
+    def test_cancelamento_manual_venda_48_nao_captura_movimento_da_485(self):
+        cliente_48 = Cliente.objects.create(nome="Cliente Venda 48", ativo=True)
+        cliente_485 = Cliente.objects.create(nome="Cliente Venda 485", ativo=True)
+        produto_48 = self._produto_teste("Produto Venda 48", quantidade=5)
+        produto_485 = self._produto_teste("Produto Venda 485", quantidade=5)
+        venda_48 = Venda.objects.create(
+            id=48,
+            cliente=cliente_48,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        venda_485 = Venda.objects.create(
+            id=485,
+            cliente=cliente_485,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_48,
+            produto=produto_48,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_485,
+            produto=produto_485,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("25.00"),
+            valor_total=Decimal("25.00"),
+        )
+        self._registrar_movimento_venda_a_vista_teste(venda_485)
+
+        self.assertEqual(list(views._movimentos_financeiros_venda(venda_48)), [])
+        resposta = self._post_cancelar_venda(venda_48)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda_48.refresh_from_db()
+        produto_48.refresh_from_db()
+        self.assertFalse(venda_48.cancelada)
+        self.assertEqual(produto_48.quantidade, Decimal("5.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)
+        self.assertFalse(EventoVenda.objects.filter(venda=venda_48, tipo_evento="venda_cancelada").exists())
+        mensagens = "\n".join(str(mensagem) for mensagem in get_messages(resposta.wsgi_request))
+        self.assertIn("movimento financeiro original", mensagens)
+
+    def test_cancelamento_manual_venda_485_nao_captura_movimentos_de_ids_semelhantes(self):
+        cliente = Cliente.objects.create(nome="Cliente Venda 485 Semelhantes", ativo=True)
+        produto = self._produto_teste("Produto Venda 485 Semelhantes", quantidade=5)
+        venda_485 = Venda.objects.create(
+            id=485,
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda_485,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        for venda_id in (48, 480, 489):
+            outra_venda = Venda.objects.create(
+                id=venda_id,
+                cliente=cliente,
+                data_venda=timezone.localdate(),
+                tipo_pagamento="A vista",
+                operador="Operador Teste",
+                total=Decimal("25.00"),
+            )
+            self._registrar_movimento_venda_a_vista_teste(outra_venda)
+
+        self.assertEqual(list(views._movimentos_financeiros_venda(venda_485)), [])
+        resposta = self._post_cancelar_venda(venda_485)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda_485.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertFalse(venda_485.cancelada)
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)
+        self.assertFalse(EventoVenda.objects.filter(venda=venda_485, tipo_evento="venda_cancelada").exists())
+        mensagens = "\n".join(str(mensagem) for mensagem in get_messages(resposta.wsgi_request))
+        self.assertIn("movimento financeiro original", mensagens)
+
+    def test_cancelamento_manual_venda_a_vista_sem_movimento_bloqueia_sem_parcial(self):
+        cliente = Cliente.objects.create(nome="Cliente Avista Sem Movimento", ativo=True)
+        produto = self._produto_teste("Produto Avista Sem Movimento", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        conta = ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("25.00"),
+            valor_em_aberto=Decimal("25.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        rota = EntregaRota.objects.create(data=timezone.localdate(), tipo=EntregaRota.TIPO_UNITARIA)
+        item_rota = EntregaRotaItem.objects.create(
+            rota=rota,
+            venda=venda,
+            status=EntregaRotaItem.STATUS_PENDENTE,
+        )
+        separacao = SeparacaoVenda.objects.create(
+            venda=venda,
+            status=SeparacaoVenda.STATUS_EM_SEPARACAO,
+            revisao_pendente=True,
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        conta.refresh_from_db()
+        item_rota.refresh_from_db()
+        separacao.refresh_from_db()
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(conta.status, ContaReceber.STATUS_ABERTA)
+        self.assertEqual(conta.valor_em_aberto, Decimal("25.00"))
+        self.assertEqual(item_rota.status, EntregaRotaItem.STATUS_PENDENTE)
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_EM_SEPARACAO)
+        self.assertTrue(separacao.revisao_pendente)
+        self.assertFalse(EventoVenda.objects.filter(venda=venda, tipo_evento="venda_cancelada").exists())
+        mensagens = "\n".join(str(mensagem) for mensagem in get_messages(resposta.wsgi_request))
+        self.assertIn("movimento financeiro original", mensagens)
+
+    def test_cancelamento_manual_venda_a_vista_valida_cancela_e_estorna_conta_correta(self):
+        cliente = Cliente.objects.create(nome="Cliente Avista Valida", ativo=True)
+        produto = self._produto_teste("Produto Avista Valida", quantidade=5)
+        conta_banco = views._conta_financeira_padrao("banco")
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        self._registrar_movimento_venda_a_vista_teste(venda, conta=conta_banco)
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        estorno = MovimentoFinanceiro.objects.get(origem="venda_estorno")
+        self.assertTrue(venda.cancelada)
+        self.assertEqual(produto.quantidade, Decimal("7.000"))
+        self.assertEqual(estorno.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(estorno.conta, conta_banco)
+        self.assertEqual(estorno.valor, Decimal("25.00"))
+
+    def test_cancelamento_manual_venda_a_vista_ja_estornada_bloqueia_sem_parcial(self):
+        cliente = Cliente.objects.create(nome="Cliente Avista Ja Estornada", ativo=True)
+        produto = self._produto_teste("Produto Avista Ja Estornada", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        conta = views._conta_financeira_padrao("caixa")
+        self._registrar_movimento_venda_a_vista_teste(venda, conta=conta)
+        MovimentoFinanceiro.objects.create(
+            conta=conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal("25.00"),
+            data=timezone.localdate(),
+            descricao=f"Estorno venda a vista #{venda.id} - cancelamento anterior",
+            operador="Operador Teste",
+            origem="venda_estorno",
+        )
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 1)
+        self.assertFalse(EventoVenda.objects.filter(venda=venda, tipo_evento="venda_cancelada").exists())
+        mensagens = "\n".join(str(mensagem) for mensagem in get_messages(resposta.wsgi_request))
+        self.assertIn("integralmente estornados", mensagens)
+
+    def test_cancelamento_manual_venda_a_vista_valor_rastreavel_divergente_bloqueia_sem_parcial(self):
+        cliente = Cliente.objects.create(nome="Cliente Avista Divergente", ativo=True)
+        produto = self._produto_teste("Produto Avista Divergente", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A vista",
+            operador="Operador Teste",
+            total=Decimal("25.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.50"),
+            valor_total=Decimal("25.00"),
+        )
+        self._registrar_movimento_venda_a_vista_teste(venda, valor=Decimal("20.00"))
+
+        resposta = self._post_cancelar_venda(venda)
+
+        self.assertEqual(resposta.status_code, 200)
+        venda.refresh_from_db()
+        produto.refresh_from_db()
+        self.assertFalse(venda.cancelada)
+        self.assertEqual(produto.quantidade, Decimal("5.000"))
+        self.assertEqual(MovimentoFinanceiro.objects.filter(origem="venda_estorno").count(), 0)
+        self.assertFalse(EventoVenda.objects.filter(venda=venda, tipo_evento="venda_cancelada").exists())
+        mensagens = "\n".join(str(mensagem) for mensagem in get_messages(resposta.wsgi_request))
+        self.assertIn("nao corresponde ao total atual da venda", mensagens)
+
+    def test_cancelamento_manual_venda_cancelada_bloqueia_criar_entrega(self):
+        cliente = Cliente.objects.create(nome="Cliente Pos Cancelamento Bloqueio", ativo=True)
+        produto = self._produto_teste("Produto Pos Cancelamento Bloqueio", quantidade=5)
+        venda = Venda.objects.create(
+            cliente=cliente,
+            data_venda=timezone.localdate(),
+            tipo_pagamento="A prazo",
+            total=Decimal("12.00"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("1.000"),
+            unidade="un",
+            preco_unitario=Decimal("12.00"),
+            valor_total=Decimal("12.00"),
+        )
+        ContaReceber.objects.create(
+            venda=venda,
+            cliente=cliente,
+            data_emissao=timezone.localdate(),
+            valor_original=Decimal("12.00"),
+            valor_em_aberto=Decimal("12.00"),
+            status=ContaReceber.STATUS_ABERTA,
+        )
+        self._post_cancelar_venda(venda)
+
+        resposta = self.client.get(
+            reverse("estoque:venda_criar_entrega", kwargs={"pk": venda.id}),
+            secure=True,
+            follow=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertFalse(EntregaRotaItem.objects.filter(venda=venda).exists())
+        self.assertContains(resposta, "Venda cancelada / venda nao realizada")
 
     def test_cancelamento_manual_preserva_conta_parcial_e_recebimentos(self):
         cliente = Cliente.objects.create(nome="Cliente Conta Parcial Cancelamento", ativo=True)
@@ -14733,6 +15164,7 @@ class PixRecebidoTests(TestCase):
             preco_unitario=Decimal("30.00"),
             valor_total=Decimal("30.00"),
         )
+        self._registrar_movimento_venda_a_vista_teste(venda)
 
         self._post_cancelar_venda(venda)
 
@@ -31901,6 +32333,37 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertTrue(venda.cancelada)
         self.assertTrue(venda.estoque_devolvido_cancelamento)
         self.assertTrue(ItemVenda.objects.filter(pk=item.pk, venda=venda).exists())
+
+    def test_tela_vendas_em_edicao_exibe_cancelar_nota_separado(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+
+        resposta = self.client.get(
+            reverse("estoque:vendas"),
+            {"editar": venda.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="btnCancelarNotaVendaEdicao"')
+        self.assertContains(resposta, "Cancelar nota")
+        self.assertContains(resposta, reverse("estoque:venda_cancelar", kwargs={"pk": venda.id}))
+        self.assertContains(resposta, "cancelamento-nota-grupo")
+
+    def test_tela_vendas_em_edicao_nao_exibe_cancelar_nota_para_venda_cancelada(self):
+        cliente, produto, venda, item = self.criar_venda_base()
+        venda.cancelada = True
+        venda.cancelada_em = timezone.now()
+        venda.motivo_cancelamento = "Cancelada em teste"
+        venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+
+        resposta = self.client.get(
+            reverse("estoque:vendas"),
+            {"editar": venda.id},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertNotContains(resposta, 'id="btnCancelarNotaVendaEdicao"')
 
     def preparar_venda_a_vista_com_movimentos(self, caixa="0.00", banco="0.00", criar_movimentos=True):
         cliente, produto, venda, item = self.criar_venda_base(

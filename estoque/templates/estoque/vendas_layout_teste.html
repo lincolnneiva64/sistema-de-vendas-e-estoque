@@ -986,6 +986,24 @@ select {
     border-color: #ea580c;
     color: #7c2d12;
 }
+.acao-venda-btn.cancelar-nota {
+    background: #dc2626;
+    border-color: #b91c1c;
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(185, 28, 28, 0.26);
+}
+.acao-venda-btn.cancelar-nota:hover,
+.acao-venda-btn.cancelar-nota:focus-visible {
+    background: #b91c1c;
+    border-color: #991b1b;
+    color: #ffffff;
+    box-shadow: 0 10px 24px rgba(185, 28, 28, 0.34);
+}
+.cancelamento-nota-grupo {
+    margin-left: auto;
+    padding-left: 12px;
+    border-left: 1px solid #fecaca;
+}
 .venda-gravada-bloco {
     display: flex;
     align-items: flex-end;
@@ -3013,6 +3031,11 @@ td:first-child {
                 <button type="button" id="btnWhatsappSeparacaoVendaGravada" class="acao-venda-btn secundaria" title="Enviar checklist pelo WhatsApp" disabled>Enviar Zap</button>
                 <a id="btnFilaDepositoVendaGravada" class="acao-venda-btn secundaria" href="{% url 'estoque:separacao_vendas_fila' %}" title="Abrir fila de separacao">Fila notas</a>
             </div>
+            {% if venda_edicao and not venda_edicao.cancelada %}
+            <div class="acoes-venda-grupo direita cancelamento-nota-grupo" aria-label="Cancelamento da nota">
+                <a id="btnCancelarNotaVendaEdicao" class="acao-venda-btn cancelar-nota" href="{{ venda_edicao.cancelar_url }}{% if venda_edicao.next %}?next={{ venda_edicao.next|urlencode }}{% endif %}">Cancelar nota</a>
+            </div>
+            {% endif %}
         </div>
         <aside class="atalhos-venda" id="atalhosVenda" aria-label="Atalhos da venda">
             <button type="button" class="atalhos-venda-toggle" id="btnAtalhosVenda" aria-expanded="false" aria-controls="atalhosVendaPainel">Atalhos</button>

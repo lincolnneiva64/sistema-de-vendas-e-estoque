@@ -3203,6 +3203,18 @@ def _descricao_venda_a_vista(venda, conta=None):
     return descricao[:255]
 
 
+def _prefixo_descricao_venda_a_vista(venda):
+    return f"Venda a vista #{venda.id} -"
+
+
+def _prefixo_descricao_estorno_venda_a_vista(venda):
+    return f"Estorno venda a vista #{venda.id} -"
+
+
+def _prefixo_descricao_ajuste_venda_a_vista(venda):
+    return f"Ajuste edicao venda a vista #{venda.id} -"
+
+
 def _movimentos_financeiros_venda(venda):
     return (
         MovimentoFinanceiro.objects
@@ -3210,7 +3222,7 @@ def _movimentos_financeiros_venda(venda):
         .filter(
             tipo=MovimentoFinanceiro.TIPO_ENTRADA,
             origem="venda",
-            descricao__startswith=f"Venda a vista #{venda.id}",
+            descricao__startswith=_prefixo_descricao_venda_a_vista(venda),
         )
         .order_by("id")
     )
@@ -3223,7 +3235,7 @@ def _movimentos_estorno_venda_a_vista(venda):
         .filter(
             tipo=MovimentoFinanceiro.TIPO_SAIDA,
             origem="venda_estorno",
-            descricao__startswith=f"Estorno venda a vista #{venda.id}",
+            descricao__startswith=_prefixo_descricao_estorno_venda_a_vista(venda),
         )
         .order_by("id")
     )
@@ -3333,7 +3345,7 @@ def _movimentos_ajuste_edicao_venda_a_vista(venda):
         .select_related("conta", "conta_destino")
         .filter(
             origem="venda_edicao_ajuste",
-            descricao__startswith=f"Ajuste edicao venda a vista #{venda.id}",
+            descricao__startswith=_prefixo_descricao_ajuste_venda_a_vista(venda),
         )
         .order_by("id")
     )
@@ -3576,7 +3588,7 @@ def _estornar_movimentos_venda_a_vista_para_prazo(venda):
         .filter(
             tipo=MovimentoFinanceiro.TIPO_ENTRADA,
             origem="venda",
-            descricao__startswith=f"Venda a vista #{venda.id}",
+            descricao__startswith=_prefixo_descricao_venda_a_vista(venda),
         )
         .order_by("id")
     )
@@ -3586,7 +3598,7 @@ def _estornar_movimentos_venda_a_vista_para_prazo(venda):
         .filter(
             tipo=MovimentoFinanceiro.TIPO_SAIDA,
             origem="venda_estorno",
-            descricao__startswith=f"Estorno venda a vista #{venda.id}",
+            descricao__startswith=_prefixo_descricao_estorno_venda_a_vista(venda),
         )
         .order_by("id")
     )
@@ -3625,6 +3637,66 @@ def _estornar_movimentos_venda_a_vista_para_prazo(venda):
             origem="venda_estorno",
         ))
     return estornos
+
+
+def _estornar_movimentos_venda_a_vista_cancelamento(venda, operador=""):
+    if not _venda_pagamento_imediato(venda.tipo_pagamento):
+        return ""
+
+    movimentos_originais = list(_movimentos_financeiros_venda(venda))
+    if not movimentos_originais:
+        raise ValueError(
+            "Cancelamento bloqueado: o movimento financeiro original da venda a vista "
+            "nao pode ser identificado com seguranca. Confira o financeiro da venda "
+            "antes de cancelar para evitar inconsistencia."
+        )
+
+    if _movimentos_venda_a_vista_integralmente_estornados(venda):
+        raise ValueError(
+            "Cancelamento bloqueado: os movimentos financeiros da venda a vista "
+            "ja aparecem integralmente estornados. Confira a situacao financeira da venda."
+        )
+
+    saldos = _saldo_financeiro_venda_a_vista_por_conta(venda)
+    total_saldo = sum(saldos.values(), Decimal("0.00")).quantize(Decimal("0.01"))
+    total_venda = _financeiro_dinheiro(venda.total).quantize(Decimal("0.01"))
+    if total_saldo != total_venda:
+        raise ValueError(
+            "Cancelamento bloqueado: o saldo financeiro rastreado da venda a vista "
+            "nao corresponde ao total atual da venda."
+        )
+
+    estornos = []
+    for conta_id, saldo_conta in sorted(saldos.items()):
+        saldo_conta = _financeiro_dinheiro(saldo_conta).quantize(Decimal("0.01"))
+        if saldo_conta <= Decimal("0.00"):
+            continue
+        movimento_base = next(
+            (movimento for movimento in movimentos_originais if movimento.conta_id == conta_id),
+            None,
+        )
+        conta = movimento_base.conta if movimento_base else ContaFinanceira.objects.get(pk=conta_id)
+        estornos.append(MovimentoFinanceiro.objects.create(
+            conta=conta,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=saldo_conta,
+            data=timezone.localdate(),
+            descricao=(f"Estorno venda a vista #{venda.id} - cancelamento")[:255],
+            operador=operador or venda.operador or "",
+            origem="venda_estorno",
+        ))
+
+    if not estornos:
+        raise ValueError(
+            "Cancelamento bloqueado: nao foi identificado saldo positivo para estornar "
+            "nos movimentos financeiros da venda a vista."
+        )
+
+    total_estornado = sum(
+        (_financeiro_dinheiro(movimento.valor) for movimento in estornos),
+        Decimal("0.00"),
+    ).quantize(Decimal("0.01"))
+    return f" Financeiro a vista estornado: {_formatar_moeda(total_estornado)}."
 
 
 def _abrir_conta_receber_conversao_venda_a_prazo(venda):
@@ -15072,6 +15144,8 @@ def vendas(request):
             venda_edicao = {
                 "id": venda_para_editar.id,
                 "visualizar_url": reverse("estoque:venda_detalhe", args=[venda_para_editar.id]),
+                "cancelar_url": reverse("estoque:venda_cancelar", args=[venda_para_editar.id]),
+                "cancelada": venda_para_editar.cancelada,
                 "next": venda_edicao_next,
                 "cliente_id": venda_para_editar.cliente_id,
                 "data_venda": venda_para_editar.data_venda.isoformat() if venda_para_editar.data_venda else "",
@@ -22396,6 +22470,13 @@ def _contexto_venda_quitada(venda, conta_receber=None):
     }
 
 
+def _responsavel_cancelamento_venda(request, venda):
+    usuario = getattr(request, "user", None)
+    if getattr(usuario, "is_authenticated", False):
+        return _nome_usuario_recebimento(usuario)
+    return venda.operador or ""
+
+
 def criar_ajuste_item_venda_quitada(
     venda,
     item_venda,
@@ -24081,78 +24162,119 @@ def venda_cancelar(request, pk):
             motivo = motivo_padrao
             if observacao_cancelamento:
                 motivo = f"{motivo_padrao} - Observação: {observacao_cancelamento}"
-            with transaction.atomic():
-                resumo_financeiro = ""
-                resumo_estoque = _devolver_estoque_cancelamento_venda(venda)
-                if conta_receber and recebimentos_count:
-                    primeiro_recebimento = conta_receber.recebimentos.order_by("data_recebimento", "id").first()
-                    if destino_financeiro == "credito_cliente":
-                        CreditoCliente.objects.create(
-                            cliente=venda.cliente,
-                            valor=total_recebido,
-                            tipo=CreditoCliente.TIPO_CREDITO_GERADO,
-                            origem_conta_receber=conta_receber,
-                            origem_recebimento=primeiro_recebimento,
-                            observacao=(
-                                f"Credito gerado pelo cancelamento da venda #{venda.id}. "
-                                f"Valor ja recebido preservado: {_formatar_moeda(total_recebido)}."
-                            ),
-                        )
-                        resumo_financeiro = (
-                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) virou credito do cliente. "
-                            "Recebimentos antigos preservados."
-                        )
-                        observacao_conta = (
-                            f"Cancelada por venda nao realizada. Valor ja recebido "
-                            f"({_formatar_moeda(total_recebido)}) transformado em credito do cliente."
-                        )
-                    elif destino_financeiro == "devolucao_manual":
-                        resumo_financeiro = (
-                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente. "
-                            "Recebimentos antigos preservados; caixa nao foi alterado nesta fase."
-                        )
-                        observacao_conta = (
-                            f"Cancelada por venda nao realizada. Valor ja recebido "
-                            f"({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente."
-                        )
-                    else:
-                        resumo_financeiro = (
-                            f" Valor ja pago ({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior. "
-                            "Recebimentos antigos preservados."
-                        )
-                        observacao_conta = (
-                            f"Cancelada por venda nao realizada. Valor ja recebido "
-                            f"({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior."
-                        )
+            try:
+                with transaction.atomic():
+                    venda = (
+                        Venda.objects
+                        .select_for_update()
+                        .select_related("cliente")
+                        .prefetch_related("itens__produto")
+                        .get(pk=venda.pk)
+                    )
+                    if venda.cancelada:
+                        messages.warning(request, "Esta venda ja esta cancelada.")
+                        return redirect(_url_com_retorno(detalhe_url, retorno_url))
 
-                    conta_receber.status = ContaReceber.STATUS_CANCELADA
-                    conta_receber.valor_em_aberto = Decimal("0.00")
-                    conta_receber.observacao = observacao_conta
-                    conta_receber.save(update_fields=["status", "valor_em_aberto", "observacao", "atualizado_em"])
+                    conta_receber = _conta_receber_da_venda(venda)
+                    recebimentos_count = conta_receber.recebimentos.count() if conta_receber else 0
+                    responsavel_cancelamento = _responsavel_cancelamento_venda(request, venda)
+                    resumo_financeiro = _estornar_movimentos_venda_a_vista_cancelamento(
+                        venda,
+                        responsavel_cancelamento,
+                    )
+                    resumo_estoque = _devolver_estoque_cancelamento_venda(venda)
+                    if conta_receber and recebimentos_count:
+                        primeiro_recebimento = conta_receber.recebimentos.order_by("data_recebimento", "id").first()
+                        if destino_financeiro == "credito_cliente":
+                            CreditoCliente.objects.create(
+                                cliente=venda.cliente,
+                                valor=total_recebido,
+                                tipo=CreditoCliente.TIPO_CREDITO_GERADO,
+                                origem_conta_receber=conta_receber,
+                                origem_recebimento=primeiro_recebimento,
+                                observacao=(
+                                    f"Credito gerado pelo cancelamento da venda #{venda.id}. "
+                                    f"Valor ja recebido preservado: {_formatar_moeda(total_recebido)}."
+                                ),
+                            )
+                            resumo_financeiro = (
+                                f"{resumo_financeiro} Valor ja pago ({_formatar_moeda(total_recebido)}) virou credito do cliente. "
+                                "Recebimentos antigos preservados."
+                            )
+                            observacao_conta = (
+                                f"Cancelada por venda nao realizada. Valor ja recebido "
+                                f"({_formatar_moeda(total_recebido)}) transformado em credito do cliente."
+                            )
+                        elif destino_financeiro == "devolucao_manual":
+                            resumo_financeiro = (
+                                f"{resumo_financeiro} Valor ja pago ({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente. "
+                                "Recebimentos antigos preservados; caixa nao foi alterado nesta fase."
+                            )
+                            observacao_conta = (
+                                f"Cancelada por venda nao realizada. Valor ja recebido "
+                                f"({_formatar_moeda(total_recebido)}) marcado como devolucao manual ao cliente."
+                            )
+                        else:
+                            resumo_financeiro = (
+                                f"{resumo_financeiro} Valor ja pago ({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior. "
+                                "Recebimentos antigos preservados."
+                            )
+                            observacao_conta = (
+                                f"Cancelada por venda nao realizada. Valor ja recebido "
+                                f"({_formatar_moeda(total_recebido)}) ficou como pendencia financeira para resolucao posterior."
+                            )
 
-                venda.cancelada = True
-                venda.cancelada_em = timezone.now()
-                venda.motivo_cancelamento = motivo
-                venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
-                EntregaRotaItem.objects.filter(venda=venda).exclude(
-                    status=EntregaRotaItem.STATUS_CANCELADA
-                ).update(status=EntregaRotaItem.STATUS_CANCELADA)
-                _registrar_evento_venda(
-                    venda,
-                    "venda_cancelada",
-                    (
-                        "Venda cancelada / venda nao realizada. "
-                        f"Motivo: {motivo}. "
-                        "Itens preservados para historico. "
-                        f"{resumo_financeiro} "
-                        f"{resumo_estoque} "
-                        "Conta a receber vinculada cancelada/zerada quando existente. Caixa nao foi alterado nesta fase."
-                    ),
-                    canal="sistema",
-                    usuario=venda.operador,
-                )
-                if not (conta_receber and recebimentos_count):
-                    _sincronizar_conta_receber(venda, "venda cancelada")
+                        conta_receber.status = ContaReceber.STATUS_CANCELADA
+                        conta_receber.valor_em_aberto = Decimal("0.00")
+                        conta_receber.observacao = observacao_conta
+                        conta_receber.save(update_fields=["status", "valor_em_aberto", "observacao", "atualizado_em"])
+
+                    venda.cancelada = True
+                    venda.cancelada_em = timezone.now()
+                    venda.motivo_cancelamento = motivo
+                    venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+                    EntregaRotaItem.objects.filter(venda=venda).exclude(
+                        status=EntregaRotaItem.STATUS_CANCELADA
+                    ).update(status=EntregaRotaItem.STATUS_CANCELADA)
+                    separacao = SeparacaoVenda.objects.filter(venda=venda).first()
+                    resumo_separacao = ""
+                    if separacao and separacao.status != SeparacaoVenda.STATUS_CANCELADA:
+                        separacao.status = SeparacaoVenda.STATUS_CANCELADA
+                        separacao.revisao_pendente = False
+                        separacao.finalizado_em = separacao.finalizado_em or timezone.now()
+                        separacao.observacao = (
+                            (separacao.observacao or "").strip()
+                            + ("\n" if separacao.observacao else "")
+                            + f"Separacao cancelada pelo cancelamento da venda #{venda.id}."
+                        )
+                        separacao.save(update_fields=[
+                            "status",
+                            "revisao_pendente",
+                            "finalizado_em",
+                            "observacao",
+                            "atualizado_em",
+                        ])
+                        resumo_separacao = " Separacao vinculada marcada como cancelada."
+                    _registrar_evento_venda(
+                        venda,
+                        "venda_cancelada",
+                        (
+                            "Venda cancelada / venda nao realizada. "
+                            f"Motivo: {motivo}. "
+                            "Itens preservados para historico. "
+                            f"{resumo_financeiro} "
+                            f"{resumo_estoque} "
+                            "Conta a receber vinculada cancelada/zerada quando existente. "
+                            f"{resumo_separacao}"
+                        ),
+                        canal="sistema",
+                        usuario=responsavel_cancelamento,
+                    )
+                    if not (conta_receber and recebimentos_count):
+                        _sincronizar_conta_receber(venda, "venda cancelada")
+            except ValueError as exc:
+                messages.warning(request, str(exc))
+                return redirect(_url_com_retorno(detalhe_url, retorno_url))
 
             messages.success(request, "Venda marcada como CANCELADA / VENDA NAO REALIZADA.")
             return redirect(_url_com_retorno(detalhe_url, retorno_url))
