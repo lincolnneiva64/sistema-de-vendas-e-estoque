@@ -24167,7 +24167,6 @@ def venda_cancelar(request, pk):
                     venda = (
                         Venda.objects
                         .select_for_update()
-                        .select_related("cliente")
                         .prefetch_related("itens__produto")
                         .get(pk=venda.pk)
                     )
