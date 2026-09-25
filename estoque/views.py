@@ -12429,6 +12429,12 @@ def compra_corrigir_itens(request, pk):
                             f"preco {_financeiro_moeda_br(item.preco_unitario)} -> {_financeiro_moeda_br(preco_novo)}"
                         )
 
+                produtos_mantidos_ids = {
+                    item.produto_id
+                    for item, remover, _quantidade, _preco, _subtotal in planos_existentes
+                    if not remover and item.produto_id
+                }
+                produtos_novos_ids = set()
                 planos_novos = []
                 for indice, produto_id_texto in enumerate(novos_produtos):
                     produto_id_texto = str(produto_id_texto or "").strip()
@@ -12441,6 +12447,9 @@ def compra_corrigir_itens(request, pk):
                     produto = Produto.objects.filter(pk=produto_id_texto, excluido=False, ativo=True).first()
                     if not produto:
                         raise ValueError("Um dos novos produtos nao foi encontrado.")
+                    if produto.id in produtos_mantidos_ids or produto.id in produtos_novos_ids:
+                        raise ValueError("Este produto ja esta na compra.")
+                    produtos_novos_ids.add(produto.id)
                     quantidade = _decimal_compra(quantidade_texto, casas=3)
                     preco = _decimal_compra(preco_texto, casas=2)
                     if quantidade <= Decimal("0.000"):

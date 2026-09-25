@@ -366,6 +366,9 @@
   .item-mobile-erro {
     display:none;
   }
+  .item-mobile-erro.visivel {
+    display:block;
+  }
   .compras-total-itens {
     display:none;
   }
@@ -1138,6 +1141,31 @@
   }
   .conferencia-nota-ativa .linha-item td:first-child .produto-autocomplete {
     overflow:hidden;
+  }
+  #secaoItensCompra.conferencia-nota-ativa .linha-item .produto-estoque-compra {
+    display:flex;
+    align-items:center;
+    gap:5px;
+    margin:0 0 3px 0;
+    font-size:.72rem;
+    font-weight:750;
+    color:#64748b;
+  }
+  #secaoItensCompra.conferencia-nota-ativa .linha-item .produto-estoque-compra span {
+    min-width:0;
+    padding:1px 6px;
+    border-radius:7px;
+    background:#f1f5f9;
+    color:#475569;
+    font-size:.72rem;
+    font-weight:800;
+  }
+  #secaoItensCompra.conferencia-nota-ativa .linha-item [name="produto_busca[]"] {
+    color:#0f172a;
+    font-size:1.08rem;
+    font-weight:950;
+    line-height:1.15;
+    letter-spacing:0;
   }
   .conferencia-nota-ativa .linha-item.item-conferencia-conferido .conferencia-nota-check-wrap {
     background:#16a34a;
@@ -1976,6 +2004,21 @@
     #tabelaItensCompra .linha-item td:last-child::before {
       display:none !important;
     }
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .linha-item td:first-child .produto-estoque-compra {
+      display:flex !important;
+      width:max-content;
+      max-width:100%;
+      margin:0 0 5px 52px;
+      font-size:.7rem;
+      font-weight:720;
+      color:#64748b;
+    }
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .linha-item td:first-child .produto-estoque-compra span {
+      padding:1px 6px;
+      background:#f1f5f9;
+      color:#475569;
+      font-size:.7rem;
+    }
     #tabelaItensCompra .linha-item td:first-child input:not(.conferencia-nota-checkbox),
     #tabelaItensCompra .linha-item td:nth-child(2) input,
     #tabelaItensCompra .linha-item td:nth-child(3) input,
@@ -1996,6 +2039,16 @@
       color:#172033;
       font-size:.95rem;
       font-weight:900;
+    }
+    #secaoItensCompra.conferencia-nota-ativa #tabelaItensCompra .linha-item td:first-child input:not(.conferencia-nota-checkbox) {
+      display:block;
+      width:calc(100% - 52px);
+      max-width:calc(100% - 52px);
+      margin-left:52px;
+      color:#0f172a;
+      font-size:1.2rem;
+      line-height:1.12;
+      font-weight:950;
     }
     #tabelaItensCompra .linha-item td:last-child {
       margin-top:6px;
@@ -3642,8 +3695,52 @@
     );
   }
 
+  function linhaVisivelConferenciaNota(linha) {
+    if (!linha || linha.classList.contains("item-conferencia-oculto")) return false;
+    return linha.offsetParent !== null;
+  }
+
   function itemConferidoNota(linha) {
     return linha && linha.dataset.conferido === "1";
+  }
+
+  function produtoIdDaLinhaCompra(linha) {
+    const produto = linha ? linha.querySelector('[name="produto_id[]"]') : null;
+    return produto ? String(produto.value || "").trim() : "";
+  }
+
+  function produtoJaUsadoEmOutraLinha(produtoId, linhaAtual) {
+    const id = String(produtoId || "").trim();
+    if (!id || !tabela) return false;
+    return Array.from(tabela.querySelectorAll("tbody .linha-item")).some(function(linha) {
+      if (linha === linhaAtual || itemProvisorio(linha)) return false;
+      return produtoIdDaLinhaCompra(linha) === id;
+    });
+  }
+
+  function mostrarErroLinhaCompra(linha, mensagem) {
+    const erro = linha ? linha.querySelector(".item-mobile-erro") : null;
+    if (!erro) return;
+    erro.textContent = mensagem || "";
+    erro.classList.toggle("visivel", Boolean(mensagem));
+  }
+
+  function linhasPendentesVisiveisConferenciaNota() {
+    if (!tabela) return [];
+    return Array.from(tabela.querySelectorAll("tbody .linha-item")).filter(function(linha) {
+      return linhaConferivelNota(linha) && !itemConferidoNota(linha) && linhaVisivelConferenciaNota(linha);
+    });
+  }
+
+  function focarProximaLinhaConferenciaNota(linhaAtual) {
+    const linhas = linhasPendentesVisiveisConferenciaNota();
+    const indice = linhas.indexOf(linhaAtual);
+    const destino = indice >= 0 ? linhas[indice + 1] : linhas[0];
+    if (!destino) return false;
+    const campoProduto = destino.querySelector('[name="produto_busca[]"]');
+    const campoQuantidade = destino.querySelector('[name="quantidade[]"]');
+    focarCampo(campoProduto || campoQuantidade);
+    return true;
   }
 
   function limparConferenciaNotaLinha(linha) {
@@ -3879,6 +3976,14 @@
     const preco = campoPrecoUnitario(linha);
     const estoqueValor = linha.querySelector(".produto-estoque-valor");
 
+    if (produtoJaUsadoEmOutraLinha(opt.value, linha)) {
+      mostrarErroLinhaCompra(linha, "Este produto ja esta na compra.");
+      fecharSugestoes(linha);
+      focarCampo(produtoBusca);
+      return false;
+    }
+
+    mostrarErroLinhaCompra(linha, "");
     produto.value = opt.value;
     produtoBusca.value = opt.textContent.trim();
     unidade.value = opt.dataset.unidade || "";
@@ -3899,6 +4004,7 @@
     definirCustosSelecionadosParaEnvio(false);
     recalcular();
     carregarUltimasComprasProduto(linha, opt.value);
+    return true;
   }
 
   function opcaoPorId(linha, produtoId) {
@@ -3906,7 +4012,9 @@
   }
 
   function proximaOpcaoProduto(linha, produtoIdAtual) {
-    const opcoes = opcoesProduto(linha);
+    const opcoes = opcoesProduto(linha).filter(function(opt) {
+      return !produtoJaUsadoEmOutraLinha(opt.value, linha);
+    });
     if (!opcoes.length) return null;
 
     const indiceAtual = opcoes.findIndex((opt) => opt.value === String(produtoIdAtual || ""));
@@ -4068,7 +4176,7 @@
   function selecionarSugestaoComToque(linha, opt) {
     if (!opt || !linha) return;
 
-    selecionarProduto(linha, opt);
+    if (!selecionarProduto(linha, opt)) return;
 
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     setTimeout(function() {
@@ -4578,7 +4686,7 @@
       const opt = sugestaoAtiva(linha);
 
       if (listaAberta && opt) {
-        selecionarProduto(linha, opt);
+        if (!selecionarProduto(linha, opt)) return;
         setTimeout(function() {
           focarCampo(quantidade);
         }, 0);
@@ -4610,20 +4718,27 @@
     quantidade.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
+      event.stopPropagation();
       focarCampo(unidade);
     });
 
     unidade.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
+      event.stopPropagation();
       focarCampo(preco);
     });
 
     preco.addEventListener("keydown", function(event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
+      event.stopPropagation();
       if (linha.classList.contains("item-editando-mobile")) {
         salvarEdicaoItemMobile(linha);
+        return;
+      }
+      if (conferenciaNotaAtiva && linhaConferivelNota(linha)) {
+        focarProximaLinhaConferenciaNota(linha);
         return;
       }
       focarProximaLinha(linha);

@@ -39510,33 +39510,112 @@ class ConferenciaComprasUsoRealTests(TestCase):
         mensagens = [str(m) for m in get_messages(resposta.wsgi_request)]
         self.assertIn("Este produto ja esta na compra.", mensagens)
 
-    def test_conferencia_renderiza_nome_destacado_e_enter_sem_botao_adicionar(self):
-        lista = ListaCompraFornecedor.objects.create(
+    def test_compra_editar_bloqueia_adicionar_produto_ja_existente(self):
+        compra = Compra.objects.create(
             fornecedor=self.fornecedor,
-            data_lista=date(2026, 9, 25),
-            data_inicio_periodo=date(2026, 9, 1),
-            data_fim_periodo=date(2026, 9, 25),
-            total_lista=Decimal("8.00"),
-        )
-        ItemListaCompraFornecedor.objects.create(
-            lista=lista,
-            produto=self.produto_a,
-            quantidade_sugerida=Decimal("1.000"),
-            quantidade_final=Decimal("1.000"),
-            unidade="UN",
-            preco_compra=Decimal("8.00"),
-            preco_unitario=Decimal("8.00"),
+            data_compra=date(2026, 9, 25),
             total=Decimal("8.00"),
+            total_produtos=Decimal("8.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto_a,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("8.00"),
         )
 
-        resposta = self.client.get(
-            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": lista.pk}),
+        resposta = self.client.post(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            {
+                "acao_compra": "salvar_rascunho",
+                "fornecedor_id": str(self.fornecedor.id),
+                "data_compra": "2026-09-25",
+                "produto_id[]": [str(self.produto_a.id), str(self.produto_a.id)],
+                "quantidade[]": ["1,000", "1,000"],
+                "unidade[]": ["UN", "UN"],
+                "preco_unitario[]": ["8,00", "8,00"],
+                "observacao_item[]": ["", ""],
+            },
             secure=True,
         )
 
-        self.assertContains(resposta, 'class="conferencia-produto-nome"')
-        self.assertContains(resposta, "avancarCampoQuantidadeConferencia(input, 1)")
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(ItemCompra.objects.filter(compra=compra, produto=self.produto_a).count(), 1)
+        mensagens = [str(m) for m in get_messages(resposta.wsgi_request)]
+        self.assertIn("Este produto ja esta na compra.", mensagens)
+
+    def test_conferencia_real_da_compra_renderiza_marcacoes_visuais_e_enter(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=date(2026, 9, 25),
+            total=Decimal("8.00"),
+            total_produtos=Decimal("8.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto_a,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("8.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            secure=True,
+        )
+
+        self.assertContains(resposta, 'id="secaoItensCompra"')
+        self.assertContains(resposta, 'class="produto-estoque-compra"')
+        self.assertContains(resposta, 'name="produto_busca[]"')
+        self.assertContains(resposta, "focarProximaLinhaConferenciaNota(linha)")
+        self.assertContains(resposta, "produtoJaUsadoEmOutraLinha(opt.value, linha)")
         self.assertNotContains(resposta, "botaoSalvar.focus()")
+
+    def test_correcao_itens_bloqueia_novo_item_duplicado_sem_gravacao_parcial(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=date(2026, 9, 25),
+            total=Decimal("8.00"),
+            total_produtos=Decimal("8.00"),
+            status=Compra.STATUS_FINALIZADA,
+        )
+        item = ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto_a,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("8.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compra_corrigir_itens", kwargs={"pk": compra.pk}),
+            secure=True,
+        )
+        self.assertEqual(resposta.status_code, 200)
+
+        resposta = self.client.post(
+            reverse("estoque:compra_corrigir_itens", kwargs={"pk": compra.pk}),
+            {
+                "item_id[]": [str(item.id)],
+                "quantidade[]": ["1,000"],
+                "preco_unitario[]": ["8,00"],
+                "novo_produto_id[]": [str(self.produto_a.id)],
+                "nova_quantidade[]": ["1,000"],
+                "novo_preco_unitario[]": ["8,00"],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(ItemCompra.objects.filter(compra=compra, produto=self.produto_a).count(), 1)
+        mensagens = [str(m) for m in get_messages(resposta.wsgi_request)]
+        self.assertIn("Este produto ja esta na compra.", mensagens)
 
 
 class ConferenciaComprasJavascriptTests(SimpleTestCase):
@@ -39555,3 +39634,15 @@ class ConferenciaComprasJavascriptTests(SimpleTestCase):
 
         self.assertIn('label + " anterior"', conteudo)
         self.assertIn("'<strong>Novo ' + escapeHtml(label.toLowerCase())", conteudo)
+
+    def test_conferencia_nota_compra_tem_enter_visual_e_duplicidade_no_fluxo_real(self):
+        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
+        conteudo = caminho.read_text(encoding="utf-8")
+
+        self.assertIn("#secaoItensCompra.conferencia-nota-ativa .linha-item [name=\"produto_busca[]\"]", conteudo)
+        self.assertIn("#secaoItensCompra.conferencia-nota-ativa .linha-item .produto-estoque-compra", conteudo)
+        self.assertIn("function focarProximaLinhaConferenciaNota(linhaAtual)", conteudo)
+        self.assertIn("linhasPendentesVisiveisConferenciaNota()", conteudo)
+        self.assertIn("focarProximaLinhaConferenciaNota(linha);", conteudo)
+        self.assertIn("produtoJaUsadoEmOutraLinha(opt.value, linha)", conteudo)
+        self.assertIn("Este produto ja esta na compra.", conteudo)
