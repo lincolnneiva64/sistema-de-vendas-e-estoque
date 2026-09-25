@@ -11753,7 +11753,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
             re.S,
         )
         tabela_edicao = re.search(
-            r'<div class="sugestao-table-wrap sugestao-desktop">(?P<conteudo>.*?)</div>\s*<div class="sugestao-mobile"',
+            r'<div class="sugestao-table-wrap sugestao-desktop">(?P<conteudo>.*?)</div>\s*<div class="[^"]*\bsugestao-mobile\b',
             html_edicao,
             re.S,
         )
@@ -11776,7 +11776,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta_ver, 'class="lista-ver-mobile-itens"')
         self.assertContains(resposta_ver, 'data-lista-ver-historico-toggle')
         self.assertContains(resposta_edicao, 'id="mobileSugestaoProdutos"')
-        self.assertContains(resposta_edicao, 'class="sugestao-mobile-card"')
+        self.assertContains(resposta_edicao, 'class="sugestao-mobile-card')
         self.assertContains(resposta_edicao, 'data-historico-toggle')
 
         self.assertContains(resposta_edicao, 'class="sugestao-input sugestao-qtd-input"')
@@ -12067,7 +12067,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertNotContains(resposta, "window.setTimeout(selecionar, 80)")
         self.assertContains(resposta, "precoValidado.valor < 0")
         self.assertContains(resposta, "qtdValidada.valor <= 0")
-        self.assertContains(resposta, "campo.readOnly = adicionado")
+        self.assertContains(resposta, "campo.readOnly = modoEdicaoLista ? false : adicionado")
         self.assertContains(resposta, "contador.dataset.count = String(total);")
         self.assertContains(resposta, 'contador.querySelector("[data-itens-lista-mobile-total]")')
         self.assertContains(resposta, "totalEl.textContent = String(total);")
@@ -12120,9 +12120,13 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "const modoEdicaoLista = true;")
-        self.assertContains(resposta, "cards().forEach(adicionarCardNaLista);")
-        self.assertContains(resposta, 'id="itensListaMobile"')
-        self.assertContains(resposta, "atualizarContadorItensLista")
+        self.assertContains(resposta, "prepararEdicaoDiretaMobile();")
+        self.assertContains(resposta, "sugestao-mobile-edicao-direta")
+        self.assertContains(resposta, "sugestao-itens-lista-edicao-direta")
+        self.assertContains(resposta, "sugestao-confirmar-card-mobile")
+        self.assertContains(resposta, "confirmarCardEdicaoDireta")
+        self.assertContains(resposta, 'data-na-lista="1"')
+        self.assertNotContains(resposta, "cards().forEach(adicionarCardNaLista);")
 
     def test_gravar_lista_com_um_item_payload_salva_somente_esse_item(self):
         produto_escolhido = self.criar_produto("Produto Escolhido")
