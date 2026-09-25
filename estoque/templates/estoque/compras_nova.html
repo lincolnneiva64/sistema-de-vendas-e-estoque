@@ -2198,6 +2198,36 @@
       border:1.5px solid #fb923c;
       color:#9a3412;
     }
+    .compra-duplicado-modal .compra-remover-modal-card {
+      width:min(360px, 100%);
+    }
+    .compra-duplicado-modal .compra-remover-modal-topo {
+      background:#f8fafc;
+    }
+    .compra-duplicado-modal .compra-remover-modal-corpo {
+      gap:4px;
+    }
+    .compra-duplicado-modal .compra-remover-modal-acoes {
+      grid-template-columns:1fr;
+    }
+    .compra-duplicado-modal .compras-btn {
+      justify-self:end;
+      min-width:92px;
+    }
+    .compras-itens-contador-nota {
+      display:inline-flex;
+      align-items:center;
+      gap:5px;
+      margin-left:10px;
+      padding:5px 9px;
+      border:1px solid #bfdbfe;
+      border-radius:999px;
+      background:#eff6ff;
+      color:#1e3a8a;
+      font-size:.86rem;
+      font-weight:900;
+      white-space:nowrap;
+    }
     #tabelaItensCompra.itens-mobile-vazio tbody::before {
       content:"Nenhum item adicionado ainda.";
       display:block;
@@ -2772,7 +2802,10 @@
 
     <section class="compras-card" id="secaoItensCompra">
       <div class="compras-card-head compras-card-head-acoes">
-        <span><span class="compras-label-desktop">Itens da compra</span><span class="compras-label-mobile">Itens lan&ccedil;ados</span></span>
+        <span>
+          <span class="compras-label-desktop">Itens da compra</span><span class="compras-label-mobile">Itens lan&ccedil;ados</span>
+          <span class="compras-itens-contador-nota">Itens na nota: <span id="itensNaNotaCompra">0</span></span>
+        </span>
         <button type="button" class="compras-btn compras-btn-secondary" id="btnConferirNotaCompra">Conferir Nota</button>
       </div>
       <div class="compras-conferencia-nota" id="resumoConferenciaNotaCompra" aria-live="polite">
@@ -2879,6 +2912,20 @@
         <div class="compra-remover-modal-acoes">
           <button type="button" class="compras-btn compra-remover-modal-cancelar" id="btnCancelarRemoverItemCompra">Cancelar</button>
           <button type="button" class="compras-btn compra-remover-modal-confirmar" id="btnConfirmarRemoverItemCompra">Remover item</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="compra-remover-modal compra-duplicado-modal" id="modalProdutoDuplicadoCompra" aria-hidden="true">
+      <div class="compra-remover-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloModalProdutoDuplicadoCompra">
+        <div class="compra-remover-modal-topo">
+          <h2 id="tituloModalProdutoDuplicadoCompra">Produto j&aacute; adicionado</h2>
+        </div>
+        <div class="compra-remover-modal-corpo">
+          <div>Este produto j&aacute; est&aacute; nesta compra.</div>
+        </div>
+        <div class="compra-remover-modal-acoes">
+          <button type="button" class="compras-btn compras-btn-primary" id="btnOkProdutoDuplicadoCompra">OK</button>
         </div>
       </div>
     </div>
@@ -3012,6 +3059,7 @@
   const totalCompra = document.getElementById("totalCompra");
   const valorCobradoCompra = document.getElementById("valorCobradoCompra");
   const diferencaCompra = document.getElementById("diferencaCompra");
+  const itensNaNotaCompra = document.getElementById("itensNaNotaCompra");
   const totalItensCompraMobile = document.getElementById("totalItensCompraMobile");
   const totalCompraCabecalho = document.getElementById("totalCompraCabecalho");
   const btnAdicionar = document.getElementById("btnAdicionarItem");
@@ -3058,6 +3106,8 @@
   const produtoModalRemoverItemCompra = document.getElementById("produtoModalRemoverItemCompra");
   const btnCancelarRemoverItemCompra = document.getElementById("btnCancelarRemoverItemCompra");
   const btnConfirmarRemoverItemCompra = document.getElementById("btnConfirmarRemoverItemCompra");
+  const modalProdutoDuplicadoCompra = document.getElementById("modalProdutoDuplicadoCompra");
+  const btnOkProdutoDuplicadoCompra = document.getElementById("btnOkProdutoDuplicadoCompra");
   const mobileQuery = window.matchMedia("(max-width: 820px)");
   let fechamentoOrigemConfirmado = false;
   let conferenciaPrecosConfirmada = false;
@@ -3069,6 +3119,7 @@
   let revisaoPrecosIndice = 0;
   let revisaoPrecosDecisoes = {};
   let linhaPendenteRemocaoCompra = null;
+  let linhaProdutoDuplicadoCompra = null;
   let conferenciaNotaAtiva = false;
   let filtroConferenciaNota = "todos";
   let rascunhoBloqueado = {% if rascunho_salvo %}true{% else %}false{% endif %};
@@ -3718,6 +3769,32 @@
     });
   }
 
+  function contarItensNaNotaCompra() {
+    if (!tabela) return 0;
+    return Array.from(tabela.querySelectorAll("tbody .linha-item")).filter(function(linha) {
+      return !itemProvisorio(linha) && produtoSelecionadoValido(linha);
+    }).length;
+  }
+
+  function abrirModalProdutoDuplicadoCompra(linha) {
+    if (!modalProdutoDuplicadoCompra) return;
+    linhaProdutoDuplicadoCompra = linha || null;
+    modalProdutoDuplicadoCompra.classList.add("aberto");
+    modalProdutoDuplicadoCompra.setAttribute("aria-hidden", "false");
+    if (btnOkProdutoDuplicadoCompra) {
+      btnOkProdutoDuplicadoCompra.focus({ preventScroll: true });
+    }
+  }
+
+  function fecharModalProdutoDuplicadoCompra() {
+    if (!modalProdutoDuplicadoCompra) return;
+    modalProdutoDuplicadoCompra.classList.remove("aberto");
+    modalProdutoDuplicadoCompra.setAttribute("aria-hidden", "true");
+    const produtoBusca = linhaProdutoDuplicadoCompra ? linhaProdutoDuplicadoCompra.querySelector('[name="produto_busca[]"]') : null;
+    linhaProdutoDuplicadoCompra = null;
+    focarCampo(produtoBusca);
+  }
+
   function mostrarErroLinhaCompra(linha, mensagem) {
     const erro = linha ? linha.querySelector(".item-mobile-erro") : null;
     if (!erro) return;
@@ -3898,8 +3975,12 @@
     if (totalCompraCabecalho) {
       totalCompraCabecalho.textContent = moeda(valorFinanceiroCentavos / 100);
     }
-    if (totalItensCompraMobile && tabela) {
-      totalItensCompraMobile.textContent = String(tabela.querySelectorAll("tbody .linha-item:not([data-item-provisorio='1'])").length);
+    const totalItensNota = contarItensNaNotaCompra();
+    if (itensNaNotaCompra) {
+      itensNaNotaCompra.textContent = String(totalItensNota);
+    }
+    if (totalItensCompraMobile) {
+      totalItensCompraMobile.textContent = String(totalItensNota);
     }
     if (origemDinheiroCompra && origemDinheiroCompra.classList.contains("visivel")) {
       atualizarResumoOrigemDinheiroCompra();
@@ -3979,7 +4060,7 @@
     if (produtoJaUsadoEmOutraLinha(opt.value, linha)) {
       mostrarErroLinhaCompra(linha, "Este produto ja esta na compra.");
       fecharSugestoes(linha);
-      focarCampo(produtoBusca);
+      abrirModalProdutoDuplicadoCompra(linha);
       return false;
     }
 
@@ -4802,6 +4883,24 @@
     document.addEventListener("keydown", function(event) {
       if (event.key === "Escape" && modalRemoverItemCompra.classList.contains("aberto")) {
         fecharModalRemoverItemCompra();
+      }
+    });
+  }
+
+  if (btnOkProdutoDuplicadoCompra) {
+    btnOkProdutoDuplicadoCompra.addEventListener("click", fecharModalProdutoDuplicadoCompra);
+  }
+
+  if (modalProdutoDuplicadoCompra) {
+    modalProdutoDuplicadoCompra.addEventListener("click", function(event) {
+      if (event.target === modalProdutoDuplicadoCompra) {
+        fecharModalProdutoDuplicadoCompra();
+      }
+    });
+
+    document.addEventListener("keydown", function(event) {
+      if (event.key === "Escape" && modalProdutoDuplicadoCompra.classList.contains("aberto")) {
+        fecharModalProdutoDuplicadoCompra();
       }
     });
   }

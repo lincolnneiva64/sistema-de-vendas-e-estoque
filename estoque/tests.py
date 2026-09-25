@@ -39646,3 +39646,25 @@ class ConferenciaComprasJavascriptTests(SimpleTestCase):
         self.assertIn("focarProximaLinhaConferenciaNota(linha);", conteudo)
         self.assertIn("produtoJaUsadoEmOutraLinha(opt.value, linha)", conteudo)
         self.assertIn("Este produto ja esta na compra.", conteudo)
+
+    def test_compra_duplicada_usa_modal_visual_sem_alert(self):
+        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
+        conteudo = caminho.read_text(encoding="utf-8")
+
+        self.assertIn('id="modalProdutoDuplicadoCompra"', conteudo)
+        self.assertIn("Produto j&aacute; adicionado", conteudo)
+        self.assertIn("Este produto j&aacute; est&aacute; nesta compra.", conteudo)
+        self.assertIn("abrirModalProdutoDuplicadoCompra(linha);", conteudo)
+        self.assertIn("btnOkProdutoDuplicadoCompra.addEventListener", conteudo)
+        self.assertNotIn('alert("Este produto ja esta na compra.")', conteudo)
+
+    def test_contador_itens_na_nota_conta_linhas_validas(self):
+        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
+        conteudo = caminho.read_text(encoding="utf-8")
+
+        self.assertIn('id="itensNaNotaCompra"', conteudo)
+        self.assertIn("function contarItensNaNotaCompra()", conteudo)
+        self.assertIn("!itemProvisorio(linha) && produtoSelecionadoValido(linha)", conteudo)
+        self.assertIn("const totalItensNota = contarItensNaNotaCompra();", conteudo)
+        self.assertIn("itensNaNotaCompra.textContent = String(totalItensNota);", conteudo)
+        self.assertIn("totalItensCompraMobile.textContent = String(totalItensNota);", conteudo)
