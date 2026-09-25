@@ -9815,6 +9815,7 @@ def compras_lista_fornecedor_gravar(request):
     linhas = payload.get("linhas") if isinstance(payload.get("linhas"), list) else []
     itens_validos = []
     itens_zerados = []
+    produtos_vistos = set()
     try:
         for linha in linhas:
             if linha.get("ativo") is not None:
@@ -9833,6 +9834,10 @@ def compras_lista_fornecedor_gravar(request):
             produto = Produto.objects.filter(pk=produto_id, excluido=False, ativo=True).first()
             if not produto:
                 continue
+            if produto.pk in produtos_vistos:
+                messages.error(request, "Este produto ja esta na compra.")
+                return _redirect_sugestao_fornecedor_com_ciclo(fornecedor.id, data_visita_fornecedor)
+            produtos_vistos.add(produto.pk)
 
             quantidade_final = _decimal_lista_fornecedor(linha.get("sugestao"), casas=3)
             quantidade_sugerida = _decimal_lista_fornecedor(linha.get("sugestaoOriginal") or linha.get("sugestao"), casas=3)
@@ -10349,6 +10354,11 @@ def _criar_compra_rascunho_da_lista_fornecedor(lista, request):
     ]
     if not itens_validos:
         raise ValueError("Esta lista nao tem itens validos para gerar compra.")
+    produtos_vistos = set()
+    for item in itens_validos:
+        if item.produto_id in produtos_vistos:
+            raise ValueError("Este produto ja esta na compra.")
+        produtos_vistos.add(item.produto_id)
 
     total_compra = sum((item.total for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
     marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
@@ -10402,8 +10412,8 @@ def compras_lista_fornecedor_gerar_compra(request, pk):
     try:
         with transaction.atomic():
             compra = _criar_compra_rascunho_da_lista_fornecedor(lista, request)
-    except ValueError:
-        messages.error(request, "Esta lista nao tem itens validos para gerar compra.")
+    except ValueError as exc:
+        messages.error(request, str(exc))
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
     messages.success(request, f"Compra #{compra.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
@@ -10625,12 +10635,17 @@ def compras_lista_fornecedor_editar(request, pk):
         linhas = payload.get("linhas") or []
         itens_validos = []
         total_lista = Decimal("0.00")
+        produtos_vistos = set()
 
         for linha in linhas:
             produto_id = linha.get("produtoId") or linha.get("produto_id") or ""
             produto = Produto.objects.filter(pk=produto_id).first()
             if not produto:
                 continue
+            if produto.pk in produtos_vistos:
+                messages.error(request, "Este produto ja esta na compra.")
+                return redirect("estoque:compras_lista_fornecedor_editar", pk=lista.pk)
+            produtos_vistos.add(produto.pk)
 
             quantidade = _lista_fornecedor_decimal_qtd(linha.get("sugestao") or linha.get("quantidade") or "0")
             if quantidade <= 0:
@@ -11316,6 +11331,7 @@ def _dados_compra_post(request, exigir_itens=True):
     produtos_map = Produto.objects.filter(pk__in=ids_validos, excluido=False, ativo=True).in_bulk()
 
     itens_validos = []
+    produtos_vistos = set()
     for indice, produto_id in enumerate(produto_ids):
         produto_id = str(produto_id or "").strip()
         if not produto_id:
@@ -11329,6 +11345,9 @@ def _dados_compra_post(request, exigir_itens=True):
         produto = produtos_map.get(produto_chave)
         if not produto:
             raise ValueError("Produto informado nao foi encontrado.")
+        if produto.pk in produtos_vistos:
+            raise ValueError("Este produto ja esta na compra.")
+        produtos_vistos.add(produto.pk)
 
         quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
         preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)

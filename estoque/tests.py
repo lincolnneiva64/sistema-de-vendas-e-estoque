@@ -39423,3 +39423,135 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(itens[self.item_a.id].status, SeparacaoVendaItem.STATUS_PENDENTE)
         self.assertEqual(itens[item_c.id].produto_nome_snapshot, "Produto C Revisao")
         self.assertEqual(itens[item_c.id].status, SeparacaoVendaItem.STATUS_PENDENTE)
+
+
+class ConferenciaComprasUsoRealTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Conferencia")
+        self.produto_a = self._produto("Barbeador Probac")
+        self.produto_b = self._produto("Barbeador Gillette")
+
+    def _produto(self, nome):
+        return Produto.objects.create(
+            nome=nome,
+            quantidade=Decimal("10.000"),
+            estoque_minimo=1,
+            preco_compra=Decimal("8.00"),
+            preco_vista=Decimal("12.00"),
+            preco_prazo=Decimal("13.00"),
+            unidade_compra="UN",
+        )
+
+    def _payload_lista(self, produtos):
+        return {
+            "fornecedorId": str(self.fornecedor.id),
+            "dataInicio": "2026-09-01",
+            "dataFim": "2026-09-25",
+            "linhas": [
+                {
+                    "produtoId": str(produto.id),
+                    "sugestao": "1,000",
+                    "sugestaoOriginal": "1,000",
+                    "estoque": "10,000",
+                    "minimo": "1,000",
+                    "vendido": "0,000",
+                    "pedidos": "0,000",
+                    "unidade": "UN",
+                    "precoCompra": "8,00",
+                    "precoUnitario": "8,00",
+                    "total": "8,00",
+                }
+                for produto in produtos
+            ],
+            "totalOriginal": "8,00",
+        }
+
+    def test_lista_fornecedor_bloqueia_produto_duplicado_no_backend(self):
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self._payload_lista([self.produto_a, self.produto_a]))},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(ListaCompraFornecedor.objects.count(), 0)
+        mensagens = [str(m) for m in get_messages(resposta.wsgi_request)]
+        self.assertIn("Este produto ja esta na compra.", mensagens)
+
+    def test_lista_fornecedor_permite_produto_diferente(self):
+        resposta = self.client.post(
+            reverse("estoque:compras_lista_fornecedor_gravar"),
+            {"lista_payload": json.dumps(self._payload_lista([self.produto_a, self.produto_b]))},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        lista = ListaCompraFornecedor.objects.get()
+        self.assertEqual(lista.itens.count(), 2)
+
+    def test_compra_normal_bloqueia_produto_duplicado_no_backend(self):
+        resposta = self.client.post(
+            reverse("estoque:compras_nova"),
+            {
+                "acao_compra": "salvar_rascunho",
+                "fornecedor_id": str(self.fornecedor.id),
+                "data_compra": "2026-09-25",
+                "produto_id[]": [str(self.produto_a.id), str(self.produto_a.id)],
+                "quantidade[]": ["1,000", "1,000"],
+                "unidade[]": ["UN", "UN"],
+                "preco_unitario[]": ["8,00", "8,00"],
+                "observacao_item[]": ["", ""],
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(Compra.objects.count(), 0)
+        mensagens = [str(m) for m in get_messages(resposta.wsgi_request)]
+        self.assertIn("Este produto ja esta na compra.", mensagens)
+
+    def test_conferencia_renderiza_nome_destacado_e_enter_sem_botao_adicionar(self):
+        lista = ListaCompraFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            data_lista=date(2026, 9, 25),
+            data_inicio_periodo=date(2026, 9, 1),
+            data_fim_periodo=date(2026, 9, 25),
+            total_lista=Decimal("8.00"),
+        )
+        ItemListaCompraFornecedor.objects.create(
+            lista=lista,
+            produto=self.produto_a,
+            quantidade_sugerida=Decimal("1.000"),
+            quantidade_final=Decimal("1.000"),
+            unidade="UN",
+            preco_compra=Decimal("8.00"),
+            preco_unitario=Decimal("8.00"),
+            total=Decimal("8.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": lista.pk}),
+            secure=True,
+        )
+
+        self.assertContains(resposta, 'class="conferencia-produto-nome"')
+        self.assertContains(resposta, "avancarCampoQuantidadeConferencia(input, 1)")
+        self.assertNotContains(resposta, "botaoSalvar.focus()")
+
+
+class ConferenciaComprasJavascriptTests(SimpleTestCase):
+    def test_preco_manual_e_fonte_da_verdade_ate_margem_ser_editada(self):
+        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
+        conteudo = caminho.read_text(encoding="utf-8")
+
+        self.assertIn('data-origem-edicao="preco"', conteudo)
+        self.assertIn('simulador.dataset.origemEdicao = "preco"', conteudo)
+        self.assertIn('simulador.dataset.origemEdicao = "margem"', conteudo)
+        self.assertIn('if (!origemManual && simulador.dataset.origemEdicao !== "margem") return;', conteudo)
+
+    def test_custo_tem_rotulos_anterior_e_novo(self):
+        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
+        conteudo = caminho.read_text(encoding="utf-8")
+
+        self.assertIn('label + " anterior"', conteudo)
+        self.assertIn("'<strong>Novo ' + escapeHtml(label.toLowerCase())", conteudo)

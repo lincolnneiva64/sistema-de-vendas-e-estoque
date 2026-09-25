@@ -722,7 +722,7 @@
   }
   .compras-preco-custo-box {
     display:grid;
-    grid-template-columns:auto minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns:auto minmax(0, 1fr) auto auto minmax(0, 1fr);
     gap:8px;
     align-items:center;
     padding:9px 10px;
@@ -4912,9 +4912,10 @@
   function boxComparacaoCusto(label, antigo, novo) {
     return (
       '<div class="compras-preco-custo-box">' +
-        '<strong>' + escapeHtml(label) + '</strong>' +
+        '<strong>' + escapeHtml(label + " anterior") + '</strong>' +
         '<span>' + escapeHtml(antigo) + '</span>' +
         '<span class="compras-preco-seta">-&gt;</span>' +
+        '<strong>Novo ' + escapeHtml(label.toLowerCase()) + '</strong>' +
         '<span>' + escapeHtml(novo) + '</span>' +
       '</div>'
     );
@@ -4936,7 +4937,7 @@
     const classe = classeMargemSimulada(preco.margemAntiga.percentual, margemNova);
 
     return (
-      '<tr class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '">' +
+      '<tr class="compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '" data-origem-edicao="preco">' +
         '<td>' + escapeHtml(preco.titulo) + '</td>' +
         '<td>' + escapeHtml(moeda(preco.precoAtual)) + '</td>' +
         '<td><input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(novoPreco)) + '"></td>' +
@@ -5065,15 +5066,17 @@
     });
   }
 
-  function atualizarPrecoPelaMargem(simulador) {
+  function atualizarPrecoPelaMargem(simulador, origemManual) {
     if (!simulador) return;
     const custoNovo = numero(simulador.dataset.custoNovo || "0");
     const margemCampo = simulador.querySelector(".campoMargemDesejadaCompra");
     const precoCampoSimulado = simulador.querySelector(".campoNovoPrecoVendaCompra");
     if (!margemCampo || !precoCampoSimulado) return;
+    if (!origemManual && simulador.dataset.origemEdicao !== "margem") return;
 
     const margemDesejada = numero(margemCampo.value);
     const precoSugerido = arredondarPrecoSugerido(custoNovo * (1 + margemDesejada / 100));
+    simulador.dataset.origemEdicao = "margem";
     precoCampoSimulado.value = precoCampo(precoSugerido);
     atualizarResultadoSimuladorPreco(simulador);
   }
@@ -5555,9 +5558,11 @@
       event.preventDefault();
       if (typeof event.stopPropagation === "function") event.stopPropagation();
       if (campo.classList.contains("campoMargemDesejadaCompra")) {
+        campo.closest(".compras-preco-simulador").dataset.origemEdicao = "margem";
         campo.value = percentualCampo(numero(campo.value));
-        atualizarPrecoPelaMargem(campo.closest(".compras-preco-simulador"));
+        atualizarPrecoPelaMargem(campo.closest(".compras-preco-simulador"), true);
       } else if (campo.classList.contains("campoNovoPrecoVendaCompra")) {
+        campo.closest(".compras-preco-simulador").dataset.origemEdicao = "preco";
         campo.value = precoCampo(numero(campo.value));
         atualizarResultadoSimuladorPreco(campo.closest(".compras-preco-simulador"));
       }
@@ -5587,11 +5592,13 @@
       if (!simulador) return;
 
       if (event.target.classList.contains("campoMargemDesejadaCompra")) {
-        atualizarPrecoPelaMargem(simulador);
+        simulador.dataset.origemEdicao = "margem";
+        atualizarPrecoPelaMargem(simulador, true);
         return;
       }
 
       if (event.target.classList.contains("campoNovoPrecoVendaCompra")) {
+        simulador.dataset.origemEdicao = "preco";
         atualizarResultadoSimuladorPreco(simulador);
       }
     });
@@ -5616,12 +5623,14 @@
       if (!simulador) return;
 
       if (event.target.classList.contains("campoMargemDesejadaCompra")) {
+        simulador.dataset.origemEdicao = "margem";
         event.target.value = percentualCampo(numero(event.target.value));
-        atualizarPrecoPelaMargem(simulador);
+        atualizarPrecoPelaMargem(simulador, true);
         return;
       }
 
       if (event.target.classList.contains("campoNovoPrecoVendaCompra")) {
+        simulador.dataset.origemEdicao = "preco";
         event.target.value = precoCampo(numero(event.target.value));
         atualizarResultadoSimuladorPreco(simulador);
       }

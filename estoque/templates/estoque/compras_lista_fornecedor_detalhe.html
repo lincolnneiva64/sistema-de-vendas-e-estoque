@@ -1611,8 +1611,22 @@
     }
 
     .conferencia-table .lista-fornecedor-produto {
-      font-size: .96rem;
-      line-height: 1.25;
+      font-size: 1.04rem;
+      line-height: 1.18;
+      font-weight: 950;
+      color: #111827;
+      padding-bottom: 2px;
+    }
+
+    .conferencia-produto-nome {
+      display: block;
+      overflow-wrap: anywhere;
+      letter-spacing: 0;
+    }
+
+    .conferencia-table td[data-label]::before {
+      font-size: .62rem;
+      color: #a16207;
     }
 
     .conferencia-table tr.linha-conferencia.ok .lista-fornecedor-produto::after,
@@ -2066,7 +2080,7 @@
           <tbody>
             {% for item in lista.itens.all %}
               <tr data-item-id="{{ item.id }}" class="linha-conferencia {{ item.status_conferencia }}">
-                <td class="lista-fornecedor-produto" data-label="Produto">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</td>
+                <td class="lista-fornecedor-produto" data-label="Produto"><span class="conferencia-produto-nome">{% if item.produto %}{{ item.produto.nome }}{% else %}-{% endif %}</span></td>
                 <td data-label="Qtd. lista">{{ item.quantidade_final|floatformat:3 }} {{ item.unidade }}</td>
                 <td data-label="Produto confirmado?">
                   <div class="conferencia-pergunta" data-grupo-conferencia="produto">
@@ -3211,6 +3225,33 @@
       </div>`;
   }
 
+  function campoConferenciaEditavel(campo) {
+    if (!campo || campo.disabled || campo.readOnly) return false;
+    const linha = campo.closest('tr.linha-conferencia');
+    if (!linha) return false;
+    if (linha.classList.contains('oculto-filtro') || linha.classList.contains('oculto-busca')) return false;
+    return campo.offsetParent !== null;
+  }
+
+  function camposQuantidadeConferenciaEditaveis() {
+    return Array.from(document.querySelectorAll('.campoQuantidadeRecebidaLista')).filter(campoConferenciaEditavel);
+  }
+
+  function avancarCampoQuantidadeConferencia(campoAtual, direcao) {
+    const campos = camposQuantidadeConferenciaEditaveis();
+    const indice = campos.indexOf(campoAtual);
+    const destino = indice >= 0 ? campos[indice + direcao] : null;
+    if (destino) {
+      destino.focus();
+      destino.select();
+      return true;
+    }
+    if (direcao > 0) {
+      focarBuscaConferenciaMobile();
+    }
+    return false;
+  }
+
   const inputs = Array.from(document.querySelectorAll('.campoQuantidadeRecebidaLista'));
   inputs.forEach((input, idx) => {
     input.addEventListener('input', function(){
@@ -3230,15 +3271,10 @@
     input.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const next = inputs[idx+1];
-        if (next) { next.focus(); next.select(); } else {
-          const botaoSalvar = document.querySelector('.conferencia-acoes button[type=submit]');
-          if (botaoSalvar) botaoSalvar.focus();
-        }
+        avancarCampoQuantidadeConferencia(input, 1);
       } else if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
-        const prev = inputs[idx-1];
-        if (prev) { prev.focus(); prev.select(); }
+        avancarCampoQuantidadeConferencia(input, -1);
       }
     });
     atualizarLinha(input);
