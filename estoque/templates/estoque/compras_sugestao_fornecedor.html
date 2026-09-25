@@ -973,6 +973,10 @@
     align-items: center;
   }
 
+  .sugestao-historico-item > div:first-child {
+    white-space: nowrap;
+  }
+
   .sugestao-historico-item:first-of-type {
     border-top: 0;
     padding-top: 0;
@@ -1661,6 +1665,12 @@
       min-width: 0;
       white-space: normal;
       overflow-wrap: anywhere;
+    }
+
+    .produto-manual-historico-mobile .sugestao-historico-desktop-cabecalho > div:first-child,
+    .produto-manual-historico-mobile .sugestao-historico-desktop-item > div:first-child {
+      white-space: nowrap;
+      overflow-wrap: normal;
     }
 
     .sugestao-autocomplete-lista {
@@ -3331,6 +3341,7 @@
   }
 
   busca.addEventListener("focus", function() {
+    selecionarTextoBusca();
     renderizarSugestoes(false);
   });
   busca.addEventListener("click", function() {

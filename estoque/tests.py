@@ -11349,6 +11349,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             "${historicoMobileProdutoHtml(produto)}",
         )
+        self.assertContains(
+            resposta,
+            "busca.addEventListener(\"focus\", function() {\n    selecionarTextoBusca();",
+        )
 
     def test_edicao_lista_com_item_orfao_nao_quebra_get(self):
         lista = ListaCompraFornecedor.objects.create(
@@ -11683,6 +11687,8 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "R$ 12.34")
         self.assertLess(html.index(fornecedor_recente.nome), html.index(fornecedor_antigo.nome))
         self.assertContains(resposta, "function fecharHistoricosComprasMobile(exceto)")
+        self.assertContains(resposta, ".sugestao-historico-item > div:first-child")
+        self.assertContains(resposta, "white-space: nowrap;")
 
     def test_mobile_historico_ultimas_compras_visualizacao_limita_ordena_e_ignora_cancelada(self):
         produto = self.criar_produto("Produto Historico Ver")
