@@ -1918,8 +1918,23 @@ def _garantir_contas_financeiras_padrao():
         ("Banco/Pix", ContaFinanceira.TIPO_BANCO, ["Banco/Pix"]),
         ("Cartões a receber", ContaFinanceira.TIPO_BANCO, ["Cartões a receber", "Cartoes a receber"]),
     ]
+    nomes_padrao = []
+    for _nome, _tipo, aliases in contas_padrao:
+        nomes_padrao.extend(aliases)
+    contas_existentes = list(
+        ContaFinanceira.objects
+        .filter(nome__in=nomes_padrao)
+        .order_by("id")
+    )
     for nome, tipo, aliases in contas_padrao:
-        conta = ContaFinanceira.objects.filter(nome__in=aliases, tipo=tipo).order_by("id").first()
+        conta = next(
+            (
+                conta
+                for conta in contas_existentes
+                if conta.tipo == tipo and conta.nome in aliases
+            ),
+            None,
+        )
         if conta:
             campos_atualizados = []
             if conta.nome != nome:
@@ -2027,6 +2042,64 @@ def _saldo_conta_financeira(conta):
         .aggregate(total=Sum("valor"))["total"]
     )
     return saldo_inicial + entradas + ajustes - saidas - transferencias_enviadas + transferencias_recebidas
+
+
+def _contas_financeiras_padrao_mapa(chaves):
+    _garantir_contas_financeiras_padrao()
+    aliases_por_chave = {
+        "caixa": ["Caixa em espécie", "Caixa em especie"],
+        "reserva": ["Sangria / Reserva em mãos", "Sangria / Reserva em maos", "Reserva em mãos", "Reserva em maos"],
+        "banco": ["Banco/Pix"],
+        "cartoes": ["Cartões a receber", "Cartoes a receber"],
+    }
+    chaves = list(chaves)
+    nomes = []
+    for chave in chaves:
+        nomes.extend(aliases_por_chave.get(chave, [chave]))
+
+    contas = {}
+    for conta in ContaFinanceira.objects.filter(ativo=True, nome__in=nomes).order_by("id"):
+        for chave in chaves:
+            if chave not in contas and conta.nome in aliases_por_chave.get(chave, [chave]):
+                contas[chave] = conta
+                break
+    return contas
+
+
+def _saldos_contas_financeiras(contas):
+    contas = [conta for conta in contas if conta]
+    saldos = {}
+    if not contas:
+        return saldos
+
+    contas_por_id = {conta.id: conta for conta in contas}
+    for conta in contas:
+        saldos[conta.id] = _financeiro_dinheiro(conta.saldo_inicial)
+
+    totais_por_conta_tipo = (
+        MovimentoFinanceiro.objects
+        .filter(conta_id__in=contas_por_id)
+        .values("conta_id", "tipo")
+        .annotate(total=Sum("valor"))
+    )
+    for linha in totais_por_conta_tipo:
+        conta_id = linha["conta_id"]
+        total = _financeiro_dinheiro(linha["total"])
+        if linha["tipo"] in {MovimentoFinanceiro.TIPO_ENTRADA, MovimentoFinanceiro.TIPO_AJUSTE}:
+            saldos[conta_id] += total
+        elif linha["tipo"] in {MovimentoFinanceiro.TIPO_SAIDA, MovimentoFinanceiro.TIPO_TRANSFERENCIA}:
+            saldos[conta_id] -= total
+
+    transferencias_recebidas = (
+        MovimentoFinanceiro.objects
+        .filter(conta_destino_id__in=contas_por_id, tipo=MovimentoFinanceiro.TIPO_TRANSFERENCIA)
+        .values("conta_destino_id")
+        .annotate(total=Sum("valor"))
+    )
+    for linha in transferencias_recebidas:
+        saldos[linha["conta_destino_id"]] += _financeiro_dinheiro(linha["total"])
+
+    return saldos
 
 
 def _saldo_contas_financeiras(tipo_conta):
@@ -11133,8 +11206,12 @@ def _linhas_item_compra(compra=None):
     if not compra:
         return [_linha_item_compra_vazia()]
 
+    itens_qs = compra.itens.all()
+    if "itens" not in getattr(compra, "_prefetched_objects_cache", {}):
+        itens_qs = itens_qs.select_related("produto")
+
     linhas = []
-    for item in compra.itens.select_related("produto").all():
+    for item in itens_qs:
         linhas.append({
             "produto_id": item.produto_id or "",
             "produto_nome": item.produto.nome if item.produto else "",
@@ -11167,18 +11244,20 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         else None
     )
 
-    conta_caixa = _conta_financeira_padrao("caixa")
-    conta_reserva = _conta_financeira_padrao("reserva")
-    conta_banco = _conta_financeira_padrao("banco")
-    saldo_caixa = _saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")
-    saldo_reserva = _saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")
-    saldo_banco = _saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")
+    contas_padrao = _contas_financeiras_padrao_mapa(["caixa", "reserva", "banco"])
+    saldos_padrao = _saldos_contas_financeiras(contas_padrao.values())
+    conta_caixa = contas_padrao.get("caixa")
+    conta_reserva = contas_padrao.get("reserva")
+    conta_banco = contas_padrao.get("banco")
+    saldo_caixa = saldos_padrao.get(conta_caixa.id, Decimal("0.00")) if conta_caixa else Decimal("0.00")
+    saldo_reserva = saldos_padrao.get(conta_reserva.id, Decimal("0.00")) if conta_reserva else Decimal("0.00")
+    saldo_banco = saldos_padrao.get(conta_banco.id, Decimal("0.00")) if conta_banco else Decimal("0.00")
 
     return {
-        "fornecedores": Fornecedor.objects.filter(ativo=True).order_by("nome", "id"),
-        "produtos": _produto_opcoes_compra(),
-        "categorias_produto": Categoria.objects.filter(ativa=True).order_by("nome"),
-        "unidades_produto": Unidade.objects.filter(ativa=True).order_by("sigla", "nome"),
+        "fornecedores": list(Fornecedor.objects.filter(ativo=True).order_by("nome", "id")),
+        "produtos": list(_produto_opcoes_compra()),
+        "categorias_produto": list(Categoria.objects.filter(ativa=True).order_by("nome")),
+        "unidades_produto": list(Unidade.objects.filter(ativa=True).order_by("sigla", "nome")),
         "hoje": timezone.localdate(),
         "compra": compra,
         "lista_origem_compra": lista_origem_compra,
@@ -11192,7 +11271,7 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "saldo_reserva_modal": _financeiro_moeda_br(saldo_reserva),
         "saldo_banco_modal": _financeiro_moeda_br(saldo_banco),
         "erro_tipo_pagamento": erro_tipo_pagamento,
-        "cartoes_credito": CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome"),
+        "cartoes_credito": list(CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")),
     }
 
 def _dados_compra_post(request, exigir_itens=True):

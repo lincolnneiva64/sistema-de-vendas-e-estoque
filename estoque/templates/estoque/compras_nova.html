@@ -187,7 +187,6 @@
     if (card) baixarConta(card);
   });
 
-  carregarContas();
 })();
 </script>
 
@@ -1875,7 +1874,16 @@
     .compras-mobile-add-card .linha-item td:last-child { display:none; }
     .compras-mobile-add-card .compras-table-wrap { overflow:visible; }
     .compras-mobile-add-card .compras-card-body:last-child { padding-top:0; }
-    .compras-mobile-add-card #btnAdicionarItem { width:100%; }
+    .compras-mobile-add-card #btnAdicionarItem {
+      width:100%;
+      min-height:52px;
+      background:#16a34a;
+      border:1.5px solid #15803d;
+      color:#ffffff;
+      font-size:1rem;
+      font-weight:950;
+      box-shadow:0 8px 18px rgba(22,163,74,.24);
+    }
     .compras-mobile-add-card .produto-busca {
       min-height:52px;
       padding:13px 12px;
@@ -2175,6 +2183,28 @@
       border:1.5px solid #2563eb;
       color:#1d4ed8;
       box-shadow:0 3px 8px rgba(37,99,235,.08);
+    }
+    .compras-actions-final #btnSalvarRascunhoCompra {
+      background:#0f766e;
+      border-color:#0f766e;
+      color:#ffffff;
+      font-weight:950;
+      box-shadow:0 8px 18px rgba(15,118,110,.22);
+    }
+    .compras-actions-final #btnSalvarRascunhoCompra.botao-continuar-rascunho-rodape {
+      background:#16a34a !important;
+      border-color:#15803d !important;
+      color:#ffffff !important;
+      box-shadow:0 8px 18px rgba(22,163,74,.24) !important;
+    }
+    #avisoRascunhoSalvoCompra #btnContinuarLancandoItens {
+      width:100%;
+      min-height:48px;
+      background:#16a34a;
+      border-color:#15803d;
+      color:#ffffff;
+      font-weight:950;
+      box-shadow:0 8px 18px rgba(22,163,74,.22);
     }
     .compras-actions-final .compras-cancelar {
       margin-top:10px;
@@ -5241,6 +5271,30 @@
     }
   }
 
+  function restaurarBotaoEnvioPendente(botao) {
+    if (!botao || botao.dataset.envioPendente !== "1") return;
+    botao.disabled = false;
+    botao.removeAttribute("aria-busy");
+    botao.textContent = botao.dataset.textoOriginal || botao.textContent;
+    delete botao.dataset.envioPendente;
+    delete botao.dataset.textoOriginal;
+  }
+
+  function prepararFeedbackEnvioRascunho(botao) {
+    if (!botao || botao.disabled) return;
+    botao.dataset.textoOriginal = botao.textContent;
+    botao.dataset.envioPendente = "1";
+    botao.disabled = true;
+    botao.setAttribute("aria-busy", "true");
+    botao.textContent = "Salvando...";
+
+    window.setTimeout(function() {
+      if (formCompra.dataset.enviando !== "1") {
+        restaurarBotaoEnvioPendente(botao);
+      }
+    }, 600);
+  }
+
   function enviarCompraComAcao(acao, botao) {
     if (compraMobile()) {
       if (acao === "salvar_rascunho") {
@@ -5258,6 +5312,9 @@
     if (acaoCompra) acaoCompra.value = acao;
     botaoEnvioAtual = botao || null;
     envioAcionadoPeloBotao = true;
+    if (acao === "salvar_rascunho") {
+      prepararFeedbackEnvioRascunho(botaoEnvioAtual);
+    }
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
   }
 
