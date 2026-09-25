@@ -8,6 +8,7 @@ import types
 from contextlib import redirect_stdout
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 from unittest.mock import patch
@@ -39576,6 +39577,41 @@ class ConferenciaComprasUsoRealTests(TestCase):
         self.assertContains(resposta, "produtoJaUsadoEmOutraLinha(opt.value, linha)")
         self.assertNotContains(resposta, "botaoSalvar.focus()")
 
+    def test_compra_renderizada_traz_modal_duplicado_e_contador_fora_da_tabela(self):
+        compra = Compra.objects.create(
+            fornecedor=self.fornecedor,
+            data_compra=date(2026, 9, 25),
+            total=Decimal("8.00"),
+            total_produtos=Decimal("8.00"),
+            status=Compra.STATUS_RASCUNHO,
+        )
+        ItemCompra.objects.create(
+            compra=compra,
+            produto=self.produto_a,
+            quantidade=Decimal("1.000"),
+            unidade="UN",
+            preco_unitario=Decimal("8.00"),
+            valor_total=Decimal("8.00"),
+        )
+
+        resposta = self.client.get(
+            reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            secure=True,
+        )
+        html = resposta.content.decode("utf-8")
+        trecho_tabela = html[
+            html.index('<table class="compras-table" id="tabelaItensCompra">'):
+            html.index("</table>", html.index('<table class="compras-table" id="tabelaItensCompra">'))
+        ]
+
+        self.assertEqual(html.count('id="modalProdutoDuplicadoCompra"'), 1)
+        self.assertEqual(html.count('id="itensNaNotaCompra"'), 1)
+        self.assertNotIn('id="modalProdutoDuplicadoCompra"', trecho_tabela)
+        self.assertNotIn('id="itensNaNotaCompra"', trecho_tabela)
+        self.assertLess(html.index('id="itensNaNotaCompra"'), html.index('id="btnConferirNotaCompra"'))
+        self.assertIn("Produto j&aacute; est&aacute; na nota", html)
+        self.assertIn("Itens na nota:", html)
+
     def test_correcao_itens_bloqueia_novo_item_duplicado_sem_gravacao_parcial(self):
         compra = Compra.objects.create(
             fornecedor=self.fornecedor,
@@ -39619,9 +39655,37 @@ class ConferenciaComprasUsoRealTests(TestCase):
 
 
 class ConferenciaComprasJavascriptTests(SimpleTestCase):
-    def test_preco_manual_e_fonte_da_verdade_ate_margem_ser_editada(self):
+    class _IdPathParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.stack = []
+            self.paths_by_id = {}
+            self.classes_by_id = {}
+
+        def handle_starttag(self, tag, attrs):
+            attrs_dict = dict(attrs)
+            self.stack.append(tag)
+            element_id = attrs_dict.get("id")
+            if element_id:
+                self.paths_by_id.setdefault(element_id, []).append(tuple(self.stack))
+                self.classes_by_id[element_id] = attrs_dict.get("class", "")
+
+        def handle_endtag(self, tag):
+            if tag in self.stack:
+                indice = len(self.stack) - 1 - self.stack[::-1].index(tag)
+                del self.stack[indice:]
+
+    def _template_compras_nova(self):
         caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
-        conteudo = caminho.read_text(encoding="utf-8")
+        return caminho.read_text(encoding="utf-8")
+
+    def _parse_template_ids(self):
+        parser = self._IdPathParser()
+        parser.feed(self._template_compras_nova())
+        return parser
+
+    def test_preco_manual_e_fonte_da_verdade_ate_margem_ser_editada(self):
+        conteudo = self._template_compras_nova()
 
         self.assertIn('data-origem-edicao="preco"', conteudo)
         self.assertIn('simulador.dataset.origemEdicao = "preco"', conteudo)
@@ -39629,15 +39693,13 @@ class ConferenciaComprasJavascriptTests(SimpleTestCase):
         self.assertIn('if (!origemManual && simulador.dataset.origemEdicao !== "margem") return;', conteudo)
 
     def test_custo_tem_rotulos_anterior_e_novo(self):
-        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
-        conteudo = caminho.read_text(encoding="utf-8")
+        conteudo = self._template_compras_nova()
 
         self.assertIn('label + " anterior"', conteudo)
         self.assertIn("'<strong>Novo ' + escapeHtml(label.toLowerCase())", conteudo)
 
     def test_conferencia_nota_compra_tem_enter_visual_e_duplicidade_no_fluxo_real(self):
-        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
-        conteudo = caminho.read_text(encoding="utf-8")
+        conteudo = self._template_compras_nova()
 
         self.assertIn("#secaoItensCompra.conferencia-nota-ativa .linha-item [name=\"produto_busca[]\"]", conteudo)
         self.assertIn("#secaoItensCompra.conferencia-nota-ativa .linha-item .produto-estoque-compra", conteudo)
@@ -39645,26 +39707,44 @@ class ConferenciaComprasJavascriptTests(SimpleTestCase):
         self.assertIn("linhasPendentesVisiveisConferenciaNota()", conteudo)
         self.assertIn("focarProximaLinhaConferenciaNota(linha);", conteudo)
         self.assertIn("produtoJaUsadoEmOutraLinha(opt.value, linha)", conteudo)
-        self.assertIn("Este produto ja esta na compra.", conteudo)
+        self.assertIn("abrirModalProdutoDuplicadoCompra(linha);", conteudo)
 
     def test_compra_duplicada_usa_modal_visual_sem_alert(self):
-        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
-        conteudo = caminho.read_text(encoding="utf-8")
+        conteudo = self._template_compras_nova()
+        parser = self._parse_template_ids()
 
-        self.assertIn('id="modalProdutoDuplicadoCompra"', conteudo)
-        self.assertIn("Produto j&aacute; adicionado", conteudo)
-        self.assertIn("Este produto j&aacute; est&aacute; nesta compra.", conteudo)
+        self.assertEqual(conteudo.count('id="modalProdutoDuplicadoCompra"'), 1)
+        self.assertIn("Produto j&aacute; est&aacute; na nota", conteudo)
+        self.assertIn("Este produto j&aacute; foi adicionado nesta compra.", conteudo)
+        self.assertIn("Escolha outro produto ou altere a quantidade do item existente.", conteudo)
+        self.assertIn(">Entendi<", conteudo)
         self.assertIn("abrirModalProdutoDuplicadoCompra(linha);", conteudo)
         self.assertIn("btnOkProdutoDuplicadoCompra.addEventListener", conteudo)
+        self.assertIn('mostrarErroLinhaCompra(linha, "");\n      fecharSugestoes(linha);\n      abrirModalProdutoDuplicadoCompra(linha);', conteudo)
         self.assertNotIn('alert("Este produto ja esta na compra.")', conteudo)
+        caminho_modal = parser.paths_by_id["modalProdutoDuplicadoCompra"][0]
+        self.assertNotIn("table", caminho_modal)
+        self.assertNotIn("tbody", caminho_modal)
+        self.assertNotIn("tr", caminho_modal)
+        self.assertNotIn("td", caminho_modal)
 
     def test_contador_itens_na_nota_conta_linhas_validas(self):
-        caminho = Path(__file__).resolve().parent / "templates" / "estoque" / "compras_nova.html"
-        conteudo = caminho.read_text(encoding="utf-8")
+        conteudo = self._template_compras_nova()
+        parser = self._parse_template_ids()
 
-        self.assertIn('id="itensNaNotaCompra"', conteudo)
+        self.assertEqual(conteudo.count('id="itensNaNotaCompra"'), 1)
+        self.assertIn('class="compras-itens-head-info"', conteudo)
+        self.assertIn('class="compras-itens-contador-nota"', conteudo)
         self.assertIn("function contarItensNaNotaCompra()", conteudo)
         self.assertIn("!itemProvisorio(linha) && produtoSelecionadoValido(linha)", conteudo)
         self.assertIn("const totalItensNota = contarItensNaNotaCompra();", conteudo)
         self.assertIn("itensNaNotaCompra.textContent = String(totalItensNota);", conteudo)
         self.assertIn("totalItensCompraMobile.textContent = String(totalItensNota);", conteudo)
+        self.assertIn("linha.remove();\n      atualizarListaItensMobileVazia();\n      recalcular();", conteudo)
+        self.assertIn("limparLinhaItem(linha);", conteudo)
+        caminho_contador = parser.paths_by_id["itensNaNotaCompra"][0]
+        self.assertIn("section", caminho_contador)
+        self.assertIn("div", caminho_contador)
+        self.assertNotIn("table", caminho_contador)
+        self.assertNotIn("tbody", caminho_contador)
+        self.assertNotIn("tr", caminho_contador)
