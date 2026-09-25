@@ -36991,6 +36991,80 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, f"Nota #{self.venda.id}")
         self.assertContains(resposta, "Cliente Separacao")
 
+    def test_venda_em_outras_vendas_nao_tem_separacao(self):
+        venda = self._criar_venda_para_separacao("Cliente Outras Sem Separacao")
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda.data_venda.isoformat(), "aba": "outras"},
+            secure=True,
+        )
+
+        self.assertFalse(SeparacaoVenda.objects.filter(venda=venda).exists())
+        self.assertContains(resposta, "Cliente Outras Sem Separacao")
+        self.assertContains(resposta, "Enviar para separacao")
+
+    def test_separacao_enviada_sem_checklist_iniciado_nao_mostra_checklist_incompleto(self):
+        venda = self._criar_venda_para_separacao("Cliente Checklist Nao Iniciado")
+        self._enviar(venda)
+        separacao = SeparacaoVenda.objects.get(venda=venda)
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda.data_venda.isoformat(), "aba": "separacao"},
+            secure=True,
+        )
+
+        self.assertEqual(separacao.status, SeparacaoVenda.STATUS_ENVIADA)
+        self.assertContains(resposta, "Cliente Checklist Nao Iniciado")
+        self.assertContains(resposta, ">Enviada</span>")
+        self.assertContains(resposta, "AGUARDANDO SEPARACAO")
+        self.assertContains(resposta, "Checklist ainda nao iniciado.")
+        self.assertContains(resposta, "Abrir checklist")
+        self.assertNotContains(resposta, "CHECKLIST INCOMPLETO")
+
+    def test_venda_com_responsavel_aparece_enviada_sem_checklist_incompleto(self):
+        responsavel = Funcionario.objects.create(
+            nome="Separador Um",
+            telefone_whatsapp="91999990000",
+            pode_receber_checklist=True,
+        )
+        venda = self._criar_venda_para_separacao("Cliente Enviado Responsavel")
+        self._enviar(venda)
+
+        self.client.post(
+            reverse("estoque:venda_enviar_separacao", args=[venda.id]),
+            {"responsavel_separacao": str(responsavel.id)},
+            secure=True,
+        )
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": venda.data_venda.isoformat(), "aba": "separacao"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Cliente Enviado Responsavel")
+        self.assertContains(resposta, ">Enviada</span>")
+        self.assertContains(resposta, "AGUARDANDO SEPARACAO")
+        self.assertContains(resposta, "Abrir checklist")
+        self.assertNotContains(resposta, "CHECKLIST INCOMPLETO")
+
+    def test_checklist_incompleto_aparece_quando_separacao_foi_iniciada(self):
+        self._enviar()
+        separacao = self._separacao()
+        item = separacao.itens.get(item_venda=self.item_a)
+        self._post_item_checklist(separacao, item, SeparacaoVendaItem.STATUS_CONFERIDO)
+
+        resposta = self.client.get(
+            reverse("estoque:separacao_vendas_fila"),
+            {"data": self.venda.data_venda.isoformat(), "aba": "separacao"},
+            secure=True,
+        )
+
+        self.assertContains(resposta, "Em separacao")
+        self.assertContains(resposta, "CHECKLIST INCOMPLETO")
+        self.assertContains(resposta, "Falta conferir:")
+
     def test_fila_sem_parametro_mostra_somente_hoje(self):
         hoje = date(2026, 9, 14)
         ontem = hoje - timedelta(days=1)
@@ -37550,13 +37624,17 @@ class SeparacaoVendaFase1Tests(TestCase):
 
     def test_fila_sinaliza_divergencia_da_venda(self):
         self._enviar()
+        separacao = self._separacao()
         self.item_a.quantidade = Decimal("3.000")
         self.item_a.valor_total = Decimal("30.00")
         self.item_a.save(update_fields=["quantidade", "valor_total"])
+        separacao.revisao_pendente = True
+        separacao.save(update_fields=["revisao_pendente", "atualizado_em"])
 
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
-        self.assertContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
+        self.assertContains(resposta, "VENDA ALTERADA DURANTE A SEPARACAO")
+        self.assertNotContains(resposta, "AGUARDANDO SEPARACAO")
 
     def test_itens_sao_vinculados_com_snapshot_da_quantidade_do_envio(self):
         self._enviar()

@@ -24526,6 +24526,19 @@ def _montar_grupos_rota_separacao(separacoes):
             for item in itens_checklist_fila
             if item.status == SeparacaoVendaItem.STATUS_PENDENTE
         ]
+        separacao.checklist_nao_iniciado_fila = (
+            separacao.status == SeparacaoVenda.STATUS_ENVIADA
+            and not separacao.iniciado_em
+            and all(item.status == SeparacaoVendaItem.STATUS_PENDENTE for item in itens_checklist_fila)
+        )
+        separacao.mostrar_checklist_incompleto_fila = (
+            bool(separacao.itens_pendentes)
+            and not separacao.checklist_nao_iniciado_fila
+            and separacao.status in {
+                SeparacaoVenda.STATUS_EM_SEPARACAO,
+                SeparacaoVenda.STATUS_COM_PENDENCIA,
+            }
+        )
         separacao.total_pendencias = sum(
             1
             for item in itens_checklist_fila

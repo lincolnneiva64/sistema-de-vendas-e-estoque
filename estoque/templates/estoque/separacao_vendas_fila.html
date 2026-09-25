@@ -44,6 +44,7 @@
   .sep-status.separada { background: #dcfce7; color: #166534; border-color: #86efac; }
   .sep-status.em_separacao { background: #fef9c3; color: #854d0e; border-color: #fde047; }
   .sep-alert { margin-top: 10px; border-radius: 8px; border: 1px solid #fca5a5; background: #fef2f2; color: #991b1b; padding: 9px 10px; font-size: 0.82rem; font-weight: 900; }
+  .sep-alert.neutral { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
   .sep-alert.ok { border-color: #86efac; background: #dcfce7; color: #166534; }
   .pend-list { display: grid; gap: 8px; margin-top: 10px; }
   .pend-item { border: 1px solid #fdba74; border-radius: 8px; background: #fff; padding: 9px; }
@@ -244,7 +245,14 @@
                   <div class="sep-alert">AJUSTE DA NOTA PENDENTE - SEPARACAO FISICA CONCLUIDA</div>
                 {% endif %}
 
-                {% if separacao.itens_pendentes %}
+                {% if separacao.checklist_nao_iniciado_fila and not separacao.tem_alteracao_fisica_fila and not separacao.tem_divergencia_fila and not separacao.nota_pronta_fila %}
+                  <div class="sep-alert neutral">
+                    <strong>AGUARDANDO SEPARACAO</strong>
+                    <div>Checklist ainda nao iniciado.</div>
+                  </div>
+                {% endif %}
+
+                {% if separacao.mostrar_checklist_incompleto_fila %}
                   <div class="sep-alert">
                     <strong>CHECKLIST INCOMPLETO</strong>
                     <div>Falta conferir:</div>
