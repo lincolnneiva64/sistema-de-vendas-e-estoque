@@ -379,6 +379,12 @@ def _whatsapp_checklist_funcionario_url(funcionario, texto):
     return _whatsapp_web_url(telefone, texto)
 
 
+def _whatsapp_tarefa_operacional_funcionario_url(telefone, texto):
+    if not telefone:
+        return ""
+    return f"https://wa.me/{telefone}?text={quote(texto)}"
+
+
 def _url_publica_checklist_whatsapp(request, path):
     return url_publica_checklist(request, path)
 
@@ -442,7 +448,10 @@ def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
             "telefone": telefone,
             "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
             "whatsapp_url": (
-                _whatsapp_web_url(telefone, mensagem_funcionario)
+                _whatsapp_tarefa_operacional_funcionario_url(
+                    telefone,
+                    mensagem_funcionario,
+                )
                 if telefone
                 else ""
             ),

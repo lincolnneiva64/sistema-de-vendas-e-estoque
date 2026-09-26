@@ -81,10 +81,18 @@
         const responsavel = cartao.querySelector("input[name='responsavel']");
         const aviso = cartao.querySelector(".alerta-envio");
 
-        function atualizarEnvio() {
+        function envioSelecionado() {
           const opcao = select?.selectedOptions?.[0];
-          const url = opcao?.dataset.whatsappUrl || "";
-          const nome = opcao?.dataset.nome || "";
+          return {
+            url: opcao?.dataset.whatsappUrl || "",
+            nome: opcao?.dataset.nome || ""
+          };
+        }
+
+        function atualizarEnvio() {
+          const envio = envioSelecionado();
+          const url = envio.url;
+          const nome = envio.nome;
           if (responsavel) {
             responsavel.value = nome;
           }
@@ -106,7 +114,11 @@
 
         select?.addEventListener("change", atualizarEnvio);
         botao?.addEventListener("click", function (event) {
-          if (!botao.href || botao.getAttribute("href") === "#") {
+          const envio = envioSelecionado();
+          if (envio.url) {
+            botao.href = envio.url;
+          }
+          if (!envio.url || botao.getAttribute("href") === "#") {
             event.preventDefault();
             if (aviso) {
               aviso.hidden = false;

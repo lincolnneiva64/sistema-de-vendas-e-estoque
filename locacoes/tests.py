@@ -2888,7 +2888,8 @@ class LocacoesChecklistOperacionalTests(TestCase):
         item = response.context["checklist"]["grupos"]["entregas"][0]
         envio = item["envio_operacional"]
         whatsapp_url = envio["funcionario_padrao"]["whatsapp_url"]
-        texto = parse_qs(urlparse(whatsapp_url).query)["text"][0]
+        whatsapp_parts = urlparse(whatsapp_url)
+        texto = parse_qs(whatsapp_parts.query)["text"][0]
         checklist_path = reverse(
             "locacoes:conferencia_entrega",
             kwargs={"pk": item["tarefa"].pk},
@@ -2903,7 +2904,10 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertNotContains(response, ">Ver locação<")
         self.assertNotContains(response, ">Fazer checklist de entrega<")
         self.assertNotContains(response, 'placeholder="Responsável"')
-        self.assertIn("phone=5591999990000", whatsapp_url)
+        self.assertEqual(whatsapp_parts.scheme, "https")
+        self.assertEqual(whatsapp_parts.netloc, "wa.me")
+        self.assertEqual(whatsapp_parts.path, "/5591999990000")
+        self.assertIn("text=Checklist%20de%20entrega%20%231", whatsapp_url)
         self.assertNotIn("91988887777", whatsapp_url)
         self.assertIn(
             (
@@ -2935,6 +2939,83 @@ class LocacoesChecklistOperacionalTests(TestCase):
         ALLOWED_HOSTS=["testserver", "127.0.0.1"],
         CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
     )
+    def test_agenda_gera_destinos_distintos_para_funcionarios_selecionados(self):
+        Funcionario.objects.all().delete()
+        funcionarios = [
+            Funcionario.objects.create(
+                nome="Francisco Miranda",
+                telefone_whatsapp="91985022351",
+                ativo=True,
+                pode_receber_checklist=True,
+            ),
+            Funcionario.objects.create(
+                nome="Lincoln Albuquerque Neiva",
+                telefone_whatsapp="91996078910",
+                ativo=True,
+                pode_receber_checklist=True,
+            ),
+            Funcionario.objects.create(
+                nome="Roseli Da Costa Gama",
+                telefone_whatsapp="91999071612",
+                ativo=True,
+                pode_receber_checklist=True,
+            ),
+        ]
+        telefones = {
+            "Francisco Miranda": "5591985022351",
+            "Lincoln Albuquerque Neiva": "5591996078910",
+            "Roseli Da Costa Gama": "5591999071612",
+        }
+        locacao = self.criar_locacao(
+            pessoa_avulsa_nome="Lidiane Ribeiro",
+            horario_entrega=time(15, 0),
+        )
+
+        response = self.client.get(
+            reverse("locacoes:checklist_operacional"),
+            secure=True,
+            HTTP_HOST="127.0.0.1:8000",
+        )
+        item = response.context["checklist"]["grupos"]["entregas"][0]
+        urls_por_nome = {
+            funcionario["nome"]: funcionario["whatsapp_url"]
+            for funcionario in item["envio_operacional"]["funcionarios"]
+        }
+        checklist_path = reverse(
+            "locacoes:conferencia_entrega",
+            kwargs={"pk": item["tarefa"].pk},
+        )
+
+        self.assertEqual(item["locacao"].id, locacao.id)
+        for funcionario in funcionarios:
+            whatsapp_url = urls_por_nome[funcionario.nome]
+            partes = urlparse(whatsapp_url)
+            texto = parse_qs(partes.query)["text"][0]
+
+            self.assertEqual(partes.netloc, "wa.me")
+            self.assertEqual(partes.path, f"/{telefones[funcionario.nome]}")
+            self.assertIn("Checklist%20de%20entrega%20%231", whatsapp_url)
+            self.assertIn(
+                (
+                    f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}"
+                    f"?funcionario={funcionario.pk}"
+                ),
+                texto,
+            )
+            self.assertIn(f"funcionario={funcionario.pk}", texto)
+            self.assertIn("Locação #", texto)
+            self.assertIn("Lidiane Ribeiro", texto)
+            self.assertIn("Horário: 15:00", texto)
+
+        self.assertEqual(
+            len({urlparse(url).path for url in urls_por_nome.values()}),
+            3,
+        )
+
+    @override_settings(
+        ALLOWED_HOSTS=["testserver", "127.0.0.1"],
+        CHECKLIST_BASE_URL="https://sistema-de-vendas-e-estoque.onrender.com",
+    )
     def test_agenda_envia_checklist_de_recolhimento_para_rota_existente(self):
         locacao = self.colocar_na_rua(self.criar_locacao(
             pessoa_avulsa_nome="Cliente Recolhimento Agenda",
@@ -2950,14 +3031,17 @@ class LocacoesChecklistOperacionalTests(TestCase):
         item = response.context["checklist"]["grupos"]["recolhimentos"][0]
         envio = item["envio_operacional"]
         whatsapp_url = envio["funcionario_padrao"]["whatsapp_url"]
-        texto = parse_qs(urlparse(whatsapp_url).query)["text"][0]
+        whatsapp_parts = urlparse(whatsapp_url)
+        texto = parse_qs(whatsapp_parts.query)["text"][0]
         checklist_path = reverse(
             "locacoes:conferencia_recolhimento",
             kwargs={"pk": item["tarefa"].pk},
         )
 
         self.assertEqual(item["locacao"].id, locacao.id)
-        self.assertIn("phone=5591999990000", whatsapp_url)
+        self.assertEqual(whatsapp_parts.scheme, "https")
+        self.assertEqual(whatsapp_parts.netloc, "wa.me")
+        self.assertEqual(whatsapp_parts.path, "/5591999990000")
         self.assertNotIn("91988887777", whatsapp_url)
         self.assertIn(
             f"https://sistema-de-vendas-e-estoque.onrender.com{checklist_path}",
