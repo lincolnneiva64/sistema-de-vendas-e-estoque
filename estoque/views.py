@@ -4999,6 +4999,100 @@ def _painel_resultado_adicionar_lancamento(grupos, grupo_slug, grupo_nome, categ
     categoria["lancamentos"].append(lancamento)
 
 
+def _painel_resultado_adicionar_pessoal(pessoas, catalogo, lancamento):
+    pessoa_nome = (catalogo.pessoa or "").strip() or "Nao informado"
+    pessoa_slug = _chave_texto_despesa(pessoa_nome).replace(" ", "_") or "nao_informado"
+    pessoa = pessoas.setdefault(
+        pessoa_slug,
+        {
+            "slug": pessoa_slug,
+            "nome": pessoa_nome,
+            "valor": Decimal("0.00"),
+            "grupos": {},
+            "lancamentos": [],
+        },
+    )
+    valor = _financeiro_dinheiro(lancamento["valor"]).quantize(Decimal("0.01"))
+    pessoa["valor"] = (pessoa["valor"] + valor).quantize(Decimal("0.01"))
+    pessoa["lancamentos"].append(lancamento)
+
+    grupo_nome = (catalogo.grupo or "").strip() or "Nao classificado"
+    grupo = pessoa["grupos"].setdefault(
+        grupo_nome,
+        {"nome": grupo_nome, "valor": Decimal("0.00"), "categorias": {}},
+    )
+    grupo["valor"] = (grupo["valor"] + valor).quantize(Decimal("0.01"))
+
+    categoria_nome = (catalogo.categoria or "").strip() or "Nao classificado"
+    categoria = grupo["categorias"].setdefault(
+        categoria_nome,
+        {"nome": categoria_nome, "valor": Decimal("0.00"), "itens": {}},
+    )
+    categoria["valor"] = (categoria["valor"] + valor).quantize(Decimal("0.01"))
+
+    item_nome = (catalogo.nome or "").strip() or categoria_nome
+    item = categoria["itens"].setdefault(
+        item_nome,
+        {"nome": item_nome, "valor": Decimal("0.00"), "lancamentos": []},
+    )
+    item["valor"] = (item["valor"] + valor).quantize(Decimal("0.01"))
+    item["lancamentos"].append(lancamento)
+
+
+def _painel_resultado_preparar_grupos(grupos, faturamento):
+    maior_valor = max([grupo["valor"] for grupo in grupos.values()] or [Decimal("0.00")])
+    grupos_lista = []
+    for grupo in sorted(grupos.values(), key=lambda item: item["valor"], reverse=True):
+        percentual_faturamento = Decimal("0.00")
+        if faturamento > Decimal("0.00"):
+            percentual_faturamento = ((grupo["valor"] / faturamento) * Decimal("100")).quantize(Decimal("0.01"))
+        largura = Decimal("0.00")
+        if maior_valor > Decimal("0.00"):
+            largura = ((grupo["valor"] / maior_valor) * Decimal("100")).quantize(Decimal("0.01"))
+        grupo["percentual_faturamento"] = percentual_faturamento
+        grupo["largura_barra"] = largura
+        grupo["valor_texto"] = _financeiro_moeda_br(grupo["valor"])
+        grupo["categorias_lista"] = sorted(grupo["categorias"].values(), key=lambda item: item["valor"], reverse=True)
+        for categoria in grupo["categorias_lista"]:
+            categoria["valor_texto"] = _financeiro_moeda_br(categoria["valor"])
+            for lancamento in categoria["lancamentos"]:
+                lancamento["valor_texto"] = _financeiro_moeda_br(lancamento["valor"])
+        grupos_lista.append(grupo)
+    return grupos_lista
+
+
+def _painel_resultado_preparar_pessoas(pessoas, faturamento, total_pessoal):
+    maior_valor = max([pessoa["valor"] for pessoa in pessoas.values()] or [Decimal("0.00")])
+    pessoas_lista = []
+    for pessoa in sorted(pessoas.values(), key=lambda item: item["valor"], reverse=True):
+        percentual_pessoal = Decimal("0.00")
+        if total_pessoal > Decimal("0.00"):
+            percentual_pessoal = ((pessoa["valor"] / total_pessoal) * Decimal("100")).quantize(Decimal("0.01"))
+        percentual_faturamento = Decimal("0.00")
+        if faturamento > Decimal("0.00"):
+            percentual_faturamento = ((pessoa["valor"] / faturamento) * Decimal("100")).quantize(Decimal("0.01"))
+        largura = Decimal("0.00")
+        if maior_valor > Decimal("0.00"):
+            largura = ((pessoa["valor"] / maior_valor) * Decimal("100")).quantize(Decimal("0.01"))
+        pessoa["percentual_pessoal"] = percentual_pessoal
+        pessoa["percentual_faturamento"] = percentual_faturamento
+        pessoa["largura_barra"] = largura
+        pessoa["valor_texto"] = _financeiro_moeda_br(pessoa["valor"])
+        pessoa["grupos_lista"] = sorted(pessoa["grupos"].values(), key=lambda item: item["valor"], reverse=True)
+        for grupo in pessoa["grupos_lista"]:
+            grupo["valor_texto"] = _financeiro_moeda_br(grupo["valor"])
+            grupo["categorias_lista"] = sorted(grupo["categorias"].values(), key=lambda item: item["valor"], reverse=True)
+            for categoria in grupo["categorias_lista"]:
+                categoria["valor_texto"] = _financeiro_moeda_br(categoria["valor"])
+                categoria["itens_lista"] = sorted(categoria["itens"].values(), key=lambda item: item["valor"], reverse=True)
+                for item in categoria["itens_lista"]:
+                    item["valor_texto"] = _financeiro_moeda_br(item["valor"])
+                    for lancamento in item["lancamentos"]:
+                        lancamento["valor_texto"] = _financeiro_moeda_br(lancamento["valor"])
+        pessoas_lista.append(pessoa)
+    return pessoas_lista
+
+
 def _painel_resultado_gerencial_contexto(request):
     periodo = _painel_resultado_periodo(request)
     inicio = periodo["inicio"]
@@ -5041,6 +5135,7 @@ def _painel_resultado_gerencial_contexto(request):
         margem_bruta = (faturamento - cmv_conhecido).quantize(Decimal("0.01"))
 
     grupos = {}
+    despesas_pessoais = {}
     despesas_qs = (
         DespesaDiaria.objects
         .select_related("catalogo")
@@ -5048,13 +5143,25 @@ def _painel_resultado_gerencial_contexto(request):
         .order_by("data_hora", "id")
     )
     for despesa in despesas_qs:
-        # Despesa pessoal pode sair de uma conta da empresa e, portanto,
-        # gera movimento financeiro, mas nao e custo operacional da empresa.
-        # Lancamentos historicos sem catalogo preservam o comportamento antigo.
-        if (
-            despesa.catalogo
-            and despesa.catalogo.tipo == CatalogoDespesa.TIPO_PESSOAL
-        ):
+        lancamento = {
+            "tipo": "Despesa diaria",
+            "data": timezone.localtime(despesa.data_hora).date(),
+            "descricao": (
+                despesa.observacao
+                or (despesa.catalogo.nome if despesa.catalogo else "")
+                or despesa.get_categoria_display()
+                or "Nao classificado"
+            ),
+            "valor": _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01")),
+            "origem": f"Despesa #{despesa.id}",
+        }
+
+        if despesa.catalogo and despesa.catalogo.tipo == CatalogoDespesa.TIPO_PESSOAL:
+            _painel_resultado_adicionar_pessoal(
+                despesas_pessoais,
+                despesa.catalogo,
+                lancamento,
+            )
             continue
 
         if despesa.catalogo:
@@ -5071,18 +5178,7 @@ def _painel_resultado_gerencial_contexto(request):
             grupo_slug,
             grupo_nome,
             categoria_nome,
-            {
-                "tipo": "Despesa diaria",
-                "data": timezone.localtime(despesa.data_hora).date(),
-                "descricao": (
-                    despesa.observacao
-                    or (despesa.catalogo.nome if despesa.catalogo else "")
-                    or despesa.get_categoria_display()
-                    or "Nao classificado"
-                ),
-                "valor": _financeiro_dinheiro(despesa.valor).quantize(Decimal("0.01")),
-                "origem": f"Despesa #{despesa.id}",
-            },
+            lancamento,
         )
 
     pagamentos_juros = (
@@ -5112,6 +5208,8 @@ def _painel_resultado_gerencial_contexto(request):
         )
 
     despesas_total = sum((grupo["valor"] for grupo in grupos.values()), Decimal("0.00")).quantize(Decimal("0.01"))
+    despesas_pessoais_total = sum((pessoa["valor"] for pessoa in despesas_pessoais.values()), Decimal("0.00")).quantize(Decimal("0.01"))
+    total_geral_analisado = (despesas_total + despesas_pessoais_total).quantize(Decimal("0.01"))
     resultado_parcial = (faturamento - despesas_total).quantize(Decimal("0.01"))
 
     resultado_gerencial = None
@@ -5130,25 +5228,23 @@ def _painel_resultado_gerencial_contexto(request):
         despesas_percentual_faturamento = (
             (despesas_total / faturamento) * Decimal("100")
         ).quantize(Decimal("0.01"))
+    despesas_pessoais_percentual_faturamento = Decimal("0.00")
+    if faturamento > Decimal("0.00"):
+        despesas_pessoais_percentual_faturamento = (
+            (despesas_pessoais_total / faturamento) * Decimal("100")
+        ).quantize(Decimal("0.01"))
+    total_geral_percentual_faturamento = Decimal("0.00")
+    if faturamento > Decimal("0.00"):
+        total_geral_percentual_faturamento = (
+            (total_geral_analisado / faturamento) * Decimal("100")
+        ).quantize(Decimal("0.01"))
 
-    maior_valor = max([grupo["valor"] for grupo in grupos.values()] or [Decimal("0.00")])
-    grupos_lista = []
-    for grupo in sorted(grupos.values(), key=lambda item: item["valor"], reverse=True):
-        percentual_faturamento = Decimal("0.00")
-        if faturamento > Decimal("0.00"):
-            percentual_faturamento = ((grupo["valor"] / faturamento) * Decimal("100")).quantize(Decimal("0.01"))
-        largura = Decimal("0.00")
-        if maior_valor > Decimal("0.00"):
-            largura = ((grupo["valor"] / maior_valor) * Decimal("100")).quantize(Decimal("0.01"))
-        grupo["percentual_faturamento"] = percentual_faturamento
-        grupo["largura_barra"] = largura
-        grupo["valor_texto"] = _financeiro_moeda_br(grupo["valor"])
-        grupo["categorias_lista"] = sorted(grupo["categorias"].values(), key=lambda item: item["valor"], reverse=True)
-        for categoria in grupo["categorias_lista"]:
-            categoria["valor_texto"] = _financeiro_moeda_br(categoria["valor"])
-            for lancamento in categoria["lancamentos"]:
-                lancamento["valor_texto"] = _financeiro_moeda_br(lancamento["valor"])
-        grupos_lista.append(grupo)
+    grupos_lista = _painel_resultado_preparar_grupos(grupos, faturamento)
+    despesas_pessoais_lista = _painel_resultado_preparar_pessoas(
+        despesas_pessoais,
+        faturamento,
+        despesas_pessoais_total,
+    )
 
     return {
         "periodo": periodo,
@@ -5176,15 +5272,23 @@ def _painel_resultado_gerencial_contexto(request):
         "despesas_total": despesas_total,
         "despesas_total_texto": _financeiro_moeda_br(despesas_total),
         "despesas_percentual_faturamento": despesas_percentual_faturamento,
+        "despesas_pessoais_total": despesas_pessoais_total,
+        "despesas_pessoais_total_texto": _financeiro_moeda_br(despesas_pessoais_total),
+        "despesas_pessoais_percentual_faturamento": despesas_pessoais_percentual_faturamento,
+        "total_geral_analisado": total_geral_analisado,
+        "total_geral_analisado_texto": _financeiro_moeda_br(total_geral_analisado),
+        "total_geral_percentual_faturamento": total_geral_percentual_faturamento,
         "resultado_parcial": resultado_parcial,
         "resultado_parcial_texto": _financeiro_moeda_br(resultado_parcial),
         "resultado_base_simulador": resultado_base_simulador,
         "resultado_base_simulador_texto": _financeiro_moeda_br(resultado_base_simulador),
         "grupos": grupos_lista,
+        "despesas_pessoais": despesas_pessoais_lista,
         "fontes_dados": [
             "Faturamento: Venda.total de vendas nao canceladas no periodo.",
             "CMV: soma de ItemVenda.custo_total_snapshot das vendas nao canceladas no periodo.",
-            "Despesas: DespesaDiaria por data_hora no periodo.",
+            "Despesas da empresa: DespesaDiaria com CatalogoDespesa de empresa ou categoria legada no periodo.",
+            "Despesas pessoais/familiares: DespesaDiaria com CatalogoDespesa pessoal no periodo.",
             "Juros/multas: PagamentoContaPagar.juros_bancarios no periodo.",
             "MovimentoFinanceiro nao e usado como fonte geral de despesa para evitar dupla contagem.",
         ],
@@ -5200,6 +5304,7 @@ def _painel_resultado_gerencial_contexto(request):
             + [
                 "Principal de contas a pagar, compras e emprestimos nao entram como despesa operacional nesta versao.",
                 "Juros de emprestimos/dividas nao sao separados em campo proprio e por isso nao entram automaticamente.",
+                "Despesas pessoais/familiares aparecem como visao gerencial separada e nao reduzem o resultado empresarial.",
             ]
         ),
     }

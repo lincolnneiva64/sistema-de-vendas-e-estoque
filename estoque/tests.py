@@ -36431,7 +36431,95 @@ class PainelResultadoGerencialTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertTrue(DespesaDiaria.objects.filter(pk=despesa.pk).exists())
         self.assertEqual(resposta.context["despesas_total"], Decimal("0.00"))
-        self.assertNotContains(resposta, "Despesa pessoal teste")
+        self.assertEqual(
+            resposta.context["despesas_pessoais_total"],
+            Decimal("120.00"),
+        )
+        self.assertEqual(
+            resposta.context["total_geral_analisado"],
+            Decimal("120.00"),
+        )
+        self.assertContains(resposta, "Despesa pessoal teste")
+        self.assertContains(resposta, "Despesas pessoais / familiares")
+
+    def test_despesas_pessoais_sao_agrupadas_por_pessoa_sem_alterar_resultado(self):
+        self._venda("1000.00")
+        empresa = CatalogoDespesa.objects.create(
+            nome="Pagamento",
+            tipo=CatalogoDespesa.TIPO_EMPRESA,
+            grupo="Funcionarios",
+            categoria="Pagamento",
+            ativo=True,
+            ordem=1,
+        )
+        pessoal_lincoln = CatalogoDespesa.objects.create(
+            nome="Plano de saude",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            pessoa="Lincoln",
+            grupo="Saude",
+            categoria="Plano de saude",
+            ativo=True,
+            ordem=2,
+        )
+        pessoal_familia = CatalogoDespesa.objects.create(
+            nome="Mercado",
+            tipo=CatalogoDespesa.TIPO_PESSOAL,
+            pessoa="Familia",
+            grupo="Alimentacao",
+            categoria="Mercado",
+            ativo=True,
+            ordem=3,
+        )
+        DespesaDiaria.objects.create(
+            data_hora=self._data_hora(10),
+            valor=Decimal("100.00"),
+            catalogo=empresa,
+            categoria=DespesaDiaria.CATEGORIA_AJUDANTE_DIARIA,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Pagamento funcionario",
+        )
+        DespesaDiaria.objects.create(
+            data_hora=self._data_hora(10),
+            valor=Decimal("200.00"),
+            catalogo=pessoal_lincoln,
+            categoria=DespesaDiaria.CATEGORIA_PESSOAL,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Plano Lincoln",
+        )
+        DespesaDiaria.objects.create(
+            data_hora=self._data_hora(11),
+            valor=Decimal("300.00"),
+            catalogo=pessoal_familia,
+            categoria=DespesaDiaria.CATEGORIA_PESSOAL,
+            forma_pagamento=DespesaDiaria.FORMA_PIX,
+            observacao="Mercado familia",
+        )
+
+        resposta = self.client.get(self.url, {"mes": self.mes}, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["despesas_total"], Decimal("100.00"))
+        self.assertEqual(
+            resposta.context["despesas_pessoais_total"],
+            Decimal("500.00"),
+        )
+        self.assertEqual(
+            resposta.context["total_geral_analisado"],
+            Decimal("600.00"),
+        )
+        self.assertEqual(resposta.context["resultado_parcial"], Decimal("900.00"))
+
+        pessoais = {
+            pessoa["nome"]: pessoa
+            for pessoa in resposta.context["despesas_pessoais"]
+        }
+        self.assertEqual(pessoais["Lincoln"]["valor"], Decimal("200.00"))
+        self.assertEqual(pessoais["Lincoln"]["percentual_pessoal"], Decimal("40.00"))
+        self.assertEqual(pessoais["Lincoln"]["percentual_faturamento"], Decimal("20.00"))
+        self.assertEqual(pessoais["Familia"]["valor"], Decimal("300.00"))
+        self.assertEqual(pessoais["Familia"]["percentual_pessoal"], Decimal("60.00"))
+        self.assertEqual(pessoais["Familia"]["percentual_faturamento"], Decimal("30.00"))
+        self.assertContains(resposta, "Economia pessoal/familiar")
 
 
 class PagarFornecedorTests(TestCase):

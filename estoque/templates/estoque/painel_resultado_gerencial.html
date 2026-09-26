@@ -42,17 +42,28 @@
   .rg-quick-sim:hover { background:#f8fafc; }
   .rg-quick-sim.ativo { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
   .rg-total-despesas { display:flex; justify-content:flex-end; gap:18px; align-items:center; padding:12px; border-top:2px solid #e2e8f0; font-weight:950; }
+  .rg-total-despesas.geral { justify-content:space-between; flex-wrap:wrap; }
   .rg-money { font-weight:950; color:#172033; white-space:nowrap; }
   .rg-percent { color:#64748b; font-weight:850; white-space:nowrap; }
   .rg-drill { padding:0 12px 12px; display:grid; gap:8px; }
   .rg-category { border:1px solid #dbeafe; border-radius:9px; background:#f8fbff; padding:9px; }
   .rg-category-title { display:flex; justify-content:space-between; gap:8px; font-weight:950; color:#164173; margin-bottom:7px; }
+  .rg-subcategory { border-top:1px solid #dbeafe; padding-top:7px; margin-top:7px; }
+  .rg-subcategory-title { display:flex; justify-content:space-between; gap:8px; font-weight:900; color:#334155; margin-bottom:5px; }
+  .rg-personal-note { padding:0 14px 12px; color:#64748b; font-weight:800; line-height:1.35; }
   .rg-launch { display:grid; grid-template-columns:96px 1fr auto; gap:8px; padding:6px 0; border-top:1px solid #e6edf7; font-size:.86rem; font-weight:760; color:#334155; }
   .rg-launch:first-of-type { border-top:0; }
   .rg-sim { padding:13px 14px; display:grid; gap:10px; }
   .rg-sim-row { display:grid; grid-template-columns:minmax(180px, 1fr) 120px 130px 150px 150px; gap:9px; align-items:center; }
+  .rg-sim-row.pessoal { background:#f8fafc; border-radius:8px; padding:8px; }
   .rg-sim-row input { width:100%; min-height:36px; border:1.5px solid #d3dbe8; border-radius:8px; padding:7px 9px; font-weight:850; }
-  .rg-sim-total { display:grid; grid-template-columns:repeat(4, minmax(140px, 1fr)); gap:10px; margin-top:4px; }
+  .rg-sim-person { border:1px solid #e1e7ef; border-radius:10px; overflow:hidden; background:#fff; }
+  .rg-sim-person summary { list-style:none; cursor:pointer; }
+  .rg-sim-person summary::-webkit-details-marker { display:none; }
+  .rg-sim-children { display:grid; gap:8px; padding:0 8px 8px 18px; }
+  .rg-sim-child { grid-template-columns:minmax(180px, 1fr) 120px 130px 150px minmax(180px, 1fr); border-left:3px solid #dbeafe; }
+  .rg-sim-impact { color:#64748b; font-weight:800; font-size:.78rem; line-height:1.3; }
+  .rg-sim-total { display:grid; grid-template-columns:repeat(5, minmax(140px, 1fr)); gap:10px; margin-top:4px; }
   .rg-note { padding:10px 14px; color:#475569; font-weight:780; line-height:1.4; border-top:1px solid #eef2f7; background:#f8fafc; }
   .rg-note ul { margin:6px 0 0 18px; padding:0; }
   @media (max-width:860px) {
@@ -141,12 +152,12 @@
 
   <section class="rg-panel">
     <div class="rg-section-head">
-      <h2>Grupos de custos e despesas</h2>
+      <h2>Despesas da empresa</h2>
       <span class="rg-muted">{{ periodo.rotulo }}</span>
     </div>
     <div class="rg-bars">
       {% for grupo in grupos %}
-        <details class="rg-group" data-sim-group data-grupo="{{ forloop.counter0 }}" data-valor="{{ grupo.valor|stringformat:'s' }}">
+        <details class="rg-group" data-sim-group data-grupo="empresa-{{ forloop.counter0 }}" data-valor="{{ grupo.valor|stringformat:'s' }}">
           <summary>
             <span class="rg-group-name">{{ grupo.nome }}</span>
             <span class="rg-bar-track"><span class="rg-bar-fill" style="width:{{ grupo.largura_barra|stringformat:'s' }}%;"></span></span>
@@ -182,14 +193,82 @@
     </div>
   </section>
 
+  <section class="rg-panel">
+    <div class="rg-section-head">
+      <h2>Despesas pessoais / familiares</h2>
+      <span class="rg-muted">{{ despesas_pessoais_total_texto }} - {{ despesas_pessoais_percentual_faturamento }}% do faturamento</span>
+    </div>
+    <div class="rg-personal-note">
+      Visao separada de comprometimento financeiro. Estes valores nao reduzem o resultado empresarial.
+    </div>
+    <div class="rg-bars">
+      {% for pessoa in despesas_pessoais %}
+        <details class="rg-group" data-sim-group data-grupo="pessoal-{{ forloop.counter0 }}" data-valor="{{ pessoa.valor|stringformat:'s' }}">
+          <summary>
+            <span class="rg-group-name">{{ pessoa.nome }}</span>
+            <span class="rg-bar-track"><span class="rg-bar-fill" style="width:{{ pessoa.largura_barra|stringformat:'s' }}%;"></span></span>
+            <span class="rg-money">{{ pessoa.valor_texto }}</span>
+            <span class="rg-percent">{{ pessoa.percentual_pessoal }}% pessoais | {{ pessoa.percentual_faturamento }}% faturamento</span>
+            <button type="button" class="rg-quick-sim" data-quick-sim>Simular retirada</button>
+          </summary>
+          <div class="rg-drill">
+            {% for grupo in pessoa.grupos_lista %}
+              <div class="rg-category">
+                <div class="rg-category-title"><span>{{ grupo.nome }}</span><span>{{ grupo.valor_texto }}</span></div>
+                {% for categoria in grupo.categorias_lista %}
+                  <div class="rg-subcategory">
+                    <div class="rg-subcategory-title"><span>{{ categoria.nome }}</span><span>{{ categoria.valor_texto }}</span></div>
+                    {% for item in categoria.itens_lista %}
+                      <div class="rg-subcategory">
+                        <div class="rg-subcategory-title"><span>{{ item.nome }}</span><span>{{ item.valor_texto }}</span></div>
+                        {% for lancamento in item.lancamentos %}
+                          <div class="rg-launch">
+                            <span>{{ lancamento.data|date:"d/m/Y" }}</span>
+                            <span>{{ lancamento.descricao }} <small>({{ lancamento.origem }})</small></span>
+                            <span class="rg-money">{{ lancamento.valor_texto }}</span>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+      {% empty %}
+        <div class="rg-muted">Nenhuma despesa pessoal ou familiar encontrada neste periodo.</div>
+      {% endfor %}
+      <div class="rg-total-despesas">
+        <span>Total das despesas pessoais/familiares</span>
+        <span>{{ despesas_pessoais_total_texto }}</span>
+        <span>{{ despesas_pessoais_percentual_faturamento }}% do faturamento</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="rg-panel">
+    <div class="rg-section-head">
+      <h2>Total geral analisado</h2>
+      <span class="rg-muted">Visao gerencial de saidas</span>
+    </div>
+    <div class="rg-total-despesas geral">
+      <span>Despesas da empresa: {{ despesas_total_texto }}</span>
+      <span>Despesas pessoais/familiares: {{ despesas_pessoais_total_texto }}</span>
+      <span>Total geral analisado: {{ total_geral_analisado_texto }}</span>
+      <span>{{ total_geral_percentual_faturamento }}% do faturamento</span>
+    </div>
+  </section>
+
   <section class="rg-panel" id="simulador">
     <div class="rg-section-head">
       <h2>Simulador visual de reducao de custos</h2>
       <button type="button" class="rg-btn" id="limparSimulacao">Limpar simulacao</button>
     </div>
     <div class="rg-sim">
+      <div class="rg-muted">Empresa</div>
       {% for grupo in grupos %}
-        <div class="rg-sim-row" data-sim-row data-grupo="{{ forloop.counter0 }}" data-atual="{{ grupo.valor|stringformat:'s' }}">
+        <div class="rg-sim-row" data-sim-row data-sim-tipo="empresa" data-grupo="empresa-{{ forloop.counter0 }}" data-atual="{{ grupo.valor|stringformat:'s' }}">
           <strong>{{ grupo.nome }}</strong>
           <span class="rg-money">{{ grupo.valor_texto }}</span>
           <button type="button" class="rg-sim-toggle" data-sim-toggle>Retirar 100%</button>
@@ -200,7 +279,61 @@
           <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
         </div>
       {% empty %}
-        <p class="rg-muted">Sem grupos para simular neste periodo.</p>
+        <p class="rg-muted">Sem grupos da empresa para simular neste periodo.</p>
+      {% endfor %}
+      <div class="rg-muted">Pessoal / Familia</div>
+      <div class="rg-sim-row pessoal" data-sim-row data-sim-tipo="pessoal-total" data-grupo="pessoal-total" data-atual="{{ despesas_pessoais_total|stringformat:'s' }}">
+        <strong>Bloco pessoal/familiar inteiro</strong>
+        <span class="rg-money">{{ despesas_pessoais_total_texto }}</span>
+        <button type="button" class="rg-sim-toggle" data-sim-toggle>Retirar 100%</button>
+        <label>
+          <span class="rg-muted">Simulado</span>
+          <input type="number" min="0" step="0.01" value="{{ despesas_pessoais_total|stringformat:'s' }}" data-sim-input>
+        </label>
+        <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+      </div>
+      {% for pessoa in despesas_pessoais %}
+        <details class="rg-sim-person">
+          <summary>
+            <div class="rg-sim-row pessoal" data-sim-row data-sim-tipo="pessoal-pessoa" data-sim-pessoa="pessoal-{{ forloop.counter0 }}" data-grupo="pessoal-{{ forloop.counter0 }}" data-atual="{{ pessoa.valor|stringformat:'s' }}">
+              <strong>{{ pessoa.nome }}</strong>
+              <span class="rg-money">{{ pessoa.valor_texto }}</span>
+              <button type="button" class="rg-sim-toggle" data-sim-toggle>Retirar 100%</button>
+              <label>
+                <span class="rg-muted">Simulado</span>
+                <input type="number" min="0" step="0.01" value="{{ pessoa.valor|stringformat:'s' }}" data-sim-input>
+              </label>
+              <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+            </div>
+          </summary>
+          <div class="rg-sim-children">
+            {% for grupo in pessoa.grupos_lista %}
+              {% for categoria in grupo.categorias_lista %}
+                {% for item in categoria.itens_lista %}
+                  <div class="rg-sim-row pessoal rg-sim-child"
+                       data-sim-row
+                       data-sim-tipo="pessoal-item"
+                       data-sim-pessoa="pessoal-{{ forloop.parentloop.parentloop.parentloop.counter0 }}"
+                       data-grupo="pessoal-{{ forloop.parentloop.parentloop.parentloop.counter0 }}-item-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}"
+                       data-atual="{{ item.valor|stringformat:'s' }}"
+                       data-pessoa-total="{{ pessoa.valor|stringformat:'s' }}"
+                       data-pessoal-total="{{ despesas_pessoais_total|stringformat:'s' }}">
+                    <strong>{{ grupo.nome }} / {{ categoria.nome }} / {{ item.nome }}</strong>
+                    <span class="rg-money">{{ item.valor_texto }}</span>
+                    <button type="button" class="rg-sim-toggle" data-sim-toggle>Retirar 100%</button>
+                    <label>
+                      <span class="rg-muted">Simulado</span>
+                      <input type="number" min="0" step="0.01" value="{{ item.valor|stringformat:'s' }}" data-sim-input>
+                    </label>
+                    <span class="rg-sim-impact" data-sim-impact>Economia: R$ 0,00</span>
+                  </div>
+                {% endfor %}
+              {% endfor %}
+            {% endfor %}
+          </div>
+        </details>
+      {% empty %}
+        <p class="rg-muted">Sem despesas pessoais/familiares para simular neste periodo.</p>
       {% endfor %}
       <div class="rg-sim-total">
         <div class="rg-card">
@@ -211,8 +344,10 @@
           <span>{% if cmv_disponivel %}Resultado simulado{% else %}Resultado parcial simulado (sem CMV){% endif %}</span>
           <strong id="resultadoSimulado">{{ resultado_base_simulador_texto }}</strong>
         </div>
-        <div class="rg-card"><span>Melhoria mensal</span><strong id="melhoriaMensal">R$ 0,00</strong></div>
-        <div class="rg-card"><span>Impacto anualizado</span><strong id="impactoAnual">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Economia empresa</span><strong id="economiaEmpresa">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Economia pessoal/familiar</span><strong id="economiaPessoal">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Economia total anualizada</span><strong id="impactoAnual">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Impacto global apos pessoal</span><strong id="impactoGlobal">{{ resultado_base_simulador_texto }}</strong></div>
       </div>
     </div>
   </section>
@@ -240,23 +375,66 @@
   function moeda(valor) {
     return "R$ " + (valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
+  function percentual(parte, total) {
+    if (!total || total <= 0) return "0,00%";
+    return ((parte / total) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+  }
   const resultadoAtualEl = document.getElementById("resultadoAtual");
   const resultadoBase = numero(resultadoAtualEl?.dataset.valor);
   const linhas = Array.from(document.querySelectorAll("[data-sim-row]"));
   function recalcular() {
-    let economia = 0;
+    let economiaEmpresa = 0;
+    const economiaPessoalPorPessoa = {};
+    const pessoaTemItensAlterados = {};
+    let economiaPessoalTotal = 0;
+    let totalPessoalAlterado = false;
     linhas.forEach(function (linha) {
       const atual = numero(linha.dataset.atual);
       const input = linha.querySelector("[data-sim-input]");
       const simulado = Math.max(0, numero(input?.value));
       const economiaLinha = Math.max(0, atual - simulado);
-      economia += economiaLinha;
+      if (linha.dataset.simTipo === "empresa") {
+        economiaEmpresa += economiaLinha;
+      } else if (linha.dataset.simTipo === "pessoal-total") {
+        economiaPessoalTotal = economiaLinha;
+        totalPessoalAlterado = Math.abs(simulado - atual) > 0.009;
+      } else if (linha.dataset.simTipo === "pessoal-pessoa") {
+        const pessoa = linha.dataset.simPessoa || linha.dataset.grupo;
+        economiaPessoalPorPessoa[pessoa] = economiaPessoalPorPessoa[pessoa] || { pessoa: 0, itens: 0 };
+        economiaPessoalPorPessoa[pessoa].pessoa = economiaLinha;
+      } else if (linha.dataset.simTipo === "pessoal-item") {
+        const pessoa = linha.dataset.simPessoa || "";
+        economiaPessoalPorPessoa[pessoa] = economiaPessoalPorPessoa[pessoa] || { pessoa: 0, itens: 0 };
+        economiaPessoalPorPessoa[pessoa].itens += economiaLinha;
+        if (Math.abs(simulado - atual) > 0.009) pessoaTemItensAlterados[pessoa] = true;
+      }
       const alvo = linha.querySelector("[data-sim-economia]");
       if (alvo) alvo.textContent = "Economia: " + moeda(economiaLinha);
+      const impacto = linha.querySelector("[data-sim-impact]");
+      if (impacto) {
+        const pessoaTotal = numero(linha.dataset.pessoaTotal);
+        const pessoalTotal = numero(linha.dataset.pessoalTotal);
+        const faturamento = numero("{{ faturamento|stringformat:'s' }}");
+        impacto.textContent =
+          "Economia: " + moeda(economiaLinha) + "/mes | " +
+          percentual(economiaLinha, pessoaTotal) + " da pessoa | " +
+          percentual(economiaLinha, pessoalTotal) + " das pessoais | " +
+          percentual(economiaLinha, faturamento) + " do faturamento | " +
+          moeda(economiaLinha * 12) + "/ano";
+      }
     });
-    document.getElementById("resultadoSimulado").textContent = moeda(resultadoBase + economia);
-    document.getElementById("melhoriaMensal").textContent = moeda(economia);
-    document.getElementById("impactoAnual").textContent = moeda(economia * 12);
+    let economiaPessoalPessoas = 0;
+    Object.keys(economiaPessoalPorPessoa).forEach(function (pessoa) {
+      const dados = economiaPessoalPorPessoa[pessoa];
+      economiaPessoalPessoas += pessoaTemItensAlterados[pessoa] ? dados.itens : dados.pessoa;
+    });
+    const economiaPessoal = totalPessoalAlterado ? economiaPessoalTotal : economiaPessoalPessoas;
+    const economiaTotal = economiaEmpresa + economiaPessoal;
+    document.getElementById("resultadoSimulado").textContent = moeda(resultadoBase + economiaEmpresa);
+    document.getElementById("economiaEmpresa").textContent = moeda(economiaEmpresa);
+    document.getElementById("economiaPessoal").textContent = moeda(economiaPessoal);
+    document.getElementById("impactoAnual").textContent = moeda(economiaTotal * 12);
+    document.getElementById("impactoGlobal").textContent = moeda(resultadoBase + economiaEmpresa + economiaPessoal);
   }
   function atualizarEstadoVisual(linha) {
     const input = linha.querySelector("[data-sim-input]");
