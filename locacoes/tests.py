@@ -22,6 +22,7 @@ from .models import (
     RegistroCobrancaLocacao,
     TarefaOperacionalLocacao,
 )
+from .forms import PagamentoLocacaoForm
 from .services import (
     checklist_operacional_locacoes,
     obter_ou_criar_tarefa_operacional,
@@ -905,6 +906,64 @@ class LocacoesPagamentosTermoTests(TestCase):
         movimento = pagamento.criar_movimento_financeiro()
 
         self.assertEqual(movimento.conta, self.conta_banco)
+
+    def test_form_pagamento_lista_apenas_operadores_de_caixa_ativos(self):
+        operador_caixa = Funcionario.objects.create(
+            nome="Lincoln Albuquerque Neiva",
+            ativo=True,
+            pode_operar_caixa=True,
+        )
+        outro_operador_caixa = Funcionario.objects.create(
+            nome="Roseli Da Costa Gama",
+            ativo=True,
+            pode_operar_caixa=True,
+        )
+        Funcionario.objects.create(
+            nome="Francisco Miranda",
+            ativo=True,
+            pode_receber_checklist=True,
+            telefone_whatsapp="91985022351",
+        )
+        Funcionario.objects.create(
+            nome="Operador Inativo",
+            ativo=False,
+            pode_operar_caixa=True,
+        )
+
+        form = PagamentoLocacaoForm()
+        funcionarios = list(form.fields["responsavel"].queryset)
+
+        self.assertEqual(funcionarios, [operador_caixa, outro_operador_caixa])
+
+    def test_registrar_pagamento_grava_nome_do_responsavel_e_movimento(self):
+        locacao = self.criar_locacao()
+        operador = Funcionario.objects.create(
+            nome="Roseli Da Costa Gama",
+            ativo=True,
+            pode_operar_caixa=True,
+        )
+
+        response = self.client.post(
+            reverse("locacoes:registrar_pagamento", kwargs={"pk": locacao.pk}),
+            {
+                "valor": "8.00",
+                "forma_pagamento": PagamentoLocacao.FORMA_PIX,
+                "responsavel": str(operador.pk),
+                "observacao": "Pagamento no caixa.",
+            },
+            secure=True,
+        )
+
+        pagamento = PagamentoLocacao.objects.get(locacao=locacao)
+        self.assertRedirects(
+            response,
+            reverse("locacoes:recibo_pagamento", kwargs={"pk": pagamento.pk}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(pagamento.responsavel, operador.nome)
+        self.assertNotEqual(pagamento.responsavel, str(operador.pk))
+        self.assertIsNotNone(pagamento.movimento_financeiro)
+        self.assertEqual(pagamento.movimento_financeiro.origem, "locacao")
 
     def test_recibo_pendente_enviado_e_dispensado(self):
         locacao = self.criar_locacao()

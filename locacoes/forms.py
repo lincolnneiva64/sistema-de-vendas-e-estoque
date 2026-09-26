@@ -364,10 +364,11 @@ class PagamentoLocacaoForm(forms.Form):
         choices=PagamentoLocacao.FORMA_CHOICES,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
-    responsavel = forms.CharField(
+    responsavel = forms.ModelChoiceField(
         required=False,
-        max_length=120,
-        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+        queryset=Funcionario.objects.none(),
+        empty_label="Selecione o responsavel",
+        widget=forms.Select(attrs={"class": "form-select"}),
     )
     observacao = forms.CharField(
         required=False,
@@ -379,6 +380,14 @@ class PagamentoLocacaoForm(forms.Form):
         if valor <= 0:
             raise forms.ValidationError("Informe um valor maior que zero.")
         return valor
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["responsavel"].queryset = Funcionario.operadores_do_caixa()
+
+    def clean_responsavel(self):
+        funcionario = self.cleaned_data.get("responsavel")
+        return funcionario.nome if funcionario else ""
 
 
 class VencimentoSaldoLocacaoForm(forms.Form):
