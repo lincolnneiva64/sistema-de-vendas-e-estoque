@@ -54,7 +54,17 @@
 
     {% if messages %}
       {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        <div class="alert alert-{{ message.tags|default:'info' }}">
+          <div>{{ message }}</div>
+          {% if "locacao-criada" in message.tags and tarefa_entrega and locacao.status == "reservada" %}
+            <a
+              class="btn btn-success mt-2"
+              href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id tarefa_entrega.tipo %}"
+            >
+              Preparar entrega
+            </a>
+          {% endif %}
+        </div>
       {% endfor %}
     {% endif %}
 

@@ -337,7 +337,41 @@ class LocacoesUxPadraoTests(TestCase):
         self.configuracao = ConfiguracaoLocacao.obter()
         self.configuracao.total_mesas = 4
         self.configuracao.total_cadeiras = 16
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
         self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def dados_nova_locacao(self, **extras):
+        data_entrega = extras.pop("data_entrega", timezone.localdate())
+        dados = {
+            "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+            "cliente": "",
+            "pessoa_avulsa_nome": "Cliente Proxima Etapa",
+            "pessoa_avulsa_telefone": "91999990000",
+            "endereco_entrega": "Rua Proxima Etapa, 10",
+            "faixa_preco": str(self.faixa.pk),
+            "data_evento": data_entrega.isoformat(),
+            "data_entrega": data_entrega.isoformat(),
+            "horario_evento": "18:00",
+            "horario_entrega": "09:00",
+            "data_prevista_devolucao": (data_entrega + timedelta(days=1)).isoformat(),
+            "observacao": "",
+            "jogos": "1",
+            "preco_jogo_diaria": "8.00",
+            "mesas_avulsas": "0",
+            "preco_mesa_avulsa_diaria": "4.00",
+            "cadeiras_avulsas": "0",
+            "preco_cadeira_avulsa_diaria": "1.50",
+            "sinal_valor": "",
+            "sinal_forma_pagamento": "",
+            "sinal_observacao": "",
+            "data_vencimento_saldo": data_entrega.isoformat(),
+        }
+        dados.update(extras)
+        return dados
 
     def test_lista_abre_com_periodo_de_hoje_preenchido(self):
         hoje = timezone.localdate().isoformat()
@@ -359,6 +393,75 @@ class LocacoesUxPadraoTests(TestCase):
         self.assertContains(response, f'value="{hoje}"', count=3)
         self.assertContains(response, f'name="data_prevista_devolucao" value="{amanha}"')
         self.assertContains(response, "data-enter-nav")
+
+    def test_detalhe_apos_criar_reserva_orienta_preparar_entrega(self):
+        data_entrega = date(2026, 9, 26)
+
+        response = self.client.post(
+            reverse("locacoes:nova"),
+            self.dados_nova_locacao(data_entrega=data_entrega),
+            secure=True,
+            follow=True,
+        )
+        locacao = Locacao.objects.get(pessoa_avulsa_nome="Cliente Proxima Etapa")
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        self.assertIn(
+            response.redirect_chain[0][0],
+            [
+                reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
+                f"https://testserver{reverse('locacoes:detalhe', kwargs={'pk': locacao.pk})}",
+            ],
+        )
+        self.assertContains(response, f"Locação #{locacao.id} criada com sucesso.")
+        self.assertContains(
+            response,
+            "Próxima etapa: preparar a entrega para 26/09/2026 às 09:00.",
+        )
+        self.assertContains(response, "Preparar entrega")
+        self.assertContains(
+            response,
+            reverse(
+                "locacoes:abrir_tarefa_operacional",
+                kwargs={"pk": locacao.pk, "tipo": tarefa.tipo},
+            ),
+        )
+
+    def test_detalhe_sem_mensagem_de_criacao_nao_exibe_destaque_indevido(self):
+        locacao = Locacao.criar_reserva(
+            {
+                "cliente": None,
+                "tipo_pessoa": Locacao.TIPO_PESSOA_AVULSA,
+                "pessoa_avulsa_nome": "Cliente Ja Entregue",
+                "pessoa_avulsa_telefone": "91999990000",
+                "endereco_entrega": "Rua Ja Entregue, 20",
+                "data_entrega": timezone.localdate(),
+                "horario_entrega": time(9, 0),
+                "data_evento": timezone.localdate(),
+                "horario_evento": time(18, 0),
+                "data_prevista_devolucao": timezone.localdate() + timedelta(days=1),
+                "data_vencimento_saldo": timezone.localdate(),
+                "faixa_preco": self.faixa,
+                "observacao": "",
+            },
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": 1,
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+        locacao.marcar_saiu_para_entrega(responsavel="Camila")
+        locacao.confirmar_entrega(responsavel="Camila")
+
+        response = self.client.get(
+            reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
+            secure=True,
+        )
+
+        self.assertNotContains(response, "Próxima etapa: preparar a entrega")
 
 
 class LocacoesReservasTests(TestCase):

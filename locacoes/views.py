@@ -1179,7 +1179,16 @@ def nova(request):
                     locacao_form.add_error(None, exc)
                 messages.warning(request, "Nao foi possivel salvar a reserva.")
             else:
-                messages.success(request, f"Reserva de locacao #{locacao.id} criada. Material ainda nao saiu para entrega.")
+                messages.success(
+                    request,
+                    (
+                        f"Locação #{locacao.id} criada com sucesso. "
+                        "Próxima etapa: preparar a entrega para "
+                        f"{locacao.data_entrega:%d/%m/%Y} às "
+                        f"{locacao.horario_entrega:%H:%M}."
+                    ),
+                    extra_tags="locacao-criada",
+                )
                 return redirect("locacoes:detalhe", pk=locacao.pk)
         else:
             disponibilidade = None
