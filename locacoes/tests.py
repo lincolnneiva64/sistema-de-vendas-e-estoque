@@ -1378,6 +1378,220 @@ class LocacoesAlertasCobrancaTests(TestCase):
         self.assertEqual(Produto.objects.count(), 0)
 
 
+class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
+    def setUp(self):
+        self.hoje = timezone.localdate()
+        self.configuracao = ConfiguracaoLocacao.obter()
+        self.configuracao.total_mesas = 40
+        self.configuracao.total_cadeiras = 160
+        self.configuracao.preco_mesa_avulsa_diaria = Decimal("4.00")
+        self.configuracao.preco_cadeira_avulsa_diaria = Decimal("1.50")
+        self.configuracao.save()
+        self.faixa = FaixaPrecoLocacao.objects.get(codigo=FaixaPrecoLocacao.CENTRO_PERTO)
+        self.faixa.preco_jogo_diaria = Decimal("8.00")
+        self.faixa.save()
+
+    def criar_cliente(self, nome):
+        return Cliente.objects.create(
+            nome=nome,
+            whatsapp="(91) 99999-0000",
+            ativo=True,
+        )
+
+    def criar_locacao_cliente(self, nome="Cliente Locacao", **extras):
+        cliente = extras.pop("cliente", None) or self.criar_cliente(nome)
+        data_entrega = extras.pop("data_entrega", self.hoje)
+        locacao = Locacao.criar_reserva(
+            {
+                "cliente": cliente,
+                "tipo_pessoa": Locacao.TIPO_PESSOA_CLIENTE,
+                "endereco_entrega": "Rua Consulta, 100",
+                "data_entrega": data_entrega,
+                "horario_entrega": "09:00",
+                "data_evento": data_entrega,
+                "horario_evento": "18:00",
+                "data_prevista_devolucao": extras.pop(
+                    "data_prevista_devolucao",
+                    data_entrega + timedelta(days=1),
+                ),
+                "data_vencimento_saldo": extras.pop("data_vencimento_saldo", data_entrega),
+                "faixa_preco": self.faixa,
+                "observacao": "",
+            },
+            [{
+                "tipo": ItemLocacao.TIPO_JOGO,
+                "quantidade": extras.pop("jogos", 2),
+                "preco_diaria": Decimal("8.00"),
+            }],
+        )
+        status = extras.pop("status", "")
+        if status:
+            locacao.status = status
+            locacao._permitir_alterar_status = True
+            locacao.save(update_fields=["status", "atualizado_em"])
+        pagamento = extras.pop("pagamento", None)
+        if pagamento is not None:
+            locacao.registrar_pagamento(Decimal(str(pagamento)), PagamentoLocacao.FORMA_PIX)
+        return locacao
+
+    def locacao_ids_receber_cliente(self, cliente):
+        response = self.client.get(reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}), secure=True)
+        return [locacao.id for locacao in response.context["locacoes_abertas"]]
+
+    def test_locacao_ativa_com_saldo_aparece_no_receber_cliente(self):
+        cliente = self.criar_cliente("Cliente Ativo Saldo")
+        locacao = self.criar_locacao_cliente(cliente=cliente)
+
+        self.assertIn(locacao.id, self.locacao_ids_receber_cliente(cliente))
+
+    def test_locacao_devolvida_com_saldo_continua_no_receber_cliente(self):
+        cliente = self.criar_cliente("Cliente Devolvida Saldo")
+        locacao = self.criar_locacao_cliente(cliente=cliente, status=Locacao.STATUS_DEVOLVIDA)
+
+        self.assertIn(locacao.id, self.locacao_ids_receber_cliente(cliente))
+
+    def test_locacao_devolvida_com_avaria_com_saldo_continua_no_receber_cliente(self):
+        cliente = self.criar_cliente("Cliente Avaria Saldo")
+        locacao = self.criar_locacao_cliente(cliente=cliente, status=Locacao.STATUS_DEVOLVIDA_COM_AVARIA)
+
+        self.assertIn(locacao.id, self.locacao_ids_receber_cliente(cliente))
+
+    def test_locacao_devolvida_quitada_nao_aparece_como_divida_no_receber_cliente(self):
+        cliente = self.criar_cliente("Cliente Devolvida Quitada")
+        locacao = self.criar_locacao_cliente(
+            cliente=cliente,
+            status=Locacao.STATUS_DEVOLVIDA,
+            pagamento="16.00",
+        )
+
+        self.assertNotIn(locacao.id, self.locacao_ids_receber_cliente(cliente))
+
+    def test_locacao_devolvida_vencida_continua_elegivel_para_central_cobrancas(self):
+        locacao = self.criar_locacao_cliente(
+            "Cliente Devolvida Cobranca",
+            status=Locacao.STATUS_DEVOLVIDA,
+            data_vencimento_saldo=self.hoje - timedelta(days=1),
+        )
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(response, f"Locacao #{locacao.id}")
+
+    def test_locacao_devolvida_com_avaria_vencida_continua_elegivel_para_cobranca(self):
+        locacao = self.criar_locacao_cliente(
+            "Cliente Avaria Cobranca",
+            status=Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+            data_vencimento_saldo=self.hoje - timedelta(days=1),
+        )
+
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+
+        self.assertContains(response, f"Locacao #{locacao.id}")
+
+    def test_locacao_cancelada_mantem_comportamento_atual_fora_dos_fluxos(self):
+        cliente = self.criar_cliente("Cliente Cancelada")
+        locacao = self.criar_locacao_cliente(
+            cliente=cliente,
+            status=Locacao.STATUS_CANCELADA,
+            data_vencimento_saldo=self.hoje - timedelta(days=1),
+        )
+
+        self.assertNotIn(locacao.id, self.locacao_ids_receber_cliente(cliente))
+        response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
+        self.assertNotContains(response, f"Locacao #{locacao.id}")
+
+    def test_consulta_filtra_com_saldo_a_receber(self):
+        com_saldo = self.criar_locacao_cliente("Cliente Com Saldo")
+        quitada = self.criar_locacao_cliente("Cliente Quitada", pagamento="16.00")
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"financeiro": "com_saldo", "data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+        ids = [locacao.id for locacao in response.context["locacoes"]]
+
+        self.assertIn(com_saldo.id, ids)
+        self.assertNotIn(quitada.id, ids)
+
+    def test_consulta_filtra_quitadas(self):
+        com_saldo = self.criar_locacao_cliente("Cliente Com Saldo")
+        quitada = self.criar_locacao_cliente("Cliente Quitada", pagamento="16.00")
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"financeiro": "quitadas", "data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+        ids = [locacao.id for locacao in response.context["locacoes"]]
+
+        self.assertNotIn(com_saldo.id, ids)
+        self.assertIn(quitada.id, ids)
+
+    def test_consulta_combina_status_financeiro_e_datas(self):
+        alvo = self.criar_locacao_cliente(
+            "Cliente Filtro Combinado",
+            status=Locacao.STATUS_DEVOLVIDA,
+            data_entrega=self.hoje,
+        )
+        self.criar_locacao_cliente(
+            "Cliente Status Diferente",
+            status=Locacao.STATUS_ENTREGUE,
+            data_entrega=self.hoje,
+        )
+        self.criar_locacao_cliente(
+            "Cliente Fora Da Data",
+            status=Locacao.STATUS_DEVOLVIDA,
+            data_entrega=self.hoje - timedelta(days=3),
+        )
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {
+                "status": Locacao.STATUS_DEVOLVIDA,
+                "financeiro": "com_saldo",
+                "data_inicio": self.hoje.isoformat(),
+                "data_fim": self.hoje.isoformat(),
+            },
+            secure=True,
+        )
+        ids = [locacao.id for locacao in response.context["locacoes"]]
+
+        self.assertEqual(ids, [alvo.id])
+
+    def test_template_consulta_exibe_resumo_financeiro_completo(self):
+        locacao = self.criar_locacao_cliente(
+            "Cliente Resumo Financeiro",
+            pagamento="6.00",
+        )
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+
+        self.assertContains(response, "Parcialmente pago")
+        self.assertContains(response, "Total: R$ 16")
+        self.assertContains(response, "Pago: R$ 6")
+        self.assertContains(response, "Saldo: R$ 10")
+        self.assertContains(response, f"Vencimento: {locacao.data_vencimento_saldo:%d/%m/%Y}")
+
+    def test_template_consulta_indica_locacao_vencida(self):
+        self.criar_locacao_cliente(
+            "Cliente Vencido",
+            data_vencimento_saldo=self.hoje - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+
+        self.assertContains(response, "Vencido")
+
+
 class LocacoesChecklistOperacionalTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()

@@ -697,6 +697,7 @@ def _funcionarios_checklist_recolhimento_envio(conferencia, checklist_url, funci
 
 def lista(request):
     status = request.GET.get("status", "").strip()
+    financeiro = request.GET.get("financeiro", "").strip()
     hoje = timezone.localdate()
     primeira_abertura = not request.GET
     data_inicio_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_inicio", "").strip()
@@ -729,6 +730,10 @@ def lista(request):
         locacoes_qs = locacoes_qs.filter(data_entrega__gte=data_inicio)
     if data_fim:
         locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
+    if financeiro == "com_saldo":
+        locacoes_qs = locacoes_qs.filter(saldo_devedor__gt=Decimal("0.00"))
+    elif financeiro == "quitadas":
+        locacoes_qs = locacoes_qs.filter(saldo_devedor__lte=Decimal("0.00"))
     locacoes = list(locacoes_qs)
     for locacao in locacoes:
         locacao.necessidade_pendente_lista = Locacao.necessidades_itens(
@@ -738,15 +743,22 @@ def lista(request):
             ]
         )
         locacao.acoes_consulta = _acoes_locacao(locacao, request=request)
+        locacao.saldo_vencido_lista = locacao.saldo_vencido_em(hoje)
     return render(
         request,
         "locacoes/lista.html",
         {
             "locacoes": locacoes,
             "status_filtro": status,
+            "financeiro_filtro": financeiro,
             "data_inicio": data_inicio_texto,
             "data_fim": data_fim_texto,
             "status_opcoes": Locacao.STATUS_CHOICES,
+            "financeiro_opcoes": [
+                ("", "Todas"),
+                ("com_saldo", "Com saldo a receber"),
+                ("quitadas", "Quitadas"),
+            ],
         },
     )
 

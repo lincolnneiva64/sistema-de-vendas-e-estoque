@@ -341,8 +341,6 @@ def _locacoes_cobranca_acionaveis(hoje=None, limite=None):
         )
         .exclude(status__in=[
             Locacao.STATUS_CANCELADA,
-            Locacao.STATUS_DEVOLVIDA,
-            Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
         ])
         .order_by("data_vencimento_saldo", "id")
     )
@@ -844,8 +842,6 @@ def _locacoes_abertas_cliente_qs(cliente_id, bloquear=False):
         .exclude(
             status__in=[
                 Locacao.STATUS_CANCELADA,
-                Locacao.STATUS_DEVOLVIDA,
-                Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
             ]
         )
         .prefetch_related("itens")
@@ -15967,8 +15963,6 @@ def central_cobrancas(request):
             )
             .exclude(status__in=[
                 Locacao.STATUS_CANCELADA,
-                Locacao.STATUS_DEVOLVIDA,
-                Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
             ])
         )
         if cliente_filtro:

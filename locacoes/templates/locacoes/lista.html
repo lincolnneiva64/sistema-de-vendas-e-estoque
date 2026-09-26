@@ -259,6 +259,60 @@
       color: var(--locacoes-muted);
     }
 
+    .financeiro-resumo {
+      display: grid;
+      gap: 4px;
+      min-width: 170px;
+    }
+
+    .financeiro-status {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #ecfdf5;
+      color: #047857;
+      font-size: 0.78rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .financeiro-resumo.com-saldo .financeiro-status {
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fdba74;
+    }
+
+    .financeiro-resumo.vencida .financeiro-status {
+      background: #fef2f2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+
+    .financeiro-linha {
+      font-size: 0.84rem;
+      line-height: 1.25;
+      color: var(--locacoes-text);
+      font-weight: 750;
+    }
+
+    .financeiro-linha.saldo {
+      color: #9a3412;
+      font-weight: 950;
+    }
+
+    .financeiro-resumo.quitada .financeiro-linha {
+      color: var(--locacoes-muted);
+    }
+
+    .financeiro-vencida {
+      color: #b91c1c;
+      font-size: 0.78rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
     .badge-locacoes {
       display: inline-block;
       padding: 5px 9px;
@@ -395,6 +449,14 @@
           </select>
         </div>
         <div>
+          <label class="form-label">Financeiro</label>
+          <select name="financeiro" class="form-select">
+            {% for valor, rotulo in financeiro_opcoes %}
+              <option value="{{ valor }}" {% if financeiro_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
           <label class="form-label">Data inicial</label>
           <input class="form-control" type="date" name="data_inicio" value="{{ data_inicio }}">
         </div>
@@ -421,7 +483,6 @@
               <th>Devolução prevista</th>
               <th>Pendente/rua</th>
               <th>Financeiro</th>
-              <th>Total</th>
               <th>Ações</th>
             </tr>
           </thead>
@@ -443,8 +504,18 @@
                   {{ locacao.necessidade_pendente_lista.mesas }} mesa(s) /
                   {{ locacao.necessidade_pendente_lista.cadeiras }} cadeira(s)
                 </td>
-                <td>{{ locacao.get_status_financeiro_display }}<br><span class="muted">Saldo R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></td>
-                <td>R$ {{ locacao.total|floatformat:2 }}</td>
+                <td>
+                  <div class="financeiro-resumo {% if locacao.saldo_devedor > 0 %}com-saldo{% else %}quitada{% endif %} {% if locacao.saldo_vencido_lista %}vencida{% endif %}">
+                    <span class="financeiro-status">{{ locacao.get_status_financeiro_display }}</span>
+                    <span class="financeiro-linha">Total: R$ {{ locacao.total|floatformat:2 }}</span>
+                    <span class="financeiro-linha">Pago: R$ {{ locacao.total_pago|floatformat:2 }}</span>
+                    <span class="financeiro-linha saldo">Saldo: R$ {{ locacao.saldo_devedor|floatformat:2 }}</span>
+                    <span class="financeiro-linha">Vencimento: {{ locacao.data_vencimento_saldo|date:"d/m/Y"|default:"Sem data" }}</span>
+                    {% if locacao.saldo_vencido_lista %}
+                      <span class="financeiro-vencida">Vencido</span>
+                    {% endif %}
+                  </div>
+                </td>
                 <td>
                   <div class="acoes-locacao">
                     <div class="acoes-locacao-linha principal">
