@@ -276,7 +276,7 @@
             <span class="rg-muted">Simulado</span>
             <input type="number" min="0" step="0.01" value="{{ grupo.valor|stringformat:'s' }}" data-sim-input>
           </label>
-          <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+          <span class="rg-muted" data-sim-economia>Economia neste mes: R$ 0,00</span>
         </div>
       {% empty %}
         <p class="rg-muted">Sem grupos da empresa para simular neste periodo.</p>
@@ -290,7 +290,7 @@
           <span class="rg-muted">Simulado</span>
           <input type="number" min="0" step="0.01" value="{{ despesas_pessoais_total|stringformat:'s' }}" data-sim-input>
         </label>
-        <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+        <span class="rg-muted" data-sim-economia>Economia neste mes: R$ 0,00</span>
       </div>
       {% for pessoa in despesas_pessoais %}
         <details class="rg-sim-person">
@@ -303,7 +303,7 @@
                 <span class="rg-muted">Simulado</span>
                 <input type="number" min="0" step="0.01" value="{{ pessoa.valor|stringformat:'s' }}" data-sim-input>
               </label>
-              <span class="rg-muted" data-sim-economia>Economia: R$ 0,00</span>
+              <span class="rg-muted" data-sim-economia>Economia neste mes: R$ 0,00</span>
             </div>
           </summary>
           <div class="rg-sim-children">
@@ -325,7 +325,7 @@
                       <span class="rg-muted">Simulado</span>
                       <input type="number" min="0" step="0.01" value="{{ item.valor|stringformat:'s' }}" data-sim-input>
                     </label>
-                    <span class="rg-sim-impact" data-sim-impact>Economia: R$ 0,00</span>
+                    <span class="rg-sim-impact" data-sim-impact>Economia neste mes: R$ 0,00</span>
                   </div>
                 {% endfor %}
               {% endfor %}
@@ -344,9 +344,9 @@
           <span>{% if cmv_disponivel %}Resultado simulado{% else %}Resultado parcial simulado (sem CMV){% endif %}</span>
           <strong id="resultadoSimulado">{{ resultado_base_simulador_texto }}</strong>
         </div>
-        <div class="rg-card"><span>Economia empresa</span><strong id="economiaEmpresa">R$ 0,00</strong></div>
-        <div class="rg-card"><span>Economia pessoal/familiar</span><strong id="economiaPessoal">R$ 0,00</strong></div>
-        <div class="rg-card"><span>Economia total anualizada</span><strong id="impactoAnual">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Economia empresa neste mes</span><strong id="economiaEmpresa">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Economia pessoal/familiar neste mes</span><strong id="economiaPessoal">R$ 0,00</strong></div>
+        <div class="rg-card"><span>Projecao em 12 meses</span><strong id="impactoAnual">R$ 0,00</strong><small>Estimativa: economia deste mes vezes 12.</small></div>
         <div class="rg-card"><span>Impacto global apos pessoal</span><strong id="impactoGlobal">{{ resultado_base_simulador_texto }}</strong></div>
       </div>
     </div>
@@ -409,18 +409,18 @@
         if (Math.abs(simulado - atual) > 0.009) pessoaTemItensAlterados[pessoa] = true;
       }
       const alvo = linha.querySelector("[data-sim-economia]");
-      if (alvo) alvo.textContent = "Economia: " + moeda(economiaLinha);
+      if (alvo) alvo.textContent = "Economia neste mes: " + moeda(economiaLinha);
       const impacto = linha.querySelector("[data-sim-impact]");
       if (impacto) {
         const pessoaTotal = numero(linha.dataset.pessoaTotal);
         const pessoalTotal = numero(linha.dataset.pessoalTotal);
         const faturamento = numero("{{ faturamento|stringformat:'s' }}");
         impacto.textContent =
-          "Economia: " + moeda(economiaLinha) + "/mes | " +
+          "Economia neste mes: " + moeda(economiaLinha) + " | " +
           percentual(economiaLinha, pessoaTotal) + " da pessoa | " +
           percentual(economiaLinha, pessoalTotal) + " das pessoais | " +
           percentual(economiaLinha, faturamento) + " do faturamento | " +
-          moeda(economiaLinha * 12) + "/ano";
+          "Projecao em 12 meses: " + moeda(economiaLinha * 12);
       }
     });
     let economiaPessoalPessoas = 0;
