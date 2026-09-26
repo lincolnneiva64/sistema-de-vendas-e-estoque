@@ -328,13 +328,14 @@
     .acoes-locacao {
       display: grid;
       gap: 7px;
-      min-width: 260px;
+      min-width: 230px;
     }
 
     .acoes-locacao-linha {
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
+      align-items: center;
     }
 
     .acoes-locacao .btn {
@@ -364,6 +365,40 @@
     .acoes-locacao-linha.secundaria .btn {
       min-height: 31px;
       font-size: 0.78rem;
+    }
+
+    .acoes-mais {
+      position: relative;
+    }
+
+    .acoes-mais summary {
+      list-style: none;
+      cursor: pointer;
+    }
+
+    .acoes-mais summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .acoes-mais-menu {
+      position: absolute;
+      right: 0;
+      z-index: 20;
+      display: grid;
+      gap: 6px;
+      min-width: 150px;
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
+    }
+
+    .acoes-mais-menu .btn,
+    .acoes-mais-menu form,
+    .acoes-mais-menu button {
+      width: 100%;
     }
 
     .alert {
@@ -426,6 +461,7 @@
       <div class="top-actions">
         <a class="btn btn-outline-secondary" href="{% url 'locacoes:configuracoes' %}">Configurações</a>
         <a class="btn btn-outline-primary" href="{% url 'locacoes:recibos_pendentes' %}">Recibos pendentes</a>
+        <a class="btn btn-outline-success" href="{% url 'locacoes:checklist_operacional' %}">Entregas e Recolhimentos</a>
         <a class="btn btn-locacoes" href="{% url 'locacoes:nova' %}">Nova locação</a>
       </div>
     </header>
@@ -523,33 +559,36 @@
                       <a class="btn btn-sm acao-editar" href="{% url 'locacoes:editar' locacao.id %}">Editar</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_entrega %}
-                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_entrega' locacao.acoes_consulta.tarefa_entrega.id %}">Entrega</a>
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id locacao.acoes_consulta.tarefa_entrega.tipo %}">Preparar entrega</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_recolhimento %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_recolhimento' locacao.acoes_consulta.tarefa_recolhimento.id %}">Recolhimento</a>
                     {% endif %}
-                    </div>
-                    <div class="acoes-locacao-linha secundaria">
                     {% if locacao.status != 'cancelada' %}
                       <a class="btn btn-outline-warning btn-sm" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Pagamentos</a>
                     {% endif %}
-                    {% if locacao.pagamentos.all %}
-                      <a class="btn btn-outline-info btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}#pagamentos">Recibos</a>
-                    {% endif %}
-                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Detalhes</a>
                     {% if locacao.acoes_consulta.pode_cancelar %}
                       <form method="post" action="{% url 'locacoes:cancelar' locacao.id %}" onsubmit="return confirm('{% if locacao.acoes_consulta.tem_pagamentos %}Esta locação possui pagamento registrado. Cancelar preserva o histórico financeiro e não gera estorno automático. Confirmar cancelamento?{% else %}Confirmar cancelamento desta reserva?{% endif %}');">
                         {% csrf_token %}
                         <button class="btn btn-outline-danger btn-sm" type="submit">Cancelar</button>
                       </form>
                     {% endif %}
-                    {% if locacao.acoes_consulta.pode_excluir %}
-                      <form method="post" action="{% url 'locacoes:excluir' locacao.id %}" onsubmit="return confirm('Excluir definitivamente esta reserva sem vínculos?');">
-                        {% csrf_token %}
-                        <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
-                      </form>
-                    {% endif %}
-                  </div>
+                    <details class="acoes-mais">
+                      <summary class="btn btn-outline-secondary btn-sm">Mais</summary>
+                      <div class="acoes-mais-menu">
+                        <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Detalhes</a>
+                        {% if locacao.pagamentos.all %}
+                          <a class="btn btn-outline-info btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}#pagamentos">Recibos</a>
+                        {% endif %}
+                        {% if locacao.acoes_consulta.pode_excluir %}
+                          <form method="post" action="{% url 'locacoes:excluir' locacao.id %}" onsubmit="return confirm('Excluir definitivamente esta reserva sem vínculos?');">
+                            {% csrf_token %}
+                            <button class="btn btn-danger btn-sm" type="submit">Excluir</button>
+                          </form>
+                        {% endif %}
+                      </div>
+                    </details>
+                    </div>
                   </div>
                 </td>
               </tr>

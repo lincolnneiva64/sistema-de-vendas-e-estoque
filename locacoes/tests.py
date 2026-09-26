@@ -1095,7 +1095,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         self.assertContains(response, "Abrir WhatsApp")
         self.assertContains(response, "web.whatsapp.com/send?phone=55")
         self.assertNotContains(response, "web.whatsapp.com/send?phone=55&amp;text=")
-        self.assertContains(response, "Abrir checklist de entrega")
+        self.assertContains(response, "Preparar entrega")
         self.assertContains(response, reverse("locacoes:checklist_operacional"))
         self.assertContains(response, "tarefa=")
         self.assertNotContains(response, "/conferencia-entrega/")
@@ -1649,6 +1649,118 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
         )
 
         self.assertContains(response, "Vencido")
+
+    def test_consulta_exibe_acesso_geral_e_preparar_entrega_focado(self):
+        locacao = self.criar_locacao_cliente("Cliente Preparar Entrega")
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+        tarefa = response.context["locacoes"][0].acoes_consulta["tarefa_entrega"]
+
+        self.assertContains(response, "Entregas e Recolhimentos")
+        self.assertContains(response, reverse("locacoes:checklist_operacional"))
+        self.assertContains(response, "Preparar entrega")
+        self.assertContains(
+            response,
+            reverse(
+                "locacoes:abrir_tarefa_operacional",
+                kwargs={"pk": locacao.pk, "tipo": tarefa.tipo},
+            ),
+        )
+        self.assertNotContains(
+            response,
+            reverse("locacoes:conferencia_entrega", kwargs={"pk": tarefa.pk}),
+        )
+
+    def test_abrir_tarefa_operacional_mantem_redirect_para_checklist_com_foco(self):
+        locacao = self.criar_locacao_cliente("Cliente Redirect Operacional")
+        tarefa = obter_ou_criar_tarefa_operacional(
+            locacao,
+            TarefaOperacionalLocacao.TIPO_ENTREGA,
+        )
+
+        response = self.client.get(
+            reverse(
+                "locacoes:abrir_tarefa_operacional",
+                kwargs={"pk": locacao.pk, "tipo": tarefa.tipo},
+            ),
+            secure=True,
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                f"{reverse('locacoes:checklist_operacional')}"
+                f"?data={tarefa.data_agendada:%Y-%m-%d}&tarefa={tarefa.pk}"
+            ),
+            fetch_redirect_response=False,
+        )
+
+    def test_consulta_mantem_cancelar_e_excluir_conforme_regras(self):
+        locacao = self.criar_locacao_cliente("Cliente Acoes Limpas")
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+
+        self.assertContains(response, ">Cancelar<")
+        self.assertContains(response, ">Mais<")
+        self.assertContains(response, ">Detalhes<")
+        self.assertContains(response, ">Excluir<")
+        self.assertContains(
+            response,
+            reverse("locacoes:cancelar", kwargs={"pk": locacao.pk}),
+        )
+        self.assertContains(
+            response,
+            reverse("locacoes:excluir", kwargs={"pk": locacao.pk}),
+        )
+
+        self.client.post(
+            reverse("locacoes:excluir", kwargs={"pk": locacao.pk}),
+            secure=True,
+        )
+
+        self.assertFalse(Locacao.objects.filter(pk=locacao.pk).exists())
+
+    def test_consulta_mantem_cancelar_com_pagamento_e_bloqueia_excluir(self):
+        locacao = self.criar_locacao_cliente(
+            "Cliente Acoes Com Pagamento",
+            pagamento="1.00",
+        )
+
+        response = self.client.get(
+            reverse("locacoes:lista"),
+            {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
+            secure=True,
+        )
+
+        self.assertContains(response, ">Cancelar<")
+        self.assertContains(response, ">Recibos<")
+        self.assertNotContains(response, ">Excluir<")
+        self.assertContains(
+            response,
+            reverse("locacoes:cancelar", kwargs={"pk": locacao.pk}),
+        )
+        self.assertNotContains(
+            response,
+            reverse("locacoes:excluir", kwargs={"pk": locacao.pk}),
+        )
+
+        self.client.post(
+            reverse("locacoes:cancelar", kwargs={"pk": locacao.pk}),
+            {"responsavel": "Camila", "motivo": "Cliente desistiu."},
+            secure=True,
+        )
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.status, Locacao.STATUS_CANCELADA)
+        self.assertEqual(locacao.pagamentos.count(), 1)
 
 
 class LocacoesChecklistOperacionalTests(TestCase):
