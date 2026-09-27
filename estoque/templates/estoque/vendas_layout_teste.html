@@ -1995,6 +1995,7 @@ td:first-child {
                 <option value="" selected>Tipo</option>
                 <option>À vista</option>
                 <option>A prazo</option>
+                <option value="consumo_proprio">Consumo próprio</option>
             </select>
             <select id="operadorVenda" title="Operador">
     {% for operador in operadores_venda %}
@@ -3425,6 +3426,7 @@ const clienteResumoStatus = document.getElementById("clienteResumoStatus");
 const clienteResumoStatusCard = document.getElementById("clienteResumoStatusCard");
 const clienteResumoWhatsapp = document.getElementById("clienteResumoWhatsapp");
 const clienteResumoFinanceiro = document.getElementById("clienteResumoFinanceiro");
+const clientesConsumoProprioVenda = new Set(["6", "10", "1086", "1078", "1145"]);
 const vencimentoVenda = document.getElementById("vencimentoVenda");
 [clienteBusca, tipoVenda, dataVenda, operadorVenda, vencimentoVenda].forEach((campo) => {
     if (!campo) return;
@@ -3596,6 +3598,54 @@ const ajusteSeparacaoVenda = vendaEdicaoVenda?.ajuste_separacao || null;
 let vendaEdicaoSemAlteracoesPendentes = false;
 let vendaEdicaoBloqueada = false;
 
+function tipoPagamentoConsumoProprioVenda(valor) {
+    const texto = normalizarTextoCliente(valor || "").replace(/_/g, " ");
+    const compacto = texto.replace(/\s/g, "");
+    return texto === "consumo proprio" || compacto === "consumoproprio";
+}
+
+function vendaEdicaoConsumoProprio() {
+    return Boolean(
+        vendaEdicaoVenda?.id
+        && tipoPagamentoConsumoProprioVenda(vendaEdicaoVenda.tipo_pagamento)
+    );
+}
+
+function garantirTipoVendaEdicaoConsumoProprio() {
+    if (!tipoVenda || !vendaEdicaoConsumoProprio()) return false;
+
+    let opcaoConsumo = Array.from(tipoVenda.options || []).find((opcao) => (
+        opcao.value === "consumo_proprio"
+    ));
+
+    if (!opcaoConsumo) {
+        opcaoConsumo = document.createElement("option");
+        opcaoConsumo.value = "consumo_proprio";
+        opcaoConsumo.textContent = "Consumo próprio";
+        tipoVenda.appendChild(opcaoConsumo);
+    }
+
+    tipoVenda.value = "consumo_proprio";
+    tipoVenda.disabled = true;
+    tipoVenda.title = "Consumo próprio não pode ser convertido em venda normal.";
+
+    if (window.atualizarSelectsBonitosVenda) {
+        window.atualizarSelectsBonitosVenda();
+    }
+
+    return true;
+}
+
+if (tipoVenda) {
+    ["input", "change"].forEach((evento) => {
+        tipoVenda.addEventListener(evento, () => {
+            if (vendaEdicaoConsumoProprio()) {
+                setTimeout(garantirTipoVendaEdicaoConsumoProprio, 0);
+            }
+        });
+    });
+}
+
 function aplicarBloqueioEdicaoVenda(bloquear) {
     if (!vendaEdicaoVenda?.id) return;
 
@@ -3616,6 +3666,8 @@ function aplicarBloqueioEdicaoVenda(bloquear) {
     ].forEach((controle) => {
         if (controle) controle.disabled = vendaEdicaoBloqueada;
     });
+
+    garantirTipoVendaEdicaoConsumoProprio();
 
     if (vendaEdicaoBloqueada) {
         limparEstadoEdicaoItemVenda();
@@ -3832,15 +3884,25 @@ function atualizarPrazoEVencimentoCliente() {
     const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
     clienteResumoPrazo.textContent = prazo ? prazo + " dias" : "Sem prazo definido";
 
+    if (garantirTipoVendaEdicaoConsumoProprio()) return;
+
     if (vendaEdicaoVenda?.id) return;
+
+    if (clientesConsumoProprioVenda.has(String(clienteSelecionado.id || ""))) {
+        vencimentoVenda.value = "";
+        tipoVenda.value = "consumo_proprio";
+        tipoVenda.dispatchEvent(new Event("change", { bubbles: true }));
+        return;
+    }
 
     vencimentoVenda.value = calcularVencimentoCliente();
 
     if (prazo > 0) {
         tipoVenda.value = "A prazo";
-    } else if (!tipoVenda.value) {
+    } else if (!tipoVenda.value || tipoVenda.value === "consumo_proprio") {
         tipoVenda.value = "À vista";
     }
+    tipoVenda.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function criarLinhaFinanceira(classe, texto, link, acao) {
@@ -3992,6 +4054,10 @@ dataVenda.addEventListener("input", atualizarPrazoEVencimentoCliente);
 
 function focarProximoCampo(campo) {
     if (!campo) return;
+    if (campo.disabled && campo === tipoVenda && vendaEdicaoConsumoProprio()) {
+        campo = operadorVenda;
+    }
+    if (!campo || campo.disabled) return;
     campo.focus();
     if (typeof campo.select === "function") {
         campo.select();
@@ -5201,6 +5267,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 
 function limparTipoPagamentoVenda() {
     if (!tipoVenda) return;
+    if (garantirTipoVendaEdicaoConsumoProprio()) return;
     tipoVenda.value = "";
     tipoVenda.dispatchEvent(new Event("change"));
 }
@@ -5228,6 +5295,7 @@ function limparCabecalhoVenda(resetarTipo = false) {
     dataVenda.value = dataLocalHojeInput();
 
     limparTipoPagamentoVenda();
+    garantirTipoVendaEdicaoConsumoProprio();
 
     focarProximoCampo(clienteBusca);
 }
@@ -5505,6 +5573,8 @@ function prepararVendaEmEdicao() {
     dataVenda.value = vendaEdicaoVenda.data_venda || "";
     vencimentoVenda.value = vendaEdicaoVenda.data_vencimento || "";
     tipoVenda.value = vendaEdicaoVenda.tipo_pagamento || "";
+    garantirTipoVendaEdicaoConsumoProprio();
+    tipoVenda.dispatchEvent(new Event("change", { bubbles: true }));
     operadorVenda.value = vendaEdicaoVenda.operador || "";
 
     // A rotina global de inatividade do operador roda depois deste bloco
@@ -6105,6 +6175,8 @@ function coletarItensVenda() {
 }
 
 function coletarDadosVenda() {
+    garantirTipoVendaEdicaoConsumoProprio();
+
     return {
         venda_id: vendaEdicaoVenda?.id || null,
         next: vendaEdicaoRetornoUrl || "",
@@ -6120,7 +6192,10 @@ function coletarDadosVenda() {
 }
 
 function pagamentoVendaAVista() {
+    garantirTipoVendaEdicaoConsumoProprio();
+
     const valor = normalizarTextoCliente(tipoVenda ? tipoVenda.value : "").replace(/\s/g, "");
+    if (tipoPagamentoConsumoProprioVenda(tipoVenda ? tipoVenda.value : "")) return false;
     return valor === "avista" || valor === "dinheiro" || valor === "especie" || valor === "pix" || valor === "banco" || valor === "transferencia" || valor === "cartao" || valor === "debito" || valor === "credito" || valor === "boleto" || valor === "deposito";
 }
 
@@ -6383,6 +6458,8 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
 }
 /* ===== FIM PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
 function adicionarItemVendaAtual() {
+    garantirTipoVendaEdicaoConsumoProprio();
+
     const produtoNome = (produtoBusca.value || "").trim();
     const produtoValor = (produto.value || "").trim();
     const produtoOption = obterProdutoOptionVenda(produtoValor);
@@ -6464,6 +6541,7 @@ function adicionarItemVendaAtual() {
 
         limparEstadoEdicaoItemVenda();
         limparCamposProdutoVenda();
+        garantirTipoVendaEdicaoConsumoProprio();
         focarProximoCampo(produtoBusca);
         return true;
     }
@@ -6491,9 +6569,11 @@ function adicionarItemVendaAtual() {
         estoquePreview.style.display = "none";
         historicoProdutoCliente.textContent = "";
 
+        garantirTipoVendaEdicaoConsumoProprio();
         focarProximoCampo(produtoBusca);
     }
 
+    garantirTipoVendaEdicaoConsumoProprio();
     return true;
 }
 
@@ -6523,6 +6603,7 @@ preco.addEventListener("input", atualizarCustoMargemVenda);
 async function gravarVendaAtual(dadosVendaConfirmados) {
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
 
+    garantirTipoVendaEdicaoConsumoProprio();
     const dadosVenda = dadosVendaConfirmados || coletarDadosVenda();
     let vendaSalvaComSucesso = false;
     const textoBotaoPadrao = vendaEdicaoVenda?.id ? "Salvar Alterações" : "Gravar Venda";
@@ -6535,7 +6616,14 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         return;
     }
 
-    if (!dadosVendaConfirmados && pagamentoVendaAVista()) {
+    if (
+        !dadosVendaConfirmados
+        && pagamentoVendaAVista()
+        && !(
+            vendaEdicaoConsumoProprio()
+            && tipoPagamentoConsumoProprioVenda(dadosVenda.tipo_pagamento)
+        )
+    ) {
         const contextoFinanceiro = contextoFinanceiroFechamentoVenda(dadosVenda);
 
         if (contextoFinanceiro.tipo !== "sem_alteracao") {
@@ -7280,6 +7368,7 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
 
         } else if (ativo === preco) {
         e.preventDefault();
+        garantirTipoVendaEdicaoConsumoProprio();
 
         const nomeProduto = produto.value.trim();
         const qtd = quantidade.value.trim();
@@ -7342,6 +7431,7 @@ quantidade.value = "";
 unidade.value = "";
 preco.value = "";
 
+garantirTipoVendaEdicaoConsumoProprio();
 setTimeout(() => {
 
 }, 50);
@@ -7366,6 +7456,7 @@ return;
     });
 
     limparLinhaLancamento();
+    garantirTipoVendaEdicaoConsumoProprio();
     return;
 }
 function prepararProdutoParaProximoLancamento(abrirLista = true) {
@@ -7406,6 +7497,7 @@ function limparLinhaLancamento() {
     if (precoMargemCusto) precoMargemCusto.textContent = "";
     preco.value = "";
     aplicarEstadoConferenciaPreco(null);
+    garantirTipoVendaEdicaoConsumoProprio();
 
     setTimeout(() => {
     produtoBusca.focus();

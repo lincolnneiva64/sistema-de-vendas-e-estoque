@@ -388,6 +388,8 @@ class Funcionario(models.Model):
 
 
 class Venda(models.Model):
+    TIPO_PAGAMENTO_CONSUMO_PROPRIO = "consumo_proprio"
+
     WHATSAPP_NAO_ENVIADO = "nao_enviado"
     WHATSAPP_ABERTO = "aberto"
     WHATSAPP_ENVIADO_CONFIRMADO = "enviado_confirmado"
@@ -2788,6 +2790,11 @@ class LancamentoCartao(models.Model):
 
 
 class DespesaDiaria(models.Model):
+    ORIGEM_AUTOMATICA_CONSUMO_PROPRIO = "consumo_proprio"
+    ORIGEM_AUTOMATICA_CHOICES = [
+        (ORIGEM_AUTOMATICA_CONSUMO_PROPRIO, "Consumo proprio"),
+    ]
+
     CATEGORIA_GASOLINA = "gasolina"
     CATEGORIA_ALIMENTACAO = "alimentacao"
     CATEGORIA_GELO = "gelo"
@@ -2844,6 +2851,19 @@ class DespesaDiaria(models.Model):
         blank=True,
         related_name="lancamentos",
     )
+    venda_origem = models.ForeignKey(
+        Venda,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="despesas_automaticas",
+    )
+    origem_automatica = models.CharField(
+        max_length=40,
+        choices=ORIGEM_AUTOMATICA_CHOICES,
+        blank=True,
+    )
+    chave_automatica = models.CharField(max_length=120, blank=True)
     funcionario = models.ForeignKey(
         "Funcionario",
         on_delete=models.SET_NULL,
@@ -2863,6 +2883,17 @@ class DespesaDiaria(models.Model):
 
     class Meta:
         ordering = ["-data_hora", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["venda_origem", "origem_automatica", "chave_automatica"],
+                condition=Q(
+                    venda_origem__isnull=False,
+                    origem_automatica__gt="",
+                    chave_automatica__gt="",
+                ),
+                name="uniq_despesa_automatica_venda_chave",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.get_categoria_display()} - R$ {self.valor}"

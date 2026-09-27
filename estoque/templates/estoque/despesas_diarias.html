@@ -973,12 +973,16 @@
           {% if despesa.observacao %}
             <div class="despesa-item-meta">{{ despesa.observacao }}</div>
           {% endif %}
+
+          {% if despesa.origem_automatica == "consumo_proprio" and despesa.venda_origem_id %}
+            <div class="despesa-item-meta">Gerada automaticamente pela venda #{{ despesa.venda_origem_id }}</div>
+          {% endif %}
         </div>
 
         <div>
           <div class="despesa-item-valor">R$ {{ despesa.valor|floatformat:2 }}</div>
 
-          {% if despesa.catalogo %}
+          {% if despesa.catalogo and not despesa.origem_automatica %}
             <button type="button"
                     class="despesa-btn despesa-btn-secondary despesa-editar"
                     data-despesa-id="{{ despesa.id }}"
@@ -1003,12 +1007,16 @@
             </button>
           {% endif %}
 
-          <form method="post" onsubmit="return confirm('Excluir esta despesa e o movimento financeiro correspondente?');">
-            {% csrf_token %}
-            <input type="hidden" name="acao" value="excluir">
-            <input type="hidden" name="despesa_id" value="{{ despesa.id }}">
-            <button class="despesa-delete" type="submit">Excluir</button>
-          </form>
+          {% if despesa.origem_automatica == "consumo_proprio" and despesa.venda_origem_id %}
+            <div class="despesa-item-meta">Exclusao bloqueada</div>
+          {% else %}
+            <form method="post" onsubmit="return confirm('Excluir esta despesa e o movimento financeiro correspondente?');">
+              {% csrf_token %}
+              <input type="hidden" name="acao" value="excluir">
+              <input type="hidden" name="despesa_id" value="{{ despesa.id }}">
+              <button class="despesa-delete" type="submit">Excluir</button>
+            </form>
+          {% endif %}
         </div>
       </article>
     {% empty %}

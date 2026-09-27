@@ -3208,6 +3208,8 @@ def _registrar_movimento_compra_a_vista(compra):
 
 
 def _venda_pagamento_imediato(tipo_pagamento):
+    if _tipo_pagamento_consumo_proprio_texto(tipo_pagamento):
+        return False
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
     if forma in {"a prazo", "carteira", "fiado"} or forma_compacta in {"aprazo"}:
@@ -3228,6 +3230,8 @@ def _venda_pagamento_imediato(tipo_pagamento):
 
 
 def _tipo_pagamento_venda_formulario(tipo_pagamento):
+    if _tipo_pagamento_consumo_proprio_texto(tipo_pagamento):
+        return Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO
     if _venda_pagamento_imediato(tipo_pagamento):
         return "\u00c0 vista"
     forma = normalizar_texto_cliente(tipo_pagamento)
@@ -3238,6 +3242,8 @@ def _tipo_pagamento_venda_formulario(tipo_pagamento):
 
 
 def _normalizar_tipo_pagamento_venda(tipo_pagamento):
+    if _tipo_pagamento_consumo_proprio_texto(tipo_pagamento):
+        return Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO
     if _venda_pagamento_imediato(tipo_pagamento):
         return "\u00c0 vista"
     if _tipo_pagamento_a_prazo_texto(tipo_pagamento):
@@ -3249,6 +3255,16 @@ def _tipo_pagamento_a_prazo_texto(tipo_pagamento):
     forma = normalizar_texto_cliente(tipo_pagamento)
     forma_compacta = re.sub(r"\s+", "", forma)
     return forma in {"a prazo", "carteira", "fiado"} or forma_compacta == "aprazo"
+
+
+def _tipo_pagamento_consumo_proprio_texto(tipo_pagamento):
+    forma = normalizar_texto_cliente(tipo_pagamento).replace("_", " ")
+    forma_compacta = re.sub(r"\s+", "", forma)
+    return forma == "consumo proprio" or forma_compacta == "consumoproprio"
+
+
+def _venda_consumo_proprio(venda):
+    return bool(venda and _tipo_pagamento_consumo_proprio_texto(venda.tipo_pagamento))
 
 
 def _conta_financeira_venda_a_vista(tipo_pagamento):
@@ -6033,6 +6049,16 @@ def despesas_diarias(request):
                 pk=request.POST.get("despesa_id"),
             )
 
+            if (
+                despesa.origem_automatica == DespesaDiaria.ORIGEM_AUTOMATICA_CONSUMO_PROPRIO
+                and despesa.venda_origem_id
+            ):
+                messages.warning(
+                    request,
+                    f"Despesa gerada automaticamente pela venda #{despesa.venda_origem_id}. Corrija pela venda de origem.",
+                )
+                return redirect("estoque:despesas_diarias")
+
             movimento = _movimento_despesa_diaria_correspondente(despesa)
 
             try:
@@ -6066,6 +6092,16 @@ def despesas_diarias(request):
                 DespesaDiaria.objects.select_related("catalogo", "funcionario"),
                 pk=request.POST.get("despesa_id"),
             )
+
+            if (
+                despesa_edicao.origem_automatica == DespesaDiaria.ORIGEM_AUTOMATICA_CONSUMO_PROPRIO
+                and despesa_edicao.venda_origem_id
+            ):
+                messages.warning(
+                    request,
+                    f"Despesa gerada automaticamente pela venda #{despesa_edicao.venda_origem_id}. Corrija pela venda de origem.",
+                )
+                return redirect("estoque:despesas_diarias")
 
             if despesa_edicao.confirmacoes_rota.exists():
                 messages.error(
@@ -21397,6 +21433,219 @@ def _devolver_estoque_cancelamento_venda(venda):
     return "Estoque devolvido dos itens ativos: " + "; ".join(devolvidos) + "."
 
 
+def _resolver_catalogo_despesa_consumo_proprio(venda, cliente, item, produto, categoria_produto):
+    cliente_nome = normalizar_texto_cliente(getattr(cliente, "nome", "") or "")
+    categoria_normalizada = normalizar_texto_cliente(categoria_produto or "")
+
+    destinos_pessoais = {
+        "lincoln neiva": "Lincoln",
+        "roseli da costa gama": "Roseli",
+        "camila gama neiva": "Camila",
+        "lorena gama neiva": "Lorena",
+    }
+
+    destino_pessoal = destinos_pessoais.get(cliente_nome)
+    deposito_empresa = cliente_nome == "deposito l a neiva"
+
+    if not destino_pessoal and not deposito_empresa:
+        return None
+
+    categorias_lazer = {
+        "cervejas",
+        "bebidas alcoolicas",
+        "bebidas",
+        "refrigerantes",
+        "refrigerantes e afins",
+    }
+    categorias_alimentacao = {
+        "estivas",
+        "mercearia",
+        "alimentos",
+        "biscoitos",
+        "biscoitos e petiscos",
+        "enlatados",
+        "farinhas e panificacao",
+        "frios e embutidos",
+        "hortifrutigranjeiros",
+        "hortifrutigranjeiro",
+        "leite e derivados",
+        "massas",
+        "panificacao",
+        "tempero e condimentos",
+    }
+    categorias_higiene_limpeza = {
+        "higiene e limpeza",
+        "higiene pessoal",
+        "limpeza",
+    }
+
+    if categoria_normalizada in categorias_lazer:
+        tipo = CatalogoDespesa.TIPO_PESSOAL
+        grupo = "Lazer"
+        categoria = "Cerveja / Bar"
+        pessoa = destino_pessoal or "Familia"
+        nome = "Cerveja / Bar"
+    elif categoria_normalizada in categorias_alimentacao:
+        tipo = CatalogoDespesa.TIPO_PESSOAL
+        grupo = "Alimentação"
+        categoria = "Mercado"
+        pessoa = destino_pessoal or "Familia"
+        nome = "Mercado"
+    elif categoria_normalizada in categorias_higiene_limpeza and destino_pessoal:
+        tipo = CatalogoDespesa.TIPO_PESSOAL
+        grupo = "Pessoal"
+        categoria = "Higiene"
+        pessoa = destino_pessoal
+        nome = "Higiene"
+    elif categoria_normalizada in categorias_higiene_limpeza and deposito_empresa:
+        tipo = CatalogoDespesa.TIPO_EMPRESA
+        grupo = "Depósito"
+        categoria = "Manutenção"
+        pessoa = ""
+        nome = "Manutenção"
+    else:
+        return None
+
+    catalogos = CatalogoDespesa.objects.filter(tipo=tipo, ativo=True)
+    for catalogo in catalogos:
+        if (
+            normalizar_texto_cliente(catalogo.grupo) == normalizar_texto_cliente(grupo)
+            and normalizar_texto_cliente(catalogo.categoria) == normalizar_texto_cliente(categoria)
+            and normalizar_texto_cliente(catalogo.pessoa) == normalizar_texto_cliente(pessoa)
+        ):
+            return catalogo
+
+    return CatalogoDespesa.objects.create(
+        nome=nome,
+        tipo=tipo,
+        grupo=grupo,
+        categoria=categoria,
+        pessoa=pessoa,
+        ativo=True,
+        ordem=100,
+    )
+
+
+def _data_hora_despesa_consumo_proprio(venda):
+    data_venda = venda.data_venda or timezone.localdate()
+    horario_atual = timezone.localtime()
+    return timezone.make_aware(
+        timezone.datetime(
+            data_venda.year,
+            data_venda.month,
+            data_venda.day,
+            horario_atual.hour,
+            horario_atual.minute,
+            horario_atual.second,
+        ),
+        timezone.get_current_timezone(),
+    )
+
+
+def _grupos_despesa_consumo_proprio(venda):
+    grupos = {}
+    itens = (
+        ItemVenda.objects
+        .select_related("produto")
+        .filter(venda=venda)
+        .order_by("id")
+    )
+    for item in itens:
+        produto = item.produto
+        categoria_produto = produto.categoria if produto else ""
+        catalogo = _resolver_catalogo_despesa_consumo_proprio(
+            venda,
+            venda.cliente,
+            item,
+            produto,
+            categoria_produto,
+        )
+        chave = f"catalogo:{catalogo.pk}" if catalogo else "sem_catalogo"
+        grupo = grupos.setdefault(
+            chave,
+            {
+                "catalogo": catalogo,
+                "valor": Decimal("0.00"),
+                "itens": [],
+            },
+        )
+        grupo["valor"] = (
+            grupo["valor"] + _financeiro_dinheiro(item.valor_total)
+        ).quantize(Decimal("0.01"))
+        grupo["itens"].append(item)
+    return grupos
+
+
+def _sincronizar_despesas_consumo_proprio(venda):
+    if not _venda_consumo_proprio(venda):
+        return []
+
+    despesas_sincronizadas = []
+    existentes = {
+        despesa.chave_automatica: despesa
+        for despesa in DespesaDiaria.objects.select_for_update().filter(
+            venda_origem=venda,
+            origem_automatica=DespesaDiaria.ORIGEM_AUTOMATICA_CONSUMO_PROPRIO,
+        )
+    }
+
+    if venda.cancelada:
+        for despesa in existentes.values():
+            if despesa.valor != Decimal("0.00"):
+                despesa.valor = Decimal("0.00")
+                despesa.observacao = (
+                    f"Consumo proprio da venda #{venda.id} cancelado. "
+                    "Valor zerado automaticamente."
+                )
+                despesa.save(update_fields=["valor", "observacao", "atualizado_em"])
+            despesas_sincronizadas.append(despesa)
+        return despesas_sincronizadas
+
+    grupos = _grupos_despesa_consumo_proprio(venda)
+    chaves_ativas = set()
+    data_hora = _data_hora_despesa_consumo_proprio(venda)
+
+    for chave, grupo in grupos.items():
+        valor = _financeiro_dinheiro(grupo["valor"]).quantize(Decimal("0.01"))
+        if valor <= Decimal("0.00"):
+            continue
+        chaves_ativas.add(chave)
+        despesa, _criada = DespesaDiaria.objects.update_or_create(
+            venda_origem=venda,
+            origem_automatica=DespesaDiaria.ORIGEM_AUTOMATICA_CONSUMO_PROPRIO,
+            chave_automatica=chave,
+            defaults={
+                "data_hora": data_hora,
+                "valor": valor,
+                "catalogo": grupo["catalogo"],
+                "categoria": DespesaDiaria.CATEGORIA_OUTROS,
+                "forma_pagamento": DespesaDiaria.FORMA_OUTRO,
+                "operador": venda.operador or "",
+                "observacao": f"Consumo proprio automatico da venda #{venda.id}.",
+                "paga_com_dinheiro_rota": False,
+                "rota_recebimento": "",
+                "data_rota_recebimento": None,
+                "cartao": None,
+                "funcionario": None,
+            },
+        )
+        despesas_sincronizadas.append(despesa)
+
+    for chave, despesa in existentes.items():
+        if chave in chaves_ativas:
+            continue
+        if despesa.valor != Decimal("0.00"):
+            despesa.valor = Decimal("0.00")
+            despesa.observacao = (
+                f"Consumo proprio da venda #{venda.id} sem itens correspondentes. "
+                "Valor zerado automaticamente."
+            )
+            despesa.save(update_fields=["valor", "observacao", "atualizado_em"])
+        despesas_sincronizadas.append(despesa)
+
+    return despesas_sincronizadas
+
+
 @require_POST
 def gravar_venda(request):
     try:
@@ -21564,6 +21813,23 @@ def gravar_venda(request):
         })
 
     tipo_pagamento_venda = _normalizar_tipo_pagamento_venda(dados.get("tipo_pagamento"))
+    if venda_em_edicao:
+        venda_edicao_consumo_proprio = _venda_consumo_proprio(venda_em_edicao)
+        pagamento_novo_consumo_proprio = _tipo_pagamento_consumo_proprio_texto(tipo_pagamento_venda)
+        if not venda_edicao_consumo_proprio and pagamento_novo_consumo_proprio:
+            return erro_gravar_venda(
+                (
+                    "Nao e permitido alterar uma venda normal para consumo proprio. "
+                    "Cancele a operacao e registre uma nova venda como consumo proprio."
+                ),
+                status=409,
+            )
+        if venda_edicao_consumo_proprio and not pagamento_novo_consumo_proprio:
+            return erro_gravar_venda(
+                "Nao e permitido alterar uma venda de consumo proprio para uma forma de pagamento normal.",
+                status=409,
+            )
+
     valores_origem_venda = None
     if (
         _venda_pagamento_imediato(tipo_pagamento_venda)
@@ -21600,6 +21866,10 @@ def gravar_venda(request):
             pagamento_antigo_imediato_pre
             and pagamento_novo_imediato_pre
         )
+        edicao_consumo_proprio_pre = (
+            _venda_consumo_proprio(venda_em_edicao)
+            and _tipo_pagamento_consumo_proprio_texto(tipo_pagamento_venda)
+        )
         if (
             edicao_vista_para_vista_pre
             and valores_origem_venda is not None
@@ -21618,6 +21888,7 @@ def gravar_venda(request):
             contexto_quitada.get("quitada")
             and not conversao_vista_para_prazo_pre
             and not edicao_vista_para_vista_pre
+            and not edicao_consumo_proprio_pre
         ):
             return erro_gravar_venda(
                 (
@@ -21650,10 +21921,15 @@ def gravar_venda(request):
                     pagamento_antigo_imediato
                     and pagamento_novo_imediato
                 )
+                edicao_consumo_proprio = (
+                    _venda_consumo_proprio(venda)
+                    and _tipo_pagamento_consumo_proprio_texto(tipo_pagamento_venda)
+                )
                 if (
                     contexto_quitada_atual.get("quitada")
                     and not conversao_vista_para_prazo
                     and not edicao_vista_para_vista
+                    and not edicao_consumo_proprio
                 ):
                     raise ValueError(
                         "Esta venda ja possui pagamento/baixa financeira e nao pode ser alterada por esta edicao simplificada."
@@ -22060,6 +22336,8 @@ def gravar_venda(request):
                         total_anterior,
                         valores_origem_venda,
                     )
+                elif edicao_consumo_proprio:
+                    _sincronizar_despesas_consumo_proprio(venda)
                 else:
                     _sincronizar_conta_receber(
                         venda,
@@ -22248,6 +22526,7 @@ def gravar_venda(request):
                 usuario=venda.operador,
             )
             _sincronizar_conta_receber(venda, "venda gravada")
+            _sincronizar_despesas_consumo_proprio(venda)
             if _venda_pagamento_imediato(venda.tipo_pagamento):
                 if valores_origem_venda is None:
                     _registrar_movimento_venda_a_vista(venda)
@@ -22659,16 +22938,20 @@ def _contexto_venda_quitada(venda, conta_receber=None):
     recebimentos_count = len(recebimentos_ativos)
     conta_paga = bool(conta and conta.status == ContaReceber.STATUS_PAGA)
     venda_a_vista = normalizar_texto_cliente(venda.tipo_pagamento) in {"a vista", "avista"}
+    venda_consumo_proprio = _venda_consumo_proprio(venda)
     motivos = []
     if venda_a_vista:
         motivos.append("Venda a vista.")
+    if venda_consumo_proprio:
+        motivos.append("Consumo proprio quitado sem movimentacao financeira.")
     if conta_paga:
         motivos.append("Conta a receber quitada.")
     if recebimentos_count:
         motivos.append(f"{recebimentos_count} recebimento(s)/baixa(s) registrado(s).")
     return {
-        "quitada": venda_a_vista or conta_paga or recebimentos_count > 0,
+        "quitada": venda_a_vista or venda_consumo_proprio or conta_paga or recebimentos_count > 0,
         "venda_a_vista": venda_a_vista,
+        "venda_consumo_proprio": venda_consumo_proprio,
         "conta_paga": conta_paga,
         "recebimentos_count": recebimentos_count,
         "motivos": motivos,
@@ -24438,6 +24721,7 @@ def venda_cancelar(request, pk):
                     venda.cancelada_em = timezone.now()
                     venda.motivo_cancelamento = motivo
                     venda.save(update_fields=["cancelada", "cancelada_em", "motivo_cancelamento", "atualizado_em"])
+                    _sincronizar_despesas_consumo_proprio(venda)
                     EntregaRotaItem.objects.filter(venda=venda).exclude(
                         status=EntregaRotaItem.STATUS_CANCELADA
                     ).update(status=EntregaRotaItem.STATUS_CANCELADA)

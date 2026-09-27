@@ -2007,8 +2007,13 @@
                             </div>
                             {% if contexto_venda_quitada.quitada %}
                                 <div class="venda-quitada-banner">
-                                    <strong>VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS</strong>
-                                    Esta nota j&aacute; possui pagamento registrado. Evite editar produtos ou valores. Se houver diferen&ccedil;a, resolva por devolu&ccedil;&atilde;o, cr&eacute;dito, abatimento autorizado ou pend&ecirc;ncia financeira.
+                                    {% if contexto_venda_quitada.venda_consumo_proprio %}
+                                        <strong>CONSUMO PR&Oacute;PRIO REGISTRADO</strong>
+                                        Esta nota n&atilde;o gera recebimento financeiro. Ajuste produtos ou valores pela pr&oacute;pria venda.
+                                    {% else %}
+                                        <strong>VENDA J&Aacute; QUITADA / RECEBIMENTOS REGISTRADOS</strong>
+                                        Esta nota j&aacute; possui pagamento registrado. Evite editar produtos ou valores. Se houver diferen&ccedil;a, resolva por devolu&ccedil;&atilde;o, cr&eacute;dito, abatimento autorizado ou pend&ecirc;ncia financeira.
+                                    {% endif %}
                                 </div>
                             {% endif %}
                             </div>
@@ -2112,6 +2117,10 @@
                         {% elif venda_a_prazo and conta_receber and conta_receber.status == "parcial" %}
                             <div class="conta-receber-info parcial">
                                 Conta a receber parcial - Valor em aberto: R$ {{ conta_receber.valor_em_aberto|floatformat:2 }} - Vencimento: {{ conta_receber.data_vencimento|date:"d/m/Y"|default:"-" }}
+                            </div>
+                        {% elif contexto_venda_quitada.venda_consumo_proprio %}
+                            <div class="conta-receber-info">
+                                Consumo pr&oacute;prio: sem conta a receber e sem movimenta&ccedil;&atilde;o financeira.
                             </div>
                         {% elif not venda_a_prazo %}
                             <div class="conta-receber-info">
