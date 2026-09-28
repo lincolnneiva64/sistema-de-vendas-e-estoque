@@ -15598,7 +15598,7 @@ def consultar_vendas(request, mostrar_canceladas=False):
 
     vendas_qs = (
         Venda.objects.select_related("cliente")
-        .prefetch_related("itens__produto", "eventos")
+        .prefetch_related("eventos")
         .filter(cancelada=mostrar_canceladas)
         .order_by("-data_venda", "-id")
     )
@@ -15636,7 +15636,6 @@ def consultar_vendas(request, mostrar_canceladas=False):
     total_vendas_geral = resumo_vendas_filtradas["geral"]
 
     for venda in vendas_lista:
-        venda.whatsapp_url_consulta = "" if venda.cancelada else montar_link_whatsapp_venda(venda)
         venda.whatsapp_status_selos = (
             [{"texto": "Cancelada / venda nao realizada", "classe": "cancelada"}]
             if venda.cancelada
