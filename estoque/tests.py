@@ -12812,6 +12812,13 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
         )
         return produto
 
+    def ativar_ciclo_fornecedor(self, intervalo=21, referencia=date(2026, 7, 14)):
+        self.fornecedor.frequencia_visita_ativa = True
+        self.fornecedor.frequencia_visita_intervalo_dias = intervalo
+        self.fornecedor.frequencia_visita_dia_semana = referencia.weekday()
+        self.fornecedor.frequencia_visita_data_referencia = referencia
+        self.fornecedor.save()
+
     def criar_venda(self, produto, quantidade, unidade="UN"):
         venda = Venda.objects.create(
             cliente=self.cliente,
@@ -12854,6 +12861,142 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
             if linha["produto"] == produto:
                 return linha
         return None
+
+    def test_estoque_minimo_proporcional_ciclo_21_por_periodo(self):
+        for dias, esperado in (
+            (7, Decimal("7.000")),
+            (10, Decimal("10.000")),
+            (14, Decimal("14.000")),
+            (21, Decimal("21.000")),
+        ):
+            with self.subTest(dias=dias):
+                incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+                    Decimal("0.000"),
+                    Decimal("21.000"),
+                    Decimal("1.000"),
+                    Decimal("0.000"),
+                    dias_lista=dias,
+                    ciclo_fornecedor=21,
+                )
+
+                self.assertTrue(incluir)
+                self.assertEqual(sugestao, esperado)
+
+    def test_estoque_minimo_integral_quando_fornecedor_sem_ciclo(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("0.000"),
+            Decimal("21.000"),
+            Decimal("1.000"),
+            Decimal("0.000"),
+            dias_lista=7,
+            ciclo_fornecedor=None,
+        )
+
+        self.assertTrue(incluir)
+        self.assertEqual(sugestao, Decimal("21.000"))
+
+    def test_estoque_acima_do_minimo_proporcional_nao_gera_necessidade_isolada(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("8.000"),
+            Decimal("21.000"),
+            Decimal("1.000"),
+            Decimal("0.000"),
+            dias_lista=7,
+            ciclo_fornecedor=21,
+        )
+
+        self.assertFalse(incluir)
+        self.assertEqual(sugestao, Decimal("0.000"))
+
+    def test_estoque_abaixo_do_minimo_proporcional_recompoe_necessidade(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("1.000"),
+            Decimal("21.000"),
+            Decimal("1.000"),
+            Decimal("0.000"),
+            dias_lista=7,
+            ciclo_fornecedor=21,
+        )
+
+        self.assertTrue(incluir)
+        self.assertEqual(sugestao, Decimal("6.000"))
+
+    def test_pedido_aberto_reduz_estoque_efetivo_abaixo_do_minimo_proporcional(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("10.000"),
+            Decimal("21.000"),
+            Decimal("0.000"),
+            Decimal("5.000"),
+            dias_lista=7,
+            ciclo_fornecedor=21,
+        )
+
+        self.assertTrue(incluir)
+        self.assertEqual(sugestao, Decimal("2.000"))
+
+    def test_consumo_reserva_maior_que_minimo_proporcional_vence(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("0.000"),
+            Decimal("6.000"),
+            Decimal("5.000"),
+            Decimal("0.000"),
+            dias_lista=7,
+            ciclo_fornecedor=21,
+        )
+
+        self.assertTrue(incluir)
+        self.assertEqual(sugestao, Decimal("6.000"))
+
+    def test_minimo_proporcional_maior_que_consumo_reserva_vence(self):
+        incluir, sugestao = views._sugestao_compra_fornecedor_quantidade(
+            Decimal("0.000"),
+            Decimal("21.000"),
+            Decimal("1.000"),
+            Decimal("0.000"),
+            dias_lista=14,
+            ciclo_fornecedor=21,
+        )
+
+        self.assertTrue(incluir)
+        self.assertEqual(sugestao, Decimal("14.000"))
+
+    def test_periodo_padrao_usa_exatamente_quantidade_de_datas_inclusivas(self):
+        with patch("estoque.views.timezone.localdate", return_value=date(2026, 9, 28)):
+            for periodo, data_inicio in (
+                ("7", date(2026, 9, 22)),
+                ("10", date(2026, 9, 19)),
+                ("14", date(2026, 9, 15)),
+                ("21", date(2026, 9, 8)),
+            ):
+                with self.subTest(periodo=periodo):
+                    resposta = self.client.get(
+                        self.url,
+                        {"periodo": periodo},
+                        secure=True,
+                    )
+
+                    self.assertEqual(resposta.context["data_inicio"], data_inicio)
+                    self.assertEqual(resposta.context["data_fim"], date(2026, 9, 28))
+
+    def test_view_aplica_minimo_proporcional_do_ciclo_do_fornecedor(self):
+        self.ativar_ciclo_fornecedor(intervalo=21)
+        produto = self.criar_produto("Micos Laranja 6/2,5L", "3.666", "6.000")
+        self.criar_venda(produto, "4.167")
+
+        resposta = self.client.get(
+            self.url,
+            {
+                "fornecedor": str(self.fornecedor.id),
+                "periodo": "14",
+                "data_inicio": (timezone.localdate() - timedelta(days=13)).isoformat(),
+                "data_fim": timezone.localdate().isoformat(),
+            },
+            secure=True,
+        )
+
+        linha = self.linha_por_produto(resposta, produto)
+        self.assertIsNotNone(linha)
+        self.assertEqual(linha["sugestao"], Decimal("1.334"))
 
     def test_produto_sem_venda_e_sem_pedido_nao_aparece_mesmo_abaixo_do_minimo(self):
         produto = self.criar_produto("Frisco Sem Demanda", "0.000", "4.000")
@@ -12935,6 +13078,31 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
         self.assertIsNotNone(linha)
         self.assertEqual(linha["quantidade_vendida"], Decimal("2.167"))
         self.assertNotEqual(linha["quantidade_vendida"], Decimal("6.500"))
+
+    def test_venda_fracionada_preserva_conversao_com_minimo_proporcional(self):
+        self.ativar_ciclo_fornecedor(intervalo=21)
+        produto = self.criar_produto(
+            "Farinha Proporcional 1/30Kg",
+            "0.000",
+            "0.000",
+            unidade_compra="SC",
+            unidade_venda_1="SC",
+            unidade_venda_2="KG",
+            fator_conversao=Decimal("30.00"),
+            vende_fracionado=True,
+        )
+        self.criar_venda(produto, "15.000", "KG")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id), "periodo": "7"},
+            secure=True,
+        )
+
+        linha = self.linha_por_produto(resposta, produto)
+        self.assertIsNotNone(linha)
+        self.assertEqual(linha["quantidade_vendida"], Decimal("0.500"))
+        self.assertEqual(linha["sugestao"], Decimal("0.600"))
 
     def test_produto_inativo_nao_aparece_em_nova_sugestao(self):
         produto = self.criar_produto("Produto Inativo Sugestao", "0.000", "4.000", ativo=False)

@@ -8174,7 +8174,7 @@ def _periodo_sugestao_compra(request):
     periodo = str(dias)
 
     data_final = parse_date(request.GET.get("data_fim") or "") or hoje
-    data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=dias))
+    data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=dias - 1))
 
     if data_inicial > data_final:
         data_inicial, data_final = data_final, data_inicial
@@ -8300,17 +8300,70 @@ def _quantidades_vendidas_por_produto_em_unidade_base(produto_ids, data_inicial,
 FATOR_RESERVA_SUGESTAO_COMPRA = Decimal("1.20")
 
 
+def _dias_sugestao_compra(data_inicial, data_final):
+    if not data_inicial or not data_final:
+        return None
+    return Decimal(max((data_final - data_inicial).days + 1, 1))
+
+
+def _ciclo_fornecedor_sugestao_compra(fornecedor):
+    if not fornecedor or not getattr(fornecedor, "frequencia_visita_ativa", False):
+        return None
+
+    intervalo = getattr(fornecedor, "frequencia_visita_intervalo_dias", None)
+    data_referencia = getattr(fornecedor, "frequencia_visita_data_referencia", None)
+    dia_semana = getattr(fornecedor, "frequencia_visita_dia_semana", None)
+    try:
+        ciclo = Decimal(intervalo or 0)
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+
+    if ciclo <= 0 or ciclo != ciclo.to_integral_value() or int(ciclo) % 7 != 0:
+        return None
+    if dia_semana is None or not data_referencia:
+        return None
+    try:
+        if int(dia_semana) != data_referencia.weekday():
+            return None
+    except (TypeError, ValueError):
+        return None
+    return ciclo
+
+
+def _estoque_minimo_considerado_sugestao_compra(estoque_minimo, dias_lista=None, ciclo_fornecedor=None):
+    estoque_minimo = Decimal(estoque_minimo or 0)
+    if dias_lista is None or ciclo_fornecedor is None:
+        return estoque_minimo
+
+    try:
+        dias_lista = Decimal(dias_lista)
+        ciclo_fornecedor = Decimal(ciclo_fornecedor)
+    except (TypeError, ValueError, ArithmeticError):
+        return estoque_minimo
+
+    if dias_lista <= 0 or ciclo_fornecedor <= 0:
+        return estoque_minimo
+    return estoque_minimo * dias_lista / ciclo_fornecedor
+
+
 def _sugestao_compra_fornecedor_quantidade(
     estoque_atual,
     estoque_minimo,
     quantidade_vendida,
     quantidade_pedidos_abertos,
+    dias_lista=None,
+    ciclo_fornecedor=None,
 ):
     estoque_atual = Decimal(estoque_atual or 0)
     estoque_minimo = Decimal(estoque_minimo or 0)
     quantidade_vendida = Decimal(quantidade_vendida or 0)
     quantidade_pedidos_abertos = Decimal(quantidade_pedidos_abertos or 0)
     consumo_reserva = quantidade_vendida * FATOR_RESERVA_SUGESTAO_COMPRA
+    estoque_minimo_considerado = _estoque_minimo_considerado_sugestao_compra(
+        estoque_minimo,
+        dias_lista=dias_lista,
+        ciclo_fornecedor=ciclo_fornecedor,
+    )
 
     if quantidade_pedidos_abertos <= Decimal("0.000"):
         if quantidade_vendida <= Decimal("0.000"):
@@ -8320,7 +8373,7 @@ def _sugestao_compra_fornecedor_quantidade(
 
     necessidade_pedidos = max(Decimal("0.000"), quantidade_pedidos_abertos - estoque_atual)
     estoque_apos_pedidos = max(Decimal("0.000"), estoque_atual - quantidade_pedidos_abertos)
-    reserva_desejada = max(estoque_minimo, consumo_reserva)
+    reserva_desejada = max(estoque_minimo_considerado, consumo_reserva)
     sugestao = (
         necessidade_pedidos
         + max(Decimal("0.000"), reserva_desejada - estoque_apos_pedidos)
@@ -8370,6 +8423,8 @@ def sugestao_compra_fornecedor(request):
 
     if fornecedor_id and fornecedor_id.isdigit():
         fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+        dias_lista = _dias_sugestao_compra(data_inicial, data_final)
+        ciclo_fornecedor = _ciclo_fornecedor_sugestao_compra(fornecedor)
         if data_visita_fornecedor and not data_pertence_calendario_visita_fornecedor(fornecedor, data_visita_fornecedor):
             data_visita_fornecedor = None
             fornecedor_ciclo_id = ""
@@ -8427,6 +8482,8 @@ def sugestao_compra_fornecedor(request):
                 estoque_minimo,
                 quantidade_vendida,
                 quantidade_pedidos_abertos,
+                dias_lista=dias_lista,
+                ciclo_fornecedor=ciclo_fornecedor,
             )
             if not incluir_produto:
                 continue
@@ -8468,6 +8525,8 @@ def sugestao_compra_fornecedor(request):
                 estoque_minimo,
                 quantidade_vendida,
                 quantidade_pedidos_abertos,
+                dias_lista=dias_lista,
+                ciclo_fornecedor=ciclo_fornecedor,
             )
             fator_conversao = Decimal(produto.fator_conversao or 1)
             if fator_conversao <= 0:
@@ -10963,6 +11022,8 @@ def compras_lista_fornecedor_editar(request, pk):
 
     produtos_ids_lista = {item.produto_id for item in itens if item.produto_id}
     produtos_manual = []
+    dias_lista_edicao = _dias_sugestao_compra(lista.data_inicio_periodo, lista.data_fim_periodo)
+    ciclo_fornecedor_edicao = _ciclo_fornecedor_sugestao_compra(fornecedor)
     for produto in produtos_queryset_list:
         if produto.id in produtos_ids_lista:
             continue
@@ -10987,6 +11048,8 @@ def compras_lista_fornecedor_editar(request, pk):
             estoque_minimo,
             quantidade_vendida,
             quantidade_pedidos_abertos,
+            dias_lista=dias_lista_edicao,
+            ciclo_fornecedor=ciclo_fornecedor_edicao,
         )
         preco_compra = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
         payload_produto["sugestao"] = _lista_fornecedor_fmt_qtd(sugestao)
@@ -11007,7 +11070,7 @@ def compras_lista_fornecedor_editar(request, pk):
         )
 
     produtos_manual_json = json.dumps(produtos_manual_payload, ensure_ascii=False)
-    periodo_edicao = max((lista.data_fim_periodo - lista.data_inicio_periodo).days, 1)
+    periodo_edicao = int(dias_lista_edicao or 1)
 
     context = {
         "modo_edicao_lista": True,

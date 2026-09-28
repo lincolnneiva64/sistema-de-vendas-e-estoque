@@ -2339,7 +2339,7 @@
       ? new Date(dataFim.value + "T00:00:00")
       : new Date();
     const inicio = new Date(fim);
-    inicio.setDate(fim.getDate() - dias);
+    inicio.setDate(fim.getDate() - (dias - 1));
     dataFim.value = iso(fim);
     dataInicio.value = iso(inicio);
   }
