@@ -23,6 +23,10 @@ class VendaConsumoProprioTests(TestCase):
     def setUp(self):
         self.cliente = Cliente.objects.create(nome="Cliente Normal")
         self.cliente_consumo = Cliente.objects.create(nome="Lincoln Neiva")
+        self.cliente_roseli = Cliente.objects.create(nome="Roseli da Costa Gama")
+        self.cliente_camila = Cliente.objects.create(nome="Camila Gama Neiva")
+        self.cliente_lorena = Cliente.objects.create(nome="Lorena Gama Neiva")
+        self.cliente_deposito = Cliente.objects.create(nome="Deposito L A Neiva")
         self.produto = Produto.objects.create(
             nome="Produto Teste Consumo",
             categoria="Cervejas",
@@ -50,6 +54,15 @@ class VendaConsumoProprioTests(TestCase):
             unidade_compra="UN",
             quantidade=Decimal("5.000"),
         )
+        self.produto_sem_regra_empresa = Produto.objects.create(
+            nome="Produto Sem Regra Empresa",
+            categoria="Papelaria",
+            preco_compra=Decimal("1.50"),
+            preco_vista=Decimal("7.00"),
+            preco_prazo=Decimal("8.00"),
+            unidade_compra="UN",
+            quantidade=Decimal("5.000"),
+        )
         self.catalogo_lazer = CatalogoDespesa.objects.create(
             nome="Cerveja / Bar",
             tipo=CatalogoDespesa.TIPO_PESSOAL,
@@ -67,7 +80,8 @@ class VendaConsumoProprioTests(TestCase):
             ativo=True,
         )
 
-    def payload_venda(self, tipo_pagamento, cliente=None, quantidade="2,000", preco="10,00"):
+    def payload_venda(self, tipo_pagamento, cliente=None, quantidade="2,000", preco="10,00", produto=None):
+        produto = produto or self.produto
         return {
             "cliente_id": cliente.pk if cliente else self.cliente.pk,
             "data_venda": "2026-09-27",
@@ -75,8 +89,8 @@ class VendaConsumoProprioTests(TestCase):
             "operador": "Teste",
             "itens": [
                 {
-                    "produto_id": self.produto.pk,
-                    "produto_nome": self.produto.nome,
+                    "produto_id": produto.pk,
+                    "produto_nome": produto.nome,
                     "quantidade": quantidade,
                     "unidade": "UN",
                     "preco_unitario": preco,
@@ -452,6 +466,123 @@ class VendaConsumoProprioTests(TestCase):
         self.assertEqual(despesas[0].catalogo, self.catalogo_lazer)
         self.assertEqual(despesas[0].valor, Decimal("25.00"))
         self.assertEqual(sum((d.valor for d in despesas), Decimal("0.00")), venda.total)
+
+    def test_consumo_proprio_lideres_com_alimentacao_preserva_classificacao_pessoal(self):
+        cenarios = [
+            (self.cliente_consumo, "Lincoln", self.catalogo_alimentacao),
+            (self.cliente_roseli, "Roseli", None),
+            (self.cliente_camila, "Camila", None),
+            (self.cliente_lorena, "Lorena", None),
+        ]
+
+        for cliente, pessoa, catalogo_esperado in cenarios:
+            with self.subTest(pessoa=pessoa):
+                venda = self.postar_venda(
+                    self.payload_venda(
+                        Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO,
+                        cliente=cliente,
+                        quantidade="1,000",
+                        preco="4,70",
+                        produto=self.produto_alimento,
+                    )
+                )
+
+                despesa = DespesaDiaria.objects.get(venda_origem=venda)
+                self.assertEqual(despesa.catalogo.tipo, CatalogoDespesa.TIPO_PESSOAL)
+                self.assertEqual(despesa.catalogo.grupo, "Alimentação")
+                self.assertEqual(despesa.catalogo.categoria, "Mercado")
+                self.assertEqual(despesa.catalogo.pessoa, pessoa)
+                if catalogo_esperado:
+                    self.assertEqual(despesa.catalogo, catalogo_esperado)
+
+    def test_consumo_proprio_deposito_com_alimentacao_gera_catalogo_empresarial(self):
+        venda = self.postar_venda(
+            self.payload_venda(
+                Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO,
+                cliente=self.cliente_deposito,
+                quantidade="1,000",
+                preco="4,70",
+                produto=self.produto_alimento,
+            )
+        )
+
+        views._sincronizar_despesas_consumo_proprio(venda)
+        despesas = list(self.despesas_consumo(venda))
+
+        self.assertEqual(len(despesas), 1)
+        despesa = despesas[0]
+        self.assertEqual(despesa.valor, Decimal("4.70"))
+        self.assertEqual(despesa.catalogo.tipo, CatalogoDespesa.TIPO_EMPRESA)
+        self.assertEqual(despesa.catalogo.nome, "Copa/Alimentação")
+        self.assertEqual(despesa.catalogo.grupo, "Consumo interno")
+        self.assertEqual(despesa.catalogo.categoria, "Copa/Alimentação")
+        self.assertEqual(despesa.catalogo.pessoa, "")
+        self.assertEqual(despesa.chave_automatica, f"catalogo:{despesa.catalogo_id}")
+        self.assertEqual(DespesaDiaria.objects.filter(venda_origem=venda).count(), 1)
+        self.assertFalse(MovimentoFinanceiro.objects.exists())
+        self.assertFalse(ContaReceber.objects.filter(venda=venda).exists())
+
+    def test_consumo_proprio_deposito_sem_regra_empresarial_nao_cai_em_familia_mercado(self):
+        venda = self.postar_venda(
+            self.payload_venda(
+                Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO,
+                cliente=self.cliente_deposito,
+                quantidade="1,000",
+                preco="7,00",
+                produto=self.produto_sem_regra_empresa,
+            )
+        )
+
+        despesa = DespesaDiaria.objects.get(venda_origem=venda)
+
+        self.assertIsNone(despesa.catalogo)
+        self.assertEqual(despesa.chave_automatica, "sem_catalogo")
+        self.assertEqual(despesa.valor, Decimal("7.00"))
+
+    def test_editar_consumo_proprio_deposito_mantem_classificacao_empresarial(self):
+        venda = self.postar_venda(
+            self.payload_venda(
+                Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO,
+                cliente=self.cliente_deposito,
+                quantidade="1,000",
+                preco="4,70",
+                produto=self.produto_alimento,
+            )
+        )
+        item = ItemVenda.objects.get(venda=venda)
+        despesa_original = DespesaDiaria.objects.get(venda_origem=venda)
+
+        payload = self.payload_venda(
+            Venda.TIPO_PAGAMENTO_CONSUMO_PROPRIO,
+            cliente=self.cliente_deposito,
+            quantidade="2,000",
+            preco="5,00",
+            produto=self.produto_alimento,
+        )
+        payload["venda_id"] = venda.pk
+        payload["itens"][0]["item_id"] = item.pk
+
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertTrue(resposta.json()["sucesso"])
+        despesa = DespesaDiaria.objects.get(venda_origem=venda)
+        item.refresh_from_db()
+
+        self.assertEqual(despesa.pk, despesa_original.pk)
+        self.assertEqual(despesa.valor, Decimal("10.00"))
+        self.assertEqual(despesa.catalogo.tipo, CatalogoDespesa.TIPO_EMPRESA)
+        self.assertEqual(despesa.catalogo.grupo, "Consumo interno")
+        self.assertEqual(despesa.catalogo.categoria, "Copa/Alimentação")
+        self.assertEqual(DespesaDiaria.objects.filter(venda_origem=venda).count(), 1)
+        self.assertEqual(item.custo_total_snapshot, Decimal("4.00"))
+        self.assertFalse(MovimentoFinanceiro.objects.exists())
+        self.assertFalse(ContaReceber.objects.filter(venda=venda).exists())
 
     def test_consumo_proprio_alimentacao_e_lazer_gera_duas_despesas_idempotentes(self):
         payload = self.payload_venda(

@@ -21478,7 +21478,13 @@ def _resolver_catalogo_despesa_consumo_proprio(venda, cliente, item, produto, ca
         "limpeza",
     }
 
-    if categoria_normalizada in categorias_lazer:
+    if deposito_empresa and categoria_normalizada in categorias_alimentacao:
+        tipo = CatalogoDespesa.TIPO_EMPRESA
+        grupo = "Consumo interno"
+        categoria = "Copa/Alimentação"
+        pessoa = ""
+        nome = "Copa/Alimentação"
+    elif categoria_normalizada in categorias_lazer:
         tipo = CatalogoDespesa.TIPO_PESSOAL
         grupo = "Lazer"
         categoria = "Cerveja / Bar"
