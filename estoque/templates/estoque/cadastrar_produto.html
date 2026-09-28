@@ -1874,7 +1874,6 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
         if (!campo) return;
         campo.addEventListener("input", callback);
         campo.addEventListener("change", callback);
-        campo.addEventListener("blur", callback);
     }
 
     function marcarPrecoFinalManual(precoCampo, evento) {
