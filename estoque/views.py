@@ -8162,16 +8162,25 @@ def _total_pago_conta_pagar(conta):
         Decimal("0.00"),
     ).quantize(Decimal("0.01"))
 
-def _periodo_sugestao_compra(request):
+def _periodo_sugestao_compra(request, periodo_padrao=None):
     hoje = timezone.localdate()
-    periodo = (request.GET.get("periodo") or "14").strip()
+    periodo_informado = request.GET.get("periodo")
+    if periodo_informado is None and periodo_padrao:
+        periodo_informado = str(periodo_padrao)
+    periodo = (periodo_informado or "").strip()
     try:
         dias = int(periodo)
     except (TypeError, ValueError):
-        dias = 14
-    if dias <= 0:
-        dias = 14
-    periodo = str(dias)
+        dias = None
+    if dias is None or dias <= 0:
+        dias = None
+
+    if dias is None:
+        data_final = parse_date(request.GET.get("data_fim") or "")
+        data_inicial = parse_date(request.GET.get("data_inicio") or "")
+        if data_inicial and data_final and data_inicial > data_final:
+            data_inicial, data_final = data_final, data_inicial
+        return "", data_inicial, data_final
 
     data_final = parse_date(request.GET.get("data_fim") or "") or hoje
     data_inicial = parse_date(request.GET.get("data_inicio") or "") or (data_final - timedelta(days=dias - 1))
@@ -8384,9 +8393,26 @@ def _sugestao_compra_fornecedor_quantidade(
 
 def sugestao_compra_fornecedor(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
-    fornecedores_payload = [{"id": item.id, "nome": item.nome} for item in fornecedores]
+    fornecedores_payload = []
+    for item in fornecedores:
+        ciclo_sugestao = _ciclo_fornecedor_sugestao_compra(item)
+        fornecedores_payload.append({
+            "id": item.id,
+            "nome": item.nome,
+            "periodo_sugestao": int(ciclo_sugestao) if ciclo_sugestao is not None else None,
+        })
     fornecedor_id = (request.GET.get("fornecedor") or "").strip()
-    periodo, data_inicial, data_final = _periodo_sugestao_compra(request)
+    fornecedor = None
+    periodo_padrao_fornecedor = None
+    if fornecedor_id and fornecedor_id.isdigit():
+        fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+        ciclo_fornecedor_inicial = _ciclo_fornecedor_sugestao_compra(fornecedor)
+        if ciclo_fornecedor_inicial is not None:
+            periodo_padrao_fornecedor = str(int(ciclo_fornecedor_inicial))
+    periodo, data_inicial, data_final = _periodo_sugestao_compra(
+        request,
+        periodo_padrao=periodo_padrao_fornecedor,
+    )
     fornecedor_ciclo_id, data_visita_fornecedor, data_visita_invalida, tem_fornecedor_ciclo, tem_data_ciclo = (
         _parametros_ciclo_visita_fornecedor(request)
     )
@@ -8405,15 +8431,21 @@ def sugestao_compra_fornecedor(request):
     data_chegada = (request.GET.get("data_chegada") or "").strip()
     if data_visita_fornecedor and not data_chegada:
         data_chegada = data_visita_fornecedor.isoformat()
-    nova_lista_limpa = request.GET.get("nova") == "1" and not fornecedor_id
+    elif not data_chegada:
+        data_chegada = timezone.localdate().isoformat()
+    nova_lista_inicial = (
+        not fornecedor_id
+        and not request.GET.get("periodo")
+        and not request.GET.get("data_inicio")
+        and not request.GET.get("data_fim")
+    )
+    nova_lista_limpa = (request.GET.get("nova") == "1" or nova_lista_inicial) and not fornecedor_id
     if nova_lista_limpa:
         periodo = ""
         data_inicial = None
         data_final = None
-        data_chegada = timezone.localdate().isoformat()
         data_visita_fornecedor = None
         fornecedor_ciclo_id = ""
-    fornecedor = None
     linhas = []
     total_sugerido = Decimal("0.00")
     total_produtos_vinculados = 0
@@ -8421,8 +8453,7 @@ def sugestao_compra_fornecedor(request):
     produtos_manual_payload = []
     status_pedidos_abertos = []
 
-    if fornecedor_id and fornecedor_id.isdigit():
-        fornecedor = get_object_or_404(Fornecedor, pk=fornecedor_id, ativo=True)
+    if fornecedor:
         dias_lista = _dias_sugestao_compra(data_inicial, data_final)
         ciclo_fornecedor = _ciclo_fornecedor_sugestao_compra(fornecedor)
         if data_visita_fornecedor and not data_pertence_calendario_visita_fornecedor(fornecedor, data_visita_fornecedor):
@@ -8437,6 +8468,9 @@ def sugestao_compra_fornecedor(request):
             produto__excluido=False,
         )
         total_produtos_vinculados = vinculos_base.count()
+        periodo_valido_para_calculo = bool(data_inicial and data_final)
+        if not periodo_valido_para_calculo:
+            vinculos_base = ProdutoFornecedor.objects.none()
         vinculos = list(
             vinculos_base
             .annotate(
@@ -8450,26 +8484,34 @@ def sugestao_compra_fornecedor(request):
         )
         produto_ids = [vinculo.produto_id for vinculo in vinculos]
 
-        produtos_manual = list(Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id"))
+        produtos_manual = (
+            list(Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id"))
+            if periodo_valido_para_calculo
+            else []
+        )
         produto_ids_consulta = [produto.id for produto in produtos_manual]
         produtos_vinculados_ids = set(produto_ids)
-        vendidos_por_produto = _quantidades_vendidas_por_produto_em_unidade_base(
-            produto_ids_consulta,
-            data_inicial,
-            data_final,
-        )
-        pedidos_abertos_por_produto = {
-            item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
-            for item in (
-                ItemPedido.objects.filter(
-                    produto_id__in=produto_ids_consulta,
-                    pedido__status__in=status_pedidos_abertos,
-                )
-                .values("produto_id")
-                .annotate(quantidade_pedida=Sum("quantidade"))
+        if periodo_valido_para_calculo:
+            vendidos_por_produto = _quantidades_vendidas_por_produto_em_unidade_base(
+                produto_ids_consulta,
+                data_inicial,
+                data_final,
             )
-        }
-        quantidade_vendida_calculada = True
+            pedidos_abertos_por_produto = {
+                item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
+                for item in (
+                    ItemPedido.objects.filter(
+                        produto_id__in=produto_ids_consulta,
+                        pedido__status__in=status_pedidos_abertos,
+                    )
+                    .values("produto_id")
+                    .annotate(quantidade_pedida=Sum("quantidade"))
+                )
+            }
+            quantidade_vendida_calculada = True
+        else:
+            vendidos_por_produto = {}
+            pedidos_abertos_por_produto = {}
 
         for vinculo in vinculos:
             produto = vinculo.produto

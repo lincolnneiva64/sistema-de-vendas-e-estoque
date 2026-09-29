@@ -1774,7 +1774,7 @@
         <div class="sugestao-field">
           <label for="periodo">Periodo</label>
           <div class="sugestao-periodo-input">
-            <input type="number" name="periodo" id="periodo" min="1" step="1" inputmode="numeric" value="{{ periodo|default_if_none:'14' }}">
+            <input type="number" name="periodo" id="periodo" min="1" step="1" inputmode="numeric" value="{{ periodo|default_if_none:'' }}">
             <span class="sugestao-periodo-sufixo">dias</span>
           </div>
         </div>
@@ -1958,11 +1958,11 @@
   <section class="sugestao-conferencia" aria-label="Conferencia da sugestao">
     <div class="sugestao-conferencia-item">
       <span class="sugestao-conferencia-label">Fornecedor selecionado</span>
-      <span class="sugestao-conferencia-valor">{% if fornecedor %}{{ fornecedor.nome }}{% else %}Nenhum{% endif %}</span>
+      <span class="sugestao-conferencia-valor" id="fornecedorSelecionadoResumo">{% if fornecedor %}{{ fornecedor.nome }}{% else %}Nenhum{% endif %}</span>
     </div>
     <div class="sugestao-conferencia-item">
       <span class="sugestao-conferencia-label">Periodo calculado</span>
-      <span class="sugestao-conferencia-valor">{{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}</span>
+      <span class="sugestao-conferencia-valor" id="periodoCalculadoResumo">{% if data_inicio and data_fim %}{{ data_inicio|date:"d/m/Y" }} ate {{ data_fim|date:"d/m/Y" }}{% else %}&mdash;{% endif %}</span>
     </div>
     <div class="sugestao-conferencia-item">
       <span class="sugestao-conferencia-label">Produtos vinculados</span>
@@ -2278,6 +2278,7 @@
   const dataChegada = document.getElementById("data_chegada");
   const fornecedorBusca = document.getElementById("fornecedorBuscaSugestao");
   const fornecedorId = document.getElementById("fornecedor");
+  const periodoResumo = document.getElementById("periodoCalculadoResumo");
 
   if (!periodo || !dataInicio || !dataFim) return;
 
@@ -2299,7 +2300,38 @@
   }
 
   function hojeIso() {
-    return iso(new Date());
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+    const dia = String(hoje.getDate()).padStart(2, "0");
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  function selecionarPeriodo() {
+    if (!periodo.value) return;
+    window.setTimeout(function() {
+      try {
+        periodo.select();
+      } catch (erro) {
+        // Alguns navegadores mobile podem ignorar selecao programatica.
+      }
+    }, 0);
+  }
+
+  function dataBr(valor) {
+    if (!valor) return "";
+    const partes = String(valor).split("-");
+    if (partes.length !== 3) return "";
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
+  }
+
+  function atualizarResumoPeriodo() {
+    if (!periodoResumo) return;
+    if (dataInicio.value && dataFim.value) {
+      periodoResumo.textContent = `${dataBr(dataInicio.value)} ate ${dataBr(dataFim.value)}`;
+      return;
+    }
+    periodoResumo.textContent = "—";
   }
 
   function prepararNovaListaMobileLimpa() {
@@ -2309,6 +2341,7 @@
     periodo.value = "";
     dataInicio.value = "";
     dataFim.value = "";
+    atualizarResumoPeriodo();
     if (dataChegada && !dataChegada.value) {
       dataChegada.value = hojeIso();
     }
@@ -2321,18 +2354,16 @@
     if (novaListaMobileLimpa && ehMobile() && !String(periodo.value || "").trim()) {
       dataInicio.value = "";
       dataFim.value = "";
+      atualizarResumoPeriodo();
       return;
     }
 
-    let dias = Number(periodo.value || 14);
+    let dias = Number(periodo.value || "");
     if (!Number.isFinite(dias) || dias <= 0) {
-      if (novaListaMobileLimpa && ehMobile()) {
-        dataInicio.value = "";
-        dataFim.value = "";
-        return;
-      }
-      dias = 14;
-      periodo.value = "14";
+      dataInicio.value = "";
+      dataFim.value = "";
+      atualizarResumoPeriodo();
+      return;
     }
 
     const fim = (dataFim.value && !(novaListaMobileLimpa && ehMobile()))
@@ -2342,10 +2373,18 @@
     inicio.setDate(fim.getDate() - (dias - 1));
     dataFim.value = iso(fim);
     dataInicio.value = iso(inicio);
+    atualizarResumoPeriodo();
   }
 
   periodo.addEventListener("input", atualizarDatasRapidas);
   periodo.addEventListener("change", atualizarDatasRapidas);
+  dataInicio.addEventListener("change", atualizarResumoPeriodo);
+  dataFim.addEventListener("change", atualizarResumoPeriodo);
+  periodo.addEventListener("focus", selecionarPeriodo);
+  window.aplicarPeriodoSugestaoFornecedor = function(valor) {
+    periodo.value = valor ? String(valor) : "";
+    atualizarDatasRapidas();
+  };
   prepararNovaListaMobileLimpa();
   if (abrirPorCicloFornecedor) {
     window.setTimeout(function() {
@@ -2385,6 +2424,8 @@
   const msg = document.getElementById("msgFornecedorSugestao");
   const dadosEl = document.getElementById("fornecedoresSugestaoData");
   const botaoGerar = document.getElementById("btnGerarListaSugestao");
+  const fornecedorResumo = document.getElementById("fornecedorSelecionadoResumo");
+  const aplicarPeriodoAoSelecionar = {% if modo_edicao_lista %}false{% else %}true{% endif %};
 
   if (!form || !busca || !selecionado || !lista || !dadosEl) return;
 
@@ -2433,6 +2474,12 @@
     if (!fornecedor) return false;
     selecionado.value = String(fornecedor.id);
     busca.value = fornecedor.nome;
+    if (fornecedorResumo) {
+      fornecedorResumo.textContent = fornecedor.nome || "Nenhum";
+    }
+    if (confirmar && aplicarPeriodoAoSelecionar && typeof window.aplicarPeriodoSugestaoFornecedor === "function") {
+      window.aplicarPeriodoSugestaoFornecedor(fornecedor.periodo_sugestao || "");
+    }
     mostrarMsg("");
     if (confirmar) {
       fecharSugestoes();

@@ -10476,9 +10476,12 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
     def test_nova_lista_exibe_botao_mobile_gravar_lista(self):
+        hoje = timezone.localdate().isoformat()
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, 'id="periodo" min="1" step="1" inputmode="numeric" value=""')
+        self.assertContains(resposta, f'id="data_chegada" value="{hoje}"')
         self.assertContains(resposta, 'id="btnGravarListaFornecedor"')
         self.assertContains(resposta, 'id="btnGravarGerarCompraFornecedor"')
         self.assertContains(resposta, 'id="btnGravarListaMobile"')
@@ -11017,10 +11020,11 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, f'id="periodo" min="1" step="1" inputmode="numeric" value="9"')
+        self.assertContains(resposta, f'id="periodo" min="1" step="1" inputmode="numeric" value="10"')
         self.assertContains(resposta, f'id="data_inicio" value="{inicio.isoformat()}"')
         self.assertContains(resposta, f'id="data_fim" value="{fim.isoformat()}"')
         self.assertContains(resposta, f'id="data_chegada" value="{chegada.isoformat()}"')
+        self.assertContains(resposta, "const aplicarPeriodoAoSelecionar = false;")
 
     def test_visualizacao_lista_aberta_mostra_botao_editar_lista(self):
         produto = self.criar_produto("Produto Botao Editar Ver Lista")
@@ -12978,6 +12982,80 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
                     self.assertEqual(resposta.context["data_inicio"], data_inicio)
                     self.assertEqual(resposta.context["data_fim"], date(2026, 9, 28))
 
+    def test_fornecedor_com_frequencia_valida_preenche_periodo_inicial(self):
+        self.ativar_ciclo_fornecedor(intervalo=21, referencia=date(2026, 9, 29))
+
+        with patch("estoque.views.timezone.localdate", return_value=date(2026, 9, 29)):
+            resposta = self.client.get(
+                self.url,
+                {"fornecedor": str(self.fornecedor.id)},
+                secure=True,
+            )
+
+        self.assertEqual(resposta.context["periodo"], "21")
+        self.assertEqual(resposta.context["data_inicio"], date(2026, 9, 9))
+        self.assertEqual(resposta.context["data_fim"], date(2026, 9, 29))
+        self.assertContains(resposta, 'id="periodo" min="1" step="1" inputmode="numeric" value="21"')
+        self.assertContains(resposta, 'id="periodoCalculadoResumo">09/09/2026 ate 29/09/2026')
+
+    def test_payload_fornecedores_expoe_periodo_sugestao_validado(self):
+        coca = Fornecedor.objects.create(
+            nome="Coca Cola",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=7,
+            frequencia_visita_dia_semana=date(2026, 9, 16).weekday(),
+            frequencia_visita_data_referencia=date(2026, 9, 16),
+        )
+        nelson = Fornecedor.objects.create(
+            nome="Nelson Farinha",
+            frequencia_visita_ativa=True,
+            frequencia_visita_intervalo_dias=14,
+            frequencia_visita_dia_semana=date(2026, 9, 15).weekday(),
+            frequencia_visita_data_referencia=date(2026, 9, 15),
+        )
+        sem_frequencia = Fornecedor.objects.create(nome="Fornecedor Sem Frequencia")
+
+        resposta = self.client.get(self.url, secure=True)
+        fornecedores_payload = {
+            item["id"]: item
+            for item in resposta.context["fornecedores_payload"]
+        }
+
+        self.assertEqual(fornecedores_payload[coca.id]["periodo_sugestao"], 7)
+        self.assertEqual(fornecedores_payload[nelson.id]["periodo_sugestao"], 14)
+        self.assertIsNone(fornecedores_payload[sem_frequencia.id]["periodo_sugestao"])
+        self.assertContains(resposta, "periodo_sugestao")
+
+    def test_autocomplete_tem_hooks_para_aplicar_periodo_e_resumo(self):
+        resposta = self.client.get(self.url, secure=True)
+
+        self.assertContains(resposta, 'id="fornecedorSelecionadoResumo"')
+        self.assertContains(resposta, 'id="periodoCalculadoResumo"')
+        self.assertContains(resposta, "window.aplicarPeriodoSugestaoFornecedor = function(valor)")
+        self.assertContains(resposta, "function atualizarResumoPeriodo()")
+        self.assertContains(resposta, "fornecedorResumo.textContent = fornecedor.nome")
+        self.assertContains(resposta, "window.aplicarPeriodoSugestaoFornecedor(fornecedor.periodo_sugestao || \"\")")
+        self.assertContains(resposta, 'periodo.addEventListener("input", atualizarDatasRapidas)')
+        self.assertContains(resposta, 'periodo.addEventListener("focus", selecionarPeriodo)')
+        self.assertContains(resposta, 'dataInicio.addEventListener("change", atualizarResumoPeriodo)')
+
+    def test_fornecedor_sem_frequencia_valida_deixa_periodo_inicial_vazio(self):
+        produto = self.criar_produto("Produto Sem Frequencia", "0.000", "4.000")
+        self.criar_venda(produto, "10.000")
+
+        resposta = self.client.get(
+            self.url,
+            {"fornecedor": str(self.fornecedor.id)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta.context["periodo"], "")
+        self.assertIsNone(resposta.context["data_inicio"])
+        self.assertIsNone(resposta.context["data_fim"])
+        self.assertEqual(resposta.context["linhas"], [])
+        self.assertContains(resposta, 'id="periodo" min="1" step="1" inputmode="numeric" value=""')
+        self.assertContains(resposta, 'id="periodoCalculadoResumo">&mdash;')
+
     def test_view_aplica_minimo_proporcional_do_ciclo_do_fornecedor(self):
         self.ativar_ciclo_fornecedor(intervalo=21)
         produto = self.criar_produto("Micos Laranja 6/2,5L", "3.666", "6.000")
@@ -12996,6 +13074,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         linha = self.linha_por_produto(resposta, produto)
         self.assertIsNotNone(linha)
+        self.assertEqual(resposta.context["periodo"], "14")
         self.assertEqual(linha["sugestao"], Decimal("1.334"))
 
     def test_produto_sem_venda_e_sem_pedido_nao_aparece_mesmo_abaixo_do_minimo(self):
@@ -13003,7 +13082,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
@@ -13017,7 +13096,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
@@ -13031,7 +13110,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
@@ -13043,7 +13122,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
@@ -13070,7 +13149,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
@@ -13110,7 +13189,7 @@ class ComprasSugestaoFornecedorGeracaoTests(TestCase):
 
         resposta = self.client.get(
             self.url,
-            {"fornecedor": str(self.fornecedor.id)},
+            {"fornecedor": str(self.fornecedor.id), "periodo": "14"},
             secure=True,
         )
 
