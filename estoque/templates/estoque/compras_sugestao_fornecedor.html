@@ -2275,6 +2275,20 @@
         margemMaxima: 190,
         proporcaoViewport: 0.24
       });
+      window.requestAnimationFrame(function() {
+        window.requestAnimationFrame(focarPrimeiraSugestaoCompraGerada);
+      });
+    }
+
+    function focarPrimeiraSugestaoCompraGerada() {
+      const primeiraSugestao = document.querySelector(
+        "#tbodySugestaoProdutos tr[data-produto-id] .sugestao-qtd-input"
+      );
+      if (!primeiraSugestao) return;
+      primeiraSugestao.focus({ preventScroll: true });
+      if (typeof primeiraSugestao.select === "function") {
+        primeiraSugestao.select();
+      }
     }
 
     function recolher() {
@@ -2493,6 +2507,7 @@
   const botaoGerar = document.getElementById("btnGerarListaSugestao");
   const fornecedorResumo = document.getElementById("fornecedorSelecionadoResumo");
   const aplicarPeriodoAoSelecionar = {% if modo_edicao_lista %}false{% else %}true{% endif %};
+  const deveFocarFornecedorInicial = {% if not linhas and not fornecedor and not modo_edicao_lista %}true{% else %}false{% endif %};
 
   if (!form || !busca || !selecionado || !lista || !dadosEl) return;
 
@@ -2691,11 +2706,6 @@
         botaoGerar.classList.add("is-loading");
         botaoGerar.disabled = true;
       }
-      try {
-        window.sessionStorage.setItem("focarAdicionarProdutoSugestaoFornecedor", "1");
-      } catch (erro) {
-        // sessionStorage pode estar indisponivel em alguns modos de privacidade.
-      }
       return;
     }
 
@@ -2705,6 +2715,16 @@
     busca.focus();
     renderizarSugestoes(false);
   });
+
+  function focarFornecedorInicial() {
+    if (!deveFocarFornecedorInicial || window.location.hash) return;
+    busca.focus({ preventScroll: true });
+    renderizarSugestoes(false);
+  }
+
+  window.addEventListener("load", function() {
+    window.requestAnimationFrame(focarFornecedorInicial);
+  }, { once: true });
 })();
 </script>
 
@@ -3662,10 +3682,6 @@
   try {
     if (window.sessionStorage.getItem("focarAdicionarProdutoSugestaoFornecedor") === "1") {
       window.sessionStorage.removeItem("focarAdicionarProdutoSugestaoFornecedor");
-      window.setTimeout(function() {
-        busca.focus();
-        selecionarTextoBusca();
-      }, 0);
     }
   } catch (erro) {
     // sessionStorage pode estar indisponivel em alguns modos de privacidade.
@@ -4551,6 +4567,7 @@
           proximo.focus();
           if (typeof proximo.select === "function") proximo.select();
         } else {
+          fecharHistoricosComprasDesktop();
           focarAdicionarProdutoManual();
         }
         return;

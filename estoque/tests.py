@@ -10497,6 +10497,15 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, 'document.getElementById("produtoManualBuscaSugestao")')
         self.assertContains(resposta, '.matches(".sugestao-remover-item")')
         conteudo = resposta.content.decode()
+        self.assertIn("const devePosicionarTabelaInicial = false;", conteudo)
+        self.assertIn("const deveFocarFornecedorInicial = true;", conteudo)
+        self.assertIn("function focarFornecedorInicial()", conteudo)
+        self.assertIn("renderizarSugestoes(false);", conteudo)
+        self.assertIn('window.addEventListener("load", function() {', conteudo)
+        self.assertNotIn(
+            'window.sessionStorage.setItem("focarAdicionarProdutoSugestaoFornecedor", "1")',
+            conteudo,
+        )
         self.assertIn("+ Adicionar produto", conteudo)
         self.assertIn("window.recolherAreaProdutoManual = recolher", conteudo)
         self.assertIn('campoProduto.focus({ preventScroll: true })', conteudo)
@@ -10518,6 +10527,11 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertIn('const tabelaPrincipal = document.querySelector(".sugestao-card");', conteudo)
         self.assertIn("function posicionarElementoComContexto(elemento, opcoes)", conteudo)
         self.assertIn("function posicionarTabelaPrincipalGerada()", conteudo)
+        self.assertIn("window.requestAnimationFrame(focarPrimeiraSugestaoCompraGerada);", conteudo)
+        self.assertIn("function focarPrimeiraSugestaoCompraGerada()", conteudo)
+        self.assertIn('"#tbodySugestaoProdutos tr[data-produto-id] .sugestao-qtd-input"', conteudo)
+        self.assertIn("primeiraSugestao.focus({ preventScroll: true });", conteudo)
+        self.assertIn("primeiraSugestao.select();", conteudo)
         self.assertIn("window.requestAnimationFrame(posicionarTabelaPrincipalGerada);", conteudo)
         self.assertIn("posicionarElementoComContexto(area,", conteudo)
         self.assertIn("function historicoDesktopProdutoHtml(produto)", conteudo)
@@ -10530,6 +10544,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertIn('document.addEventListener("focusin", function(event) {', conteudo)
         self.assertIn("let linhaProdutoComFoco = null;", conteudo)
         self.assertIn("fecharHistoricosComprasDesktop(", conteudo)
+        self.assertIn(
+            "fecharHistoricosComprasDesktop();\n          focarAdicionarProdutoManual();",
+            conteudo,
+        )
         self.assertLess(
             conteudo.index('id="tbodySugestaoProdutos"'),
             conteudo.index('id="btnToggleAdicionarProdutosMobile"'),
@@ -11259,6 +11277,8 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "const devePosicionarTabelaInicial = false;")
+        self.assertContains(resposta, "const deveFocarFornecedorInicial = false;")
 
         produtos_payload = resposta.context["produtos_manual_payload"]
         payload_produto = next(
@@ -11351,6 +11371,8 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "const devePosicionarTabelaInicial = true;")
+        self.assertContains(resposta, "const deveFocarFornecedorInicial = false;")
         linha = next(
             item for item in resposta.context["linhas"]
             if item["produto_id"] == produto.id
@@ -11444,6 +11466,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "const devePosicionarTabelaInicial = false;")
 
         produtos_payload = resposta.context["produtos_manual_payload"]
         payload_produto = next(
