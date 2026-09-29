@@ -10496,6 +10496,32 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "scrollIntoView")
         self.assertContains(resposta, 'document.getElementById("produtoManualBuscaSugestao")')
         self.assertContains(resposta, '.matches(".sugestao-remover-item")')
+        conteudo = resposta.content.decode()
+        self.assertIn("+ Adicionar produto", conteudo)
+        self.assertIn("window.recolherAreaProdutoManual = recolher", conteudo)
+        self.assertIn('campoProduto.focus({ preventScroll: true })', conteudo)
+        self.assertIn("function preVisualizarOpcao(opcao)", conteudo)
+        self.assertIn("preencherLinhaManual(produto, false)", conteudo)
+        self.assertIn("preVisualizarOpcao(opcoes[indiceAtivo])", conteudo)
+        self.assertIn(".sugestao-autocomplete-opcao.ativa {", conteudo)
+        self.assertIn("border-left: 5px solid #9f1239;", conteudo)
+        self.assertIn(".sugestao-autocomplete-opcao.ativa.ja-na-lista", conteudo)
+        self.assertIn("#btnToggleAdicionarProdutosMobile:focus-visible", conteudo)
+        self.assertIn("window.focarBotaoAdicionarProdutoManual = function ()", conteudo)
+        self.assertIn("window.focarBotaoAdicionarProdutoManual?.();", conteudo)
+        self.assertIn("function focarAdicionarProdutoManual()", conteudo)
+        self.assertIn("focarAdicionarProdutoManual();", conteudo)
+        self.assertIn('document.addEventListener("focusin", function(event) {', conteudo)
+        self.assertIn("let linhaProdutoComFoco = null;", conteudo)
+        self.assertIn("fecharHistoricosComprasDesktop(", conteudo)
+        self.assertLess(
+            conteudo.index('id="tbodySugestaoProdutos"'),
+            conteudo.index('id="btnToggleAdicionarProdutosMobile"'),
+        )
+        self.assertLess(
+            conteudo.index('id="btnToggleAdicionarProdutosMobile"'),
+            conteudo.index('class="sugestao-resumo-final"'),
+        )
 
     def test_mobile_topo_mostra_consultar_listas_e_nova_lista_sem_alterar_desktop(self):
         resposta = self.client.get(reverse("estoque:sugestao_compra_fornecedor"), secure=True)
@@ -11258,6 +11284,83 @@ class ComprasListaFornecedorGravarTests(TestCase):
             resposta,
             'data-historico-toggle aria-expanded="false"',
         )
+
+    def test_nova_lista_payload_manual_espelha_dados_da_linha_sugerida(self):
+        produto = self.criar_produto(
+            "Produto Manual Espelha Linha",
+            quantidade=Decimal("0.000"),
+        )
+        produto.estoque_minimo = Decimal("6.000")
+        produto.unidade_compra = "PCT"
+        produto.preco_compra = Decimal("29.45")
+        produto.preco_vista = Decimal("35.00")
+        produto.preco_prazo = Decimal("36.00")
+        produto.fator_conversao = Decimal("6.00")
+        produto.save()
+        ProdutoFornecedor.objects.create(
+            fornecedor=self.fornecedor,
+            produto=produto,
+            ativo=True,
+        )
+        venda = Venda.objects.create(
+            data_venda=timezone.localdate(),
+            tipo_pagamento="avista",
+            total=Decimal("29.45"),
+        )
+        ItemVenda.objects.create(
+            venda=venda,
+            produto=produto,
+            quantidade=Decimal("2.000"),
+            unidade="PCT",
+            preco_unitario=Decimal("29.45"),
+            valor_total=Decimal("58.90"),
+        )
+        self.criar_compra_historico_produto(
+            produto,
+            quantidade=Decimal("2.000"),
+            unidade="PCT",
+            preco=Decimal("29.45"),
+        )
+
+        hoje = timezone.localdate()
+        resposta = self.client.get(
+            reverse("estoque:sugestao_compra_fornecedor"),
+            {
+                "fornecedor": self.fornecedor.pk,
+                "periodo": "7",
+                "data_inicio": (hoje - timedelta(days=6)).isoformat(),
+                "data_fim": hoje.isoformat(),
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        linha = next(
+            item for item in resposta.context["linhas"]
+            if item["produto_id"] == produto.id
+        )
+        payload_produto = next(
+            item for item in resposta.context["produtos_manual_payload"]
+            if item["id"] == produto.id
+        )
+
+        self.assertEqual(payload_produto["estoque_atual"], f"{linha['estoque_atual']:.3f}")
+        self.assertEqual(payload_produto["estoque_minimo"], f"{linha['estoque_minimo']:.3f}")
+        self.assertEqual(payload_produto["quantidade_vendida"], f"{linha['quantidade_vendida']:.3f}")
+        self.assertEqual(payload_produto["quantidade_pedidos_abertos"], f"{linha['quantidade_pedidos_abertos']:.3f}")
+        self.assertEqual(payload_produto["sugestao"], f"{linha['sugestao']:.3f}")
+        self.assertEqual(payload_produto["unidade"], linha["unidade"])
+        self.assertEqual(payload_produto["preco_compra"], f"{linha['preco_compra']:.2f}")
+        self.assertEqual(payload_produto["preco_unitario_calculado"], f"{linha['preco_unitario_calculado']:.2f}")
+        self.assertEqual(payload_produto["total_sugerido"], f"{linha['total_sugerido']:.2f}")
+        historico_linha = linha["historico_ultimas_compras"][0]
+        historico_payload = payload_produto["historico_ultimas_compras"][0]
+        self.assertEqual(historico_payload["compra_id"], historico_linha["compra_id"])
+        self.assertEqual(historico_payload["data"], historico_linha["data"])
+        self.assertEqual(historico_payload["fornecedor"], historico_linha["fornecedor"])
+        self.assertEqual(historico_payload["quantidade"], f"{historico_linha['quantidade']:.3f}")
+        self.assertEqual(historico_payload["unidade"], historico_linha["unidade"])
+        self.assertEqual(historico_payload["preco"], f"{historico_linha['preco']:.2f}")
 
     def test_historico_manual_nao_e_ocultado_no_mobile(self):
         resposta = self.client.get(
