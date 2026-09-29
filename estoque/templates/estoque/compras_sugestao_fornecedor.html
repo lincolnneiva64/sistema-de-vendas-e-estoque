@@ -2248,8 +2248,34 @@
   (function () {
     const botao = document.getElementById("btnToggleAdicionarProdutosMobile");
     const area = document.getElementById("areaAdicionarProdutosManual");
+    const tabelaPrincipal = document.querySelector(".sugestao-card");
+    const devePosicionarTabelaInicial = {% if linhas and not modo_edicao_lista %}true{% else %}false{% endif %};
 
     if (!botao || !area) return;
+
+    function posicionarElementoComContexto(elemento, opcoes) {
+      if (!elemento || typeof elemento.getBoundingClientRect !== "function") return;
+
+      const margemMinima = opcoes?.margemMinima || 72;
+      const margemMaxima = opcoes?.margemMaxima || 160;
+      const proporcaoViewport = opcoes?.proporcaoViewport || 0.18;
+      const margem = Math.min(
+        Math.max(window.innerHeight * proporcaoViewport, margemMinima),
+        margemMaxima
+      );
+      const destino = Math.max(0, elemento.getBoundingClientRect().top + window.scrollY - margem);
+      window.scrollTo({ top: destino, behavior: "smooth" });
+    }
+
+    function posicionarTabelaPrincipalGerada() {
+      if (!devePosicionarTabelaInicial || window.location.hash) return;
+      if (!document.querySelector("#tbodySugestaoProdutos tr[data-produto-id]")) return;
+      posicionarElementoComContexto(tabelaPrincipal, {
+        margemMinima: 96,
+        margemMaxima: 190,
+        proporcaoViewport: 0.24
+      });
+    }
 
     function recolher() {
       area.classList.add("sugestao-manual-recolhida-mobile");
@@ -2261,12 +2287,17 @@
       area.classList.remove("sugestao-manual-recolhida-mobile");
       botao.setAttribute("aria-expanded", "true");
       botao.textContent = "Cancelar";
-      window.setTimeout(function () {
+      window.requestAnimationFrame(function () {
+        posicionarElementoComContexto(area, {
+          margemMinima: 72,
+          margemMaxima: 150,
+          proporcaoViewport: 0.18
+        });
         const campoProduto = document.getElementById("produtoManualBuscaSugestao");
         if (campoProduto) {
           campoProduto.focus({ preventScroll: true });
         }
-      }, 0);
+      });
     }
 
     botao.addEventListener("click", function () {
@@ -2282,6 +2313,8 @@
     window.focarBotaoAdicionarProdutoManual = function () {
       botao.focus({ preventScroll: true });
     };
+
+    window.requestAnimationFrame(posicionarTabelaPrincipalGerada);
   })();
   </script>
 
@@ -2903,6 +2936,7 @@
   const produtos = JSON.parse(dadosEl.textContent || "[]");
   const produtosPorId = new Map(produtos.map((produto) => [String(produto.id), produto]));
   let indiceAtivo = -1;
+  let continuarDepoisProdutoId = "";
 
   function mostrarMsg(texto) {
     if (!msg) return;
@@ -3128,6 +3162,24 @@
     opcoes[indiceAtivo].scrollIntoView({ block: "nearest" });
   }
 
+  function destacarProximoAposProduto(produtoId) {
+    const id = String(produtoId || "");
+    if (!id) return false;
+
+    const opcoes = opcoesAtuais();
+    const indiceProduto = opcoes.findIndex((opcao) => {
+      return String(opcao.dataset.produtoId || "") === id;
+    });
+
+    if (indiceProduto < 0 || indiceProduto >= opcoes.length - 1) {
+      indiceAtivo = -1;
+      return false;
+    }
+
+    destacarOpcao(indiceProduto + 1);
+    return true;
+  }
+
   function selecionarProduto(produtoId) {
     const produto = produtosPorId.get(String(produtoId));
     if (!produto) return;
@@ -3194,6 +3246,13 @@
     lista.classList.add("aberta");
     manualWrap?.classList.add("autocomplete-aberto");
     mostrarMsg("");
+    if (!selecionarPrimeira && !termo && continuarDepoisProdutoId) {
+      const produtoReferenciaId = continuarDepoisProdutoId;
+      continuarDepoisProdutoId = "";
+      if (destacarProximoAposProduto(produtoReferenciaId)) {
+        return;
+      }
+    }
     if (selecionarPrimeira) {
       destacarOpcao(0);
     } else {
@@ -3207,10 +3266,63 @@
     }
   }
 
+  function historicoDesktopProdutoHtml(produto) {
+    const historico = Array.isArray(produto?.historico_ultimas_compras)
+      ? produto.historico_ultimas_compras.slice(0, 3)
+      : [];
+    const conteudo = historico.length
+      ? `
+          <div class="sugestao-historico-titulo">&Uacute;ltimas 3 compras deste produto</div>
+          <div class="sugestao-historico-desktop-cabecalho" aria-hidden="true">
+            <div>Data</div>
+            <div>Fornecedor</div>
+            <div>Qde comprada</div>
+            <div>Pre&ccedil;o comprado</div>
+          </div>
+          ${historico.map((compra) => {
+            const quantidade = String(compra.quantidade || "0.000");
+            const unidade = String(compra.unidade || "").trim();
+            const preco = String(compra.preco || "0.00");
+            return `
+              <div class="sugestao-historico-desktop-item">
+                <div>${escapeHtml(compra.data || "-")}</div>
+                <div>${escapeHtml(compra.fornecedor || "-")}</div>
+                <div class="sugestao-historico-desktop-quantidade">${escapeHtml(quantidade)}${unidade ? " " + escapeHtml(unidade) : ""}</div>
+                <div class="sugestao-historico-desktop-preco">R$ ${escapeHtml(preco)}</div>
+              </div>
+            `;
+          }).join("")}
+        `
+      : `
+          <div class="sugestao-historico-titulo">&Uacute;ltimas compras</div>
+          <div class="sugestao-historico-vazio">Nenhuma compra anterior encontrada para este produto.</div>
+        `;
+
+    return `
+      <tr class="sugestao-historico-desktop-row" data-historico-desktop-row hidden>
+        <td colspan="11">
+          <div class="sugestao-historico-desktop-card">
+            ${conteudo}
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
   function linhaDesktop(produto) {
     return `
       <tr data-produto-id="${produto.id}" data-fator="${escapeHtml(produto.fator_conversao)}" data-sugestao-original="${escapeHtml(produto.sugestao)}">
-        <td class="sugestao-col-produto">${escapeHtml(produto.nome)}</td>
+        <td class="sugestao-col-produto">
+          <div>${escapeHtml(produto.nome)}</div>
+          <div class="sugestao-historico-desktop-acao">
+            <button
+              type="button"
+              class="sugestao-historico-desktop-toggle"
+              data-historico-desktop-toggle
+              aria-expanded="false"
+            >Ver &uacute;ltimas compras</button>
+          </div>
+        </td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_atual)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.estoque_minimo)}</td>
         <td class="sugestao-numero">${escapeHtml(produto.quantidade_vendida)}</td>
@@ -3222,6 +3334,7 @@
         <td><input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}"></td>
         <td class="sugestao-col-acao"><button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button></td>
       </tr>
+      ${historicoDesktopProdutoHtml(produto)}
     `;
   }
 
@@ -3387,6 +3500,15 @@
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
 
+    const linhaManualDesktop = Array.from(
+      tbody.querySelectorAll("tr[data-produto-id]")
+    ).find((linha) => {
+      return String(linha.dataset.produtoId || "") === String(produto.id);
+    }) || null;
+    window.configurarHistoricoComprasDesktop?.(
+      linhaManualDesktop?.querySelector("[data-historico-desktop-toggle]")
+    );
+
     const cardManual = Array.from(
       mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]")
     ).find((card) => {
@@ -3410,6 +3532,7 @@
     }
 
     atualizarResumoDepoisDeAdicionar();
+    continuarDepoisProdutoId = String(produto.id);
     limparLinhaManual();
     window.recolherAreaProdutoManual?.();
     window.focarBotaoAdicionarProdutoManual?.();
@@ -4326,7 +4449,9 @@
       ?.setAttribute("aria-expanded", "true");
   }
 
-  document.querySelectorAll("#tbodySugestaoProdutos [data-historico-desktop-toggle]").forEach(function(botao) {
+  function configurarHistoricoComprasDesktop(botao) {
+    if (!botao || botao.dataset.historicoDesktopConfigurado === "1") return;
+    botao.dataset.historicoDesktopConfigurado = "1";
     botao.addEventListener("click", function(event) {
       event.preventDefault();
 
@@ -4342,7 +4467,13 @@
         botao.setAttribute("aria-expanded", "false");
       }
     });
-  });
+  }
+
+  document
+    .querySelectorAll("#tbodySugestaoProdutos [data-historico-desktop-toggle]")
+    .forEach(configurarHistoricoComprasDesktop);
+
+  window.configurarHistoricoComprasDesktop = configurarHistoricoComprasDesktop;
 
   window.selecionarProdutoSugestao = selecionarProduto;
 
