@@ -304,6 +304,9 @@
                         <div><span class="cp-history-label">Juros</span><span class="cp-history-value">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span></div>
                         <div><span class="cp-history-label">Forma</span><span class="cp-history-value">{{ pagamento.forma_pagamento|default:"-" }}</span></div>
                         <div><span class="cp-history-label">Observacao</span><span class="cp-history-value">{{ pagamento.observacao|default:"-" }}</span></div>
+                        {% if pagamento.cancelado %}
+                          <div><span class="cp-history-label">Status</span><span class="cp-history-value">CANCELADO</span></div>
+                        {% endif %}
                       </div>
                     {% endfor %}
                   </div>
@@ -376,6 +379,9 @@
                     <div><span class="cp-history-label">Juros</span><span class="cp-history-value">R$ {{ pagamento.juros_bancarios|floatformat:2 }}</span></div>
                     <div><span class="cp-history-label">Forma</span><span class="cp-history-value">{{ pagamento.forma_pagamento|default:"-" }}</span></div>
                     <div><span class="cp-history-label">Observacao</span><span class="cp-history-value">{{ pagamento.observacao|default:"-" }}</span></div>
+                    {% if pagamento.cancelado %}
+                      <div><span class="cp-history-label">Status</span><span class="cp-history-value">CANCELADO</span></div>
+                    {% endif %}
                   </div>
                 {% endfor %}
               </div>
@@ -466,7 +472,11 @@
 
         <section class="cp-origens-section">
           <h3>De onde saiu o dinheiro?</h3>
-          <p>Distribua o total do pagamento entre as contas abaixo.</p>
+          <p id="textoOrigemContaPagar">Distribua o total do pagamento entre as contas abaixo.</p>
+          <div class="cp-distribuicao-status" id="diferencaCorrecaoContaPagar" style="display:none;">
+            <strong>Diferença da correção:</strong>
+            <strong id="valorDiferencaCorrecaoContaPagar">R$ 0,00</strong>
+          </div>
 
           <div class="cp-origens-grid">
             <div class="cp-origem-card cp-origem-caixa">
@@ -544,7 +554,7 @@
             <strong id="faltaDistribuirContaPagar">R$ 0,00</strong>
           </div>
 
-          <small class="cp-distribuicao-help">
+          <small class="cp-distribuicao-help" id="ajudaDistribuicaoContaPagar">
             O valor distribuído deve ser exatamente igual ao total efetivamente pago.
           </small>
         </section>
@@ -958,8 +968,16 @@
   const previewPrincipal = document.getElementById("previewPrincipalContaPagar");
   const previewJuros = document.getElementById("previewJurosContaPagar");
   const previewTotal = document.getElementById("previewTotalContaPagar");
+  const textoOrigem = document.getElementById("textoOrigemContaPagar");
+  const ajudaDistribuicao = document.getElementById("ajudaDistribuicaoContaPagar");
+  const diferencaCorrecao = document.getElementById("diferencaCorrecaoContaPagar");
+  const valorDiferencaCorrecao = document.getElementById("valorDiferencaCorrecaoContaPagar");
+  const labelsOrigemSaida = Array.from(document.querySelectorAll(".cp-origem-saida label"));
+  const retornoEdicaoPagamento = "{{ retorno_pagamento_edicao|escapejs }}";
   let urlBaixaAtual = "";
   let modoCorrecaoPagamento = false;
+  let modoCorrecaoDiferenca = false;
+  let totalAnteriorEdicao = 0;
 
   function restaurarBotaoConfirmacao() {
     if (!confirmar) return;
@@ -995,6 +1013,56 @@
 
   function valorInput(valor) {
     return Math.max(0, valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function moedaAssinada(valor) {
+    const numeroValor = Number(valor || 0);
+    const prefixo = numeroValor > 0 ? "+ " : (numeroValor < 0 ? "- " : "");
+    return prefixo + moeda(Math.abs(numeroValor));
+  }
+
+  function diferencaFinanceiraCorrecao() {
+    if (!modoCorrecaoDiferenca) return 0;
+    return totalCalculado() - totalAnteriorEdicao;
+  }
+
+  function totalAlvoDistribuicao() {
+    return modoCorrecaoDiferenca
+      ? Math.abs(diferencaFinanceiraCorrecao())
+      : totalCalculado();
+  }
+
+  function zerarDistribuicaoFinanceira() {
+    if (valorSaidaCaixa) valorSaidaCaixa.value = "0,00";
+    if (valorSaidaReserva) valorSaidaReserva.value = "0,00";
+    if (valorSaidaBanco) valorSaidaBanco.value = "0,00";
+  }
+
+  function atualizarTextoCorrecaoDiferenca() {
+    const diferenca = diferencaFinanceiraCorrecao();
+    if (diferencaCorrecao) {
+      diferencaCorrecao.style.display = modoCorrecaoDiferenca ? "" : "none";
+    }
+    if (valorDiferencaCorrecao) {
+      valorDiferencaCorrecao.textContent = moedaAssinada(diferenca);
+    }
+    if (textoOrigem) {
+      if (!modoCorrecaoDiferenca) {
+        textoOrigem.textContent = "Distribua o total do pagamento entre as contas abaixo.";
+      } else if (diferenca < 0) {
+        textoOrigem.textContent = "Informe em qual conta a diferença será recomposta.";
+      } else {
+        textoOrigem.textContent = "Distribua somente a diferença financeira desta correção.";
+      }
+    }
+    if (ajudaDistribuicao) {
+      ajudaDistribuicao.textContent = modoCorrecaoDiferenca
+        ? "O valor distribuído deve ser exatamente igual à diferença da correção."
+        : "O valor distribuído deve ser exatamente igual ao total efetivamente pago.";
+    }
+    labelsOrigemSaida.forEach(function (label) {
+      label.textContent = modoCorrecaoDiferenca && diferenca < 0 ? "VAI RECOMPOR" : "VAI SAIR";
+    });
   }
 
   function enviarFiltros() {
@@ -1047,26 +1115,46 @@
   };
 
   function atualizarDistribuicao() {
-    const diferenca = totalCalculado() - totalDistribuido();
+    atualizarTextoCorrecaoDiferenca();
+    const diferenca = totalAlvoDistribuicao() - totalDistribuido();
+    const diferencaCorrecao = diferencaFinanceiraCorrecao();
 
     const creditoCaixa = modoCorrecaoPagamento ? distribuicaoAtualEdicao.caixa : 0;
     const creditoReserva = modoCorrecaoPagamento ? distribuicaoAtualEdicao.reserva : 0;
     const creditoBanco = modoCorrecaoPagamento ? distribuicaoAtualEdicao.banco : 0;
 
     if (saldoDepoisCaixa) {
+      if (modoCorrecaoDiferenca) {
+        saldoDepoisCaixa.textContent = moeda(
+          saldoAtualCaixa + (diferencaCorrecao < 0 ? numero(valorSaidaCaixa?.value) : -numero(valorSaidaCaixa?.value))
+        );
+      } else {
       saldoDepoisCaixa.textContent = moeda(
         saldoAtualCaixa + creditoCaixa - numero(valorSaidaCaixa?.value)
       );
+      }
     }
     if (saldoDepoisReserva) {
+      if (modoCorrecaoDiferenca) {
+        saldoDepoisReserva.textContent = moeda(
+          saldoAtualReserva + (diferencaCorrecao < 0 ? numero(valorSaidaReserva?.value) : -numero(valorSaidaReserva?.value))
+        );
+      } else {
       saldoDepoisReserva.textContent = moeda(
         saldoAtualReserva + creditoReserva - numero(valorSaidaReserva?.value)
       );
+      }
     }
     if (saldoDepoisBanco) {
+      if (modoCorrecaoDiferenca) {
+        saldoDepoisBanco.textContent = moeda(
+          saldoAtualBanco + (diferencaCorrecao < 0 ? numero(valorSaidaBanco?.value) : -numero(valorSaidaBanco?.value))
+        );
+      } else {
       saldoDepoisBanco.textContent = moeda(
         saldoAtualBanco + creditoBanco - numero(valorSaidaBanco?.value)
       );
+      }
     }
 
     if (!faltaDistribuir) return;
@@ -1088,7 +1176,14 @@
   }
 
   function distribuirAutomaticamenteAPartirDe(indice) {
-    const total = Math.max(0, totalCalculado());
+    const diferenca = diferencaFinanceiraCorrecao();
+    if (modoCorrecaoDiferenca && diferenca <= 0) {
+      zerarDistribuicaoFinanceira();
+      atualizarDistribuicao();
+      return;
+    }
+
+    const total = Math.max(0, totalAlvoDistribuicao());
 
     const campos = [
       { campo: valorSaidaCaixa, saldo: saldoAtualCaixa },
@@ -1110,6 +1205,32 @@
       const aplicar = limitarOrigem(restante, campos[i].saldo);
       campos[i].campo.value = valorInput(aplicar);
       restante = Math.max(0, restante - aplicar);
+    }
+
+    atualizarDistribuicao();
+  }
+
+  function completarDiferencaPositivaAPartirDe(indice) {
+    if (!modoCorrecaoDiferenca || diferencaFinanceiraCorrecao() <= 0) return;
+
+    const campos = [
+      valorSaidaCaixa,
+      valorSaidaReserva,
+      valorSaidaBanco,
+    ];
+    const alvo = totalAlvoDistribuicao();
+    const restante = Math.max(0, alvo - totalDistribuido());
+
+    if (restante <= 0.005) {
+      atualizarDistribuicao();
+      return;
+    }
+
+    for (let i = indice; i < campos.length; i++) {
+      const campo = campos[i];
+      if (!campo || numero(campo.value) > 0) continue;
+      campo.value = valorInput(restante);
+      break;
     }
 
     atualizarDistribuicao();
@@ -1148,6 +1269,8 @@
 
   function abrirModal(botao) {
     modoCorrecaoPagamento = false;
+    modoCorrecaoDiferenca = false;
+    totalAnteriorEdicao = 0;
     distribuicaoAtualEdicao = { caixa: 0, reserva: 0, banco: 0 };
     urlBaixaAtual = botao.dataset.url || "";
     vencimentoIsoAtual = botao.dataset.vencimentoIso || "";
@@ -1179,6 +1302,8 @@
 
   function abrirModalEdicao(pagamento) {
     modoCorrecaoPagamento = true;
+    modoCorrecaoDiferenca = Boolean(pagamento.correcao_por_diferenca);
+    totalAnteriorEdicao = numero(pagamento.total_pago);
     distribuicaoAtualEdicao = {
       caixa: numero(pagamento.saida_caixa),
       reserva: numero(pagamento.saida_reserva),
@@ -1216,13 +1341,15 @@
     if (jurosBancarios) jurosBancarios.value = valorInput(numero(pagamento.juros_bancarios));
     if (totalEfetivo) totalEfetivo.value = valorInput(numero(pagamento.total_pago));
 
-    if (valorSaidaCaixa) {
+    if (modoCorrecaoDiferenca) {
+      zerarDistribuicaoFinanceira();
+    } else if (valorSaidaCaixa) {
       valorSaidaCaixa.value = valorInput(numero(pagamento.saida_caixa));
     }
-    if (valorSaidaReserva) {
+    if (!modoCorrecaoDiferenca && valorSaidaReserva) {
       valorSaidaReserva.value = valorInput(numero(pagamento.saida_reserva));
     }
-    if (valorSaidaBanco) {
+    if (!modoCorrecaoDiferenca && valorSaidaBanco) {
       valorSaidaBanco.value = valorInput(numero(pagamento.saida_banco));
     }
 
@@ -1245,6 +1372,10 @@
   }
 
   function fecharModal() {
+    if (modoCorrecaoPagamento && retornoEdicaoPagamento) {
+      window.location.href = retornoEdicaoPagamento;
+      return;
+    }
     modal?.classList.remove("aberto");
     modal?.setAttribute("aria-hidden", "true");
     urlBaixaAtual = "";
@@ -1254,21 +1385,21 @@
 
   dataPagamento?.addEventListener("change", function () {
     atualizarAvisoAtraso();
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   valorPago?.addEventListener("input", function () {
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   jurosBancarios?.addEventListener("input", function () {
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   jurosBancarios?.addEventListener("blur", function () {
     if (!jurosBancarios.value.trim()) jurosBancarios.value = "0,00";
     jurosBancarios.value = valorInput(numero(jurosBancarios.value));
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   valorPago?.addEventListener("blur", function () {
@@ -1276,7 +1407,7 @@
       valorPago.value = document.getElementById("baixaContaAberto").textContent.replace("R$ ", "");
     }
     valorPago.value = valorInput(numero(valorPago.value));
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   totalEfetivo?.addEventListener("input", function () {
@@ -1293,7 +1424,11 @@
     if (previewJuros) previewJuros.textContent = moeda(encargos);
     if (previewTotal) previewTotal.textContent = moeda(principal + encargos);
 
-    atualizarDistribuicao();
+    if (modoCorrecaoDiferenca) {
+      atualizarPreview(true);
+    } else {
+      atualizarDistribuicao();
+    }
   });
 
   totalEfetivo?.addEventListener("blur", function () {
@@ -1310,7 +1445,7 @@
       jurosBancarios.value = valorInput(total - principal);
     }
 
-    atualizarPreview(!modoCorrecaoPagamento);
+    atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   [
@@ -1319,7 +1454,10 @@
     { campo: valorSaidaBanco, indiceSeguinte: 3 },
   ].forEach(function (item) {
     item.campo?.addEventListener("input", function () {
-      if (!modoCorrecaoPagamento && item.indiceSeguinte < 3) {
+      const valorDigitado = numero(item.campo.value);
+      if (modoCorrecaoDiferenca && diferencaFinanceiraCorrecao() > 0 && valorDigitado <= 0 && item.indiceSeguinte < 3) {
+        completarDiferencaPositivaAPartirDe(item.indiceSeguinte);
+      } else if (!modoCorrecaoPagamento && item.indiceSeguinte < 3) {
         distribuirAutomaticamenteAPartirDe(item.indiceSeguinte);
       } else {
         atualizarDistribuicao();
@@ -1332,8 +1470,11 @@
         item.campo === valorSaidaReserva ? saldoAtualReserva :
         saldoAtualBanco;
 
+      const valorDigitado = numero(item.campo.value);
       item.campo.value = valorInput(
-        limitarOrigem(numero(item.campo.value), saldo)
+        modoCorrecaoDiferenca && diferencaFinanceiraCorrecao() < 0
+          ? valorDigitado
+          : limitarOrigem(valorDigitado, saldo)
       );
 
       if (!modoCorrecaoPagamento && item.indiceSeguinte < 3) {
@@ -1404,7 +1545,8 @@
     total_pago: "{{ pagamento_edicao.total_pago|escapejs }}",
     saida_caixa: "{{ pagamento_edicao.saida_caixa|escapejs }}",
     saida_reserva: "{{ pagamento_edicao.saida_reserva|escapejs }}",
-    saida_banco: "{{ pagamento_edicao.saida_banco|escapejs }}"
+    saida_banco: "{{ pagamento_edicao.saida_banco|escapejs }}",
+    correcao_por_diferenca: {% if pagamento_edicao.correcao_por_diferenca %}true{% else %}false{% endif %}
   });
   {% endif %}
 
@@ -1427,6 +1569,7 @@
     const principal = numero(valorPago?.value);
     const encargos = numero(jurosBancarios?.value);
     const total = principal + encargos;
+    const totalDistribuir = totalAlvoDistribuicao();
     const distribuido = totalDistribuido();
 
     if (principal <= 0) {
@@ -1437,10 +1580,12 @@
       return;
     }
 
-    if (Math.abs(total - distribuido) >= 0.005) {
+    if (Math.abs(totalDistribuir - distribuido) >= 0.005) {
       mostrarFeedback(
         "erro",
-        "Distribua o total efetivamente pago entre Caixa, Sangria/Reserva e Banco/Pix."
+        modoCorrecaoDiferenca
+          ? "Distribua a diferença da correção entre Caixa, Sangria/Reserva e Banco/Pix."
+          : "Distribua o total efetivamente pago entre Caixa, Sangria/Reserva e Banco/Pix."
       );
       if (confirmar) {
         restaurarBotaoConfirmacao();
@@ -1468,9 +1613,7 @@
       }
       window.setTimeout(function () {
         if (modoCorrecaoPagamento) {
-          const parametros = new URLSearchParams(window.location.search);
-          const retorno = parametros.get("retorno");
-          window.location.href = retorno || "{% url 'estoque:contas_pagar_pagamentos' %}";
+          window.location.href = retornoEdicaoPagamento || "{% url 'estoque:contas_pagar_pagamentos' %}";
         } else {
           window.location.reload();
         }

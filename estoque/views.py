@@ -5200,7 +5200,11 @@ def _painel_resultado_gerencial_contexto(request):
     pagamentos_juros = (
         PagamentoContaPagar.objects
         .select_related("conta__fornecedor")
-        .filter(data_pagamento__range=(inicio, fim), juros_bancarios__gt=Decimal("0.00"))
+        .filter(
+            cancelado=False,
+            data_pagamento__range=(inicio, fim),
+            juros_bancarios__gt=Decimal("0.00"),
+        )
         .order_by("data_pagamento", "id")
     )
     for pagamento in pagamentos_juros:
@@ -28011,6 +28015,13 @@ def pedido_detalhe(request, pk):
 
 def contas_pagar(request):
     editar_pagamento_id = (request.GET.get("editar_pagamento") or "").strip()
+    retorno_pagamento_edicao = (request.GET.get("retorno") or "").strip()
+    if retorno_pagamento_edicao and not url_has_allowed_host_and_scheme(
+        retorno_pagamento_edicao,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        retorno_pagamento_edicao = ""
     pagamento_edicao = None
 
     if editar_pagamento_id:
@@ -28023,7 +28034,7 @@ def contas_pagar(request):
             pagamento_edicao = (
                 PagamentoContaPagar.objects
                 .select_related("conta", "conta__fornecedor", "conta__compra")
-                .filter(pk=editar_pagamento_pk)
+                .filter(pk=editar_pagamento_pk, cancelado=False)
                 .first()
             )
 
@@ -28119,18 +28130,27 @@ def contas_pagar(request):
         contas = contas_base.filter(status=ContaPagar.STATUS_PAGA)
     elif atalho == "com_juros":
         periodo_tipo = "pagamento"
-        contas = contas_base.filter(pagamentos__juros_bancarios__gt=Decimal("0.00")).distinct()
+        contas = contas_base.filter(
+            pagamentos__cancelado=False,
+            pagamentos__juros_bancarios__gt=Decimal("0.00"),
+        ).distinct()
     elif atalho:
         atalho = ""
 
     if data_inicio:
         if periodo_tipo == "pagamento":
-            contas = contas.filter(pagamentos__data_pagamento__gte=data_inicio).distinct()
+            contas = contas.filter(
+                pagamentos__cancelado=False,
+                pagamentos__data_pagamento__gte=data_inicio,
+            ).distinct()
         else:
             contas = contas.filter(data_vencimento__gte=data_inicio)
     if data_fim:
         if periodo_tipo == "pagamento":
-            contas = contas.filter(pagamentos__data_pagamento__lte=data_fim).distinct()
+            contas = contas.filter(
+                pagamentos__cancelado=False,
+                pagamentos__data_pagamento__lte=data_fim,
+            ).distinct()
         else:
             contas = contas.filter(data_vencimento__lte=data_fim)
 
@@ -28152,7 +28172,10 @@ def contas_pagar(request):
         "parciais": resumo_contas(contas_abertas_base.filter(status=ContaPagar.STATUS_PARCIAL)),
     }
 
-    pagamentos_periodo = PagamentoContaPagar.objects.filter(conta__in=contas_base)
+    pagamentos_periodo = PagamentoContaPagar.objects.filter(
+        conta__in=contas_base,
+        cancelado=False,
+    )
     if data_inicio:
         pagamentos_periodo = pagamentos_periodo.filter(data_pagamento__gte=data_inicio)
     if data_fim:
@@ -28185,12 +28208,18 @@ def contas_pagar(request):
     def aplicar_periodo_atalho(qs, tipo_periodo):
         if data_inicio:
             if tipo_periodo == "pagamento":
-                qs = qs.filter(pagamentos__data_pagamento__gte=data_inicio).distinct()
+                qs = qs.filter(
+                    pagamentos__cancelado=False,
+                    pagamentos__data_pagamento__gte=data_inicio,
+                ).distinct()
             else:
                 qs = qs.filter(data_vencimento__gte=data_inicio)
         if data_fim:
             if tipo_periodo == "pagamento":
-                qs = qs.filter(pagamentos__data_pagamento__lte=data_fim).distinct()
+                qs = qs.filter(
+                    pagamentos__cancelado=False,
+                    pagamentos__data_pagamento__lte=data_fim,
+                ).distinct()
             else:
                 qs = qs.filter(data_vencimento__lte=data_fim)
         return qs
@@ -28226,13 +28255,19 @@ def contas_pagar(request):
             qs = contas_base.filter(status=ContaPagar.STATUS_PAGA)
         elif valor == "com_juros":
             tipo_periodo = "pagamento"
-            qs = contas_base.filter(pagamentos__juros_bancarios__gt=Decimal("0.00")).distinct()
+            qs = contas_base.filter(
+                pagamentos__cancelado=False,
+                pagamentos__juros_bancarios__gt=Decimal("0.00"),
+            ).distinct()
         else:
             qs = contas_base.none()
         return aplicar_periodo_atalho(qs, tipo_periodo).distinct(), tipo_periodo
 
     def pagamentos_do_atalho(contas_qs, somente_juros=False):
-        pagamentos_qs = PagamentoContaPagar.objects.filter(conta__in=contas_qs)
+        pagamentos_qs = PagamentoContaPagar.objects.filter(
+            conta__in=contas_qs,
+            cancelado=False,
+        )
         if data_inicio:
             pagamentos_qs = pagamentos_qs.filter(data_pagamento__gte=data_inicio)
         if data_fim:
@@ -28283,14 +28318,17 @@ def contas_pagar(request):
     contas = list(contas.distinct())
     for conta in contas:
         pagamentos = list(conta.pagamentos.all())
+        pagamentos_validos = [
+            pagamento for pagamento in pagamentos if not pagamento.cancelado
+        ]
         conta.tem_pagamentos = bool(pagamentos)
         conta.pagamento_legado_sem_historico = (
             not conta.tem_pagamentos
             and conta.status == ContaPagar.STATUS_PAGA
             and conta.valor_em_aberto <= Decimal("0.00")
         )
-        conta.principal_pago = sum((_financeiro_dinheiro(pagamento.valor) for pagamento in pagamentos), Decimal("0.00")).quantize(Decimal("0.01"))
-        conta.juros_pagos = sum((_financeiro_dinheiro(pagamento.juros_bancarios) for pagamento in pagamentos), Decimal("0.00")).quantize(Decimal("0.01"))
+        conta.principal_pago = sum((_financeiro_dinheiro(pagamento.valor) for pagamento in pagamentos_validos), Decimal("0.00")).quantize(Decimal("0.01"))
+        conta.juros_pagos = sum((_financeiro_dinheiro(pagamento.juros_bancarios) for pagamento in pagamentos_validos), Decimal("0.00")).quantize(Decimal("0.01"))
         conta.total_desembolsado = (conta.principal_pago + conta.juros_pagos).quantize(Decimal("0.01"))
         conta.valor_original_input = _financeiro_decimal_br(conta.valor_original)
         conta.valor_em_aberto_input = _financeiro_decimal_br(conta.valor_em_aberto)
@@ -28402,9 +28440,22 @@ def contas_pagar(request):
             "banco": Decimal("0.00"),
         }
 
-        movimentos_pagamento = pagamento_edicao.movimentos_financeiros.select_related("conta")
+        movimentos_pagamento = list(
+            pagamento_edicao.movimentos_financeiros.select_related("conta")
+        )
+        movimentos_originais_pagamento = [
+            movimento
+            for movimento in movimentos_pagamento
+            if movimento.origem == "conta_pagar_fornecedor"
+        ]
 
-        for movimento in movimentos_pagamento:
+        movimentos_distribuicao_edicao = (
+            movimentos_pagamento
+            if movimentos_originais_pagamento
+            else []
+        )
+
+        for movimento in movimentos_distribuicao_edicao:
             valor_movimento = _financeiro_dinheiro(movimento.valor)
 
             if movimento.tipo == MovimentoFinanceiro.TIPO_ENTRADA:
@@ -28438,6 +28489,7 @@ def contas_pagar(request):
             "saida_caixa": str(distribuicao_edicao["caixa"].quantize(Decimal("0.01"))),
             "saida_reserva": str(distribuicao_edicao["reserva"].quantize(Decimal("0.01"))),
             "saida_banco": str(distribuicao_edicao["banco"].quantize(Decimal("0.01"))),
+            "correcao_por_diferenca": not movimentos_originais_pagamento,
         }
 
     return render(
@@ -28468,8 +28520,163 @@ def contas_pagar(request):
             "situacao_choices": situacao_choices,
             "fornecedores": fornecedores,
             "saldos_pagamento": saldos_pagamento,
+            "retorno_pagamento_edicao": retorno_pagamento_edicao,
         },
     )
+
+
+def _atualizar_status_conta_pagar_por_saldo(conta):
+    saldo = _financeiro_dinheiro(conta.valor_em_aberto).quantize(Decimal("0.01"))
+    conta.valor_em_aberto = saldo
+    if saldo == Decimal("0.00"):
+        conta.status = ContaPagar.STATUS_PAGA
+    elif saldo < _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01")):
+        conta.status = ContaPagar.STATUS_PARCIAL
+    else:
+        conta.status = ContaPagar.STATUS_ABERTA
+    conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+
+
+def _total_financeiro_pagamento_conta_pagar(pagamento):
+    return (
+        _financeiro_dinheiro(pagamento.valor)
+        + _financeiro_dinheiro(pagamento.juros_bancarios)
+    ).quantize(Decimal("0.01"))
+
+
+def _efeito_movimentos_por_conta(movimentos):
+    efeito_por_conta = {}
+    for movimento in movimentos:
+        valor_movimento = _financeiro_dinheiro(movimento.valor).quantize(Decimal("0.01"))
+        if valor_movimento <= Decimal("0.00"):
+            continue
+
+        if movimento.tipo == MovimentoFinanceiro.TIPO_SAIDA:
+            efeito_por_conta[movimento.conta] = (
+                efeito_por_conta.get(movimento.conta, Decimal("0.00")) + valor_movimento
+            )
+        elif movimento.tipo == MovimentoFinanceiro.TIPO_ENTRADA:
+            efeito_por_conta[movimento.conta] = (
+                efeito_por_conta.get(movimento.conta, Decimal("0.00")) - valor_movimento
+            )
+        else:
+            raise ValueError("O pagamento possui movimento financeiro de tipo nao reconhecido.")
+
+    return {
+        conta_financeira: efeito.quantize(Decimal("0.01"))
+        for conta_financeira, efeito in efeito_por_conta.items()
+        if efeito.quantize(Decimal("0.01")) != Decimal("0.00")
+    }
+
+
+def _conta_pagar_referencia(conta):
+    if conta.compra_id:
+        return f"Compra #{conta.compra_id}"
+    if conta.documento_legado:
+        return f"Documento {conta.documento_legado}"
+    return f"Conta #{conta.id}"
+
+
+def _pagamento_tem_movimento_original_individual(pagamento):
+    return pagamento.movimentos_financeiros.filter(
+        origem="conta_pagar_fornecedor"
+    ).exists()
+
+
+def _movimentos_cancelamento_liquidos_pagamento(pagamento):
+    movimentos_cancelamento = (
+        pagamento.movimentos_financeiros
+        .select_related("conta")
+        .filter(
+            origem__in=[
+                "conta_pagar_cancelamento",
+                "conta_pagar_desfazer_cancelamento",
+            ]
+        )
+    )
+    return _efeito_movimentos_por_conta(movimentos_cancelamento)
+
+
+def _eventos_relevantes_apos_cancelamento_pagamento(pagamento):
+    if not pagamento.cancelado or not pagamento.cancelado_em:
+        return []
+
+    fornecedor_id = pagamento.conta.fornecedor_id
+    if not fornecedor_id:
+        return []
+
+    pagamentos = (
+        PagamentoContaPagar.objects
+        .filter(
+            conta__fornecedor_id=fornecedor_id,
+            cancelado=False,
+            criado_em__gt=pagamento.cancelado_em,
+        )
+        .exclude(pk=pagamento.pk)
+        .values("id", "criado_em")[:3]
+    )
+    compras = (
+        Compra.objects
+        .filter(
+            fornecedor_id=fornecedor_id,
+            cancelada=False,
+            status=Compra.STATUS_FINALIZADA,
+            criado_em__gt=pagamento.cancelado_em,
+        )
+        .values("id", "criado_em", "tipo_pagamento")[:10]
+    )
+
+    eventos = [
+        ("pagamento", item["id"], item["criado_em"])
+        for item in pagamentos
+    ]
+    eventos.extend(
+        ("compra", item["id"], item["criado_em"])
+        for item in compras
+        if _compra_pagamento_a_prazo(item["tipo_pagamento"])
+    )
+    eventos.sort(key=lambda item: (item[2], item[1]))
+    return eventos
+
+
+def _pagamento_cancelado_pode_desfazer(pagamento):
+    if not pagamento.cancelado:
+        return False, "Pagamento nao esta cancelado."
+    if not pagamento.cancelado_em:
+        return False, "Cancelamento sem timestamp para desfazer com seguranca."
+
+    eventos = _eventos_relevantes_apos_cancelamento_pagamento(pagamento)
+    if len(eventos) > 1:
+        return False, "Ha mais de uma movimentacao relevante posterior deste fornecedor."
+
+    valor_principal = _financeiro_dinheiro(pagamento.valor).quantize(Decimal("0.01"))
+    saldo_aberto = _financeiro_dinheiro(pagamento.conta.valor_em_aberto).quantize(Decimal("0.01"))
+    if saldo_aberto < valor_principal:
+        return False, "A conta nao comporta restaurar este pagamento sem gerar excedente."
+
+    try:
+        efeito_cancelamento = _movimentos_cancelamento_liquidos_pagamento(pagamento)
+    except ValueError as exc:
+        return False, str(exc)
+
+    if not efeito_cancelamento:
+        return False, "Nao ha movimentos de cancelamento para desfazer com seguranca."
+
+    for conta_financeira, efeito in efeito_cancelamento.items():
+        if efeito >= Decimal("0.00"):
+            continue
+        valor_saida = abs(efeito).quantize(Decimal("0.01"))
+        saldo_disponivel = _saldo_conta_financeira(conta_financeira)
+        if saldo_disponivel < valor_saida:
+            return (
+                False,
+                (
+                    f"Saldo insuficiente em {conta_financeira.nome}. "
+                    f"Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                ),
+            )
+
+    return True, ""
 
 
 
@@ -28486,6 +28693,9 @@ def conta_pagar_pagamento_corrigir(request, pk):
 
     if not pagamento:
         return JsonResponse({"erro": "Pagamento nao encontrado."}, status=404)
+
+    if pagamento.cancelado:
+        return JsonResponse({"erro": "Pagamento cancelado nao pode ser editado."}, status=409)
 
     conta = (
         ContaPagar.objects
@@ -28554,37 +28764,180 @@ def conta_pagar_pagamento_corrigir(request, pk):
         return JsonResponse({"erro": "A distribuicao financeira nao pode ser negativa."}, status=400)
 
     total_novo = (valor_novo + juros_novos).quantize(Decimal("0.01"))
+    total_antigo_pagamento = (
+        valor_antigo + juros_antigos
+    ).quantize(Decimal("0.01"))
     total_distribuido = sum(
         nova_distribuicao.values(),
         Decimal("0.00"),
     ).quantize(Decimal("0.01"))
-
-    if total_distribuido != total_novo:
-        return JsonResponse(
-            {
-                "erro": (
-                    "A soma de Caixa, Sangria/Reserva e Banco/Pix deve ser "
-                    f"exatamente {_financeiro_moeda_br(total_novo)}."
-                )
-            },
-            status=400,
-        )
 
     movimentos_pagamento = list(
         pagamento.movimentos_financeiros
         .select_for_update()
         .select_related("conta")
     )
+    movimentos_originais_pagamento = [
+        movimento
+        for movimento in movimentos_pagamento
+        if movimento.origem == "conta_pagar_fornecedor"
+    ]
 
-    if not movimentos_pagamento:
+    correcao_por_diferenca = not movimentos_originais_pagamento
+    total_alvo_distribuicao = total_novo
+
+    if correcao_por_diferenca:
+        diferenca_total = (total_novo - total_antigo_pagamento).quantize(Decimal("0.01"))
+        total_alvo_distribuicao = abs(diferenca_total).quantize(Decimal("0.01"))
+
+        if total_alvo_distribuicao == Decimal("0.00") and any(
+            valor > Decimal("0.00")
+            for valor in nova_distribuicao.values()
+        ):
+            return JsonResponse(
+                {
+                    "erro": (
+                        "Este pagamento nao possui origem financeira individual vinculada. "
+                        "Troca de origem sem alteracao do total continua bloqueada para "
+                        "evitar mexer no movimento agregado historico."
+                    )
+                },
+                status=409,
+            )
+
+    if total_distribuido != total_alvo_distribuicao:
         return JsonResponse(
             {
                 "erro": (
-                    "Este pagamento antigo ainda nao possui a origem financeira "
-                    "vinculada. A correcao foi bloqueada para evitar alterar saldo incorretamente."
+                    "A soma de Caixa, Sangria/Reserva e Banco/Pix deve ser "
+                    f"exatamente {_financeiro_moeda_br(total_alvo_distribuicao)}."
                 )
             },
-            status=409,
+            status=400,
+        )
+
+    def aplicar_saldo_conta_corrigido():
+        novo_em_aberto = (
+            _financeiro_dinheiro(conta.valor_em_aberto)
+            + valor_antigo
+            - valor_novo
+        ).quantize(Decimal("0.01"))
+
+        if novo_em_aberto < Decimal("0.00"):
+            return None
+
+        conta.valor_em_aberto = novo_em_aberto
+
+        if novo_em_aberto == Decimal("0.00"):
+            conta.status = ContaPagar.STATUS_PAGA
+        elif novo_em_aberto < _financeiro_dinheiro(conta.valor_original):
+            conta.status = ContaPagar.STATUS_PARCIAL
+        else:
+            conta.status = ContaPagar.STATUS_ABERTA
+
+        conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
+        return novo_em_aberto
+
+    if not movimentos_originais_pagamento:
+        diferenca_total = (total_novo - total_antigo_pagamento).quantize(Decimal("0.01"))
+        distribuicao_informada = any(
+            valor > Decimal("0.00")
+            for valor in nova_distribuicao.values()
+        )
+
+        sem_alteracoes = (
+            data_pagamento == pagamento.data_pagamento
+            and valor_novo == valor_antigo
+            and juros_novos == juros_antigos
+            and not distribuicao_informada
+        )
+
+        if sem_alteracoes:
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "mensagem": "Nenhuma alteracao foi necessaria.",
+                    "pagamento_id": pagamento.id,
+                    "sem_alteracoes": True,
+                    "correcao_por_diferenca": True,
+                }
+            )
+
+        if diferenca_total > Decimal("0.00"):
+            for chave, valor in nova_distribuicao.items():
+                if valor <= Decimal("0.00"):
+                    continue
+
+                conta_financeira = contas_origem[chave]
+                if not conta_financeira:
+                    raise ValueError(f"Conta financeira {chave} nao encontrada.")
+
+                saldo_disponivel = _saldo_conta_financeira(conta_financeira)
+                if saldo_disponivel < valor:
+                    transaction.set_rollback(True)
+                    return JsonResponse(
+                        {
+                            "erro": (
+                                f"Saldo insuficiente em {conta_financeira.nome}. "
+                                f"Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                            )
+                        },
+                        status=400,
+                    )
+
+        if aplicar_saldo_conta_corrigido() is None:
+            return JsonResponse({"erro": "A correcao deixaria a conta com saldo negativo."}, status=400)
+
+        pagamento.data_pagamento = data_pagamento
+        pagamento.valor = valor_novo
+        pagamento.juros_bancarios = juros_novos
+        pagamento.save(
+            update_fields=[
+                "data_pagamento",
+                "valor",
+                "juros_bancarios",
+            ]
+        )
+
+        fornecedor_nome = (
+            conta.fornecedor.nome
+            if conta.fornecedor
+            else f"Conta #{conta.id}"
+        )
+        tipo_movimento = (
+            MovimentoFinanceiro.TIPO_SAIDA
+            if diferenca_total > Decimal("0.00")
+            else MovimentoFinanceiro.TIPO_ENTRADA
+        )
+        descricao = (
+            f"Correcao por diferenca de pagamento de fornecedor: {fornecedor_nome}"
+        )
+
+        for chave, valor in nova_distribuicao.items():
+            if valor <= Decimal("0.00"):
+                continue
+
+            conta_financeira = contas_origem[chave]
+            if not conta_financeira:
+                raise ValueError(f"Conta financeira {chave} nao encontrada.")
+
+            MovimentoFinanceiro.objects.create(
+                conta=conta_financeira,
+                tipo=tipo_movimento,
+                valor=valor,
+                data=data_pagamento,
+                descricao=descricao[:255],
+                origem="conta_pagar_correcao",
+                pagamento_conta_pagar=pagamento,
+            )
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "mensagem": "Pagamento corrigido por diferenca com sucesso.",
+                "pagamento_id": pagamento.id,
+                "correcao_por_diferenca": True,
+            }
         )
 
     distribuicao_antiga = {
@@ -28638,10 +28991,6 @@ def conta_pagar_pagamento_corrigir(request, pk):
         Decimal("0.00"),
     ).quantize(Decimal("0.01"))
 
-    total_antigo_pagamento = (
-        valor_antigo + juros_antigos
-    ).quantize(Decimal("0.01"))
-
     if total_antigo_movimentos != total_antigo_pagamento:
         return JsonResponse(
             {
@@ -28671,25 +29020,9 @@ def conta_pagar_pagamento_corrigir(request, pk):
         )
 
     # Reabre o principal anteriormente baixado e aplica o principal corrigido.
-    novo_em_aberto = (
-        _financeiro_dinheiro(conta.valor_em_aberto)
-        + valor_antigo
-        - valor_novo
-    ).quantize(Decimal("0.01"))
-
-    if novo_em_aberto < Decimal("0.00"):
+    novo_em_aberto = aplicar_saldo_conta_corrigido()
+    if novo_em_aberto is None:
         return JsonResponse({"erro": "A correcao deixaria a conta com saldo negativo."}, status=400)
-
-    conta.valor_em_aberto = novo_em_aberto
-
-    if novo_em_aberto == Decimal("0.00"):
-        conta.status = ContaPagar.STATUS_PAGA
-    elif novo_em_aberto < _financeiro_dinheiro(conta.valor_original):
-        conta.status = ContaPagar.STATUS_PARCIAL
-    else:
-        conta.status = ContaPagar.STATUS_ABERTA
-
-    conta.save(update_fields=["valor_em_aberto", "status", "atualizado_em"])
 
     data_antiga = pagamento.data_pagamento
 
@@ -28771,6 +29104,300 @@ def conta_pagar_pagamento_corrigir(request, pk):
     )
 
 
+@require_POST
+@transaction.atomic
+def conta_pagar_pagamento_cancelar(request, pk):
+    is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    retorno = (request.POST.get("retorno") or "").strip()
+    if retorno and not url_has_allowed_host_and_scheme(
+        retorno,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        retorno = ""
+    retorno = retorno or reverse("estoque:contas_pagar_pagamentos")
+
+    def resposta_erro(mensagem, status=400):
+        if is_ajax:
+            return JsonResponse({"ok": False, "erro": mensagem}, status=status)
+        messages.error(request, mensagem)
+        return redirect(retorno)
+
+    confirmacao = (request.POST.get("confirmacao_cancelar") or "").strip().upper()
+    if confirmacao != "CANCELAR":
+        return resposta_erro("Confirme o cancelamento do pagamento antes de continuar.")
+
+    pagamento = (
+        PagamentoContaPagar.objects
+        .select_for_update()
+        .select_related("conta")
+        .filter(pk=pk)
+        .first()
+    )
+
+    if not pagamento:
+        return resposta_erro("Pagamento nao encontrado.", status=404)
+
+    if pagamento.cancelado:
+        return resposta_erro("Este pagamento ja esta cancelado.", status=409)
+
+    conta = (
+        ContaPagar.objects
+        .select_for_update()
+        .get(pk=pagamento.conta_id)
+    )
+
+    movimentos = list(
+        pagamento.movimentos_financeiros
+        .select_for_update()
+        .select_related("conta")
+    )
+
+    tem_movimento_original_vinculado = any(
+        movimento.origem == "conta_pagar_fornecedor"
+        for movimento in movimentos
+    )
+
+    valor_reabrir = _financeiro_dinheiro(pagamento.valor).quantize(Decimal("0.01"))
+    novo_em_aberto = (
+        _financeiro_dinheiro(conta.valor_em_aberto) + valor_reabrir
+    ).quantize(Decimal("0.01"))
+
+    if novo_em_aberto > _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01")):
+        return resposta_erro(
+            "O cancelamento deixaria a conta com saldo em aberto maior que o valor original.",
+            status=400,
+        )
+
+    contas_origem = {
+        "caixa": _conta_financeira_saida_pagar_fornecedor("caixa"),
+        "reserva": _conta_financeira_saida_pagar_fornecedor("reserva"),
+        "banco": _conta_financeira_saida_pagar_fornecedor("banco"),
+    }
+
+    if tem_movimento_original_vinculado:
+        try:
+            efeito_por_conta = _efeito_movimentos_por_conta(movimentos)
+        except ValueError as exc:
+            return resposta_erro(str(exc), status=409)
+    else:
+        distribuicao_recomposicao = {
+            "caixa": _financeiro_dinheiro(
+                _parse_decimal_financeiro(request.POST.get("valor_saida_caixa"))
+            ),
+            "reserva": _financeiro_dinheiro(
+                _parse_decimal_financeiro(request.POST.get("valor_saida_reserva"))
+            ),
+            "banco": _financeiro_dinheiro(
+                _parse_decimal_financeiro(request.POST.get("valor_saida_banco"))
+            ),
+        }
+
+        if any(valor < Decimal("0.00") for valor in distribuicao_recomposicao.values()):
+            return resposta_erro("A recomposicao financeira nao pode ser negativa.")
+
+        total_recomposicao = sum(
+            distribuicao_recomposicao.values(),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01"))
+        total_pagamento = _total_financeiro_pagamento_conta_pagar(pagamento)
+
+        if total_recomposicao != total_pagamento:
+            return resposta_erro(
+                (
+                    "A soma de Caixa, Sangria/Reserva e Banco/Pix deve recompor "
+                    f"exatamente {_financeiro_moeda_br(total_pagamento)}."
+                ),
+                status=400,
+            )
+
+        efeito_por_conta = {}
+        for chave, valor in distribuicao_recomposicao.items():
+            if valor <= Decimal("0.00"):
+                continue
+            conta_financeira = contas_origem[chave]
+            if not conta_financeira:
+                return resposta_erro("Nao foi possivel localizar uma das contas de recomposicao.")
+            efeito_por_conta[conta_financeira] = valor.quantize(Decimal("0.01"))
+
+    for conta_financeira, efeito in efeito_por_conta.items():
+        efeito = efeito.quantize(Decimal("0.01"))
+        if efeito >= Decimal("0.00"):
+            continue
+        valor_saida = abs(efeito).quantize(Decimal("0.01"))
+        saldo_disponivel = _saldo_conta_financeira(conta_financeira)
+        if saldo_disponivel < valor_saida:
+            return resposta_erro(
+                (
+                    f"Saldo insuficiente em {conta_financeira.nome} para cancelar "
+                    f"este pagamento. Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                ),
+                status=400,
+            )
+
+    fornecedor_nome = (
+        conta.fornecedor.nome
+        if conta.fornecedor
+        else "Fornecedor nao informado"
+    )
+    referencia = (
+        f"Compra #{conta.compra_id}"
+        if conta.compra_id
+        else (f"Documento {conta.documento_legado}" if conta.documento_legado else f"Conta #{conta.id}")
+    )
+    pagamento_id = pagamento.id
+    data_movimento = timezone.localdate()
+
+    for conta_financeira, efeito in efeito_por_conta.items():
+        efeito = efeito.quantize(Decimal("0.01"))
+        if efeito == Decimal("0.00"):
+            continue
+
+        if efeito > Decimal("0.00"):
+            tipo = MovimentoFinanceiro.TIPO_ENTRADA
+            valor = efeito
+        else:
+            tipo = MovimentoFinanceiro.TIPO_SAIDA
+            valor = abs(efeito).quantize(Decimal("0.01"))
+
+        MovimentoFinanceiro.objects.create(
+            conta=conta_financeira,
+            tipo=tipo,
+            valor=valor,
+            data=data_movimento,
+            descricao=(
+                f"Cancelamento de pagamento de fornecedor #{pagamento_id}: "
+                f"{fornecedor_nome} - {referencia}"
+            )[:255],
+            origem="conta_pagar_cancelamento",
+            pagamento_conta_pagar=pagamento,
+        )
+
+    conta.valor_em_aberto = novo_em_aberto
+    _atualizar_status_conta_pagar_por_saldo(conta)
+
+    pagamento.cancelado = True
+    pagamento.cancelado_em = timezone.now()
+    pagamento.save(update_fields=["cancelado", "cancelado_em"])
+
+    mensagem = "Pagamento cancelado e conta reaberta com sucesso."
+    if is_ajax:
+        return JsonResponse({"ok": True, "mensagem": mensagem, "retorno": retorno})
+    messages.success(request, mensagem)
+    return redirect(retorno)
+
+
+@require_POST
+@transaction.atomic
+def conta_pagar_pagamento_desfazer_cancelamento(request, pk):
+    is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    retorno = (request.POST.get("retorno") or "").strip()
+    if retorno and not url_has_allowed_host_and_scheme(
+        retorno,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        retorno = ""
+    retorno = retorno or reverse("estoque:contas_pagar_pagamentos")
+
+    def resposta_erro(mensagem, status=400):
+        if is_ajax:
+            return JsonResponse({"ok": False, "erro": mensagem}, status=status)
+        messages.error(request, mensagem)
+        return redirect(retorno)
+
+    confirmacao = (request.POST.get("confirmacao_desfazer") or "").strip().upper()
+    if confirmacao != "DESFAZER":
+        return resposta_erro("Confirme o desfazimento do cancelamento antes de continuar.")
+
+    pagamento = (
+        PagamentoContaPagar.objects
+        .select_for_update()
+        .select_related("conta")
+        .filter(pk=pk)
+        .first()
+    )
+
+    if not pagamento:
+        return resposta_erro("Pagamento nao encontrado.", status=404)
+
+    conta = (
+        ContaPagar.objects
+        .select_for_update()
+        .get(pk=pagamento.conta_id)
+    )
+
+    permitido, motivo = _pagamento_cancelado_pode_desfazer(pagamento)
+    if not permitido:
+        return resposta_erro(motivo, status=409)
+
+    valor_principal = _financeiro_dinheiro(pagamento.valor).quantize(Decimal("0.01"))
+    novo_em_aberto = (
+        _financeiro_dinheiro(conta.valor_em_aberto) - valor_principal
+    ).quantize(Decimal("0.01"))
+
+    if novo_em_aberto < Decimal("0.00"):
+        return resposta_erro("A conta nao comporta restaurar este pagamento sem gerar saldo negativo.")
+
+    efeito_cancelamento = _movimentos_cancelamento_liquidos_pagamento(pagamento)
+    data_movimento = timezone.localdate()
+    fornecedor_nome = (
+        conta.fornecedor.nome
+        if conta.fornecedor
+        else "Fornecedor nao informado"
+    )
+    referencia = _conta_pagar_referencia(conta)
+
+    for conta_financeira, efeito in efeito_cancelamento.items():
+        efeito = efeito.quantize(Decimal("0.01"))
+        if efeito == Decimal("0.00"):
+            continue
+
+        if efeito > Decimal("0.00"):
+            tipo = MovimentoFinanceiro.TIPO_ENTRADA
+            valor = efeito
+        else:
+            tipo = MovimentoFinanceiro.TIPO_SAIDA
+            valor = abs(efeito).quantize(Decimal("0.01"))
+
+        if tipo == MovimentoFinanceiro.TIPO_SAIDA:
+            saldo_disponivel = _saldo_conta_financeira(conta_financeira)
+            if saldo_disponivel < valor:
+                return resposta_erro(
+                    (
+                        f"Saldo insuficiente em {conta_financeira.nome}. "
+                        f"Disponivel: {_financeiro_moeda_br(saldo_disponivel)}."
+                    ),
+                    status=400,
+                )
+
+        MovimentoFinanceiro.objects.create(
+            conta=conta_financeira,
+            tipo=tipo,
+            valor=valor,
+            data=data_movimento,
+            descricao=(
+                f"Desfaz cancelamento de pagamento de fornecedor #{pagamento.id}: "
+                f"{fornecedor_nome} - {referencia}"
+            )[:255],
+            origem="conta_pagar_desfazer_cancelamento",
+            pagamento_conta_pagar=pagamento,
+        )
+
+    conta.valor_em_aberto = novo_em_aberto
+    _atualizar_status_conta_pagar_por_saldo(conta)
+
+    pagamento.cancelado = False
+    pagamento.cancelado_em = None
+    pagamento.save(update_fields=["cancelado", "cancelado_em"])
+
+    mensagem = "Cancelamento do pagamento desfeito com sucesso."
+    if is_ajax:
+        return JsonResponse({"ok": True, "mensagem": mensagem, "retorno": retorno})
+    messages.success(request, mensagem)
+    return redirect(retorno)
+
+
 
 def contas_pagar_pagamentos(request):
     hoje = timezone.localdate()
@@ -28831,13 +29458,11 @@ def contas_pagar_pagamentos(request):
     total_encargos = Decimal("0.00")
 
     for pagamento in pagamentos:
-        pagamento.total_desembolsado = (
-            _financeiro_dinheiro(pagamento.valor)
-            + _financeiro_dinheiro(pagamento.juros_bancarios)
-        ).quantize(Decimal("0.01"))
+        pagamento.total_desembolsado = _total_financeiro_pagamento_conta_pagar(pagamento)
 
-        total_principal += _financeiro_dinheiro(pagamento.valor)
-        total_encargos += _financeiro_dinheiro(pagamento.juros_bancarios)
+        if not pagamento.cancelado:
+            total_principal += _financeiro_dinheiro(pagamento.valor)
+            total_encargos += _financeiro_dinheiro(pagamento.juros_bancarios)
 
         conta = pagamento.conta
         if conta.documento_legado:
@@ -28846,6 +29471,32 @@ def contas_pagar_pagamentos(request):
             pagamento.documento_exibicao = f"Compra #{conta.compra_id}"
         else:
             pagamento.documento_exibicao = f"Conta #{conta.id}"
+
+        pagamento.tem_movimento_original_individual = _pagamento_tem_movimento_original_individual(pagamento)
+        pagamento.cancelamento_legado = not pagamento.tem_movimento_original_individual
+        pagamento.cancelamento_recomposicao_automatica = ""
+        if pagamento.tem_movimento_original_individual:
+            try:
+                efeitos_cancelamento = _efeito_movimentos_por_conta(
+                    pagamento.movimentos_financeiros.select_related("conta").all()
+                )
+            except ValueError:
+                efeitos_cancelamento = {}
+            partes_recomposicao = []
+            for conta_financeira, efeito in efeitos_cancelamento.items():
+                if efeito > Decimal("0.00"):
+                    partes_recomposicao.append(
+                        f"{conta_financeira.nome}: {_financeiro_moeda_br(efeito)}"
+                    )
+            pagamento.cancelamento_recomposicao_automatica = (
+                "; ".join(partes_recomposicao) if partes_recomposicao else "Origem financeira vinculada ao pagamento."
+            )
+        pagamento.pode_desfazer_cancelamento = False
+        pagamento.motivo_bloqueio_desfazer = ""
+        if pagamento.cancelado:
+            permitido, motivo = _pagamento_cancelado_pode_desfazer(pagamento)
+            pagamento.pode_desfazer_cancelamento = permitido
+            pagamento.motivo_bloqueio_desfazer = motivo
 
     total_principal = total_principal.quantize(Decimal("0.01"))
     total_encargos = total_encargos.quantize(Decimal("0.01"))
@@ -28857,6 +29508,23 @@ def contas_pagar_pagamentos(request):
         .distinct()
         .order_by("nome")
     )
+    conta_caixa = _conta_financeira_padrao("caixa")
+    conta_reserva = _conta_financeira_padrao("reserva")
+    conta_banco = _conta_financeira_padrao("banco")
+    saldos_pagamento = {
+        "caixa": {
+            "valor": str((_saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_caixa) if conta_caixa else Decimal("0.00")),
+        },
+        "reserva": {
+            "valor": str((_saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_reserva) if conta_reserva else Decimal("0.00")),
+        },
+        "banco": {
+            "valor": str((_saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")).quantize(Decimal("0.01"))),
+            "texto": _financeiro_moeda_br(_saldo_conta_financeira(conta_banco) if conta_banco else Decimal("0.00")),
+        },
+    }
 
     return render(
         request,
@@ -28872,6 +29540,7 @@ def contas_pagar_pagamentos(request):
             "total_principal": total_principal,
             "total_encargos": total_encargos,
             "total_desembolsado": total_desembolsado,
+            "saldos_pagamento": saldos_pagamento,
         },
     )
 

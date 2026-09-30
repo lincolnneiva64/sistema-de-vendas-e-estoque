@@ -36469,6 +36469,822 @@ class CentralContasPagarTests(TestCase):
         self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
         self.assertEqual(views._saldo_conta_financeira(conta_banco), saldo_antes)
 
+    def _pagamento_legado_pagar_fornecedor(self, valor="410.00", aberto="10.00", original="420.00"):
+        conta = self._conta(
+            valor=original,
+            aberto=aberto,
+            status=ContaPagar.STATUS_PARCIAL if Decimal(aberto) > 0 else ContaPagar.STATUS_PAGA,
+            documento_legado="LEGADO-PAGAR-FORNECEDOR",
+        )
+        pagamento = PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=self.hoje,
+            valor=Decimal(valor),
+            juros_bancarios=Decimal("0.00"),
+            forma_pagamento="Pix",
+            observacao="Pagamento geral em Pagar fornecedor.",
+        )
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("2000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        MovimentoFinanceiro.objects.create(
+            conta=banco,
+            tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=Decimal(valor),
+            data=self.hoje,
+            descricao="Pagamento de fornecedor: baixa geral",
+            origem="pagar_fornecedor",
+        )
+        return conta, pagamento, banco
+
+    def _post_corrigir_pagamento(
+        self,
+        pagamento,
+        valor,
+        juros="0,00",
+        saida_caixa="0,00",
+        saida_reserva="0,00",
+        saida_banco="0,00",
+    ):
+        return self.client.post(
+            reverse("estoque:conta_pagar_pagamento_corrigir", kwargs={"pk": pagamento.pk}),
+            {
+                "valor_pago": valor,
+                "juros_bancarios": juros,
+                "data_pagamento": pagamento.data_pagamento.isoformat(),
+                "valor_saida_caixa": saida_caixa,
+                "valor_saida_reserva": saida_reserva,
+                "valor_saida_banco": saida_banco,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def test_correcao_legada_por_diferenca_aumenta_sem_reaplicar_total(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        agregado_antigo = MovimentoFinanceiro.objects.get(origem="pagar_fornecedor")
+        saldo_antes = views._saldo_conta_financeira(banco)
+
+        resposta = self._post_corrigir_pagamento(
+            pagamento,
+            "420,00",
+            saida_banco="10,00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.json()["correcao_por_diferenca"])
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        agregado_antigo.refresh_from_db()
+        self.assertEqual(pagamento.valor, Decimal("420.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PAGA)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 1)
+        self.assertEqual(agregado_antigo.valor, Decimal("410.00"))
+        self.assertIsNone(agregado_antigo.pagamento_conta_pagar_id)
+
+        correcao = MovimentoFinanceiro.objects.get(origem="conta_pagar_correcao")
+        self.assertEqual(correcao.pagamento_conta_pagar, pagamento)
+        self.assertEqual(correcao.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(correcao.valor, Decimal("10.00"))
+        self.assertEqual(correcao.conta, banco)
+        self.assertEqual(views._saldo_conta_financeira(banco), saldo_antes - Decimal("10.00"))
+        self.assertFalse(
+            MovimentoFinanceiro.objects.filter(
+                origem="conta_pagar_correcao",
+                valor=Decimal("420.00"),
+            ).exists()
+        )
+
+    def test_correcao_legada_ja_corrigida_continua_por_diferenca(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor(
+            original="430.00",
+            aberto="20.00",
+        )
+        caixa = views._conta_financeira_saida_pagar_fornecedor("caixa")
+        caixa.saldo_inicial = Decimal("100.00")
+        caixa.save(update_fields=["saldo_inicial", "atualizado_em"])
+
+        primeira = self._post_corrigir_pagamento(
+            pagamento,
+            "420,00",
+            saida_banco="10,00",
+        )
+        self.assertEqual(primeira.status_code, 200)
+        agregado_antigo = MovimentoFinanceiro.objects.get(origem="pagar_fornecedor")
+        correcao_dez = MovimentoFinanceiro.objects.get(origem="conta_pagar_correcao")
+
+        resposta_modal = self.client.get(
+            self.url,
+            {"editar_pagamento": str(pagamento.id)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta_modal.status_code, 200)
+        pagamento_edicao = resposta_modal.context["pagamento_edicao"]
+        self.assertTrue(pagamento_edicao["correcao_por_diferenca"])
+        self.assertEqual(pagamento_edicao["saida_caixa"], "0.00")
+        self.assertEqual(pagamento_edicao["saida_reserva"], "0.00")
+        self.assertEqual(pagamento_edicao["saida_banco"], "0.00")
+
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        segunda = self._post_corrigir_pagamento(
+            pagamento,
+            "425,00",
+            saida_caixa="5,00",
+        )
+
+        self.assertEqual(segunda.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pagamento.valor, Decimal("425.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("5.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 1)
+
+        agregado_antigo.refresh_from_db()
+        correcao_dez.refresh_from_db()
+        self.assertEqual(agregado_antigo.valor, Decimal("410.00"))
+        self.assertIsNone(agregado_antigo.pagamento_conta_pagar_id)
+        self.assertEqual(correcao_dez.valor, Decimal("10.00"))
+        self.assertEqual(correcao_dez.conta, banco)
+        self.assertEqual(correcao_dez.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+
+        correcao_cinco = (
+            MovimentoFinanceiro.objects
+            .filter(origem="conta_pagar_correcao", valor=Decimal("5.00"))
+            .get()
+        )
+        self.assertEqual(correcao_cinco.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(correcao_cinco.pagamento_conta_pagar, pagamento)
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(
+                origem="conta_pagar_correcao",
+                valor__in=[Decimal("420.00"), Decimal("425.00")],
+            ).count(),
+            0,
+        )
+
+    def test_correcao_legada_por_diferenca_reduz_recompondo_conta_escolhida(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor(
+            valor="410.00",
+            aberto="0.00",
+            original="410.00",
+        )
+        caixa = views._conta_financeira_saida_pagar_fornecedor("caixa")
+        saldo_caixa_antes = views._saldo_conta_financeira(caixa)
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self._post_corrigir_pagamento(
+            pagamento,
+            "400,00",
+            saida_caixa="10,00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pagamento.valor, Decimal("400.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("10.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PARCIAL)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 1)
+
+        correcao = MovimentoFinanceiro.objects.get(origem="conta_pagar_correcao")
+        self.assertEqual(correcao.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(correcao.valor, Decimal("10.00"))
+        self.assertEqual(correcao.conta, caixa)
+        self.assertEqual(correcao.pagamento_conta_pagar, pagamento)
+        self.assertEqual(views._saldo_conta_financeira(caixa), saldo_caixa_antes + Decimal("10.00"))
+        self.assertEqual(
+            MovimentoFinanceiro.objects.filter(origem="pagar_fornecedor").count(),
+            1,
+        )
+
+    def test_correcao_legada_bloqueia_troca_origem_sem_alterar_total(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor(
+            valor="410.00",
+            aberto="0.00",
+            original="410.00",
+        )
+        antes = {
+            "pagamento": pagamento.valor,
+            "aberto": conta.valor_em_aberto,
+            "movimentos": MovimentoFinanceiro.objects.count(),
+            "saldo_banco": views._saldo_conta_financeira(banco),
+        }
+
+        resposta = self._post_corrigir_pagamento(
+            pagamento,
+            "410,00",
+            saida_banco="410,00",
+        )
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("Troca de origem sem alteracao do total", resposta.json()["erro"])
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pagamento.valor, antes["pagamento"])
+        self.assertEqual(conta.valor_em_aberto, antes["aberto"])
+        self.assertEqual(MovimentoFinanceiro.objects.count(), antes["movimentos"])
+        self.assertEqual(views._saldo_conta_financeira(banco), antes["saldo_banco"])
+
+    def test_correcao_individual_com_movimentos_vinculados_preserva_fluxo_existente(self):
+        conta = self._conta(valor="420.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("2000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        resposta_baixa = self._baixar(conta, "410,00", saida_banco="410,00")
+        self.assertEqual(resposta_baixa.status_code, 200)
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+
+        resposta = self._post_corrigir_pagamento(
+            pagamento,
+            "420,00",
+            saida_banco="420,00",
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pagamento.valor, Decimal("420.00"))
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes + 2)
+        self.assertTrue(
+            MovimentoFinanceiro.objects.filter(
+                origem="conta_pagar_correcao",
+                tipo=MovimentoFinanceiro.TIPO_ENTRADA,
+                valor=Decimal("410.00"),
+                pagamento_conta_pagar=pagamento,
+            ).exists()
+        )
+        self.assertTrue(
+            MovimentoFinanceiro.objects.filter(
+                origem="conta_pagar_correcao",
+                tipo=MovimentoFinanceiro.TIPO_SAIDA,
+                valor=Decimal("420.00"),
+                pagamento_conta_pagar=pagamento,
+            ).exists()
+        )
+
+    def test_modal_edicao_legada_renderiza_modo_diferenca_e_retorno_seguro(self):
+        _conta, pagamento, _banco = self._pagamento_legado_pagar_fornecedor()
+        retorno = (
+            reverse("estoque:contas_pagar_pagamentos")
+            + f"?fornecedor={self.fornecedor.id}&periodo=personalizado"
+            + f"&data_inicio={self.hoje.isoformat()}&data_fim={self.hoje.isoformat()}"
+        )
+
+        resposta = self.client.get(
+            self.url,
+            {
+                "editar_pagamento": str(pagamento.id),
+                "retorno": retorno,
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTrue(resposta.context["pagamento_edicao"]["correcao_por_diferenca"])
+        self.assertEqual(resposta.context["retorno_pagamento_edicao"], retorno)
+        self.assertContains(resposta, "Diferença da correção")
+        self.assertContains(resposta, "function diferencaFinanceiraCorrecao()")
+        self.assertContains(resposta, "function totalAlvoDistribuicao()")
+        self.assertContains(resposta, "zerarDistribuicaoFinanceira();")
+        self.assertContains(resposta, "function completarDiferencaPositivaAPartirDe(indice)")
+        self.assertContains(resposta, 'item.campo?.addEventListener("input", function () {', html=False)
+        self.assertContains(resposta, "const valorDigitado = numero(item.campo.value);")
+        self.assertContains(resposta, "completarDiferencaPositivaAPartirDe(item.indiceSeguinte);")
+        self.assertContains(resposta, 'window.location.href = retornoEdicaoPagamento;', html=False)
+
+    def test_modal_edicao_ignora_retorno_externo(self):
+        _conta, pagamento, _banco = self._pagamento_legado_pagar_fornecedor()
+
+        resposta = self.client.get(
+            self.url,
+            {
+                "editar_pagamento": str(pagamento.id),
+                "retorno": "https://exemplo.invalid/fora",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["retorno_pagamento_edicao"], "")
+        self.assertContains(resposta, 'const retornoEdicaoPagamento = "";', html=False)
+
+    def _post_cancelar_pagamento(
+        self,
+        pagamento,
+        caixa="0,00",
+        reserva="0,00",
+        banco="0,00",
+    ):
+        return self.client.post(
+            reverse("estoque:conta_pagar_pagamento_cancelar", kwargs={"pk": pagamento.pk}),
+            {
+                "confirmacao_cancelar": "CANCELAR",
+                "retorno": reverse("estoque:contas_pagar_pagamentos"),
+                "valor_saida_caixa": caixa,
+                "valor_saida_reserva": reserva,
+                "valor_saida_banco": banco,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def _post_desfazer_cancelamento(self, pagamento):
+        return self.client.post(
+            reverse("estoque:conta_pagar_pagamento_desfazer_cancelamento", kwargs={"pk": pagamento.pk}),
+            {
+                "confirmacao_desfazer": "DESFAZER",
+                "retorno": reverse("estoque:contas_pagar_pagamentos"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            secure=True,
+        )
+
+    def test_cancelar_pagamento_individual_reabre_conta_preserva_pagamento_e_compensa_movimento(self):
+        conta = self._conta(valor="410.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        resposta_baixa = self._baixar(conta, "410,00", saida_banco="410,00")
+        self.assertEqual(resposta_baixa.status_code, 200)
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        saldo_antes = views._saldo_conta_financeira(banco)
+
+        resposta = self._post_cancelar_pagamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        self.assertTrue(pagamento.cancelado)
+        self.assertIsNotNone(pagamento.cancelado_em)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("410.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
+
+        compensacao = MovimentoFinanceiro.objects.get(origem="conta_pagar_cancelamento")
+        self.assertEqual(compensacao.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(compensacao.valor, Decimal("410.00"))
+        self.assertEqual(compensacao.conta, banco)
+        self.assertEqual(compensacao.pagamento_conta_pagar, pagamento)
+        self.assertEqual(views._saldo_conta_financeira(banco), saldo_antes + Decimal("410.00"))
+
+    def test_cancelar_pagamento_individual_dividido_recompoe_origens_conhecidas(self):
+        conta = self._conta(valor="490.00")
+        caixa = views._conta_financeira_saida_pagar_fornecedor("caixa")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        caixa.saldo_inicial = Decimal("1000.00")
+        banco.saldo_inicial = Decimal("1000.00")
+        caixa.save(update_fields=["saldo_inicial", "atualizado_em"])
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+
+        resposta_baixa = self._baixar(
+            conta,
+            "490,00",
+            saida_caixa="190,00",
+            saida_banco="300,00",
+        )
+        self.assertEqual(resposta_baixa.status_code, 200)
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+
+        resposta = self._post_cancelar_pagamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+        movimentos = MovimentoFinanceiro.objects.filter(origem="conta_pagar_cancelamento")
+        self.assertEqual(movimentos.count(), 2)
+        self.assertEqual(movimentos.get(conta=banco).valor, Decimal("300.00"))
+        self.assertEqual(movimentos.get(conta=caixa).valor, Decimal("190.00"))
+        self.assertTrue(all(m.tipo == MovimentoFinanceiro.TIPO_ENTRADA for m in movimentos))
+
+    def test_cancelar_pagamento_individual_com_correcao_compensa_efeito_liquido(self):
+        conta = self._conta(valor="420.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("2000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        resposta_baixa = self._baixar(conta, "410,00", saida_banco="410,00")
+        self.assertEqual(resposta_baixa.status_code, 200)
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        resposta_correcao = self._post_corrigir_pagamento(
+            pagamento,
+            "420,00",
+            saida_banco="420,00",
+        )
+        self.assertEqual(resposta_correcao.status_code, 200)
+        saldo_antes = views._saldo_conta_financeira(banco)
+
+        resposta = self._post_cancelar_pagamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        self.assertTrue(pagamento.cancelado)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("420.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_ABERTA)
+
+        compensacao = MovimentoFinanceiro.objects.get(origem="conta_pagar_cancelamento")
+        self.assertEqual(compensacao.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(compensacao.valor, Decimal("420.00"))
+        self.assertEqual(compensacao.conta, banco)
+        self.assertEqual(views._saldo_conta_financeira(banco), saldo_antes + Decimal("420.00"))
+
+    def test_cancelar_pagamento_legado_corrigido_para_420_recompoe_total_informado_sem_duplicar_correcao(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor()
+        resposta_correcao = self._post_corrigir_pagamento(
+            pagamento,
+            "420,00",
+            saida_banco="10,00",
+        )
+        self.assertEqual(resposta_correcao.status_code, 200)
+        agregado_antigo = MovimentoFinanceiro.objects.get(origem="pagar_fornecedor")
+        correcao = MovimentoFinanceiro.objects.get(origem="conta_pagar_correcao")
+        saldo_antes = views._saldo_conta_financeira(banco)
+
+        resposta = self._post_cancelar_pagamento(pagamento, banco="420,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        agregado_antigo.refresh_from_db()
+        correcao.refresh_from_db()
+        self.assertTrue(pagamento.cancelado)
+        self.assertEqual(conta.valor_em_aberto, Decimal("420.00"))
+        self.assertEqual(agregado_antigo.valor, Decimal("410.00"))
+        self.assertIsNone(agregado_antigo.pagamento_conta_pagar_id)
+        self.assertEqual(correcao.valor, Decimal("10.00"))
+        cancelamento = MovimentoFinanceiro.objects.get(origem="conta_pagar_cancelamento")
+        self.assertEqual(cancelamento.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(cancelamento.valor, Decimal("420.00"))
+        self.assertEqual(cancelamento.conta, banco)
+        self.assertEqual(cancelamento.pagamento_conta_pagar, pagamento)
+        self.assertEqual(views._saldo_conta_financeira(banco), saldo_antes + Decimal("420.00"))
+
+    def test_cancelar_pagamento_legado_reduzido_para_400_recompoe_total_atual(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor(
+            valor="410.00",
+            aberto="0.00",
+            original="410.00",
+        )
+        caixa = views._conta_financeira_saida_pagar_fornecedor("caixa")
+        resposta_correcao = self._post_corrigir_pagamento(
+            pagamento,
+            "400,00",
+            saida_caixa="10,00",
+        )
+        self.assertEqual(resposta_correcao.status_code, 200)
+        saldo_caixa_antes = views._saldo_conta_financeira(caixa)
+
+        resposta = self._post_cancelar_pagamento(pagamento, caixa="400,00")
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertTrue(pagamento.cancelado)
+        self.assertEqual(conta.valor_em_aberto, Decimal("410.00"))
+        cancelamento = MovimentoFinanceiro.objects.get(origem="conta_pagar_cancelamento")
+        self.assertEqual(cancelamento.tipo, MovimentoFinanceiro.TIPO_ENTRADA)
+        self.assertEqual(cancelamento.valor, Decimal("400.00"))
+        self.assertEqual(cancelamento.conta, caixa)
+        self.assertEqual(views._saldo_conta_financeira(caixa), saldo_caixa_antes + Decimal("400.00"))
+
+    def test_cancelar_pagamento_legado_distribuicao_que_nao_fecha_rejeita_atomicamente(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor()
+        antes = {
+            "cancelado": pagamento.cancelado,
+            "movimentos": MovimentoFinanceiro.objects.count(),
+            "aberto": conta.valor_em_aberto,
+            "saldo_banco": views._saldo_conta_financeira(banco),
+        }
+
+        resposta = self._post_cancelar_pagamento(pagamento, banco="409,99")
+
+        self.assertEqual(resposta.status_code, 400)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertEqual(pagamento.cancelado, antes["cancelado"])
+        self.assertEqual(conta.valor_em_aberto, antes["aberto"])
+        self.assertEqual(MovimentoFinanceiro.objects.count(), antes["movimentos"])
+        self.assertEqual(views._saldo_conta_financeira(banco), antes["saldo_banco"])
+
+    def test_pagamento_cancelado_nao_pode_ser_editado_nem_cancelado_novamente(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+
+        resposta_edicao = self._post_corrigir_pagamento(
+            pagamento,
+            "100,00",
+            saida_banco="100,00",
+        )
+        resposta_cancelar = self._post_cancelar_pagamento(pagamento)
+        resposta_modal = self.client.get(
+            self.url,
+            {"editar_pagamento": str(pagamento.id)},
+            secure=True,
+        )
+
+        self.assertEqual(resposta_edicao.status_code, 409)
+        self.assertEqual(resposta_cancelar.status_code, 409)
+        self.assertIsNone(resposta_modal.context["pagamento_edicao"])
+
+    def test_cancelado_aparece_no_historico_mas_nao_entra_nos_totais_validos(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", juros="5,00", saida_banco="105,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+
+        resposta = self.client.get(
+            reverse("estoque:contas_pagar_pagamentos"),
+            secure=True,
+        )
+        central = self.client.get(self.url, {"atalho": "todas"}, secure=True)
+
+        self.assertContains(resposta, "CANCELADO")
+        self.assertEqual(resposta.context["total_principal"], Decimal("0.00"))
+        self.assertEqual(resposta.context["total_encargos"], Decimal("0.00"))
+        conta_contexto = {item.id: item for item in central.context["contas"]}[conta.id]
+        self.assertEqual(conta_contexto.principal_pago, Decimal("0.00"))
+        self.assertEqual(conta_contexto.juros_pagos, Decimal("0.00"))
+        self.assertContains(central, "CANCELADO")
+
+    def test_desfazer_cancelamento_sem_evento_posterior_restaura_pagamento_e_cria_movimento_auditavel(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(pagamento.cancelado)
+        self.assertIsNone(pagamento.cancelado_em)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertEqual(conta.status, ContaPagar.STATUS_PAGA)
+        desfazer = MovimentoFinanceiro.objects.get(origem="conta_pagar_desfazer_cancelamento")
+        self.assertEqual(desfazer.tipo, MovimentoFinanceiro.TIPO_SAIDA)
+        self.assertEqual(desfazer.valor, Decimal("100.00"))
+        self.assertEqual(desfazer.pagamento_conta_pagar, pagamento)
+        self.assertTrue(MovimentoFinanceiro.objects.filter(origem="conta_pagar_cancelamento").exists())
+
+    def test_desfazer_cancelamento_com_um_pagamento_posterior_do_mesmo_fornecedor_permite(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        conta_posterior = self._conta(valor="10.00")
+        PagamentoContaPagar.objects.create(
+            conta=conta_posterior,
+            data_pagamento=self.hoje,
+            valor=Decimal("10.00"),
+            forma_pagamento="Pix",
+        )
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+
+    def test_desfazer_cancelamento_com_duas_movimentacoes_posteriores_do_mesmo_fornecedor_bloqueia(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        for indice in range(2):
+            conta_posterior = self._conta(valor="10.00", documento_legado=f"POST-{indice}")
+            PagamentoContaPagar.objects.create(
+                conta=conta_posterior,
+                data_pagamento=self.hoje,
+                valor=Decimal("10.00"),
+                forma_pagamento="Pix",
+            )
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("mais de uma movimentacao", resposta.json()["erro"])
+
+    def test_desfazer_cancelamento_ignora_movimentacoes_de_outro_fornecedor(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        conta_outro = self._conta(valor="10.00", fornecedor=self.outro_fornecedor)
+        PagamentoContaPagar.objects.create(
+            conta=conta_outro,
+            data_pagamento=self.hoje,
+            valor=Decimal("10.00"),
+            forma_pagamento="Pix",
+        )
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+
+    def test_desfazer_cancelamento_conta_compra_a_prazo_posterior_uma_vez_mesmo_com_parcelas(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        compra = self._compra(total="200.00")
+        self._conta(valor="100.00", compra=compra, numero_parcela=1, total_parcelas=2)
+        self._conta(valor="100.00", compra=compra, numero_parcela=2, total_parcelas=2)
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 200)
+
+    def test_desfazer_cancelamento_bloqueia_se_conta_nao_comporta_principal(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        conta.refresh_from_db()
+        conta.valor_em_aberto = Decimal("50.00")
+        conta.save(update_fields=["valor_em_aberto", "atualizado_em"])
+
+        resposta = self._post_desfazer_cancelamento(pagamento)
+
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("nao comporta", resposta.json()["erro"])
+
+    def test_pagamentos_realizados_desfazer_cancelamento_usa_modal_sem_confirm_nativo(self):
+        conta, pagamento, _banco = self._pagamento_legado_pagar_fornecedor(
+            valor="490.00",
+            aberto="0.00",
+            original="490.00",
+        )
+        conta.documento_legado = "28739-01/1-CA"
+        conta.save(update_fields=["documento_legado", "atualizado_em"])
+        self.assertEqual(self._post_cancelar_pagamento(pagamento, banco="490,00").status_code, 200)
+
+        resposta = self.client.get(reverse("estoque:contas_pagar_pagamentos"), secure=True)
+        desfazer_url = reverse(
+            "estoque:conta_pagar_pagamento_desfazer_cancelamento",
+            kwargs={"pk": pagamento.pk},
+        )
+
+        self.assertContains(resposta, 'id="modalDesfazerCancelamento"')
+        self.assertContains(resposta, "Desfazer cancelamento")
+        self.assertContains(resposta, f'action="{desfazer_url}"')
+        self.assertContains(resposta, 'data-undo-cancel-form')
+        self.assertContains(resposta, 'class="pp-edit pp-open-undo-cancel"')
+        self.assertContains(resposta, 'data-fornecedor="Micos Distribuidora"')
+        self.assertContains(resposta, 'data-documento="28739-01/1-CA"')
+        self.assertContains(resposta, 'data-principal="490.00"')
+        self.assertContains(resposta, 'data-encargos="0.00"')
+        self.assertContains(resposta, 'data-total="490.00"')
+        self.assertContains(resposta, "Documento/compra")
+        self.assertContains(resposta, "Confirmar desfazimento")
+        self.assertContains(resposta, 'id="desfazerVoltar"')
+        self.assertContains(resposta, 'type="button" class="pp-modal-btn secondary" id="desfazerVoltar"', html=False)
+        self.assertContains(resposta, "fetch(formAtual.action")
+        self.assertContains(resposta, "'X-Requested-With': 'XMLHttpRequest'", html=False)
+        self.assertContains(resposta, "mostrarErro(erro.message)")
+        self.assertNotContains(resposta, "Desfazer o cancelamento deste pagamento?")
+        self.assertNotContains(resposta, "return confirm('Desfazer")
+
+    def test_pagamentos_realizados_nao_mostra_desfazer_cancelamento_bloqueado(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self._baixar(conta, "100,00", saida_banco="100,00")
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+        self.assertEqual(self._post_cancelar_pagamento(pagamento).status_code, 200)
+        for indice in range(2):
+            conta_posterior = self._conta(valor="10.00", documento_legado=f"POST-MODAL-{indice}")
+            PagamentoContaPagar.objects.create(
+                conta=conta_posterior,
+                data_pagamento=self.hoje,
+                valor=Decimal("10.00"),
+                forma_pagamento="Pix",
+            )
+
+        resposta = self.client.get(reverse("estoque:contas_pagar_pagamentos"), secure=True)
+
+        self.assertNotContains(
+            resposta,
+            reverse("estoque:conta_pagar_pagamento_desfazer_cancelamento", kwargs={"pk": pagamento.pk}),
+        )
+        self.assertNotContains(resposta, 'class="pp-edit pp-open-undo-cancel"')
+
+    def test_pagamentos_realizados_renderiza_cancelar_com_modal_sem_confirm_nativo(self):
+        conta = self._conta(valor="100.00")
+        pagamento = PagamentoContaPagar.objects.create(
+            conta=conta,
+            data_pagamento=self.hoje,
+            valor=Decimal("100.00"),
+            juros_bancarios=Decimal("0.00"),
+            forma_pagamento="Pix",
+        )
+
+        resposta = self.client.get(reverse("estoque:contas_pagar_pagamentos"), secure=True)
+
+        self.assertContains(
+            resposta,
+            reverse("estoque:conta_pagar_pagamento_cancelar", kwargs={"pk": pagamento.pk}),
+        )
+        self.assertContains(resposta, 'id="modalCancelarPagamento"')
+        self.assertContains(resposta, 'class="pp-delete pp-open-cancel"')
+        self.assertContains(resposta, 'data-legado="1"')
+        self.assertContains(resposta, 'data-principal="100.00"')
+        self.assertContains(resposta, 'data-total="100.00"')
+        self.assertContains(resposta, "Confirmar cancelamento")
+        self.assertNotContains(resposta, "Cancelar este pagamento de")
+        self.assertNotContains(resposta, "return confirm('Cancelar")
+        self.assertNotContains(resposta, '<div class="pp-legacy-cancel">', html=False)
+
+    def test_pagamentos_realizados_modal_recebe_dados_corretos_do_pagamento_legado(self):
+        conta, pagamento, _banco = self._pagamento_legado_pagar_fornecedor(
+            valor="490.00",
+            aberto="0.00",
+            original="490.00",
+        )
+        conta.documento_legado = "28739-01/1-CA"
+        conta.save(update_fields=["documento_legado", "atualizado_em"])
+
+        resposta = self.client.get(reverse("estoque:contas_pagar_pagamentos"), secure=True)
+
+        self.assertContains(resposta, 'data-fornecedor="Micos Distribuidora"')
+        self.assertContains(resposta, 'data-documento="28739-01/1-CA"')
+        self.assertContains(resposta, 'data-principal="490.00"')
+        self.assertContains(resposta, 'data-encargos="0.00"')
+        self.assertContains(resposta, 'data-total="490.00"')
+        self.assertContains(resposta, 'id="cancelarCaixa"')
+        self.assertContains(resposta, 'id="cancelarReserva"')
+        self.assertContains(resposta, 'id="cancelarBanco"')
+        self.assertContains(resposta, "Falta distribuir:")
+        self.assertContains(resposta, "function completarDiferencaAPartirDe")
+        self.assertContains(resposta, "campo.addEventListener('keydown', function (event) {", html=False)
+        self.assertContains(resposta, "if (event.key !== 'Enter'", html=False)
+        self.assertContains(resposta, "event.preventDefault();", html=False)
+        self.assertContains(resposta, "proximo.focus();", html=False)
+        self.assertContains(resposta, "proximo.select();", html=False)
+        self.assertContains(resposta, "confirmarBtn.focus();", html=False)
+        self.assertContains(resposta, "mostrarErro(erro.message)")
+
+    def test_cancelamento_legado_distribuicao_zerada_ou_incompleta_rejeita_sem_cancelar(self):
+        conta, pagamento, banco = self._pagamento_legado_pagar_fornecedor(
+            valor="490.00",
+            aberto="0.00",
+            original="490.00",
+        )
+
+        zerada = self._post_cancelar_pagamento(pagamento)
+        incompleta = self._post_cancelar_pagamento(pagamento, banco="489,99")
+
+        self.assertEqual(zerada.status_code, 400)
+        self.assertIn("exatamente R$ 490,00", zerada.json()["erro"])
+        self.assertEqual(incompleta.status_code, 400)
+        self.assertIn("exatamente R$ 490,00", incompleta.json()["erro"])
+        pagamento.refresh_from_db()
+        conta.refresh_from_db()
+        self.assertFalse(pagamento.cancelado)
+        self.assertEqual(conta.valor_em_aberto, Decimal("0.00"))
+        self.assertFalse(MovimentoFinanceiro.objects.filter(origem="conta_pagar_cancelamento").exists())
+        self.assertEqual(views._saldo_conta_financeira(banco), Decimal("1510.00"))
+
+    def test_pagamento_individual_modal_nao_pede_distribuicao_manual(self):
+        conta = self._conta(valor="100.00")
+        banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        banco.saldo_inicial = Decimal("1000.00")
+        banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+        self.assertEqual(self._baixar(conta, "100,00", saida_banco="100,00").status_code, 200)
+        pagamento = PagamentoContaPagar.objects.get(conta=conta)
+
+        resposta = self.client.get(reverse("estoque:contas_pagar_pagamentos"), secure=True)
+
+        self.assertContains(resposta, 'data-legado="0"')
+        self.assertContains(resposta, 'data-auto="Banco/Pix: R$ 100,00"')
+        self.assertContains(resposta, "Recomposicao automatica:")
+
 
 class ContaPagarLegadaTests(TestCase):
     def setUp(self):
@@ -36501,6 +37317,10 @@ class ContaPagarLegadaTests(TestCase):
         )
         self.assertContains(resposta_busca, "Documento FB-2026-0001")
 
+        conta_banco = views._conta_financeira_saida_pagar_fornecedor("banco")
+        conta_banco.saldo_inicial = Decimal("200.00")
+        conta_banco.save(update_fields=["saldo_inicial", "atualizado_em"])
+
         resposta_baixa = self.client.post(
             reverse("estoque:conta_pagar_baixar", kwargs={"pk": self.conta.pk}),
             {
@@ -36508,6 +37328,9 @@ class ContaPagarLegadaTests(TestCase):
                 "juros_bancarios": "0,00",
                 "data_pagamento": timezone.localdate().isoformat(),
                 "forma_pagamento": "Pix",
+                "valor_saida_caixa": "0,00",
+                "valor_saida_reserva": "0,00",
+                "valor_saida_banco": "125,00",
             },
             secure=True,
         )

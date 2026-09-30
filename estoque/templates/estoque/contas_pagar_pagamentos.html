@@ -190,6 +190,46 @@
     font-weight:950;
   }
 
+  .pp-canceled td {
+    color:#64748b;
+    background:#f8fafc;
+  }
+
+  .pp-status-canceled {
+    display:inline-flex;
+    padding:4px 8px;
+    border-radius:999px;
+    border:1px solid #fecaca;
+    background:#fef2f2;
+    color:#991b1b;
+    font-size:.72rem;
+    font-weight:950;
+  }
+
+  .pp-legacy-cancel {
+    display:none;
+    grid-template-columns:repeat(3, minmax(76px, 1fr));
+    gap:5px;
+    margin:6px 0;
+  }
+
+  .pp-legacy-cancel label {
+    display:block;
+    color:#64748b;
+    font-size:.62rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+
+  .pp-legacy-cancel input {
+    width:100%;
+    min-height:30px;
+    padding:5px 7px;
+    border:1px solid #d3dbe8;
+    border-radius:7px;
+    font-weight:850;
+  }
+
   .pp-empty {
     padding:30px 15px;
     text-align:center;
@@ -242,6 +282,216 @@
 
 .pp-btn-clear:hover {
   background:#1d4ed8;
+}
+
+.pp-actions {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  white-space:nowrap;
+}
+
+.pp-delete-form {
+  display:inline-block;
+  margin:0;
+}
+
+.pp-edit,
+.pp-delete {
+  border:0;
+  background:transparent;
+  font:inherit;
+  font-weight:900;
+  cursor:pointer;
+  padding:0;
+}
+
+.pp-edit {
+  color:#2563eb;
+  text-decoration:none;
+}
+
+.pp-delete {
+  color:#b91c1c;
+}
+
+.pp-modal-backdrop {
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  background:rgba(15,23,42,.48);
+}
+
+.pp-modal-backdrop.open {
+  display:flex;
+}
+
+.pp-modal {
+  width:min(720px, 100%);
+  max-height:92vh;
+  overflow:auto;
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 22px 55px rgba(15,23,42,.28);
+}
+
+.pp-modal-header,
+.pp-modal-body,
+.pp-modal-footer {
+  padding:16px 18px;
+}
+
+.pp-modal-header {
+  border-bottom:1px solid #e5eaf1;
+}
+
+.pp-modal-title {
+  margin:0;
+  color:#172033;
+  font-size:1.2rem;
+  font-weight:950;
+}
+
+.pp-modal-grid {
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:10px;
+}
+
+.pp-modal-field span,
+.pp-cancel-account span {
+  display:block;
+  color:#64748b;
+  font-size:.72rem;
+  font-weight:950;
+  text-transform:uppercase;
+}
+
+.pp-modal-field strong,
+.pp-cancel-account strong {
+  display:block;
+  margin-top:2px;
+  color:#172033;
+  font-weight:950;
+}
+
+.pp-cancel-distribution {
+  display:none;
+  margin-top:14px;
+  border-top:1px solid #e5eaf1;
+  padding-top:14px;
+}
+
+.pp-cancel-distribution.open {
+  display:block;
+}
+
+.pp-cancel-accounts {
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:10px;
+}
+
+.pp-cancel-account {
+  padding:10px;
+  border:1px solid #dbe3ef;
+  border-radius:10px;
+  background:#f8fafc;
+}
+
+.pp-cancel-account input {
+  width:100%;
+  min-height:38px;
+  margin-top:8px;
+  padding:7px 9px;
+  border:1.5px solid #cbd5e1;
+  border-radius:8px;
+  font-weight:900;
+}
+
+.pp-cancel-pending {
+  margin-top:12px;
+  padding:10px 12px;
+  border-radius:9px;
+  background:#fff7ed;
+  color:#9a3412;
+  font-weight:950;
+}
+
+.pp-cancel-pending.ok {
+  background:#ecfdf5;
+  color:#166534;
+}
+
+.pp-cancel-auto {
+  display:none;
+  margin-top:14px;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #bbf7d0;
+  background:#f0fdf4;
+  color:#14532d;
+  font-weight:850;
+}
+
+.pp-cancel-auto.open {
+  display:block;
+}
+
+.pp-modal-error {
+  display:none;
+  margin-top:12px;
+  padding:10px 12px;
+  border-radius:9px;
+  background:#fef2f2;
+  color:#991b1b;
+  font-weight:900;
+}
+
+.pp-modal-error.open {
+  display:block;
+}
+
+.pp-modal-footer {
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  border-top:1px solid #e5eaf1;
+}
+
+.pp-modal-btn {
+  min-height:39px;
+  padding:8px 14px;
+  border-radius:8px;
+  border:0;
+  font-weight:950;
+  cursor:pointer;
+}
+
+.pp-modal-btn.secondary {
+  background:#e2e8f0;
+  color:#334155;
+}
+
+.pp-modal-btn.danger {
+  background:#dc2626;
+  color:#fff;
+}
+
+.pp-modal-btn:disabled {
+  opacity:.48;
+  cursor:not-allowed;
+}
+
+@media (max-width:760px) {
+  .pp-modal-grid,
+  .pp-cancel-accounts {
+    grid-template-columns:1fr;
+  }
 }
 </style>
 
@@ -338,7 +588,7 @@
 
       <tbody>
         {% for pagamento in pagamentos %}
-          <tr>
+          <tr{% if pagamento.cancelado %} class="pp-canceled"{% endif %}>
             <td>{{ pagamento.data_pagamento|date:"d/m/Y" }}</td>
 
             <td class="pp-provider">
@@ -367,15 +617,58 @@
 
             <td class="pp-money pp-total">
               R$ {{ pagamento.total_desembolsado|floatformat:2 }}
+              {% if pagamento.cancelado %}
+                <br><span class="pp-status-canceled">CANCELADO</span>
+              {% endif %}
             </td>
 
             <td>
-              <a
-                href="{% url 'estoque:contas_pagar' %}?editar_pagamento={{ pagamento.id }}&retorno={{ request.get_full_path|urlencode }}"
-                class="pp-edit"
-              >
-                Editar
-              </a>
+              <div class="pp-actions">
+                {% if pagamento.cancelado %}
+                  <span class="pp-status-canceled">CANCELADO</span>
+                  {% if pagamento.pode_desfazer_cancelamento %}
+                    <form
+                      method="post"
+                      action="{% url 'estoque:conta_pagar_pagamento_desfazer_cancelamento' pagamento.id %}"
+                      class="pp-delete-form"
+                      data-undo-cancel-form
+                    >
+                      {% csrf_token %}
+                      <input type="hidden" name="confirmacao_desfazer" value="DESFAZER">
+                      <input type="hidden" name="retorno" value="{{ request.get_full_path }}">
+                      <button
+                        type="button"
+                        class="pp-edit pp-open-undo-cancel"
+                        data-fornecedor="{% if pagamento.conta.fornecedor %}{{ pagamento.conta.fornecedor.nome|escape }}{% else %}Fornecedor nao informado{% endif %}"
+                        data-documento="{{ pagamento.documento_exibicao|escape }}"
+                        data-principal="{{ pagamento.valor }}"
+                        data-encargos="{{ pagamento.juros_bancarios }}"
+                        data-total="{{ pagamento.total_desembolsado }}"
+                      >Desfazer cancelamento</button>
+                    </form>
+                  {% endif %}
+                {% else %}
+                  <a
+                    href="{% url 'estoque:contas_pagar' %}?editar_pagamento={{ pagamento.id }}&retorno={{ request.get_full_path|urlencode }}"
+                    class="pp-edit"
+                  >
+                    Editar
+                  </a>
+                  <span>|</span>
+                  <button
+                    type="button"
+                    class="pp-delete pp-open-cancel"
+                    data-url="{% url 'estoque:conta_pagar_pagamento_cancelar' pagamento.id %}"
+                    data-legado="{% if pagamento.cancelamento_legado %}1{% else %}0{% endif %}"
+                    data-fornecedor="{% if pagamento.conta.fornecedor %}{{ pagamento.conta.fornecedor.nome|escape }}{% else %}Fornecedor nao informado{% endif %}"
+                    data-documento="{{ pagamento.documento_exibicao|escape }}"
+                    data-principal="{{ pagamento.valor }}"
+                    data-encargos="{{ pagamento.juros_bancarios }}"
+                    data-total="{{ pagamento.total_desembolsado }}"
+                    data-auto="{{ pagamento.cancelamento_recomposicao_automatica|escape }}"
+                  >Cancelar</button>
+                {% endif %}
+              </div>
             </td>
           </tr>
         {% empty %}
@@ -389,6 +682,80 @@
     </table>
   </section>
 
+</div>
+
+<div class="pp-modal-backdrop" id="modalCancelarPagamento" aria-hidden="true">
+  <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="cancelarPagamentoTitulo">
+    {% csrf_token %}
+    <div class="pp-modal-header">
+      <h2 class="pp-modal-title" id="cancelarPagamentoTitulo">Cancelar pagamento</h2>
+    </div>
+    <div class="pp-modal-body">
+      <div class="pp-modal-grid">
+        <div class="pp-modal-field"><span>Fornecedor</span><strong id="cancelarFornecedor">-</strong></div>
+        <div class="pp-modal-field"><span>Documento</span><strong id="cancelarDocumento">-</strong></div>
+        <div class="pp-modal-field"><span>Valor principal</span><strong id="cancelarPrincipal">R$ 0,00</strong></div>
+        <div class="pp-modal-field"><span>Encargos</span><strong id="cancelarEncargos">R$ 0,00</strong></div>
+        <div class="pp-modal-field"><span>Valor a recompor</span><strong id="cancelarTotal">R$ 0,00</strong></div>
+      </div>
+
+      <div class="pp-cancel-auto" id="cancelarAutomatico"></div>
+
+      <div class="pp-cancel-distribution" id="cancelarDistribuicao">
+        <div class="pp-cancel-accounts">
+          <label class="pp-cancel-account">
+            <span>Caixa</span>
+            <strong>{{ saldos_pagamento.caixa.texto }}</strong>
+            <input id="cancelarCaixa" inputmode="decimal" autocomplete="off" aria-label="Vai recompor pelo Caixa">
+          </label>
+          <label class="pp-cancel-account">
+            <span>Sangria/Reserva</span>
+            <strong>{{ saldos_pagamento.reserva.texto }}</strong>
+            <input id="cancelarReserva" inputmode="decimal" autocomplete="off" aria-label="Vai recompor pela Sangria ou Reserva">
+          </label>
+          <label class="pp-cancel-account">
+            <span>Banco/Pix</span>
+            <strong>{{ saldos_pagamento.banco.texto }}</strong>
+            <input id="cancelarBanco" inputmode="decimal" autocomplete="off" aria-label="Vai recompor pelo Banco ou Pix">
+          </label>
+        </div>
+        <div class="pp-cancel-pending" id="cancelarFalta">Falta distribuir: R$ 0,00</div>
+      </div>
+
+      <div class="pp-modal-error" id="cancelarErro"></div>
+    </div>
+    <div class="pp-modal-footer">
+      <button type="button" class="pp-modal-btn secondary" id="cancelarVoltar">Voltar</button>
+      <button type="button" class="pp-modal-btn danger" id="cancelarConfirmar">Confirmar cancelamento</button>
+    </div>
+  </div>
+</div>
+
+<div class="pp-modal-backdrop" id="modalDesfazerCancelamento" aria-hidden="true">
+  <div class="pp-modal" role="dialog" aria-modal="true" aria-labelledby="desfazerCancelamentoTitulo">
+    <div class="pp-modal-header">
+      <h2 class="pp-modal-title" id="desfazerCancelamentoTitulo">Desfazer cancelamento</h2>
+    </div>
+    <div class="pp-modal-body">
+      <div class="pp-modal-grid">
+        <div class="pp-modal-field"><span>Fornecedor</span><strong id="desfazerFornecedor">-</strong></div>
+        <div class="pp-modal-field"><span>Documento/compra</span><strong id="desfazerDocumento">-</strong></div>
+        <div class="pp-modal-field"><span>Valor principal</span><strong id="desfazerPrincipal">R$ 0,00</strong></div>
+        <div class="pp-modal-field"><span>Encargos</span><strong id="desfazerEncargos">R$ 0,00</strong></div>
+        <div class="pp-modal-field"><span>Total do pagamento</span><strong id="desfazerTotal">R$ 0,00</strong></div>
+      </div>
+
+      <div class="pp-cancel-auto open">
+        Este pagamento voltara a ser valido e os movimentos financeiros do cancelamento serao compensados de forma auditavel.
+      </div>
+
+      <div class="pp-modal-error" id="desfazerErro"></div>
+    </div>
+    <div class="pp-modal-footer">
+      <button type="button" class="pp-modal-btn secondary" id="desfazerVoltar">Voltar</button>
+      <button type="button" class="pp-modal-btn danger" id="desfazerConfirmar">Confirmar desfazimento</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -490,6 +857,395 @@
       botao.disabled = true;
       botao.textContent = 'Filtrando...';
     }
+  });
+})();
+</script>
+
+<script>
+(function () {
+  const modal = document.getElementById('modalDesfazerCancelamento');
+  if (!modal) return;
+
+  const fornecedorEl = document.getElementById('desfazerFornecedor');
+  const documentoEl = document.getElementById('desfazerDocumento');
+  const principalEl = document.getElementById('desfazerPrincipal');
+  const encargosEl = document.getElementById('desfazerEncargos');
+  const totalEl = document.getElementById('desfazerTotal');
+  const erroEl = document.getElementById('desfazerErro');
+  const voltarBtn = document.getElementById('desfazerVoltar');
+  const confirmarBtn = document.getElementById('desfazerConfirmar');
+
+  let formAtual = null;
+  let enviando = false;
+
+  function numero(valor) {
+    const texto = String(valor || '').replace(/[^\d,.-]/g, '').trim();
+    if (!texto) return 0;
+    const temVirgula = texto.includes(',');
+    const normalizado = temVirgula
+      ? texto.replace(/\./g, '').replace(',', '.')
+      : texto;
+    const parsed = Number.parseFloat(normalizado);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function moeda(valor) {
+    return 'R$ ' + Number(valor || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function esconderErro() {
+    erroEl.textContent = '';
+    erroEl.classList.remove('open');
+  }
+
+  function mostrarErro(mensagem) {
+    erroEl.textContent = mensagem || 'Nao foi possivel desfazer este cancelamento.';
+    erroEl.classList.add('open');
+  }
+
+  function abrirModal(botao) {
+    formAtual = botao.closest('[data-undo-cancel-form]');
+    if (!formAtual) return;
+
+    fornecedorEl.textContent = botao.dataset.fornecedor || 'Fornecedor nao informado';
+    documentoEl.textContent = botao.dataset.documento || '-';
+    principalEl.textContent = moeda(numero(botao.dataset.principal));
+    encargosEl.textContent = moeda(numero(botao.dataset.encargos));
+    totalEl.textContent = moeda(numero(botao.dataset.total));
+    confirmarBtn.textContent = 'Confirmar desfazimento';
+    confirmarBtn.disabled = false;
+    voltarBtn.disabled = false;
+    enviando = false;
+    esconderErro();
+
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function () {
+      voltarBtn.focus();
+    }, 0);
+  }
+
+  function fecharModal() {
+    if (enviando) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    formAtual = null;
+  }
+
+  document.querySelectorAll('.pp-open-undo-cancel').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      abrirModal(botao);
+    });
+  });
+
+  voltarBtn.addEventListener('click', fecharModal);
+
+  modal.addEventListener('click', function (event) {
+    if (event.target === modal) {
+      fecharModal();
+    }
+  });
+
+  modal.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+    }
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) {
+      fecharModal();
+    }
+  });
+
+  confirmarBtn.addEventListener('click', function () {
+    if (!formAtual || enviando) return;
+    enviando = true;
+    confirmarBtn.disabled = true;
+    voltarBtn.disabled = true;
+    confirmarBtn.textContent = 'Desfazendo...';
+
+    fetch(formAtual.action, {
+      method: 'POST',
+      body: new FormData(formAtual),
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+      .then(function (resposta) {
+        return resposta.json().then(function (payload) {
+          return { ok: resposta.ok, payload: payload };
+        });
+      })
+      .then(function (resultado) {
+        if (!resultado.ok || !resultado.payload.ok) {
+          throw new Error(resultado.payload.erro || 'Nao foi possivel desfazer este cancelamento.');
+        }
+        window.location.href = resultado.payload.retorno || '{{ request.get_full_path|escapejs }}';
+      })
+      .catch(function (erro) {
+        enviando = false;
+        confirmarBtn.disabled = false;
+        voltarBtn.disabled = false;
+        confirmarBtn.textContent = 'Confirmar desfazimento';
+        mostrarErro(erro.message);
+      });
+  });
+})();
+</script>
+
+<script>
+(function () {
+  const modal = document.getElementById('modalCancelarPagamento');
+  if (!modal) return;
+
+  const fornecedorEl = document.getElementById('cancelarFornecedor');
+  const documentoEl = document.getElementById('cancelarDocumento');
+  const principalEl = document.getElementById('cancelarPrincipal');
+  const encargosEl = document.getElementById('cancelarEncargos');
+  const totalEl = document.getElementById('cancelarTotal');
+  const autoEl = document.getElementById('cancelarAutomatico');
+  const distribuicaoEl = document.getElementById('cancelarDistribuicao');
+  const faltaEl = document.getElementById('cancelarFalta');
+  const erroEl = document.getElementById('cancelarErro');
+  const voltarBtn = document.getElementById('cancelarVoltar');
+  const confirmarBtn = document.getElementById('cancelarConfirmar');
+  const csrfInput = modal.querySelector('input[name="csrfmiddlewaretoken"]');
+  const campos = [
+    document.getElementById('cancelarCaixa'),
+    document.getElementById('cancelarReserva'),
+    document.getElementById('cancelarBanco')
+  ];
+
+  let pagamentoAtual = null;
+  let valorAlvo = 0;
+  let legadoAtual = false;
+  let indiceAuto = 0;
+  let enviando = false;
+
+  function numero(valor) {
+    const texto = String(valor || '').replace(/[^\d,.-]/g, '').trim();
+    if (!texto) return 0;
+    const temVirgula = texto.includes(',');
+    const normalizado = temVirgula
+      ? texto.replace(/\./g, '').replace(',', '.')
+      : texto;
+    const parsed = Number.parseFloat(normalizado);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function moeda(valor) {
+    return 'R$ ' + Number(valor || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function valorInput(valor) {
+    return Number(valor || 0).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function totalDistribuido() {
+    return campos.reduce(function (total, campo) {
+      return total + numero(campo.value);
+    }, 0);
+  }
+
+  function esconderErro() {
+    erroEl.textContent = '';
+    erroEl.classList.remove('open');
+  }
+
+  function mostrarErro(mensagem) {
+    erroEl.textContent = mensagem || 'Nao foi possivel cancelar este pagamento.';
+    erroEl.classList.add('open');
+  }
+
+  function atualizarDistribuicao() {
+    if (!legadoAtual) {
+      confirmarBtn.disabled = enviando;
+      return;
+    }
+
+    const falta = Math.round((valorAlvo - totalDistribuido()) * 100) / 100;
+    faltaEl.textContent = 'Falta distribuir: ' + moeda(Math.max(falta, 0));
+    faltaEl.classList.toggle('ok', Math.abs(falta) < 0.005);
+    confirmarBtn.disabled = enviando || Math.abs(falta) >= 0.005;
+  }
+
+  function completarDiferencaAPartirDe(indice) {
+    if (!legadoAtual || indice >= campos.length) return;
+    const antes = campos.slice(0, indice).reduce(function (total, campo) {
+      return total + numero(campo.value);
+    }, 0);
+    const restante = Math.max(Math.round((valorAlvo - antes) * 100) / 100, 0);
+    campos.forEach(function (campo, posicao) {
+      if (posicao < indice) return;
+      campo.value = valorInput(posicao === indice ? restante : 0);
+    });
+    indiceAuto = indice;
+  }
+
+  function abrirModal(botao) {
+    pagamentoAtual = {
+      url: botao.dataset.url || '',
+      fornecedor: botao.dataset.fornecedor || 'Fornecedor nao informado',
+      documento: botao.dataset.documento || '-',
+      principal: numero(botao.dataset.principal),
+      encargos: numero(botao.dataset.encargos),
+      total: numero(botao.dataset.total),
+      auto: botao.dataset.auto || ''
+    };
+    legadoAtual = botao.dataset.legado === '1';
+    valorAlvo = pagamentoAtual.total;
+    indiceAuto = 0;
+    enviando = false;
+
+    fornecedorEl.textContent = pagamentoAtual.fornecedor;
+    documentoEl.textContent = pagamentoAtual.documento;
+    principalEl.textContent = moeda(pagamentoAtual.principal);
+    encargosEl.textContent = moeda(pagamentoAtual.encargos);
+    totalEl.textContent = moeda(valorAlvo);
+    confirmarBtn.textContent = 'Confirmar cancelamento';
+    esconderErro();
+
+    if (legadoAtual) {
+      autoEl.classList.remove('open');
+      distribuicaoEl.classList.add('open');
+      campos[0].value = valorInput(valorAlvo);
+      campos[1].value = valorInput(0);
+      campos[2].value = valorInput(0);
+    } else {
+      distribuicaoEl.classList.remove('open');
+      autoEl.textContent = 'Recomposicao automatica: ' + (pagamentoAtual.auto || 'origem financeira vinculada ao pagamento.');
+      autoEl.classList.add('open');
+      campos.forEach(function (campo) { campo.value = valorInput(0); });
+    }
+
+    atualizarDistribuicao();
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    window.setTimeout(function () {
+      if (legadoAtual) {
+        campos[0].focus();
+        campos[0].select();
+      } else {
+        confirmarBtn.focus();
+      }
+    }, 0);
+  }
+
+  function fecharModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    pagamentoAtual = null;
+  }
+
+  document.querySelectorAll('.pp-open-cancel').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      abrirModal(botao);
+    });
+  });
+
+  campos.forEach(function (campo, indice) {
+    campo.addEventListener('focus', function () {
+      campo.select();
+    });
+    campo.addEventListener('input', function () {
+      esconderErro();
+      const valorDigitado = numero(campo.value);
+      if (legadoAtual && indice === indiceAuto && valorDigitado === 0 && indice < campos.length - 1) {
+        completarDiferencaAPartirDe(indice + 1);
+      }
+      atualizarDistribuicao();
+    });
+    campo.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      esconderErro();
+      atualizarDistribuicao();
+
+      const proximo = campos[indice + 1];
+      if (proximo) {
+        proximo.focus();
+        proximo.select();
+        return;
+      }
+
+      if (!confirmarBtn.disabled) {
+        confirmarBtn.focus();
+      }
+    });
+  });
+
+  voltarBtn.addEventListener('click', fecharModal);
+
+  modal.addEventListener('click', function (event) {
+    if (event.target === modal) {
+      fecharModal();
+    }
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('open')) {
+      fecharModal();
+    }
+  });
+
+  confirmarBtn.addEventListener('click', function () {
+    if (!pagamentoAtual || enviando) return;
+
+    esconderErro();
+    if (legadoAtual && confirmarBtn.disabled) {
+      const falta = Math.max(Math.round((valorAlvo - totalDistribuido()) * 100) / 100, 0);
+      mostrarErro('Falta distribuir ' + moeda(falta) + '.');
+      return;
+    }
+
+    const dados = new FormData();
+    dados.append('confirmacao_cancelar', 'CANCELAR');
+    dados.append('retorno', '{{ request.get_full_path|escapejs }}');
+    dados.append('valor_saida_caixa', legadoAtual ? campos[0].value : '0,00');
+    dados.append('valor_saida_reserva', legadoAtual ? campos[1].value : '0,00');
+    dados.append('valor_saida_banco', legadoAtual ? campos[2].value : '0,00');
+    if (csrfInput) {
+      dados.append('csrfmiddlewaretoken', csrfInput.value);
+    }
+
+    enviando = true;
+    confirmarBtn.disabled = true;
+    confirmarBtn.textContent = 'Cancelando...';
+
+    fetch(pagamentoAtual.url, {
+      method: 'POST',
+      body: dados,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+      .then(function (resposta) {
+        return resposta.json().then(function (payload) {
+          return { ok: resposta.ok, payload: payload };
+        });
+      })
+      .then(function (resultado) {
+        if (!resultado.ok || !resultado.payload.ok) {
+          throw new Error(resultado.payload.erro || 'Nao foi possivel cancelar este pagamento.');
+        }
+        window.location.href = resultado.payload.retorno || '{{ request.get_full_path|escapejs }}';
+      })
+      .catch(function (erro) {
+        enviando = false;
+        confirmarBtn.textContent = 'Confirmar cancelamento';
+        atualizarDistribuicao();
+        mostrarErro(erro.message);
+      });
   });
 })();
 </script>

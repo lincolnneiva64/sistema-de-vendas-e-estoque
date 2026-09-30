@@ -131,6 +131,16 @@ urlpatterns = [
         views.conta_pagar_pagamento_corrigir,
         name="conta_pagar_pagamento_corrigir",
     ),
+    path(
+        "contas-a-pagar/pagamentos/<int:pk>/cancelar/",
+        views.conta_pagar_pagamento_cancelar,
+        name="conta_pagar_pagamento_cancelar",
+    ),
+    path(
+        "contas-a-pagar/pagamentos/<int:pk>/desfazer-cancelamento/",
+        views.conta_pagar_pagamento_desfazer_cancelamento,
+        name="conta_pagar_pagamento_desfazer_cancelamento",
+    ),
     path("pagar-fornecedor/", views.pagar_fornecedor, name="pagar_fornecedor"),
     path("contas-a-pagar/abertas/", views.contas_pagar_abertas_geral, name="contas_pagar_abertas_geral"),
     path("emprestimos-rapidos/", views.emprestimos_rapidos, name="emprestimos_rapidos"),
