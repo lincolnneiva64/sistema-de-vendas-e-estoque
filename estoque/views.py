@@ -20762,6 +20762,27 @@ def entrega_rota_checklist(request, pk):
             if item_rota_salvo:
                 marcar_checklist_fase_salva(item_rota_salvo, bloco_fase)
 
+                # Ao salvar novamente a entrega, a versao anteriormente enviada
+                # ao cliente deixa de representar o checklist atual.
+                if bloco_fase == "entrega":
+                    envio_anterior = EventoVenda.objects.filter(
+                        venda=item_rota_salvo.venda,
+                        tipo_evento="checklist_cliente_enviado",
+                        canal="whatsapp_checklist",
+                        descricao__icontains=f"bloco #{item_rota_salvo.id}",
+                    ).exists()
+
+                    if envio_anterior:
+                        _registrar_evento_venda(
+                            item_rota_salvo.venda,
+                            "checklist_cliente_atualizado",
+                            (
+                                "Checklist atualizado apos envio ao cliente "
+                                f"(rota/entrega #{rota.id}, bloco #{item_rota_salvo.id})."
+                            ),
+                            canal="whatsapp_checklist",
+                        )
+
         redirect_url = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota.id})
         if bloco_valido and bloco_fase in {"carregamento", "entrega"}:
             redirect_url = f"{redirect_url}?salvo_item={bloco_rota_item_id}&salvo_fase={bloco_fase}"
@@ -20780,13 +20801,18 @@ def entrega_rota_checklist(request, pk):
     itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
     salvo_item_id = request.GET.get("salvo_item", "")
     salvo_fase = request.GET.get("salvo_fase", "")
-    eventos_checklist_enviado = set(
+    eventos_checklist_cliente = list(
         EventoVenda.objects.filter(
             venda_id__in=[item_rota.venda_id for item_rota in itens_entrega],
-            tipo_evento="checklist_cliente_enviado",
+            tipo_evento__in=[
+                "checklist_cliente_enviado",
+                "checklist_cliente_atualizado",
+            ],
             canal="whatsapp_checklist",
             descricao__icontains=f"rota/entrega #{rota.id}",
-        ).values_list("descricao", flat=True)
+        )
+        .order_by("-criado_em", "-id")
+        .values("tipo_evento", "descricao", "criado_em", "id")
     )
     for item_rota in itens_entrega:
         item_rota.salvo_carregamento = salvo_item_id == str(item_rota.id) and salvo_fase == "carregamento"
@@ -20834,9 +20860,18 @@ def entrega_rota_checklist(request, pk):
             and bool(item_rota.checklists_ordenados)
             and not item_rota.entrega_completa
         )
-        item_rota.checklist_cliente_enviado = any(
-            f"bloco #{item_rota.id}" in descricao
-            for descricao in eventos_checklist_enviado
+        ultimo_evento_checklist_cliente = next(
+            (
+                evento
+                for evento in eventos_checklist_cliente
+                if f"bloco #{item_rota.id}" in evento["descricao"]
+            ),
+            None,
+        )
+        item_rota.checklist_cliente_enviado = bool(
+            ultimo_evento_checklist_cliente
+            and ultimo_evento_checklist_cliente["tipo_evento"]
+            == "checklist_cliente_enviado"
         )
 
     itens_entrega = sorted(
@@ -25862,12 +25897,25 @@ def confirmar_checklist_whatsapp(request, pk):
     detalhes_texto = f" ({', '.join(detalhes)})." if detalhes else "."
     descricao = f"Checklist enviado ao cliente por WhatsApp{detalhes_texto}"
 
-    ja_existe = EventoVenda.objects.filter(
-        venda=venda,
-        tipo_evento="checklist_cliente_enviado",
-        canal="whatsapp_checklist",
-        descricao=descricao,
-    ).exists()
+    ultimo_evento = (
+        EventoVenda.objects.filter(
+            venda=venda,
+            tipo_evento__in=[
+                "checklist_cliente_enviado",
+                "checklist_cliente_atualizado",
+            ],
+            canal="whatsapp_checklist",
+            descricao__icontains=f"bloco #{rota_item_id}",
+        )
+        .order_by("-criado_em", "-id")
+        .first()
+    )
+
+    ja_existe = bool(
+        ultimo_evento
+        and ultimo_evento.tipo_evento == "checklist_cliente_enviado"
+    )
+
     if not ja_existe:
         _registrar_evento_venda(
             venda,
