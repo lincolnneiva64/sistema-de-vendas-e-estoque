@@ -37,6 +37,10 @@
             line-height: 1.1;
         }
 
+        .barra-operacional-mobile {
+            display: none;
+        }
+
         .acoes {
             display: flex;
             align-items: center;
@@ -1364,6 +1368,60 @@
                 background: #eef4ff;
             }
 
+            .nota-mobile-checklist .acoes {
+                display: none !important;
+            }
+
+            /* Na rua, identificar o cliente vem antes dos dados da venda. */
+            .nota-mobile-checklist .venda-nota-corpo .dados .campo:nth-child(2) {
+                order: -20;
+            }
+
+            .nota-mobile-checklist .venda-nota-corpo .dados .campo:nth-child(1) {
+                order: -19;
+            }
+
+            /* No uso operacional pela rua, a nota termina no status do WhatsApp.
+               Os blocos administrativos continuam intactos no desktop. */
+            .nota-mobile-checklist .entrega-section,
+            .nota-mobile-checklist .ajuste-pendente-banner,
+            .nota-mobile-checklist .historico,
+            .nota-mobile-checklist .comunicacao,
+            .nota-mobile-checklist #mensagem {
+                display: none !important;
+            }
+
+            .barra-operacional-mobile {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 6px;
+                padding: 9px 8px;
+                background: #ffffff;
+                border-bottom: 1px solid #dbeafe;
+            }
+
+            .barra-operacional-mobile a {
+                min-height: 42px;
+                padding: 7px 5px;
+                border: 1px solid #2563eb;
+                border-radius: 10px;
+                background: #2563eb;
+                color: #ffffff;
+                font-size: 12px;
+                font-weight: 900;
+                line-height: 1.15;
+                text-align: center;
+                text-decoration: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .barra-operacional-mobile a.receber {
+                border-color: #15803d;
+                background: #16a34a;
+            }
+
             .pagina {
                 width: 100%;
                 max-width: none;
@@ -1763,7 +1821,7 @@
     </style>
 </head>
 <body>
-    <main class="pagina">
+    <main class="pagina{% if entrega_contexto %} nota-mobile-checklist{% endif %}">
         <div class="nota-duas-vias">
             <article class="nota-copia">
                 <header class="cabecalho">
@@ -1772,6 +1830,15 @@
                         <h1>Nota de Venda</h1>
                         <div style="margin-top: 1px; color: #334155; font-size: 11.5px;">Venda #{{ venda.id }}</div>
                     </div>
+                    {% if entrega_contexto %}
+                    <nav class="barra-operacional-mobile" aria-label="Acoes operacionais">
+                        <a href="{% url 'estoque:entrega_rota_checklist' entrega_contexto.id %}">Voltar ao checklist</a>
+                        <a href="{% url 'estoque:home' %}">Painel</a>
+                        {% if venda.cliente %}
+                        <a class="receber" href="{% url 'estoque:receber_cliente' venda.cliente.id %}?next={{ request.get_full_path|urlencode }}">Receber do cliente</a>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
                     <div class="acoes">
                         {% if modo_pendencia_resolvida %}
                             <a href="{% url 'estoque:pendencias_entrega' %}?status=resolvidas">Voltar para pendencias resolvidas</a>
