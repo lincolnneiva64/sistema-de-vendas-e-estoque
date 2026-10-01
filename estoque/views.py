@@ -8351,6 +8351,50 @@ def _quantidades_vendidas_por_produto_em_unidade_base(produto_ids, data_inicial,
     }
 
 
+def _quantidades_pedidos_abertos_por_produto_em_unidade_base(produto_ids, status_pedidos):
+    totais = {}
+    produtos = {
+        produto.id: produto
+        for produto in Produto.objects.filter(id__in=produto_ids)
+    }
+    itens = ItemPedido.objects.filter(
+        produto_id__in=produto_ids,
+        pedido__status__in=status_pedidos,
+    ).only("produto_id", "quantidade", "unidade")
+
+    for item in itens:
+        produto = produtos.get(item.produto_id)
+        if not produto:
+            continue
+
+        quantidade = Decimal(item.quantidade or 0)
+        unidade_item = _normalizar_unidade_estoque(item.unidade)
+        unidade_base = _normalizar_unidade_estoque(
+            produto.unidade_venda_1 or produto.unidade_compra
+        )
+        unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
+        fator = Decimal(produto.fator_conversao or 0)
+
+        if (
+            unidade_item
+            and produto.vende_fracionado
+            and unidade_fracionada
+            and unidade_item == unidade_fracionada
+            and unidade_item != unidade_base
+            and fator > 0
+        ):
+            quantidade = quantidade / fator
+
+        totais[item.produto_id] = (
+            totais.get(item.produto_id, Decimal("0.000")) + quantidade
+        )
+
+    return {
+        produto_id: quantidade.quantize(Decimal("0.001"))
+        for produto_id, quantidade in totais.items()
+    }
+
+
 FATOR_RESERVA_SUGESTAO_COMPRA = Decimal("1.20")
 
 
@@ -8542,17 +8586,12 @@ def sugestao_compra_fornecedor(request):
                 data_inicial,
                 data_final,
             )
-            pedidos_abertos_por_produto = {
-                item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
-                for item in (
-                    ItemPedido.objects.filter(
-                        produto_id__in=produto_ids_consulta,
-                        pedido__status__in=status_pedidos_abertos,
-                    )
-                    .values("produto_id")
-                    .annotate(quantidade_pedida=Sum("quantidade"))
+            pedidos_abertos_por_produto = (
+                _quantidades_pedidos_abertos_por_produto_em_unidade_base(
+                    produto_ids_consulta,
+                    status_pedidos_abertos,
                 )
-            }
+            )
             quantidade_vendida_calculada = True
         else:
             vendidos_por_produto = {}
@@ -11035,17 +11074,12 @@ def compras_lista_fornecedor_editar(request, pk):
     )
 
     status_pedidos_abertos = [Pedido.STATUS_ABERTO, Pedido.STATUS_PARCIAL]
-    pedidos_abertos_por_produto_edicao = {
-        item["produto_id"]: item["quantidade_pedida"] or Decimal("0.000")
-        for item in (
-            ItemPedido.objects.filter(
-                produto_id__in=produto_ids_edicao,
-                pedido__status__in=status_pedidos_abertos,
-            )
-            .values("produto_id")
-            .annotate(quantidade_pedida=Sum("quantidade"))
+    pedidos_abertos_por_produto_edicao = (
+        _quantidades_pedidos_abertos_por_produto_em_unidade_base(
+            produto_ids_edicao,
+            status_pedidos_abertos,
         )
-    }
+    )
 
     linhas_edicao = []
     for item in itens:
