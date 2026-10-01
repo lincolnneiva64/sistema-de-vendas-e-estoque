@@ -5951,9 +5951,7 @@
       if (!simulador) return;
 
       if (event.target.classList.contains("campoMargemDesejadaCompra")) {
-        simulador.dataset.origemEdicao = "margem";
         event.target.value = percentualCampo(numero(event.target.value));
-        atualizarPrecoPelaMargem(simulador, true);
         return;
       }
 
