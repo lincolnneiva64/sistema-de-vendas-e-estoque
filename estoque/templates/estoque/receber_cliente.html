@@ -3112,7 +3112,7 @@
         return checkbox.checked;
       });
 
-      calculadoraUsarValor.disabled = temDividaSelecionada;
+      calculadoraUsarValor.disabled = temDividaSelecionada || calculadoraOperador !== null;
     }
 
     calculadoraTeclas.forEach(function (botao) {
@@ -3181,6 +3181,7 @@
 
           calculadoraEntrada = "";
           atualizarVisorCalculadora();
+          atualizarEstadoCalculadora();
           return;
         }
 
@@ -3200,6 +3201,7 @@
           calculadoraExpressao = "";
 
           atualizarVisorCalculadora();
+          atualizarEstadoCalculadora();
         }
       }, listenerOptions);
     });
