@@ -22743,9 +22743,9 @@ class PixRecebidoTests(TestCase):
             mensagem,
         )
 
-    def test_receber_cliente_permite_pagamento_parcial_da_locacao(self):
+    def test_receber_cliente_rejeita_pagamento_parcial_de_locacao_selecionada(self):
         cliente = Cliente.objects.create(
-            nome="Cliente Locacao Parcial",
+            nome="Cliente Locacao Parcial Selecionada",
             ativo=True,
         )
         locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
@@ -22762,6 +22762,44 @@ class PixRecebidoTests(TestCase):
             },
             secure=True,
         )
+
+        self.assertEqual(response.status_code, 200)
+
+        locacao.refresh_from_db()
+        self.assertEqual(locacao.total_pago, Decimal("0.00"))
+        self.assertEqual(locacao.saldo_devedor, Decimal("24.00"))
+        self.assertContains(
+            response,
+            "Para pagamento parcial, desmarque todas as dividas.",
+        )
+
+    def test_receber_cliente_permite_pagamento_parcial_sem_divida_selecionada(self):
+        cliente = Cliente.objects.create(
+            nome="Cliente Locacao Parcial Livre",
+            ativo=True,
+        )
+        locacao = self._criar_locacao_cliente(cliente, mesas=3, cadeiras=12)
+
+        response = self.client.post(
+            reverse("estoque:receber_cliente", kwargs={"cliente_id": cliente.id}),
+            {
+                "data_recebimento": timezone.localdate().isoformat(),
+                "valor": "10,00",
+                "forma_pagamento": "PIX",
+                "destino_diferenca": "troco",
+                "selecao_dividas_ativa": "1",
+            },
+            secure=True,
+        )
+
+        if response.status_code != 302:
+            print("\nSTATUS:", response.status_code)
+            print(
+                "MESSAGES:",
+                [str(m) for m in response.context["messages"]]
+                if response.context and "messages" in response.context
+                else []
+            )
 
         self.assertEqual(response.status_code, 302)
 

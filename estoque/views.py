@@ -2204,6 +2204,7 @@ def _criar_operacao_recebimento_cliente(
     somente_contas_ate_referencia=False,
     contas_ids_adicionais=None,
     dividas_selecionadas=None,
+    exigir_quitacao_selecionadas=False,
 ):
     hoje_referencia = hoje_referencia or timezone.localdate()
     valor_recebido = _financeiro_dinheiro(valor_recebido).quantize(Decimal("0.01"))
@@ -2222,6 +2223,14 @@ def _criar_operacao_recebimento_cliente(
         )
 
         locacoes_selecionadas = []
+        if dividas_selecionadas is None:
+            locacoes_selecionadas = list(
+                _locacoes_abertas_cliente_qs(
+                    cliente.id,
+                    bloquear=True,
+                )
+            )
+
         if dividas_selecionadas is not None:
             contas_ids_selecionadas = []
             locacoes_ids_selecionadas = []
@@ -2282,6 +2291,34 @@ def _criar_operacao_recebimento_cliente(
         if not contas_atualizadas and not locacoes_selecionadas:
             raise RecebimentoContaErro("Nao ha dividas abertas para receber deste cliente.")
 
+        # Quando o usuario escolhe dividas especificas, a selecao representa
+        # quitacao integral. Pagamentos parciais continuam sendo feitos sem
+        # selecionar dividas, usando a distribuicao automatica existente.
+        if exigir_quitacao_selecionadas and dividas_selecionadas is not None:
+            total_dividas_selecionadas = (
+                sum(
+                    (
+                        conta.valor_em_aberto or Decimal("0.00")
+                        for conta in contas_atualizadas
+                    ),
+                    Decimal("0.00"),
+                )
+                + sum(
+                    (
+                        locacao.saldo_devedor or Decimal("0.00")
+                        for locacao in locacoes_selecionadas
+                    ),
+                    Decimal("0.00"),
+                )
+            ).quantize(Decimal("0.01"))
+
+            if valor_recebido != total_dividas_selecionadas:
+                raise RecebimentoContaErro(
+                    "Para pagar dividas selecionadas, o valor recebido deve ser "
+                    f"exatamente {_formatar_moeda(total_dividas_selecionadas)}. "
+                    "Para pagamento parcial, desmarque todas as dividas."
+                )
+
         dividas_para_distribuir = []
 
         if dividas_selecionadas is None:
@@ -2289,6 +2326,10 @@ def _criar_operacao_recebimento_cliente(
                 ("conta", conta_atual)
                 for conta_atual in contas_atualizadas
             ]
+            dividas_para_distribuir.extend(
+                ("locacao", locacao_atual)
+                for locacao_atual in locacoes_selecionadas
+            )
         else:
             contas_por_id = {conta.id: conta for conta in contas_atualizadas}
             locacoes_por_id = {
@@ -17657,6 +17698,8 @@ def receber_cliente(request, cliente_id):
     if request.method == "POST":
         selecao_dividas_ativa = request.POST.get("selecao_dividas_ativa", "").strip() == "1"
         dividas_selecionadas = request.POST.getlist("dividas") if selecao_dividas_ativa else []
+        if selecao_dividas_ativa and not dividas_selecionadas:
+            dividas_selecionadas = None
 
         valores = {
             "data_recebimento": request.POST.get("data_recebimento", "").strip(),
@@ -17710,6 +17753,7 @@ def receber_cliente(request, cliente_id):
                                     usuario=request.user,
                                     hoje_referencia=hoje,
                                     dividas_selecionadas=dividas_selecionadas if selecao_dividas_ativa else None,
+                                    exigir_quitacao_selecionadas=bool(dividas_selecionadas),
                                 )
                                 operacao_recebimento = resultado_operacao["operacao"]
                                 valor_aplicado_total = resultado_operacao["valor_aplicado_total"]

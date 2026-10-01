@@ -1,8 +1,8 @@
-{% extends 'estoque/base.html' %}
+﻿{% extends 'estoque/base.html' %}
 {% block title %}Receber do cliente{% endblock %}
 {% block content %}
 
-<aside class="rc-atalhos-lateral" id="atalhosReceberCliente" aria-label="Atalhos do receber cliente">
+<aside class="rc-atalhos-lateral{% if cliente %} rc-atalhos-cliente-selecionado{% endif %}" id="atalhosReceberCliente" aria-label="Atalhos do receber cliente">
   <button type="button" class="rc-atalhos-toggle" id="btnAtalhosReceberCliente" aria-expanded="false" aria-controls="atalhosReceberClientePainel">Atalhos</button>
   <div class="rc-atalhos-painel" id="atalhosReceberClientePainel">
     <h2 class="rc-atalhos-titulo">Atalhos</h2>
@@ -943,6 +943,36 @@
     }
   }
 
+  /* Fluxo operacional no celular: com o cliente ja definido,
+     evita repetir filtros e atalhos administrativos. */
+  @media (max-width: 700px) {
+    .rc-cliente-selecionado .rc-atalhos-lateral,
+    .rc-cliente-selecionado .rc-rota-receber-card {
+      display: none !important;
+    }
+
+    .rc-cliente-selecionado .rc-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .rc-cliente-selecionado .rc-header .rc-subtitle {
+      display: none;
+    }
+
+    .rc-cliente-selecionado .rc-header-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 100%;
+      gap: 6px;
+    }
+
+    .rc-cliente-selecionado .rc-header-actions > a {
+      min-height: 42px;
+    }
+
+  }
+
   .rc-rota-busca-wrap {
     position: relative;
   }
@@ -1103,9 +1133,114 @@
     line-height: 1.35;
   }
 
-</style>
 
-<div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}">
+  .rc-header-painel-mobile {
+    display: none;
+  }
+
+  @media (max-width: 700px) {
+    body:has(.rc-cliente-selecionado) .ambiente-sistema {
+      display: none !important;
+    }
+
+    .rc-atalhos-cliente-selecionado {
+      display: none !important;
+    }
+
+    .rc-cliente-selecionado .rc-header-administrativo {
+      display: none !important;
+    }
+
+    .rc-cliente-selecionado .rc-header-painel-mobile {
+      display: inline-flex;
+    }
+
+    .rc-cliente-selecionado .rc-header-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .rc-cliente-selecionado .rc-cliente-busca-card,
+    .rc-cliente-selecionado .rc-pos-confirmacao-direita,
+    .rc-cliente-selecionado .rc-historico,
+    .rc-cliente-selecionado .rc-distribuicao,
+    .rc-cliente-selecionado .rc-note {
+      display: none !important;
+    }
+  }
+
+
+  .rc-calculadora-toggle {
+    display: none;
+  }
+
+  @media (max-width: 700px) {
+    .rc-cliente-selecionado .rc-calculadora-toggle {
+      display: block;
+      width: 100%;
+      min-height: 40px;
+      margin-top: 7px;
+      border: 1px solid #cbd2da;
+      border-radius: 7px;
+      background: #fff;
+      font-weight: 600;
+    }
+  }
+  .rc-calculadora {
+    display: none;
+  }
+
+  @media (max-width: 700px) {
+    .rc-cliente-selecionado .rc-calculadora {
+      display: block;
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid #d7dce3;
+      border-radius: 10px;
+      background: #f8f9fa;
+    }
+
+    .rc-calculadora-display {
+      min-height: 42px;
+      margin-bottom: 7px;
+      padding: 7px 10px;
+      border: 1px solid #cbd2da;
+      border-radius: 7px;
+      background: #fff;
+      font-size: 1.25rem;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .rc-calculadora-teclas {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .rc-calculadora-teclas button {
+      min-height: 42px;
+      border: 1px solid #cbd2da;
+      border-radius: 7px;
+      background: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .rc-calculadora-igual {
+      grid-column: span 2;
+    }
+
+    .rc-calculadora-usar {
+      grid-column: span 2;
+    }
+
+    .rc-calculadora-usar:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+  }</style>
+
+<div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}{% if cliente %} rc-cliente-selecionado{% endif %}">
   <div class="receber-cliente-shell">
     <header class="rc-header" id="topo-recebimento-cliente">
       <div>
@@ -1113,9 +1248,10 @@
         <p class="rc-subtitle">Previa de distribuicao automatica nas contas abertas.</p>
       </div>
       <div class="rc-header-actions">
-        <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="rc-btn {% if tem_pix_em_atencao %}rc-btn-pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
-        <a href="{% url 'estoque:painel_financeiro' %}" class="rc-btn">Central Financeira</a>
-        <a href="{{ retorno_url }}" class="rc-btn">Voltar</a>
+        <a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="rc-btn rc-header-administrativo {% if tem_pix_em_atencao %}rc-btn-pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
+        <a href="{% url 'estoque:painel_financeiro' %}" class="rc-btn rc-header-administrativo">Central Financeira</a>
+        <a href="{% url 'estoque:home' %}" class="rc-btn rc-header-painel-mobile">Painel</a>
+        <a href="{{ retorno_url }}" class="rc-btn rc-header-voltar">Voltar</a>
       </div>
     </header>
 
@@ -1441,18 +1577,56 @@
             </div>
             {% if pix_recebido_escolhido %}
               <div class="rc-alert">
-                Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix será marcado como baixado e qualquer Pix parecido pendente será marcado automaticamente como duplicado/inativo.
+                Baixa vinculada ao Pix #{{ pix_recebido_escolhido.id }}. Ao confirmar, este Pix serÃ¡ marcado como baixado e qualquer Pix parecido pendente serÃ¡ marcado automaticamente como duplicado/inativo.
               </div>
             {% endif %}
             <div class="rc-form">
               <div class="rc-field">
                 <label for="valorRecebidoCliente">Valor recebido</label>
                 <input id="valorRecebidoCliente" name="valor" type="text" inputmode="decimal" autocomplete="off" value="{{ valores.valor }}" tabindex="1">
+                <button
+                  type="button"
+                  class="rc-calculadora-toggle"
+                  id="calculadoraToggle"
+                  aria-expanded="false"
+                  aria-controls="calculadoraRecebimento"
+                >
+                  Calculadora
+                </button>
+
+                <div class="rc-calculadora" id="calculadoraRecebimento" hidden>
+                  <div class="rc-calculadora-display" id="calculadoraDisplay">0</div>
+
+                  <div class="rc-calculadora-teclas">
+                    <button type="button" data-calc="7">7</button>
+                    <button type="button" data-calc="8">8</button>
+                    <button type="button" data-calc="9">9</button>
+                    <button type="button" data-calc="/">&#247;</button>
+
+                    <button type="button" data-calc="4">4</button>
+                    <button type="button" data-calc="5">5</button>
+                    <button type="button" data-calc="6">6</button>
+                    <button type="button" data-calc="*">&#215;</button>
+
+                    <button type="button" data-calc="1">1</button>
+                    <button type="button" data-calc="2">2</button>
+                    <button type="button" data-calc="3">3</button>
+                    <button type="button" data-calc="-">&minus;</button>
+
+                    <button type="button" data-calc="C">C</button>
+                    <button type="button" data-calc="0">0</button>
+                    <button type="button" data-calc=",">,</button>
+                    <button type="button" data-calc="+">+</button>
+
+                    <button type="button" class="rc-calculadora-igual" data-calc="=">=</button>
+                    <button type="button" class="rc-calculadora-usar" id="calculadoraUsarValor">Usar valor</button>
+                  </div>
+                </div>
               </div>
               {% if locacoes_abertas %}
                 <div class="rc-locacao-destaque">
                   <div class="rc-locacao-destaque-titulo">
-                    LOCAÇÃO EM ABERTO
+                    LOCAÃ‡ÃƒO EM ABERTO
                   </div>
 
                   {% for locacao in locacoes_abertas %}
@@ -1461,18 +1635,18 @@
                         type="checkbox"
                         name="dividas"
                         value="locacao:{{ locacao.id }}"
-                        checked
+
                         class="rc-locacao-checkbox"
                       >
                       <span class="rc-locacao-destaque-conteudo">
                         <strong>
-                          Quitar locação #{{ locacao.id }} com este recebimento
+                          Quitar locaÃ§Ã£o #{{ locacao.id }} com este recebimento
                         </strong>
 
                         <span class="rc-locacao-detalhes">
                           <span data-descricao-locacao="{{ locacao.id }}"></span>
                           <span>
-                            Saldo da locação:
+                            Saldo da locaÃ§Ã£o:
                             <strong>R$ {{ locacao.saldo_devedor|floatformat:2 }}</strong>
                           </span>
                         </span>
@@ -1501,7 +1675,7 @@
                 <button type="button" id="btnFormaPagamentoCliente" class="rc-forma-pagamento-btn" aria-haspopup="dialog">
                   <span id="textoFormaPagamentoCliente">Dinheiro</span>
                 </button>
-                <div class="rc-feedback-campo">Esse recebimento será lançado automaticamente em Caixa/Banco conforme a forma de pagamento.</div>
+                <div class="rc-feedback-campo">Esse recebimento serÃ¡ lanÃ§ado automaticamente em Caixa/Banco conforme a forma de pagamento.</div>
               </div>
               <div class="rc-confirmar-cliente-acoes">
                 <button type="submit" class="rc-btn rc-btn-primary" id="btnConfirmarRecebimentoCliente" tabindex="4">Confirmar recebimento</button>
@@ -1520,7 +1694,7 @@
               </label>
               <label class="rc-sobra-opcao" tabindex="-1">
                 <input id="destinoSobraCreditoCliente" type="radio" name="destino_diferenca" value="credito" {% if valores.destino_diferenca == "credito" %}checked{% endif %} tabindex="-1">
-                Registrar como crédito do cliente
+                Registrar como crÃ©dito do cliente
               </label>
             </div>
             <div class="rc-distribuicao" aria-label="Resumo da distribuicao">
@@ -1543,7 +1717,7 @@
             </div>
             <div class="rc-saldo-total">
               <span>Saldo atual em aberto: R$ {{ total_em_aberto|floatformat:2 }}</span>
-              <span>Saldo após recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
+              <span>Saldo ap&oacute;s recebimento: <strong id="saldoAposRecebimentoResumo">R$ {{ total_em_aberto|floatformat:2 }}</strong></span>
             </div>
             <div class="rc-note">Confira a previa antes de confirmar. A baixa real sera gravada somente apos a confirmacao final.</div>
           </section>
@@ -1552,11 +1726,11 @@
 
         <div class="mt-3 mb-3">
           <div class="fw-semibold mb-2">
-            Dívidas que serão pagas
+            D&Iacute;VIDAS QUE SER&Atilde;O PAGAS
           </div>
 
           <div class="small text-muted mb-2">
-            Marque somente as dívidas que deseja incluir neste recebimento.
+            Marque somente as d&iacute;vidas que deseja incluir neste recebimento.
           </div>
 
           {% for conta in contas %}
@@ -1565,7 +1739,7 @@
                 type="checkbox"
                 name="dividas"
                 value="conta:{{ conta.id }}"
-                checked
+
                 class="mt-1"
               >
               <span>
@@ -1576,7 +1750,7 @@
                     Conta #{{ conta.id }}
                   {% endif %}
                 </strong>
-                ? saldo R$ {{ conta.valor_em_aberto|floatformat:2 }}
+                &mdash; {{ conta.data_emissao|date:"d/m/Y" }} &mdash; saldo R$ {{ conta.valor_em_aberto|floatformat:2 }}
               </span>
             </label>
           {% endfor %}
@@ -1602,23 +1776,23 @@
           {% if credito_disponivel > 0 %}
             <section class="rc-creditos-disponiveis" aria-label="Creditos disponiveis do cliente">
               <div class="rc-creditos-head">
-                <h3 class="rc-creditos-title">Créditos disponíveis do cliente</h3>
+                <h3 class="rc-creditos-title">CrÃ©ditos disponÃ­veis do cliente</h3>
                 <span class="rc-creditos-total">Total: R$ {{ credito_disponivel|floatformat:2 }}</span>
               </div>
               <div class="rc-creditos-lista">
                 {% if total_contas == 0 %}
                   <div class="rc-credito-item">
                     <div class="rc-credito-topo">
-                      <span class="rc-credito-origem">Cliente não possui contas em aberto. Crédito disponível: R$ {{ credito_disponivel|floatformat:2 }}</span>
+                      <span class="rc-credito-origem">Cliente nÃ£o possui contas em aberto. CrÃ©dito disponÃ­vel: R$ {{ credito_disponivel|floatformat:2 }}</span>
                     </div>
                   </div>
                 {% else %}
                   <div class="rc-credito-item">
                     <div class="rc-credito-topo">
-                      <span class="rc-credito-origem">Saldo resultante se o crédito for considerado</span>
+                      <span class="rc-credito-origem">Saldo resultante se o crÃ©dito for considerado</span>
                       <span class="rc-credito-valor">R$ {{ saldo_resultante_credito|floatformat:2 }}</span>
                     </div>
-                    <div class="rc-credito-meta">Este valor é apenas informativo. O crédito não será aplicado automaticamente.</div>
+                    <div class="rc-credito-meta">Este valor Ã© apenas informativo. O crÃ©dito nÃ£o serÃ¡ aplicado automaticamente.</div>
                   </div>
                 {% endif %}
                 {% for credito in creditos_disponiveis %}
@@ -1636,7 +1810,7 @@
                       Gerado em: {{ credito.criado_em|date:"d/m/Y H:i" }}
                     </div>
                     {% if total_contas > 0 %}
-                      <div class="rc-credito-saldo">Saldo resultante com este crédito: R$ {{ credito.saldo_resultante|floatformat:2 }}</div>
+                      <div class="rc-credito-saldo">Saldo resultante com este crÃ©dito: R$ {{ credito.saldo_resultante|floatformat:2 }}</div>
                     {% endif %}
                   </div>
                 {% endfor %}
@@ -1687,7 +1861,7 @@
                   {% endfor %}
                   {% for locacao in locacoes_abertas %}
                     <tr id="locacaoPreview{{ locacao.id }}" class="rc-row-prevista-neutra">
-                      <td>Locação #{{ locacao.id }}</td>
+                      <td>LocaÃ§Ã£o #{{ locacao.id }}</td>
                       <td>
                         {% for item in locacao.itens.all %}
                           {% if item.tipo == "mesa_avulsa" %}{{ item.quantidade }} mesa{{ item.quantidade|pluralize:"s" }}{% endif %}
@@ -1701,7 +1875,7 @@
                       <td class="rc-num">R$ {{ locacao.saldo_devedor|floatformat:2 }}</td>
                       <td>{{ locacao.get_status_financeiro_display }}</td>
                       <td class="rc-preview-cell" id="previewLocacao{{ locacao.id }}">
-                        <span class="rc-pill">Não atingida</span><br>
+                        <span class="rc-pill">NÃ£o atingida</span><br>
                         Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                       </td>
                     </tr>
@@ -1762,7 +1936,7 @@
                 <article id="locacaoPreviewMobile{{ locacao.id }}" class="rc-conta-mobile-card rc-row-prevista-neutra">
                   <div class="rc-conta-mobile-topo">
                     <div>
-                      <span class="rc-conta-mobile-numero">Locação #{{ locacao.id }}</span>
+                      <span class="rc-conta-mobile-numero">LocaÃ§Ã£o #{{ locacao.id }}</span>
                     </div>
                     <div class="rc-conta-mobile-venda">
                       {% for item in locacao.itens.all %}
@@ -1775,7 +1949,7 @@
 
                   <div class="rc-conta-mobile-grid">
                     <div class="rc-conta-mobile-campo">
-                      <span class="rc-conta-mobile-label">Data da locação</span>
+                      <span class="rc-conta-mobile-label">Data da locaÃ§Ã£o</span>
                       <span class="rc-conta-mobile-valor">{{ locacao.data_entrega|date:"d/m/Y" }}</span>
                     </div>
                     <div class="rc-conta-mobile-campo">
@@ -1797,7 +1971,7 @@
                   </div>
 
                   <div class="rc-conta-mobile-preview" id="previewLocacaoMobile{{ locacao.id }}">
-                    <span class="rc-pill">Não atingida</span><br>
+                    <span class="rc-pill">NÃ£o atingida</span><br>
                     Saldo continua R$ {{ locacao.saldo_devedor|floatformat:2 }}
                   </div>
                 </article>
@@ -1827,8 +2001,8 @@
           </div>
         </section>
         <section class="rc-historico">
-          <h2 class="rc-historico-title">Histórico recente do cliente</h2>
-          <p class="rc-historico-subtitle">Últimos pagamentos registrados para este cliente.</p>
+          <h2 class="rc-historico-title">HistÃ³rico recente do cliente</h2>
+          <p class="rc-historico-subtitle">Ãšltimos pagamentos registrados para este cliente.</p>
           {% if pagamentos_recentes %}
             <div class="rc-historico-lista" id="historicoRecenteCliente">
               {% for pagamento in pagamentos_recentes %}
@@ -1871,7 +2045,7 @@
   <div class="rc-forma-modal" role="dialog" aria-modal="true" aria-labelledby="formaPagamentoModalTitle">
     <div class="rc-forma-modal-head">
       <h2 id="formaPagamentoModalTitle" class="rc-forma-modal-title">Forma de pagamento</h2>
-      <button type="button" id="formaPagamentoModalFechar" class="rc-forma-modal-close" aria-label="Fechar">×</button>
+      <button type="button" id="formaPagamentoModalFechar" class="rc-forma-modal-close" aria-label="Fechar">Ã—</button>
     </div>
     <div class="rc-forma-modal-lista">
       {% for forma in formas_pagamento %}
@@ -2326,6 +2500,13 @@
     const listenerOptions = { signal: controller.signal };
     const form = document.getElementById("formReceberCliente");
     const valor = document.getElementById("valorRecebidoCliente");
+    const calculadora = document.getElementById("calculadoraRecebimento");
+    const calculadoraToggle = document.getElementById("calculadoraToggle");
+    const calculadoraDisplay = document.getElementById("calculadoraDisplay");
+    const calculadoraUsarValor = document.getElementById("calculadoraUsarValor");
+    const calculadoraTeclas = calculadora
+      ? Array.from(calculadora.querySelectorAll("[data-calc]"))
+      : [];
     const dataRecebimento = document.getElementById("dataRecebimentoCliente");
     const forma = document.getElementById("formaPagamentoCliente");
     const btnFormaPagamento = document.getElementById("btnFormaPagamentoCliente");
@@ -2393,7 +2574,7 @@
         const selecionada = botao.dataset.formaPagamento === forma.value;
         botao.classList.toggle("selecionada", selecionada);
         const check = botao.querySelector(".rc-forma-modal-check");
-        if (check) check.textContent = selecionada ? "✓" : "";
+        if (check) check.textContent = selecionada ? "âœ“" : "";
       });
     }
 
@@ -2463,27 +2644,27 @@
 
       if (!dividaEstaSelecionada(conta)) {
         aviso.textContent =
-          "A locação NÃO será abatida. O valor não será usado para quitar esta locação. Ela continuará em aberto: "
+          "A locaÃ§Ã£o NÃƒO serÃ¡ abatida. O valor nÃ£o serÃ¡ usado para quitar esta locaÃ§Ã£o. Ela continuarÃ¡ em aberto: "
           + moeda(saldoAtual) + ".";
         return;
       }
 
       if (receber <= 0) {
         aviso.textContent =
-          "Locação marcada. Este recebimento não destina valor à locação.";
+          "LocaÃ§Ã£o marcada. Este recebimento nÃ£o destina valor Ã  locaÃ§Ã£o.";
         return;
       }
 
       if (saldoApos <= 0.009) {
         aviso.textContent =
           moeda(receber)
-          + " serão abatidos da locação. Ela ficará QUITADA.";
+          + " serÃ£o abatidos da locaÃ§Ã£o. Ela ficarÃ¡ QUITADA.";
         return;
       }
 
       aviso.textContent =
         moeda(receber)
-        + " serão abatidos da locação. Restará "
+        + " serÃ£o abatidos da locaÃ§Ã£o. RestarÃ¡ "
         + moeda(saldoApos) + ".";
     }
 
@@ -2504,11 +2685,20 @@
     }
 
     function dividaEstaSelecionada(conta) {
+      const algumaDividaSelecionada = dividasCheckboxes.some(function (item) {
+        return item.checked;
+      });
+
+      if (!algumaDividaSelecionada) {
+        return true;
+      }
+
       const chave = chaveDivida(conta);
       const checkbox = dividasCheckboxes.find(function (item) {
         return item.value === chave;
       });
-      return checkbox ? checkbox.checked : true;
+
+      return checkbox ? checkbox.checked : false;
     }
     let resolverModalReceber = null;
     let focoAnteriorReceber = null;
@@ -2680,9 +2870,9 @@
       if (!duplicado) return false;
       ordenarHistoricoPorDuplicidade(itemDuplicado);
 
-      alertaDuplicidade.textContent = "Atenção: já existe um pagamento de "
+      alertaDuplicidade.textContent = "AtenÃ§Ã£o: jÃ¡ existe um pagamento de "
         + moeda(Number(duplicado.valor_numero))
-        + " para este cliente hoje. Confira se este pagamento já foi lançado.";
+        + " para este cliente hoje. Confira se este pagamento jÃ¡ foi lanÃ§ado.";
       alertaDuplicidade.classList.add("visivel");
       return true;
     }
@@ -2745,7 +2935,7 @@
             atualizarLinha(
               conta,
               "rc-row-prevista-neutra",
-              '<span class="rc-pill">Não selecionada</span><br>Saldo continua ' + moeda(Number(conta.valor_em_aberto || 0))
+              '<span class="rc-pill">NÃ£o selecionada</span><br>Saldo continua ' + moeda(Number(conta.valor_em_aberto || 0))
             );
           }
           return;
@@ -2761,7 +2951,7 @@
           aplicacoes.push({
             titulo: conta.titulo || (
               (conta.tipo || "conta") === "locacao"
-                ? "Locação #" + conta.id
+                ? "LocaÃ§Ã£o #" + conta.id
                 : (conta.venda_id ? "Venda #" + conta.venda_id : "Conta #" + conta.id)
             ),
             descricao: conta.descricao || "",
@@ -2774,7 +2964,7 @@
           atualizarLinha(
             conta,
             "rc-row-prevista-neutra",
-            '<span class="rc-pill">Não atingida</span><br>Saldo continua ' + moeda(aberto)
+            '<span class="rc-pill">NÃ£o atingida</span><br>Saldo continua ' + moeda(aberto)
           );
           return;
         }
@@ -2786,7 +2976,7 @@
           atualizarLinha(
             conta,
             "rc-row-prevista-quitada",
-            '<span class="rc-pill quitara">Será quitada</span><br>Receberá ' + moeda(receber)
+            '<span class="rc-pill quitara">SerÃ¡ quitada</span><br>ReceberÃ¡ ' + moeda(receber)
           );
           return;
         }
@@ -2794,15 +2984,15 @@
         atualizarLinha(
           conta,
           "rc-row-prevista-parcial",
-          '<span class="rc-pill parcial">Ficará parcial</span><br>Receberá ' + moeda(receber) + '<br>Saldo após: ' + moeda(saldoApos)
+          '<span class="rc-pill parcial">FicarÃ¡ parcial</span><br>ReceberÃ¡ ' + moeda(receber) + '<br>Saldo apÃ³s: ' + moeda(saldoApos)
         );
       });
 
       if (resumo) {
         if (valorInformado <= 0) {
-          resumo.textContent = "Informe um valor para calcular a prévia.";
+          resumo.textContent = "Informe um valor para calcular a prÃ©via.";
         } else if (!aplicacoes.length) {
-          resumo.textContent = "Nenhuma dívida selecionada receberá este valor.";
+          resumo.textContent = "Nenhuma dÃ­vida selecionada receberÃ¡ este valor.";
         } else {
           const detalhes = aplicacoes.map(function (item) {
             let textoAplicacao = item.titulo + " \u2014 " + moeda(item.valor);
@@ -2813,7 +3003,7 @@
 
             if (item.saldoApos <= 0.009) {
               textoAplicacao += "\nAp\u00f3s o recebimento, esta "
-                + ((item.titulo || "").startsWith("Loca") ? "locação" : "d\u00edvida")
+                + ((item.titulo || "").startsWith("Loca") ? "locaÃ§Ã£o" : "d\u00edvida")
                 + " ficar\u00e1 quitada.";
             } else {
               textoAplicacao += "\nSaldo ap\u00f3s o recebimento: " + moeda(item.saldoApos);
@@ -2823,7 +3013,7 @@
           });
 
           resumo.style.whiteSpace = "pre-line";
-          resumo.textContent = "Aplicação do recebimento: " + detalhes.join(" | ");
+          resumo.textContent = "AplicaÃ§Ã£o do recebimento: " + detalhes.join(" | ");
         }
       }
 
@@ -2839,7 +3029,7 @@
       if (sobraBox) {
         if (sobra > 0.009) {
           sobraBox.hidden = false;
-          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se será devolvida como troco ou guardada como crédito.";
+          sobraBox.textContent = "Sobra de " + moeda(sobra) + ". Escolha se serÃ¡ devolvida como troco ou guardada como crÃ©dito.";
         } else {
           sobraBox.hidden = true;
           sobraBox.textContent = "";
@@ -2858,9 +3048,237 @@
       }
     }
 
-    dividasCheckboxes.forEach(function (checkbox) {
-      checkbox.addEventListener("change", calcularPrevia, listenerOptions);
+    if (calculadoraToggle && calculadora) {
+      calculadoraToggle.addEventListener("click", function () {
+        const abrir = calculadora.hidden;
+
+        calculadora.hidden = !abrir;
+        calculadoraToggle.setAttribute("aria-expanded", abrir ? "true" : "false");
+        calculadoraToggle.textContent = abrir ? "Fechar calculadora" : "Calculadora";
+      }, listenerOptions);
+    }
+    let calculadoraAcumulado = null;
+    let calculadoraOperador = null;
+    let calculadoraEntrada = "0";
+    let calculadoraExpressao = "";
+
+    function simboloCalculadora(operador) {
+      if (operador === "*") return "\u00D7";
+      if (operador === "/") return "\u00F7";
+      if (operador === "-") return "\u2212";
+      return operador;
+    }
+
+    function numeroCalculadora() {
+      const numero = Number(
+        calculadoraEntrada.replace(/\./g, "").replace(",", ".")
+      );
+
+      return Number.isFinite(numero) ? numero : NaN;
+    }
+
+    function textoNumeroCalculadora(numero) {
+      if (!Number.isFinite(numero)) return "Erro";
+
+      return String(
+        Math.round((numero + Number.EPSILON) * 100) / 100
+      ).replace(".", ",");
+    }
+
+    function atualizarVisorCalculadora() {
+      if (!calculadoraDisplay) return;
+
+      if (calculadoraEntrada === "Erro") {
+        calculadoraDisplay.textContent = "Erro";
+        return;
+      }
+
+      calculadoraDisplay.textContent = calculadoraExpressao
+        ? calculadoraExpressao + calculadoraEntrada
+        : calculadoraEntrada;
+    }
+
+    function executarOperacaoCalculadora(a, b, operador) {
+      if (operador === "+") return a + b;
+      if (operador === "-") return a - b;
+      if (operador === "*") return a * b;
+      if (operador === "/") return b === 0 ? NaN : a / b;
+      return b;
+    }
+    function atualizarEstadoCalculadora() {
+      if (!calculadoraUsarValor) return;
+
+      const temDividaSelecionada = dividasCheckboxes.some(function (checkbox) {
+        return checkbox.checked;
+      });
+
+      calculadoraUsarValor.disabled = temDividaSelecionada;
+    }
+
+    calculadoraTeclas.forEach(function (botao) {
+      botao.addEventListener("click", function () {
+        const tecla = botao.dataset.calc;
+
+        if (/^\d$/.test(tecla)) {
+          if (calculadoraEntrada === "0" || calculadoraEntrada === "Erro") {
+            calculadoraEntrada = tecla;
+          } else {
+            calculadoraEntrada += tecla;
+          }
+
+          atualizarVisorCalculadora();
+          return;
+        }
+
+        if (tecla === ",") {
+          if (calculadoraEntrada === "Erro") {
+            calculadoraEntrada = "0,";
+          } else if (!calculadoraEntrada.includes(",")) {
+            calculadoraEntrada += ",";
+          }
+
+          atualizarVisorCalculadora();
+          return;
+        }
+
+        if (tecla === "C") {
+          calculadoraAcumulado = null;
+          calculadoraOperador = null;
+          calculadoraEntrada = "0";
+          calculadoraExpressao = "";
+          atualizarVisorCalculadora();
+          return;
+        }
+
+        if (["+", "-", "*", "/"].includes(tecla)) {
+          const atual = numeroCalculadora();
+          if (!Number.isFinite(atual)) return;
+
+          if (calculadoraOperador !== null) {
+            calculadoraAcumulado = executarOperacaoCalculadora(
+              calculadoraAcumulado,
+              atual,
+              calculadoraOperador
+            );
+
+            if (!Number.isFinite(calculadoraAcumulado)) {
+              calculadoraEntrada = "Erro";
+              calculadoraExpressao = "";
+              calculadoraOperador = null;
+              atualizarVisorCalculadora();
+              return;
+            }
+          } else {
+            calculadoraAcumulado = atual;
+          }
+
+          calculadoraOperador = tecla;
+          calculadoraExpressao =
+            textoNumeroCalculadora(calculadoraAcumulado) +
+            " " +
+            simboloCalculadora(tecla) +
+            " ";
+
+          calculadoraEntrada = "";
+          atualizarVisorCalculadora();
+          return;
+        }
+
+        if (tecla === "=" && calculadoraOperador !== null) {
+          const atual = numeroCalculadora();
+          if (!Number.isFinite(atual)) return;
+
+          const resultado = executarOperacaoCalculadora(
+            calculadoraAcumulado,
+            atual,
+            calculadoraOperador
+          );
+
+          calculadoraEntrada = textoNumeroCalculadora(resultado);
+          calculadoraAcumulado = Number.isFinite(resultado) ? resultado : null;
+          calculadoraOperador = null;
+          calculadoraExpressao = "";
+
+          atualizarVisorCalculadora();
+        }
+      }, listenerOptions);
     });
+    if (calculadoraUsarValor) {
+      calculadoraUsarValor.addEventListener("click", function () {
+        const temDividaSelecionada = dividasCheckboxes.some(function (checkbox) {
+          return checkbox.checked;
+        });
+
+        if (temDividaSelecionada || !valor) return;
+
+        if (calculadoraOperador !== null || calculadoraEntrada === "") return;
+
+        const numero = numeroCalculadora();
+
+        if (!Number.isFinite(numero)) return;
+
+        valor.value = numero.toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+
+        calcularPrevia();
+        valor.focus();
+        valor.select();
+      }, listenerOptions);
+    }
+    function sincronizarValorComDividasSelecionadas() {
+      const selecionadas = dividasCheckboxes.filter(function (checkbox) {
+        return checkbox.checked;
+      });
+
+      atualizarEstadoCalculadora();
+
+      if (!valor) {
+        calcularPrevia();
+        return;
+      }
+
+      if (!selecionadas.length) {
+        valor.readOnly = false;
+        valor.removeAttribute("aria-readonly");
+
+        if (valor.dataset.dividaFoiSelecionada === "1") {
+          valor.value = "";
+        }
+
+        calcularPrevia();
+        return;
+      }
+
+      valor.dataset.dividaFoiSelecionada = "1";
+
+      const totalSelecionado = selecionadas.reduce(function (total, checkbox) {
+        const conta = contas.find(function (item) {
+          return chaveDivida(item) === checkbox.value;
+        });
+
+        return total + Number(conta?.valor_em_aberto || 0);
+      }, 0);
+
+      valor.value = totalSelecionado.toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      valor.readOnly = true;
+      valor.setAttribute("aria-readonly", "true");
+      calcularPrevia();
+    }
+
+    dividasCheckboxes.forEach(function (checkbox) {
+      checkbox.addEventListener(
+        "change",
+        sincronizarValorComDividasSelecionadas,
+        listenerOptions
+      );
+    });
+
+    sincronizarValorComDividasSelecionadas();
 
     function atualizarOrdemFocoSobra(temSobra) {
       opcoesSobra.forEach(function (opcao, indice) {
