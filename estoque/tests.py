@@ -14254,6 +14254,74 @@ class CorrecaoFinanceiroCompraTests(TestCase):
         self.assert_estoque_itens_caixa_inalterados()
 
 
+    def test_compra_direta_a_prazo_permite_corrigir_vencimento(self):
+        self.conta.data_vencimento = date(2026, 9, 30)
+        self.conta.valor_original = Decimal("433.60")
+        self.conta.valor_em_aberto = Decimal("433.60")
+        self.conta.save(
+            update_fields=[
+                "data_vencimento",
+                "valor_original",
+                "valor_em_aberto",
+                "atualizado_em",
+            ]
+        )
+
+        url = reverse(
+            "estoque:compra_corrigir_itens",
+            kwargs={"pk": self.compra.pk},
+        )
+
+        resposta = self.client.get(url, secure=True)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Boletos da compra")
+        self.assertContains(resposta, 'name="parcela_vencimento_1"', html=False)
+        self.assertContains(resposta, 'value="2026-09-30"', html=False)
+
+    def test_compra_direta_a_prazo_salva_novo_vencimento(self):
+        self.conta.data_vencimento = date(2026, 9, 30)
+        self.conta.valor_original = Decimal("433.60")
+        self.conta.valor_em_aberto = Decimal("433.60")
+        self.conta.save(
+            update_fields=[
+                "data_vencimento",
+                "valor_original",
+                "valor_em_aberto",
+                "atualizado_em",
+            ]
+        )
+
+        url = reverse(
+            "estoque:compra_corrigir_itens",
+            kwargs={"pk": self.compra.pk},
+        )
+
+        resposta = self.client.post(
+            url,
+            {
+                "confirmar": "1",
+                "tipo_pagamento_compra": "aprazo",
+                "item_id[]": [str(self.item.id)],
+                "quantidade[]": [str(self.item.quantidade)],
+                "preco_unitario[]": [str(self.item.preco_unitario)],
+                "conta_pagar_id_1": str(self.conta.id),
+                "parcela_valor_1": "433,60",
+                "parcela_vencimento_1": "2026-10-15",
+            },
+            secure=True,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+
+        self.conta.refresh_from_db()
+        self.compra.refresh_from_db()
+
+        self.assertEqual(self.conta.data_vencimento, date(2026, 10, 15))
+        self.assertEqual(self.conta.valor_original, Decimal("433.60"))
+        self.assertEqual(self.conta.valor_em_aberto, Decimal("433.60"))
+        self.assertEqual(self.compra.total, Decimal("433.60"))
+
 class CorrecaoOrigemCompraTests(TestCase):
     def setUp(self):
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Origem")

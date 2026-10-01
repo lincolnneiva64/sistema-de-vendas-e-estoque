@@ -12324,16 +12324,19 @@ def _conta_pagar_valor_editavel(conta):
     return True, ""
 
 
-def _contexto_correcao_parcelas_compra(compra, contas_pagar=None):
+def _contexto_correcao_parcelas_compra(compra, contas_pagar=None, permitir_contas_diretas=False):
     contas_pagar = contas_pagar if contas_pagar is not None else _contas_pagar_da_compra(compra)
     lista = getattr(compra, "lista_fornecedor", None)
-    if not lista or lista.forma_cobranca_nota not in {
-        ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
-        ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
-    }:
+    lista_com_boletos = bool(
+        lista and lista.forma_cobranca_nota in {
+            ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
+            ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
+        }
+    )
+    if not lista_com_boletos and not (permitir_contas_diretas and contas_pagar):
         return None
 
-    parcelas = list(lista.parcelas_nota.order_by("numero", "id"))
+    parcelas = list(lista.parcelas_nota.order_by("numero", "id")) if lista_com_boletos else []
     parcelas_por_numero = {parcela.numero: parcela for parcela in parcelas}
     linhas = []
     total_contas = sum((_financeiro_dinheiro(conta.valor_original) for conta in contas_pagar), Decimal("0.00")).quantize(Decimal("0.01"))
@@ -12341,6 +12344,9 @@ def _contexto_correcao_parcelas_compra(compra, contas_pagar=None):
         numero = conta.numero_parcela or indice
         parcela = parcelas_por_numero.get(numero)
         valor_editavel, motivo_bloqueio_valor = _conta_pagar_valor_editavel(conta)
+        if not lista_com_boletos:
+            valor_editavel = False
+            motivo_bloqueio_valor = "Valor bloqueado: compra direta permite corrigir apenas o vencimento por esta tela."
         data_editavel = conta.status != ContaPagar.STATUS_CANCELADA
         total_pago = _total_pago_conta_pagar(conta).quantize(Decimal("0.01"))
         valor = _financeiro_dinheiro(conta.valor_original).quantize(Decimal("0.01"))
@@ -12358,10 +12364,15 @@ def _contexto_correcao_parcelas_compra(compra, contas_pagar=None):
             "total_pago": total_pago,
             "status": conta.get_status_display(),
         })
-    valor_financeiro = _financeiro_dinheiro(lista.valor_nota_boleto if lista.valor_nota_boleto is not None else compra.total).quantize(Decimal("0.01"))
+    valor_financeiro = _financeiro_dinheiro(
+        lista.valor_nota_boleto
+        if lista_com_boletos and lista.valor_nota_boleto is not None
+        else compra.total
+    ).quantize(Decimal("0.01"))
     return {
         "lista": lista,
-        "forma": lista.forma_cobranca_nota,
+        "forma": lista.forma_cobranca_nota if lista_com_boletos else "conta_direta",
+        "direta": not lista_com_boletos,
         "valor_financeiro": valor_financeiro,
         "valor_financeiro_input": f"{valor_financeiro:.2f}".replace(".", ","),
         "quantidade": len(contas_pagar),
@@ -12485,6 +12496,69 @@ def _corrigir_parcelas_financeiras_compra(request, compra, valor_financeiro_espe
             "Correcao financeira de parcelas por "
             f"{operador}: " + "; ".join(alteracoes) + ". Caixa/Banco nao alterado.",
         )
+    return bool(alteracoes)
+
+
+def _corrigir_vencimentos_contas_diretas_compra(request, compra):
+    if request.POST.get("confirmar") != "1":
+        raise ValueError("Confirme a correcao antes de continuar.")
+
+    contas = list(
+        ContaPagar.objects
+        .select_for_update()
+        .filter(compra=compra)
+        .prefetch_related("pagamentos")
+        .order_by("numero_parcela", "data_vencimento", "id")
+    )
+
+    alteracoes = []
+
+    for indice, conta in enumerate(contas, start=1):
+        numero = conta.numero_parcela or indice
+
+        if str(request.POST.get(f"conta_pagar_id_{numero}") or "") != str(conta.id):
+            raise ValueError(
+                "As Contas a Pagar mudaram. Recarregue a pagina antes de corrigir."
+            )
+
+        vencimento_texto = (
+            request.POST.get(f"parcela_vencimento_{numero}") or ""
+        ).strip()
+        vencimento = parse_date(vencimento_texto) if vencimento_texto else None
+
+        if not vencimento:
+            raise ValueError(
+                f"Informe a data de vencimento da parcela {numero}."
+            )
+
+        data_anterior = conta.data_vencimento
+        if vencimento == data_anterior:
+            continue
+
+        if conta.status == ContaPagar.STATUS_CANCELADA:
+            raise ValueError(
+                f"Parcela {numero} esta cancelada e nao pode ser alterada."
+            )
+
+        conta.data_vencimento = vencimento
+        conta.save(update_fields=["data_vencimento", "atualizado_em"])
+
+        alteracoes.append(
+            f"parcela {numero} vencimento "
+            f"{data_anterior.strftime('%d/%m/%Y') if data_anterior else '-'} "
+            f"-> {vencimento.strftime('%d/%m/%Y')}"
+        )
+
+    if alteracoes:
+        operador = (compra.operador or "Operador nao informado").strip()
+        _registrar_observacao_compra(
+            compra,
+            "Correcao de vencimento de Conta a Pagar por "
+            f"{operador}: "
+            + "; ".join(alteracoes)
+            + ". Caixa/Banco nao alterado.",
+        )
+
     return bool(alteracoes)
 
 
@@ -12861,21 +12935,31 @@ def compra_corrigir_itens(request, pk):
 
                 contas_pagar_correcao = _contas_pagar_da_compra(compra)
                 contexto_parcelas_correcao = (
-                    _contexto_correcao_parcelas_compra(compra, contas_pagar_correcao)
+                    _contexto_correcao_parcelas_compra(
+                        compra,
+                        contas_pagar_correcao,
+                        permitir_contas_diretas=True,
+                    )
                     if _compra_pagamento_a_prazo(compra.tipo_pagamento)
                     else None
                 )
                 if contexto_parcelas_correcao:
-                    _corrigir_parcelas_financeiras_compra(
-                        request,
-                        compra,
-                        valor_financeiro_esperado=novo_total,
-                    )
+                    if contexto_parcelas_correcao.get("direta"):
+                        _corrigir_vencimentos_contas_diretas_compra(
+                            request,
+                            compra,
+                        )
+                    else:
+                        _corrigir_parcelas_financeiras_compra(
+                            request,
+                            compra,
+                            valor_financeiro_esperado=novo_total,
+                        )
 
-                    lista = getattr(compra, "lista_fornecedor", None)
-                    if lista and lista.valor_nota_boleto != novo_total:
-                        lista.valor_nota_boleto = novo_total
-                        lista.save(update_fields=["valor_nota_boleto", "atualizado_em"])
+                        lista = getattr(compra, "lista_fornecedor", None)
+                        if lista and lista.valor_nota_boleto != novo_total:
+                            lista.valor_nota_boleto = novo_total
+                            lista.save(update_fields=["valor_nota_boleto", "atualizado_em"])
 
         except ValueError as exc:
             messages.error(request, str(exc))
@@ -12936,7 +13020,11 @@ def compra_corrigir_itens(request, pk):
     itens = compra.itens.select_related("produto").all()
     contas_pagar_correcao = _contas_pagar_da_compra(compra)
     correcao_parcelas = (
-        _contexto_correcao_parcelas_compra(compra, contas_pagar_correcao)
+        _contexto_correcao_parcelas_compra(
+            compra,
+            contas_pagar_correcao,
+            permitir_contas_diretas=True,
+        )
         if _compra_pagamento_a_prazo(compra.tipo_pagamento)
         else None
     )

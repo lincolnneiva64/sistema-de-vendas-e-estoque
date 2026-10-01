@@ -48,6 +48,8 @@
   .campo-boleto-correcao { width:100%; min-height:30px; padding:4px 6px; border:1px solid #cbd5e1; border-radius:6px; font:inherit; font-weight:800; }
   .campo-boleto-correcao[readonly] { background:#f1f5f9; color:#64748b; }
   .motivo-boleto-correcao { display:block; margin-top:3px; color:#92400e; font-size:.68rem; font-weight:800; }
+  .compra-correcao-table-boletos td { vertical-align:top; }
+
   .compra-correcao-totais { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; padding:6px 9px; }
   .compra-correcao-total { padding:6px 8px; border:1px solid #dbeafe; border-radius:7px; background:#f8fafc; }
   .compra-correcao-total span { display:block; color:#64748b; font-size:.62rem; line-height:1.1; font-weight:900; text-transform:uppercase; }
@@ -208,7 +210,7 @@
           Parcelas que já tiveram movimentação financeira permanecem protegidas.
         </p>
 
-        <table class="compra-correcao-table">
+        <table class="compra-correcao-table compra-correcao-table-boletos">
           <thead>
             <tr>
               <th>Parcela</th>
@@ -271,7 +273,7 @@
         <span id="textoImpactoFinanceiroCorrecaoCompra">Sem impacto financeiro previsto.</span>
       </div>
       <div class="compra-correcao-rodape">
-        <label class="compra-correcao-confirmacao"><input type="checkbox" required> Confirmo os itens, valores e boletos informados.</label>
+        <label class="compra-correcao-confirmacao"><input type="checkbox"> Confirmo os itens, valores e boletos informados.</label>
         <button type="submit" class="compra-correcao-btn" id="btnSalvarCorrecaoItensCompra">Salvar alterações</button>
       </div>
     </section>
@@ -305,14 +307,14 @@
   function numero(valor) { let texto=String(valor||"0").trim(); if(texto.includes(",")) texto=texto.replace(/\./g,"").replace(",", "."); texto=texto.replace(/[^\d.-]/g,""); return Number(texto)||0; }
   function moeda(valor) { return "R$ "+Number(valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function campoNumerico(alvo) { return alvo?.matches(".campo-quantidade-correcao, .campo-preco-correcao"); }
-  function campoNavegavel(alvo) { return alvo?.matches(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"); }
+  function campoNavegavel(alvo) { return alvo?.matches(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao, input[type=\"date\"].campo-boleto-correcao"); }
   function selecionarCampo(campo) {
     if (!campo) return;
     campo.focus();
     if (campoNumerico(campo)) campo.select();
   }
   function camposDeEdicao() {
-    return Array.from(document.querySelectorAll(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao"))
+    return Array.from(document.querySelectorAll(".campo-pagamento-correcao, .campo-produto-novo-correcao, .campo-quantidade-correcao, .campo-preco-correcao, .campo-boleto-correcao"))
       .filter(function(campo) { return !campo.disabled; });
   }
   function recalcular() {
@@ -361,7 +363,7 @@
     const indice=campos.indexOf(event.target);
     const proximo=indice >= 0 ? campos[indice+1] : null;
     if (proximo) selecionarCampo(proximo);
-    else adicionar?.focus();
+    else salvar?.focus();
   });
   form.addEventListener("change",function(event) {
     if(event.target.matches(".campo-produto-novo-correcao")) { const opcao=event.target.selectedOptions[0]; const preco=event.target.closest("tr").querySelector(".campo-preco-correcao"); if(preco&&opcao?.dataset.preco) preco.value=numero(opcao.dataset.preco).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
