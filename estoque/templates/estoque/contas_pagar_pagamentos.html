@@ -509,11 +509,11 @@
   </header>
 
   <div class="pp-periods">
-    <a href="?periodo=hoje" class="pp-period{% if periodo == 'hoje' %} active{% endif %}">Hoje</a>
-    <a href="?periodo=ontem" class="pp-period{% if periodo == 'ontem' %} active{% endif %}">Ontem</a>
-    <a href="?periodo=7" class="pp-period{% if periodo == '7' %} active{% endif %}">7 dias</a>
-    <a href="?periodo=30" class="pp-period{% if periodo == '30' %} active{% endif %}">30 dias</a>
-    <a href="?periodo=personalizado" class="pp-period{% if periodo == 'personalizado' %} active{% endif %}">Periodo</a>
+    <a href="?periodo=hoje" data-periodo="hoje" class="pp-period{% if periodo == 'hoje' %} active{% endif %}">Hoje</a>
+    <a href="?periodo=ontem" data-periodo="ontem" class="pp-period{% if periodo == 'ontem' %} active{% endif %}">Ontem</a>
+    <a href="?periodo=7" data-periodo="7" class="pp-period{% if periodo == '7' %} active{% endif %}">7 dias</a>
+    <a href="?periodo=30" data-periodo="30" class="pp-period{% if periodo == '30' %} active{% endif %}">30 dias</a>
+    <a href="?periodo=personalizado" data-periodo="personalizado" class="pp-period{% if periodo == 'personalizado' %} active{% endif %}">Periodo</a>
   </div>
 
   <section class="pp-card">
@@ -782,6 +782,17 @@
     enviar();
   }
 
+  document.querySelectorAll('.pp-period[data-periodo]').forEach(function (botao) {
+    botao.addEventListener('click', function (event) {
+      event.preventDefault();
+
+      if (periodo) {
+        periodo.value = botao.dataset.periodo;
+      }
+
+      enviar();
+    });
+  });
   if (fornecedor) {
     fornecedor.addEventListener('change', function () {
       sessionStorage.setItem('pagamentosFoco', 'fornecedor');
