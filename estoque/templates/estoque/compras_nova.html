@@ -5886,9 +5886,7 @@
       event.preventDefault();
       if (typeof event.stopPropagation === "function") event.stopPropagation();
       if (campo.classList.contains("campoMargemDesejadaCompra")) {
-        campo.closest(".compras-preco-simulador").dataset.origemEdicao = "margem";
         campo.value = percentualCampo(numero(campo.value));
-        atualizarPrecoPelaMargem(campo.closest(".compras-preco-simulador"), true);
       } else if (campo.classList.contains("campoNovoPrecoVendaCompra")) {
         campo.closest(".compras-preco-simulador").dataset.origemEdicao = "preco";
         campo.value = precoCampo(numero(campo.value));
