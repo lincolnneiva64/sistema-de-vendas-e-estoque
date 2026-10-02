@@ -4109,9 +4109,9 @@
   }
 
   if (valorCobradoCompra) {
-    if (valorCobradoCompra.value.trim()) {
-      valorCobradoCompra.dataset.valorEditado = "1";
-    }
+    {% if compra and compra.ajuste_total != 0 %}
+    valorCobradoCompra.dataset.valorEditado = "1";
+    {% endif %}
     valorCobradoCompra.addEventListener("input", function() {
       valorCobradoCompra.dataset.valorEditado = "1";
       recalcular();
