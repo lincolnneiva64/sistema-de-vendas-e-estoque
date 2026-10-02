@@ -4717,6 +4717,19 @@
       return;
     }
 
+    const linhas = Array.from(tabela.querySelectorAll("tbody .linha-item"));
+    const indiceAtual = linhas.indexOf(linha);
+    const proximaLinhaExistente = indiceAtual >= 0 ? linhas[indiceAtual + 1] : null;
+
+    if (proximaLinhaExistente && !linhaSemProduto(proximaLinhaExistente)) {
+      const quantidadeDestino = proximaLinhaExistente.querySelector('[name="quantidade[]"]');
+      focarCampo(quantidadeDestino);
+      if (quantidadeDestino && !compraMobile()) {
+        quantidadeDestino.select();
+      }
+      return;
+    }
+
     const linhaDestino = proximaLinhaVazia(linha) || criarLinhaItem();
 
     if (linhaSemProduto(linhaDestino)) {
