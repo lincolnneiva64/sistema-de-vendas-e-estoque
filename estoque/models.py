@@ -1,12 +1,40 @@
 from decimal import Decimal
+from uuid import uuid4
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .utils import normalize_category_name
+
+
+PRECOS_PRODUTO_CONTROLADOS = frozenset({
+    "preco_compra", "preco_compra_fracionado", "preco_vista", "preco_prazo",
+    "preco_vista_fracionado", "preco_prazo_fracionado", "preco_venda",
+})
+
+
+class ProdutoQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        campos = PRECOS_PRODUTO_CONTROLADOS.intersection(kwargs)
+        if not campos:
+            return super().update(**kwargs)
+        # Inclui bulk_update e expressoes: invalidar conservadoramente a autoria.
+        with transaction.atomic(using=self.db):
+            registros = list(self.select_for_update().order_by("pk").values("pk", "autoria_precos"))
+            total = 0
+            for registro in registros:
+                autoria = dict(registro["autoria_precos"] or {})
+                autoria.update({campo: uuid4().hex for campo in campos})
+                atualizacoes = {**kwargs, "autoria_precos": autoria}
+                total += models.QuerySet.update(self.filter(pk=registro["pk"]), **atualizacoes)
+            return total
+
+
 class Produto(models.Model):
+    objects = ProdutoQuerySet.as_manager()
+    autoria_precos = models.JSONField(default=dict, blank=True, editable=False)
 
     nome = models.CharField(max_length=120)
     codigo = models.CharField(max_length=50, blank=True, null=True)
@@ -121,7 +149,23 @@ class Produto(models.Model):
             self.percentual_prazo_fracionado = self.percentual_prazo_fracionado or 0
             self.preco_prazo_fracionado = self.preco_prazo_fracionado or 0
         self.full_clean()
-        super().save(*args, **kwargs)
+        using = kwargs.get("using") or self._state.db or "default"
+        with transaction.atomic(using=using):
+            anterior = (
+                type(self).objects.using(using).select_for_update()
+                .filter(pk=self.pk).values(*PRECOS_PRODUTO_CONTROLADOS, "autoria_precos").first()
+                if not self._state.adding else None
+            )
+            autoria = dict(anterior["autoria_precos"] or {}) if anterior else {}
+            campos_salvos = kwargs.get("update_fields")
+            campos = PRECOS_PRODUTO_CONTROLADOS if campos_salvos is None else PRECOS_PRODUTO_CONTROLADOS.intersection(campos_salvos)
+            for campo in campos:
+                if anterior and anterior[campo] != getattr(self, campo):
+                    autoria[campo] = uuid4().hex
+            self.autoria_precos = autoria
+            if campos_salvos:
+                kwargs["update_fields"] = set(campos_salvos) | {"autoria_precos"}
+            super().save(*args, **kwargs)
 
 
 class MovimentacaoEstoqueManual(models.Model):
@@ -2041,6 +2085,7 @@ class ItemCompra(models.Model):
         null=True,
     )
     revisao_preco_concluida = models.BooleanField(default=False)
+    alteracoes_precos = models.JSONField(default=dict, blank=True, editable=False)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
     observacao = models.TextField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)

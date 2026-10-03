@@ -43,6 +43,384 @@ from locacoes.models import (
 
 
 
+class ExclusaoCompraFinanceiroTests(TestCase):
+    def setUp(self):
+        self.fornecedor = Fornecedor.objects.create(nome="Fornecedor Exclusao")
+        self.produto = Produto.objects.create(
+            nome="Produto Exclusao", quantidade=Decimal("5.000"),
+            preco_compra=Decimal("2.00"), preco_vista=Decimal("3.00"),
+            preco_prazo=Decimal("4.00"),
+        )
+        self.compra = Compra.objects.create(
+            fornecedor=self.fornecedor, data_compra=timezone.localdate(),
+            tipo_pagamento="avista", total=Decimal("90.00"),
+            status=Compra.STATUS_FINALIZADA, estoque_entrada_realizada=True,
+        )
+        self.item = ItemCompra.objects.create(
+            compra=self.compra, produto=self.produto, quantidade=Decimal("1.000"),
+            preco_unitario=Decimal("90.00"), valor_total=Decimal("90.00"),
+        )
+        self.contas = {
+            chave: views._conta_financeira_padrao(chave)
+            for chave in ("caixa", "banco", "reserva")
+        }
+        self.url = reverse("estoque:compra_excluir", args=[self.compra.pk])
+
+    def movimento(self, chave, valor="90.00", tipo="saida", compra=None, origem="compra_a_vista"):
+        return MovimentoFinanceiro.objects.create(
+            compra=compra or self.compra, conta=self.contas[chave],
+            tipo=tipo, valor=Decimal(valor), data=timezone.localdate(), origem=origem,
+        )
+
+    def conta_pagar(self, numero):
+        self.compra.tipo_pagamento = "aprazo"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        return ContaPagar.objects.create(
+            compra=self.compra, fornecedor=self.fornecedor,
+            data_emissao=timezone.localdate(), numero_parcela=numero, total_parcelas=2,
+            valor_original=Decimal("45.00"), valor_em_aberto=Decimal("45.00"),
+        )
+
+    def excluir_e_conferir(self, distribuicao):
+        for chave, valor in distribuicao.items():
+            self.movimento(chave, valor)
+        saldos = {chave: views._saldo_conta_financeira(conta) for chave, conta in self.contas.items()}
+        self.assertEqual(self.client.post(self.url, secure=True).status_code, 302)
+        self.assertFalse(Compra.objects.filter(pk=self.compra.pk).exists())
+        self.assertFalse(ItemCompra.objects.filter(pk=self.item.pk).exists())
+        self.assertFalse(MovimentoFinanceiro.objects.exists())
+        for chave, conta in self.contas.items():
+            self.assertEqual(views._saldo_conta_financeira(conta), saldos[chave] + Decimal(distribuicao.get(chave, "0")))
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("5.000") - self.item.quantidade)
+        self.assertEqual(self.produto.preco_compra, Decimal("2.00"))
+        self.assertEqual(self.produto.preco_vista, Decimal("3.00"))
+        self.assertEqual(self.produto.preco_prazo, Decimal("4.00"))
+
+    def test_caixa(self):
+        self.excluir_e_conferir({"caixa": "90.00"})
+
+    def test_banco_pix(self):
+        self.excluir_e_conferir({"banco": "90.00"})
+
+    def test_reserva_sangria(self):
+        self.excluir_e_conferir({"reserva": "90.00"})
+
+    def test_origens_divididas(self):
+        self.excluir_e_conferir({"caixa": "20.00", "banco": "30.00", "reserva": "40.00"})
+
+    def test_quantidade_fracionada(self):
+        self.item.quantidade = Decimal("1.500")
+        self.item.save(update_fields=["quantidade"])
+        self.excluir_e_conferir({"banco": "90.00"})
+
+    def test_isolamento_e_remocao_de_correcoes_por_fk(self):
+        outra = Compra.objects.create(data_compra=timezone.localdate(), total=Decimal("90.00"))
+        protegido = self.movimento("banco", compra=outra)
+        protegido.descricao = f"Pagamento da compra #{self.compra.pk}"
+        protegido.save(update_fields=["descricao"])
+        legado = MovimentoFinanceiro.objects.create(
+            conta=self.contas["banco"], tipo="saida", valor=Decimal("9.00"),
+            data=timezone.localdate(), origem="compra_a_vista", descricao=protegido.descricao,
+        )
+        self.movimento("banco")
+        self.movimento("banco", "10.00", "entrada", origem="compra_correcao_origem")
+        self.movimento("reserva", "10.00", origem="compra_correcao_origem")
+        saldo = views._saldo_conta_financeira(self.contas["banco"])
+        self.client.post(self.url, secure=True)
+        self.assertEqual(set(MovimentoFinanceiro.objects.values_list("pk", flat=True)), {protegido.pk, legado.pk})
+        protegido.refresh_from_db()
+        self.assertEqual(protegido.compra_id, outra.pk)
+        self.assertEqual(views._saldo_conta_financeira(self.contas["banco"]), saldo + Decimal("80.00"))
+
+    def test_prazo_sem_pagamento(self):
+        contas_ids = [self.conta_pagar(numero).pk for numero in (1, 2)]
+        self.excluir_e_conferir({})
+        self.assertFalse(ContaPagar.objects.filter(pk__in=contas_ids).exists())
+
+    def conferir_bloqueio_pagamento(self, parcela, cancelado=False):
+        contas = [self.conta_pagar(numero) for numero in (1, 2)]
+        pagamento = PagamentoContaPagar.objects.create(
+            conta=contas[parcela - 1], data_pagamento=timezone.localdate(),
+            valor=Decimal("10.00"), cancelado=cancelado,
+        )
+        movimento = self.movimento("banco")
+        saldo = views._saldo_conta_financeira(self.contas["banco"])
+        resposta = self.client.post(self.url, secure=True)
+        self.assertEqual(resposta.status_code, 302)
+        self.assertTrue(any("pagamento/baixa" in str(msg) for msg in get_messages(resposta.wsgi_request)))
+        self.assertTrue(Compra.objects.filter(pk=self.compra.pk).exists())
+        self.assertEqual(ContaPagar.objects.filter(compra=self.compra).count(), 2)
+        self.assertTrue(PagamentoContaPagar.objects.filter(pk=pagamento.pk).exists())
+        movimento.refresh_from_db()
+        self.assertEqual(movimento.compra_id, self.compra.pk)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("5.000"))
+        self.assertEqual(views._saldo_conta_financeira(self.contas["banco"]), saldo)
+
+    def test_pagamento_primeira_parcela_bloqueia(self):
+        self.conferir_bloqueio_pagamento(1)
+
+    def test_pagamento_parcela_posterior_bloqueia(self):
+        self.conferir_bloqueio_pagamento(2)
+
+    def test_pagamento_cancelado_bloqueia(self):
+        self.conferir_bloqueio_pagamento(2, cancelado=True)
+
+    def test_cartao_sem_fatura_permite_exclusao(self):
+        from .models import CartaoCredito, LancamentoCartao
+
+        cartao = CartaoCredito.objects.create(nome="Cartao Teste", titular="Teste")
+        lancamento = LancamentoCartao.objects.create(
+            cartao=cartao, compra=self.compra, data=timezone.localdate(),
+            descricao="Compra teste", valor=self.compra.total,
+        )
+        self.excluir_e_conferir({})
+        self.assertFalse(LancamentoCartao.objects.filter(pk=lancamento.pk).exists())
+
+    def test_cartao_com_fatura_bloqueia_sem_alterar_efeitos(self):
+        from .models import CartaoCredito, FaturaCartao, LancamentoCartao
+
+        cartao = CartaoCredito.objects.create(nome="Cartao Teste", titular="Teste")
+        fatura = FaturaCartao.objects.create(cartao=cartao, data_vencimento=timezone.localdate())
+        lancamento = LancamentoCartao.objects.create(
+            cartao=cartao, fatura=fatura, compra=self.compra,
+            data=timezone.localdate(), descricao="Compra teste", valor=self.compra.total,
+        )
+        movimento = self.movimento("banco")
+        saldo = views._saldo_conta_financeira(self.contas["banco"])
+        self.assertEqual(self.client.post(self.url, secure=True).status_code, 302)
+        self.assertTrue(Compra.objects.filter(pk=self.compra.pk).exists())
+        lancamento.refresh_from_db()
+        self.assertEqual(lancamento.fatura_id, fatura.pk)
+        movimento.refresh_from_db()
+        self.assertEqual(movimento.compra_id, self.compra.pk)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("5.000"))
+        self.assertEqual(views._saldo_conta_financeira(self.contas["banco"]), saldo)
+
+    def test_falha_ao_excluir_compra_reverte_estoque_e_financeiro(self):
+        movimento = self.movimento("banco")
+        saldo = views._saldo_conta_financeira(self.contas["banco"])
+        with patch.object(Compra, "delete", side_effect=RuntimeError("falha simulada")):
+            with self.assertRaisesMessage(RuntimeError, "falha simulada"):
+                self.client.post(self.url, secure=True)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("5.000"))
+        movimento.refresh_from_db()
+        self.assertEqual(movimento.compra_id, self.compra.pk)
+        self.assertTrue(Compra.objects.filter(pk=self.compra.pk).exists())
+        self.assertEqual(views._saldo_conta_financeira(self.contas["banco"]), saldo)
+
+
+class ReversaoPrecosCompraTests(TestCase):
+    def setUp(self):
+        self.produto = Produto.objects.create(
+            nome="Produto Snapshot", quantidade=Decimal("5.000"),
+            preco_compra=Decimal("8.00"), preco_vista=Decimal("10.00"),
+            preco_prazo=Decimal("11.00"), vende_fracionado=True,
+            fator_conversao=Decimal("2.00"), preco_compra_fracionado=Decimal("3.75"),
+            preco_vista_fracionado=Decimal("5.00"), preco_prazo_fracionado=Decimal("5.50"),
+        )
+        self.compra, self.item = self.criar_compra("9.00")
+
+    def criar_compra(self, custo):
+        compra = Compra.objects.create(
+            data_compra=timezone.localdate(), tipo_pagamento="avista",
+            total=Decimal(custo), status=Compra.STATUS_RASCUNHO,
+        )
+        item = ItemCompra.objects.create(
+            compra=compra, produto=self.produto, quantidade=Decimal("1.000"),
+            preco_unitario=Decimal(custo), valor_total=Decimal(custo),
+        )
+        return compra, item
+
+    def finalizar(self, compra=None, custo=False, **precos):
+        compra = compra or self.compra
+        views._finalizar_compra_com_financeiro(
+            compra, {"banco": compra.total},
+            atualizar_custo_produto_ids={self.produto.pk} if custo else set(),
+            atualizar_preco_venda_produtos={(self.produto.pk, campo): Decimal(valor) for campo, valor in precos.items()},
+            revisao_precos_pendente=custo,
+        )
+        self.produto.refresh_from_db()
+        self.item.refresh_from_db()
+
+    def excluir(self, compra=None):
+        compra = compra or self.compra
+        resposta = self.client.post(reverse("estoque:compra_excluir", args=[compra.pk]), secure=True)
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(Compra.objects.filter(pk=compra.pk).exists())
+        self.produto.refresh_from_db()
+
+    def test_custo_e_custo_fracionado_voltam_ao_valor_real_anterior(self):
+        self.finalizar(custo=True)
+        self.assertEqual(set(self.item.alteracoes_precos), {"preco_compra", "preco_compra_fracionado"})
+        self.assertEqual(self.produto.preco_compra_fracionado, Decimal("4.50"))
+        self.excluir()
+        self.assertEqual(self.produto.preco_compra, Decimal("8.00"))
+        self.assertEqual(self.produto.preco_compra_fracionado, Decimal("3.75"))
+        self.assertEqual(self.produto.autoria_precos, {})
+
+    def test_vista_e_preco_venda_derivado(self):
+        self.finalizar(preco_vista="12.00")
+        self.assertEqual(set(self.item.alteracoes_precos), {"preco_vista", "preco_venda"})
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("10.00"))
+
+    def test_prazo(self):
+        self.finalizar(preco_prazo="13.00")
+        self.excluir()
+        self.assertEqual(self.produto.preco_prazo, Decimal("11.00"))
+
+    def test_precos_fracionados(self):
+        self.finalizar(preco_vista_fracionado="6.00", preco_prazo_fracionado="6.50")
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista_fracionado, Decimal("5.00"))
+        self.assertEqual(self.produto.preco_prazo_fracionado, Decimal("5.50"))
+
+    def test_compra_posterior_preservada_com_seus_snapshots(self):
+        self.produto.preco_vista = Decimal("11.00")
+        self.produto.save()
+        self.finalizar(custo=True)
+        outra, item = self.criar_compra("10.00")
+        self.finalizar(outra, custo=True)
+        item.refresh_from_db()
+        snapshot = item.alteracoes_precos
+        autoria = self.produto.autoria_precos.copy()
+        self.excluir()
+        self.assertEqual(self.produto.preco_compra, Decimal("10.00"))
+        self.assertEqual(self.produto.autoria_precos, autoria)
+        item.refresh_from_db()
+        self.assertEqual(item.alteracoes_precos, snapshot)
+        self.assertTrue(Compra.objects.filter(pk=outra.pk).exists())
+
+    def test_edicao_manual_save_preserva_preco_posterior(self):
+        self.finalizar(preco_vista="11.00")
+        self.produto.preco_vista = Decimal("12.00")
+        self.produto.save()
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("12.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("12.00"))
+
+    def test_edicao_volta_ao_mesmo_valor_sem_devolver_autoria(self):
+        self.finalizar(preco_vista="11.00")
+        token = self.produto.autoria_precos["preco_vista"]
+        for valor in ("12.00", "11.00"):
+            self.produto.preco_vista = Decimal(valor)
+            self.produto.save()
+        self.assertNotEqual(self.produto.autoria_precos["preco_vista"], token)
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("11.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("11.00"))
+
+    def test_update_importacao_invalida_autoria_mesmo_retornando_ao_valor(self):
+        self.finalizar(custo=True)
+        for valor in ("10.00", "9.00"):
+            Produto.objects.filter(pk=self.produto.pk).update(preco_compra=Decimal(valor))
+        self.excluir()
+        self.assertEqual(self.produto.preco_compra, Decimal("9.00"))
+        # O campo fracionado nao editado continua pertencendo a compra.
+        self.assertEqual(self.produto.preco_compra_fracionado, Decimal("3.75"))
+
+    def test_bulk_update_invalida_autoria(self):
+        self.finalizar(preco_prazo="12.00")
+        self.produto.preco_prazo = Decimal("13.00")
+        Produto.objects.bulk_update([self.produto], ["preco_prazo"])
+        self.excluir()
+        self.assertEqual(self.produto.preco_prazo, Decimal("13.00"))
+
+    def test_legado_sem_snapshot_preserva_precos(self):
+        self.finalizar()
+        self.assertEqual(self.item.alteracoes_precos, {})
+        self.excluir()
+        self.assertEqual(self.produto.preco_compra, Decimal("8.00"))
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+
+    def test_selecao_sem_mudanca_nao_cria_snapshot(self):
+        self.finalizar(preco_vista="10.00", preco_prazo="11.00")
+        self.assertEqual(self.item.alteracoes_precos, {})
+
+    def test_revisao_posterior_registra_somente_precos_alterados(self):
+        self.finalizar(custo=True)
+        resposta = self.client.post(reverse("estoque:revisao_precos_posterior_salvar"), {
+            "compra_id": self.compra.pk, "item_id": self.item.pk, "produto_id": self.produto.pk,
+            "atualizar_preco_venda_produto_ids[]": [str(self.produto.pk), str(self.produto.pk)],
+            "atualizar_preco_venda_nomes[]": ["preco_vista", "preco_prazo"],
+            "atualizar_preco_venda_valores[]": ["12.00", "11.00"],
+        }, secure=True)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.item.refresh_from_db()
+        self.assertEqual(set(self.item.alteracoes_precos), {
+            "preco_compra", "preco_compra_fracionado", "preco_vista", "preco_venda",
+        })
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+        self.assertEqual(self.produto.preco_compra, Decimal("8.00"))
+
+    def test_valor_divergente_com_token_original_nao_restaura(self):
+        from django.db import models
+
+        self.finalizar(preco_prazo="12.00")
+        models.QuerySet.update(Produto.objects.filter(pk=self.produto.pk), preco_prazo=Decimal("13.00"))
+        self.excluir()
+        self.assertEqual(self.produto.preco_prazo, Decimal("13.00"))
+
+    def test_preco_venda_divergente_nao_usa_normalizacao_em_memoria(self):
+        from django.db import models
+
+        self.finalizar(preco_vista="12.00")
+        models.QuerySet.update(Produto.objects.filter(pk=self.produto.pk), preco_venda=Decimal("13.00"))
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+        self.assertEqual(self.produto.preco_venda, Decimal("13.00"))
+
+    def test_update_estoque_nao_invalida_autoria_de_precos(self):
+        self.finalizar(preco_vista="12.00")
+        autoria = self.produto.autoria_precos.copy()
+        Produto.objects.filter(pk=self.produto.pk).update(quantidade=Decimal("7.000"))
+        self.produto.refresh_from_db()
+        self.produto.quantidade = Decimal("8.000")
+        self.produto.save(update_fields=["quantidade"])
+        self.assertEqual(self.produto.autoria_precos, autoria)
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+
+    def test_snapshot_sobrevive_a_regravacao_dos_itens_do_rascunho(self):
+        views._atualizar_precos_venda_produtos_compra(
+            {(self.produto.pk, "preco_vista"): Decimal("12.00")}, compra=self.compra,
+        )
+        self.item.refresh_from_db()
+        snapshot = self.item.alteracoes_precos
+        dados = {
+            "fornecedor": None, "data_compra": self.compra.data_compra,
+            "data_vencimento": None, "tipo_pagamento": "avista", "cartao": None,
+            "total": self.compra.total, "total_produtos": self.compra.total,
+            "ajuste_total": Decimal("0.00"), "observacao": "",
+            "itens": [{"produto": self.produto, "quantidade": Decimal("1.000"),
+                       "unidade": "UN", "preco_unitario": Decimal("9.00"),
+                       "valor_total": Decimal("9.00"), "observacao": ""}],
+        }
+        views._salvar_compra_e_itens(self.compra, dados, Compra.STATUS_RASCUNHO)
+        self.item = self.compra.itens.get()
+        self.assertEqual(self.item.alteracoes_precos, snapshot)
+        self.finalizar()
+        self.excluir()
+        self.assertEqual(self.produto.preco_vista, Decimal("10.00"))
+
+    def test_falha_exclusao_reverte_tambem_precos_e_tokens(self):
+        self.finalizar(custo=True, preco_vista="12.00")
+        autoria = self.produto.autoria_precos.copy()
+        with patch.object(Compra, "delete", side_effect=RuntimeError("falha simulada")):
+            with self.assertRaises(RuntimeError):
+                self.excluir()
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.preco_compra, Decimal("9.00"))
+        self.assertEqual(self.produto.preco_vista, Decimal("12.00"))
+        self.assertEqual(self.produto.autoria_precos, autoria)
+
+
 class FonteNotaWhatsappTests(SimpleTestCase):
     def test_fonte_nota_whatsapp_carrega_com_tamanho_solicitado(self):
         fonte = views._fonte_nota_whatsapp(44, negrito=True)

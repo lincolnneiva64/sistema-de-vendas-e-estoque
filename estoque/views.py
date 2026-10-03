@@ -11724,6 +11724,7 @@ def _dados_compra_post(request, exigir_itens=True):
 
 
 def _salvar_compra_e_itens(compra, dados, status):
+    snapshots = {item.produto_id: item.alteracoes_precos for item in compra.itens.all()}
     compra.fornecedor = dados["fornecedor"]
     compra.data_compra = dados["data_compra"]
     compra.data_vencimento = dados["data_vencimento"]
@@ -11746,6 +11747,7 @@ def _salvar_compra_e_itens(compra, dados, status):
             preco_unitario=item["preco_unitario"],
             valor_total=item["valor_total"],
             observacao=item["observacao"] or None,
+            alteracoes_precos=snapshots.get(item["produto"].pk, {}),
         )
         for item in dados["itens"]
     ]
@@ -11819,7 +11821,8 @@ def _produtos_preco_venda_atualizar_post(request):
     return precos
 
 
-def _atualizar_custos_produtos_compra(itens, produto_ids):
+def _atualizar_custos_produtos_compra(itens, produto_ids, compra=None):
+    from .services.precos_compra import aplicar_precos_compra
     produto_ids = set(produto_ids or [])
     if not produto_ids:
         return
@@ -11831,17 +11834,19 @@ def _atualizar_custos_produtos_compra(itens, produto_ids):
         preco_unitario = item.get("preco_unitario")
         if produto.preco_compra == preco_unitario:
             continue
-        atualizacoes = {
-            "preco_compra": preco_unitario,
-            "atualizado_em": timezone.now(),
-        }
+        atualizacoes = {"preco_compra": preco_unitario}
         fator = Decimal(str(produto.fator_conversao or "0"))
         if produto.vende_fracionado and fator > 0:
             atualizacoes["preco_compra_fracionado"] = (preco_unitario / fator).quantize(Decimal("0.01"))
-        Produto.objects.filter(pk=produto.pk).update(**atualizacoes)
+        item_compra = compra.itens.filter(produto_id=produto.pk).first() if compra else None
+        if item_compra:
+            aplicar_precos_compra(item_compra, atualizacoes)
+        else:
+            Produto.objects.filter(pk=produto.pk).update(**atualizacoes, atualizado_em=timezone.now())
 
 
-def _atualizar_precos_venda_produtos_compra(precos_por_produto):
+def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
+    from .services.precos_compra import aplicar_precos_compra
     if not precos_por_produto:
         return
 
@@ -11850,11 +11855,14 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto):
         produto_id, campo = chave
         atualizacoes = {
             campo: novo_preco,
-            "atualizado_em": agora,
         }
         if campo == "preco_vista":
             atualizacoes["preco_venda"] = novo_preco
-        Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes)
+        item_compra = compra.itens.filter(produto_id=produto_id).first() if compra else None
+        if item_compra:
+            aplicar_precos_compra(item_compra, atualizacoes)
+        else:
+            Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes, atualizado_em=agora)
 
 
 def _parcelas_financeiras_compra(compra):
@@ -11953,7 +11961,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
 
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
             produto.save(update_fields=["quantidade", "atualizado_em"])
-            _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids)
+            _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids, compra=compra)
             if compra.fornecedor_id:
                 ProdutoFornecedor.objects.update_or_create(
                     produto=produto,
@@ -11964,7 +11972,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                     },
                 )
 
-        _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
+        _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
 
         compra.revisao_precos_pendente = bool(revisao_precos_pendente)
         compra.estoque_entrada_realizada = True
@@ -12021,8 +12029,8 @@ def compras_nova(request):
                 status = Compra.STATUS_RASCUNHO
                 _salvar_compra_e_itens(compra, dados, status)
                 if acao == "finalizar":
-                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
-                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
+                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
+                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
                     if dados["compra_conta_futura"]:
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
                 if acao == "confirmar_financeiro":
@@ -12088,8 +12096,8 @@ def compra_editar(request, pk):
                 if acao in {"finalizar", "confirmar_financeiro"}:
                     _salvar_pagamento_nota_compra_lista(request, compra, dados)
                 if acao == "finalizar":
-                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
-                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
+                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
+                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
                     if dados["compra_conta_futura"]:
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
                 if acao == "confirmar_financeiro":
@@ -13465,6 +13473,7 @@ def compra_corrigir_origem_pagamento(request, pk):
 
 
 def compra_excluir(request, pk):
+    from .services.precos_compra import restaurar_precos_compra
     if request.method != "POST":
         return redirect("estoque:compras_detalhe", pk=pk)
 
@@ -13474,7 +13483,10 @@ def compra_excluir(request, pk):
             pk=pk,
         )
 
-        conta = getattr(compra, "conta_pagar", None)
+        contas_ids = list(
+            ContaPagar.objects.select_for_update()
+            .filter(compra=compra).values_list("pk", flat=True)
+        )
 
         lancamento_cartao = (
             LancamentoCartao.objects
@@ -13489,35 +13501,54 @@ def compra_excluir(request, pk):
                 "Esta compra nao pode ser excluida porque ja esta vinculada a uma fatura de cartao. Ajuste a fatura antes de excluir a compra.",
             )
             return redirect("estoque:compras_detalhe", pk=compra.pk)
-        if conta and conta.pagamentos.exists():
+        if PagamentoContaPagar.objects.filter(conta_id__in=contas_ids).exists():
             messages.error(
                 request,
-                "Esta compra nao pode ser excluida porque ja existe pagamento/baixa na conta a pagar."
+                "Esta compra nao pode ser excluida porque ja existe pagamento/baixa em uma das contas a pagar."
             )
             return redirect("estoque:compras_detalhe", pk=compra.pk)
 
+        itens = list(compra.itens.all())
+        produtos = {
+            produto.pk: produto
+            for produto in Produto.objects.select_for_update()
+            .filter(pk__in=[item.produto_id for item in itens if item.produto_id])
+            .order_by("pk")
+        }
         if compra.estoque_entrada_realizada:
-            for item in compra.itens.select_related("produto").all():
-                produto = item.produto
+            for item in itens:
+                produto = produtos.get(item.produto_id)
                 if not produto:
                     continue
 
-                quantidade_atual = produto.quantidade or 0
-                quantidade_estorno = int(item.quantidade or 0)
+                quantidade_atual = produto.quantidade or Decimal("0.000")
+                quantidade_estorno = item.quantidade or Decimal("0.000")
                 novo_estoque = quantidade_atual - quantidade_estorno
 
                 if novo_estoque < 0:
-                    novo_estoque = 0
+                    novo_estoque = Decimal("0.000")
 
                 produto.quantidade = novo_estoque
                 produto.save(update_fields=["quantidade", "atualizado_em"])
+
+        if compra.status == Compra.STATUS_FINALIZADA:
+            for item in itens:
+                produto = produtos.get(item.produto_id)
+                if produto:
+                    restaurar_precos_compra(item, produto)
+
+        movimentos_ids = list(
+            MovimentoFinanceiro.objects.select_for_update()
+            .filter(compra_id=compra.pk).values_list("pk", flat=True)
+        )
+        MovimentoFinanceiro.objects.filter(pk__in=movimentos_ids).delete()
 
         if lancamento_cartao:
             lancamento_cartao.delete()
         numero_compra = compra.pk
         compra.delete()
 
-    messages.success(request, f"Compra #{numero_compra} excluida e estoque estornado com sucesso.")
+    messages.success(request, f"Compra #{numero_compra} excluida e efeitos de estoque e financeiro desfeitos com sucesso.")
     return redirect("estoque:compras_lista")
 
 def fornecedores(request):
@@ -15754,7 +15785,7 @@ def revisao_precos_posterior_salvar(request):
             precos = _produtos_preco_venda_atualizar_post(request)
             if set(precos) != {(produto_id, campo) for _, campo, _ in enviados}:
                 raise ValueError("Preco invalido.")
-            _atualizar_precos_venda_produtos_compra(precos)
+            _atualizar_precos_venda_produtos_compra(precos, compra=compra)
             item.revisao_preco_concluida = True
             item.save(update_fields=["revisao_preco_concluida"])
             if not compra.itens.filter(preco_compra_anterior__isnull=False, revisao_preco_concluida=False).exists():

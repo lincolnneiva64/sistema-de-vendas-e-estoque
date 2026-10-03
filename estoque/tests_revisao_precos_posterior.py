@@ -59,8 +59,12 @@ class RevisaoPrecosPosteriorTests(TestCase):
         self.item.refresh_from_db()
         self.assertTrue(self.item.revisao_preco_concluida)
         produto_depois = Produto.objects.values().get(pk=self.produto.pk)
-        for campo in produto_antes.keys() - {"preco_vista", "preco_venda", "preco_prazo_fracionado", "atualizado_em"}:
+        for campo in produto_antes.keys() - {"preco_vista", "preco_venda", "preco_prazo_fracionado", "atualizado_em", "autoria_precos"}:
             self.assertEqual(produto_depois[campo], produto_antes[campo], campo)
+        self.assertEqual(set(produto_depois["autoria_precos"]), {"preco_vista", "preco_venda", "preco_prazo_fracionado"})
+        self.assertEqual(set(self.item.alteracoes_precos), {"preco_vista", "preco_venda", "preco_prazo_fracionado"})
+        for campo, registro in self.item.alteracoes_precos.items():
+            self.assertEqual(registro["alteracao_id"], produto_depois["autoria_precos"][campo])
         self.assertEqual(produto_depois["preco_vista"], Decimal("13.50"))
         self.assertEqual(produto_depois["preco_venda"], Decimal("13.50"))
         self.assertEqual(produto_depois["preco_prazo_fracionado"], Decimal("7.90"))
