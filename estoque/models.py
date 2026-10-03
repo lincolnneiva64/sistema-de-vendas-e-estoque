@@ -2034,6 +2034,13 @@ class ItemCompra(models.Model):
     quantidade = models.DecimalField(max_digits=12, decimal_places=3)
     unidade = models.CharField(max_length=20, blank=True)
     preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+    preco_compra_anterior = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        blank=True,
+        null=True,
+    )
+    revisao_preco_concluida = models.BooleanField(default=False)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
     observacao = models.TextField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)

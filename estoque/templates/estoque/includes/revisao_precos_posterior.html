@@ -1,0 +1,498 @@
+{% comment %}Adaptacao isolada do simulador de compras_nova.html. Calculos e renderizadores preservados; sem finalizacao ou custo.{% endcomment %}
+<style>
+  .rp-compras-precos-modal {
+    position:fixed;
+    inset:0;
+    z-index:6500;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+    background:rgba(15,23,42,.58);
+    overflow:hidden;
+    overscroll-behavior:contain;
+  }
+  .rp-compras-precos-modal.visivel { display:flex; }
+  .rp-compras-precos-caixa {
+    width:min(1040px, 94vw);
+    height:min(88vh, 760px);
+    height:min(88dvh, 760px);
+    max-height:calc(100vh - 32px);
+    max-height:calc(100dvh - 32px);
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    background:#fffdf8;
+    border:1px solid #f4d58d;
+    border-radius:14px;
+    box-shadow:0 26px 76px rgba(15,23,42,.32);
+  }
+  .rp-compras-precos-topo {
+    flex:0 0 auto;
+    padding:16px 20px 13px;
+    color:#172033;
+    background:linear-gradient(135deg, #fff7d6 0%, #eff6ff 100%);
+    border-bottom:1px solid #f3dc9f;
+  }
+  .rp-compras-precos-topo h2 { margin:0; font-size:1.22rem; font-weight:950; }
+  .rp-compras-precos-topo p { margin:3px 0 0; color:#475569; font-weight:750; line-height:1.3; }
+  .rp-compras-precos-lista {
+    flex:1 1 0;
+    min-height:0;
+    display:block;
+    padding:14px 16px;
+    overflow-y:hidden;
+    overflow-x:hidden;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  .rp-compras-precos-lista > .rp-compras-preco-card + .rp-compras-preco-card {
+    margin-top:9px;
+  }
+  .rp-compras-preco-card {
+    border:1px solid #e6edf6;
+    border-left:6px solid #2563eb;
+    border-radius:12px;
+    background:#fff;
+    box-shadow:0 12px 28px rgba(15,23,42,.08);
+    overflow:hidden;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+  }
+  .rp-compras-preco-progresso {
+    display:block;
+    margin-top:3px;
+    color:#64748b;
+    font-size:.82rem;
+    font-weight:850;
+  }
+  .rp-compras-preco-card-topo {
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 18px 12px;
+    border-bottom:1px solid #edf2f7;
+  }
+  .rp-compras-preco-produto { margin:0; font-size:1.12rem; font-weight:950; color:#172033; }
+  .rp-compras-preco-blocos {
+    display:grid;
+    gap:10px;
+    padding:12px 16px 14px;
+    flex:1 1 auto;
+    align-content:start;
+  }
+  .rp-compras-preco-custos {
+    display:grid;
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+    gap:8px;
+  }
+  .rp-compras-preco-custo-box {
+    display:grid;
+    grid-template-columns:auto minmax(0, 1fr) auto auto minmax(0, 1fr);
+    gap:8px;
+    align-items:center;
+    padding:9px 10px;
+    border:1px solid #e2e8f0;
+    border-radius:9px;
+    background:#fbfdff;
+  }
+  .rp-compras-preco-custo-box strong {
+    color:#334155;
+    font-size:.76rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+  .rp-compras-preco-custo-box span {
+    color:#172033;
+    font-weight:950;
+  }
+  .rp-compras-preco-seta,
+  .rp-compras-preco-custo-box .rp-compras-preco-seta {
+    color:#64748b;
+    font-weight:950;
+  }
+  .rp-compras-preco-tabela-wrap {
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    overflow:hidden;
+    background:#fff;
+  }
+  .rp-compras-preco-tabela-titulo {
+    margin:0;
+    padding:8px 10px;
+    background:#f8fafc;
+    color:#334155;
+    font-size:.8rem;
+    font-weight:950;
+    text-transform:uppercase;
+  }
+  .rp-compras-preco-tabela {
+    width:100%;
+    border-collapse:collapse;
+    table-layout:fixed;
+  }
+  .rp-compras-preco-tabela th,
+  .rp-compras-preco-tabela td {
+    padding:7px 8px;
+    border-top:1px solid #edf2f7;
+    vertical-align:middle;
+  }
+  .rp-compras-preco-tabela th {
+    color:#64748b;
+    background:#fbfdff;
+    font-size:.7rem;
+    font-weight:950;
+    text-transform:uppercase;
+    text-align:left;
+  }
+  .rp-compras-preco-tabela td {
+    color:#172033;
+    font-size:.86rem;
+    font-weight:850;
+  }
+  .rp-compras-preco-tabela .col-tipo { width:22%; }
+  .rp-compras-preco-tabela .col-valor { width:17%; }
+  .rp-compras-preco-tabela .col-acao { width:10%; text-align:center; }
+  .rp-compras-preco-margem-atual {
+    min-height:34px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:6px 9px;
+    border:1px solid #e2e8f0;
+    border-radius:8px;
+    background:#f8fafc;
+    color:#334155;
+    font-variant-numeric:tabular-nums;
+    text-align:center;
+  }
+  .rp-compras-preco-tabela input[type="text"] {
+    width:100%;
+    min-height:34px;
+    border:1.5px solid #2563eb;
+    border-radius:8px;
+    padding:6px 8px;
+    background:#eff6ff;
+    color:#172554;
+    font-size:.9rem;
+    font-weight:950;
+    outline:none;
+  }
+  .rp-compras-preco-tabela input[type="text"]:focus {
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(37,99,235,.16);
+  }
+  .rp-compras-preco-tabela input[type="checkbox"] {
+    width:18px;
+    height:18px;
+    accent-color:#2563eb;
+  }
+  .rp-compras-preco-bloco {
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    background:#fff;
+    overflow:hidden;
+  }
+  .rp-compras-preco-bloco.compra { border-color:#dbeafe; background:#f8fbff; }
+  .rp-compras-preco-simulador {
+    padding:0;
+  }
+  .rp-compras-preco-simulador {
+    border:0;
+    border-radius:0;
+    background:transparent;
+  }
+  .rp-compras-preco-resultado {
+    min-height:40px;
+    padding:8px 10px;
+    border:1px solid #bbf7d0;
+    border-radius:9px;
+    background:#f0fdf4;
+    color:#166534;
+    font-weight:950;
+  }
+  .rp-compras-preco-resultado.baixa {
+    border-color:#fed7aa;
+    background:#fff7ed;
+    color:#9a3412;
+  }
+  .rp-compras-preco-resultado.alerta {
+    border-color:#fecdd3;
+    background:#fff1f2;
+    color:#991b1b;
+  }
+  .rp-compras-preco-resultados-ocultos {
+    display:none;
+  }
+  .rp-compras-precos-rodape {
+    flex:0 0 auto;
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:12px 16px;
+    border-top:1px solid #eadfbf;
+    background:#fffaf0;
+    box-shadow:0 -8px 18px rgba(15,23,42,.08);
+  }
+</style>
+<style>
+  #revisaoPrecosPosterior { z-index:99999; backdrop-filter:blur(4px); }
+  #revisaoPrecosPosterior [hidden] { display:none !important; }
+  #revisaoPrecosPosterior .rp-compras-precos-caixa { border-radius:20px; }
+  #revisaoPrecosPosterior .rp-compras-precos-topo { background:linear-gradient(135deg,#fff7e6,#ffe8bf); padding:22px 26px; }
+  #revisaoPrecosPosterior h2 { font-size:26px; color:#7c2d12; }
+  #revisaoPrecosPosterior .rp-alerta { width:min(720px,94vw); height:auto; }
+  #revisaoPrecosPosterior .rp-mensagem { padding:26px; color:#334155; font-size:18px; line-height:1.6; }
+  #revisaoPrecosPosterior .rp-mensagem strong { display:block; margin-top:18px; color:#92400e; }
+  #revisaoPrecosPosterior button { padding:12px 22px; border-radius:10px; border:1px solid #cbd5e1; background:#fff; color:#334155; font:inherit; font-weight:750; cursor:pointer; }
+  #revisaoPrecosPosterior button.rp-principal { background:#b45309; color:#fff; border-color:#b45309; }
+  #revisaoPrecosPosterior button:disabled { opacity:.5; cursor:default; }
+  #revisaoPrecosPosterior button:focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+  #revisaoPrecosPosterior .rp-compras-precos-lista { overflow-y:auto; }
+  #revisaoPrecosPosterior .rp-erro { margin:0; padding:12px 26px; color:#9a3412; background:#fff7ed; }
+  @media(max-width:768px) {
+    #revisaoPrecosPosterior { padding:10px; }
+    #revisaoPrecosPosterior .rp-compras-precos-caixa { width:100%; max-height:94dvh; }
+    #revisaoPrecosPosterior .rp-compras-preco-mobile-lista { display:grid; gap:12px; }
+    #revisaoPrecosPosterior .rp-compras-preco-mobile-item { padding:12px; border:1px solid #e2e8f0; border-radius:10px; }
+    #revisaoPrecosPosterior .rp-compras-preco-mobile-campo { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:8px 0; }
+    #revisaoPrecosPosterior .rp-compras-preco-mobile-campo input { width:120px; padding:9px; }
+    #revisaoPrecosPosterior .rp-compras-preco-mobile-atualizar { display:flex; gap:8px; align-items:center; }
+  }
+</style>
+<section id="revisaoPrecosPosterior" class="rp-compras-precos-modal" aria-hidden="true"
+    data-pendentes="{{ revisao_precos_pendentes_qtd|default:0 }}"
+    data-compras="{{ revisao_precos_compras_qtd|default:0 }}"
+    data-consulta="{% url 'estoque:revisao_precos_posterior_pendentes' %}"
+    data-salvar="{% url 'estoque:revisao_precos_posterior_salvar' %}">
+  <div class="rp-compras-precos-caixa rp-alerta" role="dialog" aria-modal="true" aria-labelledby="rpTitulo" tabindex="-1">
+    <header class="rp-compras-precos-topo">
+      <h2 id="rpTitulo">Há preços de venda para revisar</h2>
+      <p id="rpAjuda" hidden>Confira cada preço e marque os que deseja atualizar.</p>
+    </header>
+    <div id="rpMensagem" class="rp-mensagem">
+      O custo de alguns produtos foi atualizado em compras finalizadas, mas os preços de venda ainda não foram conferidos.
+      <strong id="rpQuantidade"></strong>
+    </div>
+    <div id="rpLista" class="rp-compras-precos-lista" hidden></div>
+    <p id="rpErro" class="rp-erro" role="status" hidden></p>
+    <footer class="rp-compras-precos-rodape">
+      <button type="button" id="rpVoltar" hidden>Voltar</button>
+      <button type="button" id="rpDepois">Fazer depois</button>
+      <button type="button" id="rpAgora" class="rp-principal">Revisar agora</button>
+      <button type="button" id="rpSalvar" class="rp-principal" hidden>Salvar e próximo</button>
+    </footer>
+    <div hidden>{% csrf_token %}</div>
+  </div>
+</section>
+<script>
+(function() {
+  "use strict";
+  const modal = document.getElementById("revisaoPrecosPosterior");
+  const card = modal.querySelector('[role="dialog"]');
+  const listaConferenciaPrecosCompra = document.getElementById("rpLista");
+  const mensagem = document.getElementById("rpMensagem");
+  const erro = document.getElementById("rpErro");
+  const agora = document.getElementById("rpAgora");
+  const salvar = document.getElementById("rpSalvar");
+  const voltar = document.getElementById("rpVoltar");
+  const depois = document.getElementById("rpDepois");
+  let revisaoPrecosItens = [], revisaoPrecosIndice = 0, revisaoPrecosDecisoes = {};
+  let pendentes = Number(modal.dataset.pendentes), compras = Number(modal.dataset.compras);
+  let timer = null, ocupado = false, modoRevisao = false, focoAnterior = null, overflowAnterior = null;
+  const concluidos = new Set();
+  function compraMobile() { return window.matchMedia("(max-width: 768px)").matches; }
+  {% include "estoque/includes/revisao_precos_posterior_simulador.js.html" %}
+
+  function mostrarErro(texto) { erro.textContent = texto; erro.hidden = !texto; }
+  async function consultar() {
+    const resposta = await fetch(modal.dataset.consulta, {cache:"no-store", credentials:"same-origin"});
+    if (!resposta.ok) throw new Error("Não foi possível consultar os preços pendentes. Tente novamente.");
+    const dados = await resposta.json();
+    pendentes = dados.produtos; compras = dados.compras;
+    return dados.itens;
+  }
+  function atualizarContagem() {
+    document.getElementById("rpQuantidade").textContent = pendentes + " produto" + (pendentes === 1 ? "" : "s") +
+      " em " + compras + " compra" + (compras === 1 ? "" : "s") + " aguardando revisão.";
+    if (!pendentes) {
+      const aviso = document.getElementById("vendas-revisao-precos");
+      if (aviso) aviso.remove();
+      clearTimeout(timer);
+    }
+  }
+  function fechar() {
+    modal.classList.remove("visivel"); modal.setAttribute("aria-hidden", "true");
+    if (overflowAnterior !== null) { document.body.style.overflow = overflowAnterior; overflowAnterior = null; }
+    if (focoAnterior && focoAnterior.isConnected) focoAnterior.focus();
+  }
+  function exibir() {
+    if (!modal.classList.contains("visivel")) {
+      focoAnterior = document.activeElement;
+      overflowAnterior = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    modal.classList.add("visivel"); modal.setAttribute("aria-hidden", "false");
+  }
+  function abrirAlerta() {
+    clearTimeout(timer); atualizarContagem();
+    if (!pendentes || modal.classList.contains("visivel")) return;
+    modoRevisao = false; mostrarErro(""); focoAnterior = document.activeElement;
+    card.classList.add("rp-alerta"); mensagem.hidden = false; listaConferenciaPrecosCompra.hidden = true;
+    agora.hidden = false; salvar.hidden = true; voltar.hidden = true;
+    document.getElementById("rpAjuda").hidden = true;
+    document.getElementById("rpTitulo").textContent = "Há preços de venda para revisar";
+    exibir(); agora.focus();
+  }
+  function agendar() {
+    clearTimeout(timer);
+    if (!pendentes) return;
+    timer = setTimeout(async function() {
+      try { await consultar(); atualizarContagem(); abrirAlerta(); }
+      catch (e) { abrirAlerta(); mostrarErro(e.message); }
+    }, 120000);
+  }
+  function adaptarItem(dado) {
+    const p = dado.produto;
+    const opt = {dataset:{
+      precoVista:p.preco_vista, precoPrazo:p.preco_prazo, precoVenda:p.preco_venda,
+      precoVistaFracionado:p.preco_vista_fracionado, precoPrazoFracionado:p.preco_prazo_fracionado,
+      precoCompraFracionado:p.preco_compra_fracionado, fatorConversao:p.fator_conversao,
+      vendeFracionado:dado.vende_fracionado ? "1" : "0"
+    }};
+    const antigo = numero(dado.custo_anterior), novo = numero(dado.custo_novo);
+    const precos = montarPrecosProduto(opt, antigo, novo);
+    return Object.assign({}, dado, {
+      chave:String(dado.item_id), produtoId:String(dado.produto_id), custoAtual:antigo, custoCompra:novo,
+      diferenca:novo-antigo, temFracionado:precos.temFracionado,
+      custoFracionadoAtual:precos.custoFracionadoAtual, custoFracionadoCompra:precos.custoFracionadoCompra,
+      fatorConversao:precos.fatorConversao, precos:precos.precos.map(enriquecerPreco)
+    });
+  }
+  function renderizar() {
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    const concluido = concluidos.has(item.item_id);
+    listaConferenciaPrecosCompra.innerHTML =
+      '<article class="rp-compras-preco-card"><div class="rp-compras-preco-card-topo"><div>' +
+      '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' +
+      '<span class="rp-compras-preco-progresso">Produto ' + (revisaoPrecosIndice+1) + ' de ' + revisaoPrecosItens.length +
+      ' · Compra #' + item.compra_id + (concluido ? ' · Revisão salva' : '') + '</span></div></div>' +
+      '<div class="rp-compras-preco-blocos">' + renderizarCustosProdutoCompacto(item) +
+      renderizarTabelaPrecosCompacta(item, decisaoProduto(item)) + '</div></article>';
+    listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.disabled = concluido || !item.disponivel; });
+    voltar.disabled = revisaoPrecosIndice === 0;
+    salvar.disabled = !item.disponivel;
+    salvar.textContent = concluido ? "Próximo" : (revisaoPrecosIndice === revisaoPrecosItens.length-1 ? "Salvar e concluir revisão" : "Salvar e próximo");
+    mostrarErro(item.disponivel ? "" : "Este produto foi removido. A pendência foi preservada; faça depois e confira o cadastro.");
+    listaConferenciaPrecosCompra.scrollTop = 0;
+    const primeiro = listaConferenciaPrecosCompra.querySelector("input:not(:disabled)");
+    if (primeiro && !compraMobile()) { primeiro.focus(); primeiro.select(); }
+  }
+  async function iniciar() {
+    if (ocupado) return;
+    ocupado = true; agora.disabled = true; mostrarErro("");
+    try {
+      revisaoPrecosItens = (await consultar()).map(adaptarItem);
+      atualizarContagem();
+      if (!pendentes) { fechar(); return; }
+      revisaoPrecosIndice = 0; revisaoPrecosDecisoes = {}; concluidos.clear(); modoRevisao = true;
+      clearTimeout(timer); card.classList.remove("rp-alerta"); mensagem.hidden = true;
+      listaConferenciaPrecosCompra.hidden = false; agora.hidden = true; salvar.hidden = false; voltar.hidden = false;
+      document.getElementById("rpAjuda").hidden = false;
+      document.getElementById("rpTitulo").textContent = "Revisar preços de venda";
+      exibir(); renderizar();
+    } catch(e) { mostrarErro(e.message); }
+    finally { ocupado = false; agora.disabled = false; }
+  }
+  async function salvarAtual() {
+    if (ocupado) return;
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    ocupado = true; salvar.disabled = true; depois.disabled = true; voltar.disabled = true;
+    listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.readOnly = true; });
+    mostrarErro("");
+    try {
+      if (!concluidos.has(item.item_id)) {
+        salvarDecisaoProdutoAtual();
+        const dados = new URLSearchParams({compra_id:item.compra_id, item_id:item.item_id, produto_id:item.produtoId});
+        Object.entries(decisaoProduto(item).precos).forEach(([campo, preco]) => {
+          if (!preco.atualizar) return;
+          dados.append("atualizar_preco_venda_produto_ids[]", item.produtoId);
+          dados.append("atualizar_preco_venda_nomes[]", campo);
+          dados.append("atualizar_preco_venda_valores[]", preco.novoPreco);
+        });
+        const resposta = await fetch(modal.dataset.salvar, {method:"POST", credentials:"same-origin", body:dados,
+          headers:{"X-CSRFToken":modal.querySelector('[name="csrfmiddlewaretoken"]').value}});
+        const resultado = await resposta.json();
+        if (!resposta.ok) throw new Error(resultado.erro || "Não foi possível salvar a revisão.");
+        concluidos.add(item.item_id); pendentes = resultado.produtos; compras = resultado.compras;
+        atualizarContagem();
+      }
+      if (revisaoPrecosIndice < revisaoPrecosItens.length-1) {
+        // Releitura: o mesmo Produto pode aparecer em mais de uma Compra.
+        const atuais = await consultar();
+        const proximo = revisaoPrecosItens[revisaoPrecosIndice+1];
+        const atualizado = atuais.find(i => i.item_id === proximo.item_id);
+        if (atualizado) {
+          revisaoPrecosItens[revisaoPrecosIndice+1] = adaptarItem(atualizado);
+          delete revisaoPrecosDecisoes[String(proximo.item_id)];
+        } else { concluidos.add(proximo.item_id); }
+        revisaoPrecosIndice++; renderizar();
+      } else { fechar(); agendar(); }
+    } catch(e) { mostrarErro(e.message); }
+    finally {
+      ocupado = false; depois.disabled = false;
+      salvar.disabled = !revisaoPrecosItens[revisaoPrecosIndice].disponivel;
+      voltar.disabled = revisaoPrecosIndice === 0;
+      listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.readOnly = false; });
+    }
+  }
+  agora.addEventListener("click", iniciar);
+  salvar.addEventListener("click", salvarAtual);
+  depois.addEventListener("click", function() { if (!ocupado) { fechar(); agendar(); } });
+  voltar.addEventListener("click", function() {
+    if (ocupado || revisaoPrecosIndice === 0) return;
+    if (!concluidos.has(revisaoPrecosItens[revisaoPrecosIndice].item_id)) salvarDecisaoProdutoAtual();
+    revisaoPrecosIndice--; renderizar();
+  });
+  modal.addEventListener("input", function(event) {
+    const simulador = event.target.closest(".rp-compras-preco-simulador");
+    if (!simulador || ocupado) return;
+    if (event.target.classList.contains("campoMargemDesejadaCompra")) atualizarPrecoPelaMargem(simulador, true);
+    else if (event.target.classList.contains("campoNovoPrecoVendaCompra")) {
+      simulador.dataset.origemEdicao = "preco"; atualizarResultadoSimuladorPreco(simulador);
+    }
+  });
+  modal.addEventListener("keydown", function(event) {
+    // Atalhos globais de Vendas (por exemplo Delete) nao devem receber teclas do simulador.
+    event.stopPropagation();
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (!ocupado) { fechar(); agendar(); } return; }
+    if (event.key === "Tab") {
+      const campos = Array.from(card.querySelectorAll("button, input")).filter(el => !el.disabled && el.offsetParent !== null);
+      const primeiro = campos[0], ultimo = campos[campos.length-1];
+      if (event.shiftKey && document.activeElement === primeiro) { event.preventDefault(); ultimo.focus(); }
+      else if (!event.shiftKey && document.activeElement === ultimo) { event.preventDefault(); primeiro.focus(); }
+    }
+    if (event.key !== "Enter" || !modoRevisao || event.target.tagName !== "INPUT") return;
+    event.preventDefault(); event.stopPropagation();
+    const campo = event.target;
+    if (campo.classList.contains("campoNovoPrecoVendaCompra")) campo.value = precoCampo(numero(campo.value));
+    if (campo.classList.contains("campoMargemDesejadaCompra")) campo.value = percentualCampo(numero(campo.value));
+    const editaveis = Array.from(listaConferenciaPrecosCompra.querySelectorAll('input[type="text"]:not(:disabled)'));
+    const proximo = editaveis[editaveis.indexOf(campo)+1];
+    if (proximo) { proximo.focus(); proximo.select(); } else salvar.focus();
+  });
+  document.addEventListener("click", function(event) {
+    if (!event.target.closest('#vendas-revisao-precos .vendas-pendencias-item-acao')) return;
+    event.preventDefault(); focoAnterior = event.target; abrirAlerta(); iniciar();
+  });
+  window.addEventListener("pageshow", async function(event) {
+    if (!event.persisted) return;
+    fechar(); clearTimeout(timer);
+    try { await consultar(); abrirAlerta(); } catch(e) { abrirAlerta(); mostrarErro(e.message); }
+  });
+  abrirAlerta();
+})();
+</script>

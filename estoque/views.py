@@ -11938,6 +11938,19 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             if not item.produto_id:
                 continue
             produto = Produto.objects.select_for_update().get(pk=item.produto_id)
+
+            if (
+                revisao_precos_pendente
+                and item.produto_id in atualizar_custo_produto_ids
+                and item.preco_compra_anterior is None
+                and Decimal(str(produto.preco_compra or "0")).quantize(Decimal("0.01"))
+                != item.preco_unitario
+            ):
+                item.preco_compra_anterior = Decimal(
+                    produto.preco_compra or Decimal("0.00")
+                ).quantize(Decimal("0.01"))
+                item.save(update_fields=["preco_compra_anterior"])
+
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
             produto.save(update_fields=["quantidade", "atualizado_em"])
             _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids)
@@ -15644,6 +15657,119 @@ def _recalcular_status_separacao_da_venda(venda, usuario=None):
     return separacao
 
 
+def _itens_revisao_precos_posterior():
+    return ItemCompra.objects.filter(
+        compra__revisao_precos_pendente=True,
+        compra__status=Compra.STATUS_FINALIZADA,
+        preco_compra_anterior__isnull=False,
+        revisao_preco_concluida=False,
+    )
+
+
+@require_GET
+def revisao_precos_posterior_pendentes(request):
+    itens = []
+    campos = (
+        "preco_vista", "preco_prazo", "preco_vista_fracionado",
+        "preco_prazo_fracionado", "preco_venda", "preco_compra_fracionado",
+        "fator_conversao",
+    )
+    for item in _itens_revisao_precos_posterior().select_related("produto").order_by("compra_id", "id"):
+        produto = item.produto
+        dados = {campo: str(getattr(produto, campo) or 0) for campo in campos} if produto else {}
+        if produto and produto.fator_conversao and produto.fator_conversao > 0:
+            # O cadastro ja contem o custo novo; reconstruir o anterior pelo item.
+            dados["preco_compra_fracionado"] = str(
+                (item.preco_compra_anterior / produto.fator_conversao).quantize(Decimal("0.01"))
+            )
+        itens.append({
+            "item_id": item.pk,
+            "compra_id": item.compra_id,
+            "produto_id": item.produto_id,
+            "nome": produto.nome if produto else "Produto removido",
+            "disponivel": bool(produto and not produto.excluido),
+            "custo_anterior": str(item.preco_compra_anterior),
+            "custo_novo": str(item.preco_unitario),
+            "vende_fracionado": bool(produto and produto.vende_fracionado),
+            "produto": dados,
+        })
+    return JsonResponse({"itens": itens, "produtos": len(itens), "compras": len({i["compra_id"] for i in itens})})
+
+
+@require_POST
+def revisao_precos_posterior_salvar(request):
+    campos_permitidos = {
+        "preco_vista", "preco_prazo", "preco_vista_fracionado", "preco_prazo_fracionado",
+    }
+    try:
+        compra_id = int(request.POST.get("compra_id", ""))
+        item_id = int(request.POST.get("item_id", ""))
+        produto_id = int(request.POST.get("produto_id", ""))
+    except (TypeError, ValueError):
+        return JsonResponse({"erro": "Compra, item ou produto invalido."}, status=400)
+
+    try:
+        with transaction.atomic():
+            compra = Compra.objects.select_for_update().filter(pk=compra_id).first()
+            if not compra:
+                return JsonResponse({"erro": "Compra nao encontrada."}, status=404)
+            if compra.status != Compra.STATUS_FINALIZADA or not compra.revisao_precos_pendente:
+                return JsonResponse({"erro": "Compra sem revisao pendente."}, status=409)
+            item = ItemCompra.objects.select_for_update().filter(pk=item_id, compra=compra).first()
+            if not item:
+                return JsonResponse({"erro": "Item nao pertence a compra."}, status=404)
+            if item.preco_compra_anterior is None or item.revisao_preco_concluida:
+                return JsonResponse({"erro": "Item sem revisao pendente."}, status=409)
+            if item.produto_id != produto_id:
+                raise ValueError("Produto nao corresponde ao item da compra.")
+            produto = Produto.objects.select_for_update().filter(pk=produto_id, excluido=False).first()
+            if not produto:
+                raise ValueError("Produto indisponivel para revisao.")
+
+            ids = request.POST.getlist("atualizar_preco_venda_produto_ids[]")
+            campos = request.POST.getlist("atualizar_preco_venda_nomes[]")
+            valores = request.POST.getlist("atualizar_preco_venda_valores[]")
+            if not len(ids) == len(campos) == len(valores):
+                raise ValueError("Lista de precos incompleta.")
+            enviados = list(zip(ids, campos, valores))
+            for chave in request.POST.getlist("atualizar_preco_venda_campos[]"):
+                partes = chave.split(":", 1)
+                if len(partes) != 2:
+                    raise ValueError("Campo de preco invalido.")
+                enviados.append((*partes, request.POST.get(f"novo_preco_venda_produto_{partes[0]}_{partes[1]}")))
+            for chave in request.POST:
+                if chave.startswith("novo_preco_venda_produto_"):
+                    match = re.fullmatch(r"novo_preco_venda_produto_(\d+)_(.+)", chave)
+                    if not match or int(match[1]) != produto_id or match[2] not in campos_permitidos:
+                        raise ValueError("Produto ou campo de preco nao permitido.")
+            for id_enviado, campo, valor in enviados:
+                if int(id_enviado) != produto_id or campo not in campos_permitidos:
+                    raise ValueError("Produto ou campo de preco nao permitido.")
+                if valor is None or not str(valor).strip():
+                    raise ValueError("Informe o novo preco.")
+                preco = _decimal_compra(valor, casas=2)
+                if not preco.is_finite() or preco < 0 or preco > Decimal("9999999999.99"):
+                    raise ValueError("Preco invalido.")
+
+            precos = _produtos_preco_venda_atualizar_post(request)
+            if set(precos) != {(produto_id, campo) for _, campo, _ in enviados}:
+                raise ValueError("Preco invalido.")
+            _atualizar_precos_venda_produtos_compra(precos)
+            item.revisao_preco_concluida = True
+            item.save(update_fields=["revisao_preco_concluida"])
+            if not compra.itens.filter(preco_compra_anterior__isnull=False, revisao_preco_concluida=False).exists():
+                compra.revisao_precos_pendente = False
+                compra.save(update_fields=["revisao_precos_pendente"])
+    except (ValueError, TypeError, InvalidOperation, OverflowError):
+        return JsonResponse({"erro": "Dados de preco invalidos. Confira o produto, os campos e os valores."}, status=400)
+    pendentes = _itens_revisao_precos_posterior()
+    return JsonResponse({
+        "ok": True,
+        "produtos": pendentes.count(),
+        "compras": pendentes.values("compra_id").distinct().count(),
+    })
+
+
 def vendas(request):
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()
@@ -15784,10 +15910,21 @@ def vendas(request):
     avisos_visitas_fornecedores = obter_avisos_visitas_fornecedores()
     avisos_visitas_fornecedores_painel = _avisos_visitas_painel_vendas(avisos_visitas_fornecedores)
     contexto_rascunho = _contexto_compras_rascunho_alerta()
+
+    itens_revisao_precos_pendentes = _itens_revisao_precos_posterior()
+    revisao_precos_pendentes_qtd = itens_revisao_precos_pendentes.count()
+    revisao_precos_compras_qtd = (
+        itens_revisao_precos_pendentes
+        .values("compra_id")
+        .distinct()
+        .count()
+    )
+
     pendencias_vendas_qtd = (
         len(avisos_visitas_fornecedores_painel)
         + (1 if produtos_incompletos_vendas_qtd else 0)
         + (1 if contexto_rascunho["compras_rascunho_qtd"] else 0)
+        + (1 if revisao_precos_pendentes_qtd else 0)
     )
     pendencias_vendas_prioridade = _prioridade_pendencias_vendas(avisos_visitas_fornecedores_painel)
 
@@ -15797,6 +15934,8 @@ def vendas(request):
         'avisos_visitas_fornecedores_painel': avisos_visitas_fornecedores_painel,
         'pendencias_vendas_qtd': pendencias_vendas_qtd,
         'pendencias_vendas_prioridade': pendencias_vendas_prioridade,
+        'revisao_precos_pendentes_qtd': revisao_precos_pendentes_qtd,
+        'revisao_precos_compras_qtd': revisao_precos_compras_qtd,
         'produtos_incompletos_vendas': produtos_incompletos_vendas,
         'produtos_incompletos_vendas_qtd': produtos_incompletos_vendas_qtd,
         'mostrar_produtos_incompletos_vendas': mostrar_produtos_incompletos_vendas,

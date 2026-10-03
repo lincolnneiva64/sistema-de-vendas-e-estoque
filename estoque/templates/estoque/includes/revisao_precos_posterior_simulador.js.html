@@ -1,0 +1,326 @@
+{% comment %}Funcoes copiadas do simulador aprovado de compras_nova.html para preservar o fluxo normal de Compra.{% endcomment %}
+  function moeda(valor) {
+    return "R$ " + Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function numero(valor) {
+    let texto = String(valor || "0").trim();
+    if (!texto) return 0;
+
+    if (texto.includes(",")) {
+      texto = texto.replace(/\./g, "").replace(",", ".");
+    } else {
+      const partes = texto.split(".");
+      if (partes.length > 2) {
+        const ultimaParte = partes[partes.length - 1];
+        texto = ultimaParte.length <= 2
+          ? partes.slice(0, -1).join("") + "." + ultimaParte
+          : partes.join("");
+      }
+    }
+
+    texto = texto.replace(/[^\d.-]/g, "");
+    return Number(texto) || 0;
+  }
+
+  function precoCampo(valor) {
+    return numero(valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function percentual(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "%";
+  }
+
+  function percentualCampo(valor) {
+    return Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  }
+
+  function arredondarPrecoSugerido(valor) {
+    return Math.ceil((Number(valor || 0) * 10) - 0.000001) / 10;
+  }
+
+  function escapeHtml(valor) {
+    return String(valor || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function margem(precoVenda, precoCompra) {
+    const real = precoVenda - precoCompra;
+    const percentualValor = precoCompra > 0 ? (real / precoCompra) * 100 : 0;
+    return { real: real, percentual: percentualValor };
+  }
+
+  function classeMargemSimulada(margemAtualPercentual, margemNova) {
+    if (margemNova.real < 0 || margemNova.percentual < 0) return "alerta";
+    if (margemNova.percentual < 15 || margemAtualPercentual - margemNova.percentual >= 10) return "baixa";
+    return "ok";
+  }
+
+  function custoFracionadoNovo(custoNormal, fatorConversao, custoFracionadoAtual) {
+    if (fatorConversao > 0) return custoNormal / fatorConversao;
+    return custoFracionadoAtual || 0;
+  }
+
+  function produtoTemFracionado(opt) {
+    return opt.dataset.vendeFracionado === "1" ||
+      numero(opt.dataset.precoCompraFracionado || "0") > 0 ||
+      numero(opt.dataset.precoVistaFracionado || "0") > 0 ||
+      numero(opt.dataset.precoPrazoFracionado || "0") > 0;
+  }
+
+  function precoExistente(valor) {
+    return Number(valor || 0) > 0;
+  }
+
+  function montarPrecosProduto(opt, custoAtual, custoCompra) {
+    const custoFracionadoAtual = numero(opt.dataset.precoCompraFracionado || "0");
+    const fatorConversao = numero(opt.dataset.fatorConversao || "0");
+    const custoFracionadoCompra = custoFracionadoNovo(custoCompra, fatorConversao, custoFracionadoAtual);
+    const temFracionado = produtoTemFracionado(opt);
+
+    const precoVista = numero(opt.dataset.precoVista || opt.dataset.precoVenda || "0");
+    const precoPrazo = numero(opt.dataset.precoPrazo || "0");
+    const precoVistaFracionado = numero(opt.dataset.precoVistaFracionado || "0");
+    const precoPrazoFracionado = numero(opt.dataset.precoPrazoFracionado || "0");
+
+    const precos = [];
+    if (precoExistente(precoVista)) {
+      precos.push({ campo: "preco_vista", titulo: "A vista", tipo: "normal", precoAtual: precoVista, custoAtual: custoAtual, custoNovo: custoCompra });
+    }
+    if (precoExistente(precoPrazo)) {
+      precos.push({ campo: "preco_prazo", titulo: "A prazo", tipo: "normal", precoAtual: precoPrazo, custoAtual: custoAtual, custoNovo: custoCompra });
+    }
+    if (temFracionado && precoExistente(precoVistaFracionado)) {
+      precos.push({ campo: "preco_vista_fracionado", titulo: "A vista fracionado", tipo: "fracionado", precoAtual: precoVistaFracionado, custoAtual: custoFracionadoAtual, custoNovo: custoFracionadoCompra });
+    }
+    if (temFracionado && precoExistente(precoPrazoFracionado)) {
+      precos.push({ campo: "preco_prazo_fracionado", titulo: "A prazo fracionado", tipo: "fracionado", precoAtual: precoPrazoFracionado, custoAtual: custoFracionadoAtual, custoNovo: custoFracionadoCompra });
+    }
+
+    return {
+      precos: precos,
+      temFracionado: temFracionado,
+      custoFracionadoAtual: custoFracionadoAtual,
+      custoFracionadoCompra: custoFracionadoCompra,
+      fatorConversao: fatorConversao
+    };
+  }
+
+  function enriquecerPreco(preco) {
+    const margemAntiga = margem(preco.precoAtual, preco.custoAtual);
+    const margemNova = margem(preco.precoAtual, preco.custoNovo);
+    const precoSugerido = arredondarPrecoSugerido(preco.custoNovo * (1 + margemAntiga.percentual / 100));
+    const margemSimulada = margem(precoSugerido, preco.custoNovo);
+
+    return Object.assign({}, preco, {
+      margemAntiga: margemAntiga,
+      margemNova: margemNova,
+      precoSugerido: precoSugerido,
+      margemSimulada: margemSimulada
+    });
+  }
+
+  function decisaoPadraoPreco(preco) {
+    return {
+      atualizar: true,
+      novoPreco: precoCampo(preco.precoSugerido),
+      novaMargem: percentualCampo(preco.margemSimulada.percentual)
+    };
+  }
+
+  function decisaoProdutoPadrao(item) {
+    const precos = {};
+    item.precos.forEach(function(preco) {
+      precos[preco.campo] = decisaoPadraoPreco(preco);
+    });
+    return {
+      atualizarCusto: true,
+      precos: precos
+    };
+  }
+
+  function decisaoProduto(item) {
+    const chave = item.chave || item.produtoId;
+    if (!revisaoPrecosDecisoes[chave]) {
+      revisaoPrecosDecisoes[chave] = decisaoProdutoPadrao(item);
+    }
+    return revisaoPrecosDecisoes[chave];
+  }
+
+  function boxComparacaoCusto(label, antigo, novo) {
+    return (
+      '<div class="rp-compras-preco-custo-box">' +
+        '<strong>' + escapeHtml(label + " anterior") + '</strong>' +
+        '<span>' + escapeHtml(antigo) + '</span>' +
+        '<span class="rp-compras-preco-seta">-&gt;</span>' +
+        '<strong>Novo ' + escapeHtml(label.toLowerCase()) + '</strong>' +
+        '<span>' + escapeHtml(novo) + '</span>' +
+      '</div>'
+    );
+  }
+
+  function renderizarCustosProdutoCompacto(item) {
+    return (
+      '<div class="rp-compras-preco-custos">' +
+        boxComparacaoCusto("Custo", moeda(item.custoAtual), moeda(item.custoCompra)) +
+        (item.temFracionado ? boxComparacaoCusto("Custo fracionado", moeda(item.custoFracionadoAtual), moeda(item.custoFracionadoCompra)) : "") +
+      '</div>'
+    );
+  }
+
+  function renderizarLinhaPrecoCompacta(item, preco, decisao) {
+    const dadosPreco = decisao.precos[preco.campo] || decisaoPadraoPreco(preco);
+    const novoPreco = numero(dadosPreco.novoPreco);
+    const margemNova = margem(novoPreco, preco.custoNovo);
+    const classe = classeMargemSimulada(preco.margemAntiga.percentual, margemNova);
+
+    return (
+      '<tr class="rp-compras-preco-simulador" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '" data-origem-edicao="preco">' +
+        '<td>' + escapeHtml(preco.titulo) + '</td>' +
+        '<td>' + escapeHtml(moeda(preco.precoAtual)) + '</td>' +
+        '<td><input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(novoPreco)) + '"></td>' +
+        '<td><span class="rp-compras-preco-margem-atual">' + escapeHtml(percentual(preco.margemAntiga.percentual)) + '</span></td>' +
+        '<td><input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(margemNova.percentual)) + '"></td>' +
+        '<td class="col-acao">' +
+          '<input type="checkbox" class="marcarAtualizarVendaCompra" tabindex="-1" title="Atualizar este preco no cadastro" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" ' + (dadosPreco.atualizar ? "checked" : "") + '>' +
+          '<div class="rp-compras-preco-resultados-ocultos" aria-hidden="true">' +
+          '<div class="resultadoMargemRealCompra ' + escapeHtml(classe) + '">' + escapeHtml(moeda(margemNova.real)) + '</div>' +
+          '<div class="resultadoMargemPercentualCompra ' + escapeHtml(classe) + '">' + escapeHtml(percentual(margemNova.percentual)) + '</div>' +
+          '</div>' +
+        '</td>' +
+      '</tr>'
+    );
+  }
+
+  function renderizarTabelaPrecosCompacta(item, decisao) {
+    if (compraMobile()) {
+      return (
+        '<section class="rp-compras-preco-tabela-wrap rp-compras-preco-mobile-wrap">' +
+          '<h4 class="rp-compras-preco-tabela-titulo">Precos de venda</h4>' +
+          '<div class="rp-compras-preco-mobile-lista">' +
+            item.precos.map(function(preco) {
+              const dadosPreco = decisao.precos[preco.campo] || decisaoPadraoPreco(preco);
+              const novoPreco = numero(dadosPreco.novoPreco);
+              const margemNova = margem(novoPreco, preco.custoNovo);
+              const classe = classeMargemSimulada(preco.margemAntiga.percentual, margemNova);
+
+              return (
+                '<div class="rp-compras-preco-simulador rp-compras-preco-mobile-item" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '" data-origem-edicao="preco">' +
+                  '<strong class="rp-compras-preco-mobile-tipo">' + escapeHtml(preco.titulo) + '</strong>' +
+                  '<div class="rp-compras-preco-mobile-campo">' +
+                    '<span>Preco atual</span>' +
+                    '<strong>' + escapeHtml(moeda(preco.precoAtual)) + '</strong>' +
+                  '</div>' +
+                  '<label class="rp-compras-preco-mobile-campo">' +
+                    '<span>Novo preco</span>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(novoPreco)) + '">' +
+                  '</label>' +
+                  '<div class="rp-compras-preco-mobile-campo">' +
+                    '<span>Margem atual</span>' +
+                    '<strong class="rp-compras-preco-margem-atual">' + escapeHtml(percentual(preco.margemAntiga.percentual)) + '</strong>' +
+                  '</div>' +
+                  '<label class="rp-compras-preco-mobile-campo">' +
+                    '<span>Margem desejada</span>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(margemNova.percentual)) + '">' +
+                  '</label>' +
+                  '<label class="rp-compras-preco-mobile-atualizar">' +
+                    '<input type="checkbox" class="marcarAtualizarVendaCompra" tabindex="-1" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" ' + (dadosPreco.atualizar ? "checked" : "") + '>' +
+                    '<span>Atualizar este preco no cadastro</span>' +
+                  '</label>' +
+                  '<div class="rp-compras-preco-resultados-ocultos" aria-hidden="true">' +
+                    '<div class="resultadoMargemRealCompra ' + escapeHtml(classe) + '">' + escapeHtml(moeda(margemNova.real)) + '</div>' +
+                    '<div class="resultadoMargemPercentualCompra ' + escapeHtml(classe) + '">' + escapeHtml(percentual(margemNova.percentual)) + '</div>' +
+                  '</div>' +
+                '</div>'
+              );
+            }).join("") +
+          '</div>' +
+        '</section>'
+      );
+    }
+
+    return (
+      '<section class="rp-compras-preco-tabela-wrap">' +
+        '<h4 class="rp-compras-preco-tabela-titulo">Precos de venda</h4>' +
+        '<table class="rp-compras-preco-tabela">' +
+          '<thead><tr>' +
+            '<th class="col-tipo">Tipo</th>' +
+            '<th class="col-valor">Atual</th>' +
+            '<th class="col-valor">Novo</th>' +
+            '<th class="col-valor">Margem atual</th>' +
+            '<th class="col-valor">Margem desejada</th>' +
+            '<th class="col-acao">Atualizar</th>' +
+          '</tr></thead>' +
+          '<tbody>' + item.precos.map(function(preco) {
+            return renderizarLinhaPrecoCompacta(item, preco, decisao);
+          }).join("") + '</tbody>' +
+        '</table>' +
+      '</section>'
+    );
+  }
+
+  function salvarDecisaoProdutoAtual() {
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    if (!item || !listaConferenciaPrecosCompra) return;
+
+    const decisao = decisaoProduto(item);
+    const campoCusto = listaConferenciaPrecosCompra.querySelector(".marcarAtualizarCustoCompra");
+    decisao.atualizarCusto = campoCusto ? campoCusto.checked : false;
+
+    listaConferenciaPrecosCompra.querySelectorAll(".rp-compras-preco-simulador").forEach(function(simulador) {
+      const campoPrecoCadastro = simulador.dataset.campoPreco;
+      if (!campoPrecoCadastro) return;
+      const campoPreco = simulador.querySelector(".campoNovoPrecoVendaCompra");
+      const campoMargem = simulador.querySelector(".campoMargemDesejadaCompra");
+      const campoAtualizar = simulador.querySelector(".marcarAtualizarVendaCompra");
+      decisao.precos[campoPrecoCadastro] = {
+        atualizar: campoAtualizar ? campoAtualizar.checked : false,
+        novoPreco: precoCampo(numero(campoPreco ? campoPreco.value : "0")),
+        novaMargem: percentualCampo(numero(campoMargem ? campoMargem.value : "0"))
+      };
+    });
+  }
+
+  function atualizarResultadoSimuladorPreco(simulador) {
+    if (!simulador) return;
+    const custoNovo = numero(simulador.dataset.custoNovo || "0");
+    const margemAtualPercentual = numero(simulador.dataset.margemAtual || "0");
+    const campoPreco = simulador.querySelector(".campoNovoPrecoVendaCompra");
+    const campoMargem = simulador.querySelector(".campoMargemDesejadaCompra");
+    const resultadoReal = simulador.querySelector(".resultadoMargemRealCompra");
+    const resultadoPercentual = simulador.querySelector(".resultadoMargemPercentualCompra");
+    if (!campoPreco || !resultadoReal || !resultadoPercentual) return;
+
+    const novoPreco = numero(campoPreco.value);
+    const margemNova = margem(novoPreco, custoNovo);
+    const classe = classeMargemSimulada(margemAtualPercentual, margemNova);
+
+    resultadoReal.textContent = moeda(margemNova.real);
+    resultadoPercentual.textContent = percentual(margemNova.percentual);
+    if (campoMargem && document.activeElement !== campoMargem) {
+      campoMargem.value = percentualCampo(margemNova.percentual);
+    }
+    [resultadoReal, resultadoPercentual].forEach(function(el) {
+      el.classList.remove("ok", "baixa", "alerta");
+      el.classList.add(classe);
+    });
+  }
+
+  function atualizarPrecoPelaMargem(simulador, origemManual) {
+    if (!simulador) return;
+    const custoNovo = numero(simulador.dataset.custoNovo || "0");
+    const margemCampo = simulador.querySelector(".campoMargemDesejadaCompra");
+    const precoCampoSimulado = simulador.querySelector(".campoNovoPrecoVendaCompra");
+    if (!margemCampo || !precoCampoSimulado) return;
+    if (!origemManual && simulador.dataset.origemEdicao !== "margem") return;
+
+    const margemDesejada = numero(margemCampo.value);
+    const precoSugerido = arredondarPrecoSugerido(custoNovo * (1 + margemDesejada / 100));
+    simulador.dataset.origemEdicao = "margem";
+    precoCampoSimulado.value = precoCampo(precoSugerido);
+    atualizarResultadoSimuladorPreco(simulador);
+  }

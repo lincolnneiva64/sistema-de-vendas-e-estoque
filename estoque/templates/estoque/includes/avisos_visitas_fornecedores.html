@@ -817,6 +817,28 @@
         </article>
       {% endif %}
 
+      {% if revisao_precos_pendentes_qtd %}
+        <article class="vendas-pendencias-item prioridade-media" id="vendas-revisao-precos">
+          <div class="vendas-pendencias-item-corpo">
+            <div class="vendas-pendencias-item-topo">
+              <strong class="vendas-pendencias-item-titulo">Precos para revisar</strong>
+              <span class="vendas-pendencias-rotulo">Precos</span>
+            </div>
+          </div>
+          <div class="vendas-pendencias-item-rodape">
+            <p class="vendas-pendencias-mensagem">
+              {{ revisao_precos_pendentes_qtd }} produto{{ revisao_precos_pendentes_qtd|pluralize }}
+              em {{ revisao_precos_compras_qtd }} compra{{ revisao_precos_compras_qtd|pluralize }}
+              aguardando revisao de preco de venda.
+            </p>
+            <a
+              class="vendas-pendencias-item-acao"
+              href="?revisar_precos=1#vendas-revisao-precos"
+            >Revisar agora</a>
+          </div>
+        </article>
+      {% endif %}
+
       {% if compras_rascunho_qtd %}
         <article class="vendas-pendencias-item prioridade-rascunho" id="vendas-compras-rascunho">
             <div class="vendas-pendencias-item-corpo">
