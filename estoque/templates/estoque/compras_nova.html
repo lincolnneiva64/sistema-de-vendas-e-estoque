@@ -2484,7 +2484,153 @@
     .compras-preco-simulador-topo { flex-direction:column; }
     .compras-preco-sugerido { white-space:normal; }
     .compras-preco-simulador-grid { grid-template-columns:1fr; }
+    .compras-precos-escolha {
+      margin:auto;
+      width:100%;
+      max-width:520px;
+      padding:22px 16px;
+      display:grid;
+      gap:12px;
+    }
+    .compras-precos-escolha[hidden] { display:none !important; }
+    .compras-precos-escolha strong {
+      font-size:1.15rem;
+      color:#172033;
+    }
+    .compras-precos-escolha p {
+      margin:0 0 6px;
+      color:#475569;
+      line-height:1.45;
+    }
+    .compras-precos-escolha .compras-btn {
+      width:100%;
+      min-height:46px;
+    }
+    .compras-preco-mobile-wrap {
+      overflow:visible;
+    }
+    .compras-preco-mobile-lista {
+      display:grid;
+      gap:10px;
+      padding:10px;
+    }
+    .compras-preco-mobile-item {
+      display:grid;
+      gap:10px;
+      padding:12px;
+      border-top:1px solid #e2e8f0;
+    }
+    .compras-preco-mobile-item:first-child {
+      border-top:0;
+    }
+    .compras-preco-mobile-tipo {
+      font-size:1rem;
+      color:#172033;
+    }
+    .compras-preco-mobile-campo {
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) minmax(110px, 42%);
+      gap:10px;
+      align-items:center;
+    }
+    .compras-preco-mobile-campo > span {
+      color:#64748b;
+      font-size:.82rem;
+      font-weight:850;
+    }
+    .compras-preco-mobile-campo > strong {
+      text-align:right;
+    }
+    .compras-preco-mobile-campo input[type="text"] {
+      width:100%;
+      min-height:42px;
+      padding:8px 10px;
+      border:1.5px solid #2563eb;
+      border-radius:8px;
+      background:#eff6ff;
+      color:#172554;
+      font-size:1rem;
+      font-weight:950;
+      text-align:right;
+      outline:none;
+    }
+    .compras-preco-mobile-campo input[type="text"]:focus {
+      background:#fff;
+      box-shadow:0 0 0 3px rgba(37,99,235,.16);
+    }
+    .compras-preco-mobile-atualizar {
+      display:flex;
+      align-items:center;
+      gap:9px;
+      padding:10px;
+      border-radius:8px;
+      background:#f8fafc;
+      font-weight:850;
+    }
+    .compras-preco-mobile-atualizar input {
+      width:20px;
+      height:20px;
+      flex:0 0 auto;
+    }
+    .compras-preco-custos {
+      display:grid;
+      gap:8px;
+    }
+    .compras-preco-resumo-fixo {
+      margin-top:8px;
+      padding:8px 10px;
+      display:grid;
+      gap:2px;
+      background:#fff;
+      border:1px solid #dbeafe;
+      border-radius:8px;
+    }
+    .compras-preco-resumo-fixo[hidden] {
+      display:none !important;
+    }
+    .compras-preco-resumo-fixo strong {
+      font-size:.95rem;
+      color:#172033;
+    }
+    .compras-preco-resumo-fixo span {
+      font-size:.84rem;
+      font-weight:850;
+      color:#475569;
+    }
+    .compras-preco-custo-box {
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
+      gap:4px 12px;
+      align-items:center;
+    }
+    .compras-preco-custo-box > strong:first-child {
+      grid-column:1;
+      grid-row:1;
+    }
+    .compras-preco-custo-box > span:nth-child(2) {
+      grid-column:2;
+      grid-row:1;
+      font-weight:950;
+      text-align:right;
+    }
+    .compras-preco-custo-box > .compras-preco-seta {
+      grid-column:1 / -1;
+      grid-row:2;
+      justify-self:center;
+      line-height:1;
+    }
+    .compras-preco-custo-box > strong:nth-child(4) {
+      grid-column:1;
+      grid-row:3;
+    }
+    .compras-preco-custo-box > span:nth-child(5) {
+      grid-column:2;
+      grid-row:3;
+      font-weight:950;
+      text-align:right;
+    }
     .compras-precos-rodape { display:grid; grid-template-columns:1fr; padding:9px; }
+    #btnContinuarSemAtualizarPrecosCompra { display:none; }
     .pagamento-select-real { display:none !important; }
     .pagamento-opcoes-mobile { display:grid; }
     .campo-observacao-compra { display:none !important; }
@@ -2693,13 +2839,22 @@
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
     <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
     <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
+    <input type="hidden" name="revisao_precos_pendente" id="revisaoPrecosPendenteCompra" value="0">
     <div id="camposAtualizarCustoCompra"></div>
 
     <section class="compras-precos-modal" id="modalConferenciaPrecosCompra" aria-hidden="true">
       <div class="compras-precos-caixa" role="dialog" aria-modal="true" aria-labelledby="tituloConferenciaPrecosCompra">
         <div class="compras-precos-topo">
           <h2 id="tituloConferenciaPrecosCompra">Conferir alteracoes de preco</h2>
-          <p>Alguns itens vieram com custo diferente do cadastro. Confira o impacto nas margens antes de continuar.</p>
+          <p id="textoAjudaConferenciaPrecosCompra">Alguns itens vieram com custo diferente do cadastro. Confira o impacto nas margens antes de continuar.</p>
+          <div class="compras-preco-resumo-fixo" id="resumoCustoFixoCompra" hidden></div>
+        </div>
+        <div class="compras-precos-escolha" id="escolhaRevisaoPrecosCompra" hidden>
+          <strong>Financeiro conferido.</strong>
+          <p>Voc&ecirc; pode finalizar a compra agora e revisar os pre&ccedil;os de venda depois, ou fazer a revis&atilde;o antes de finalizar.</p>
+          <button type="button" class="compras-btn compras-btn-primary" id="btnFinalizarRevisarDepoisCompra">Finalizar agora</button>
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnRevisarPrecosAgoraCompra">Revisar pre&ccedil;os agora</button>
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarFinanceiroCompra">Voltar</button>
         </div>
         <div class="compras-precos-lista" id="listaConferenciaPrecosCompra"></div>
         <div class="compras-precos-rodape">
@@ -3199,6 +3354,13 @@
     return tipoPagamentoCompra && tipoPagamentoCompra.value === "avista";
   }
   const origemDinheiroCompra = document.getElementById("origemDinheiroCompra");
+  const revisaoPrecosPendenteCompra = document.getElementById("revisaoPrecosPendenteCompra");
+  const escolhaRevisaoPrecosCompra = document.getElementById("escolhaRevisaoPrecosCompra");
+  const btnFinalizarRevisarDepoisCompra = document.getElementById("btnFinalizarRevisarDepoisCompra");
+  const btnRevisarPrecosAgoraCompra = document.getElementById("btnRevisarPrecosAgoraCompra");
+  const btnVoltarFinanceiroCompra = document.getElementById("btnVoltarFinanceiroCompra");
+  const resumoCustoFixoCompra = document.getElementById("resumoCustoFixoCompra");
+  const textoAjudaConferenciaPrecosCompra = document.getElementById("textoAjudaConferenciaPrecosCompra");
   const origemCaixaCompra = document.getElementById("origemCaixaCompra");
   const origemReservaCompra = document.getElementById("origemReservaCompra");
   const origemBancoCompra = document.getElementById("origemBancoCompra");
@@ -3743,7 +3905,7 @@
     if (btnVoltarEditarCompra) btnVoltarEditarCompra.disabled = ativo;
     if (btnConfirmarFechamentoCompra) {
       btnConfirmarFechamentoCompra.textContent = ativo
-        ? "Fechando compra..."
+        ? "Finalizando a compra..."
         : "Fechar compra e lançar no financeiro";
       if (ativo) {
         btnConfirmarFechamentoCompra.disabled = true;
@@ -5296,6 +5458,52 @@
   }
 
   function renderizarTabelaPrecosCompacta(item, decisao) {
+    if (compraMobile()) {
+      return (
+        '<section class="compras-preco-tabela-wrap compras-preco-mobile-wrap">' +
+          '<h4 class="compras-preco-tabela-titulo">Precos de venda</h4>' +
+          '<div class="compras-preco-mobile-lista">' +
+            item.precos.map(function(preco) {
+              const dadosPreco = decisao.precos[preco.campo] || decisaoPadraoPreco(preco);
+              const novoPreco = numero(dadosPreco.novoPreco);
+              const margemNova = margem(novoPreco, preco.custoNovo);
+              const classe = classeMargemSimulada(preco.margemAntiga.percentual, margemNova);
+
+              return (
+                '<div class="compras-preco-simulador compras-preco-mobile-item" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" data-custo-novo="' + escapeHtml(String(preco.custoNovo)) + '" data-margem-atual="' + escapeHtml(String(preco.margemAntiga.percentual)) + '" data-origem-edicao="preco">' +
+                  '<strong class="compras-preco-mobile-tipo">' + escapeHtml(preco.titulo) + '</strong>' +
+                  '<div class="compras-preco-mobile-campo">' +
+                    '<span>Preco atual</span>' +
+                    '<strong>' + escapeHtml(moeda(preco.precoAtual)) + '</strong>' +
+                  '</div>' +
+                  '<label class="compras-preco-mobile-campo">' +
+                    '<span>Novo preco</span>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoNovoPrecoVendaCompra" value="' + escapeHtml(precoCampo(novoPreco)) + '">' +
+                  '</label>' +
+                  '<div class="compras-preco-mobile-campo">' +
+                    '<span>Margem atual</span>' +
+                    '<strong class="compras-preco-margem-atual">' + escapeHtml(percentual(preco.margemAntiga.percentual)) + '</strong>' +
+                  '</div>' +
+                  '<label class="compras-preco-mobile-campo">' +
+                    '<span>Margem desejada</span>' +
+                    '<input type="text" inputmode="decimal" autocomplete="off" class="campoMargemDesejadaCompra" value="' + escapeHtml(percentualCampo(margemNova.percentual)) + '">' +
+                  '</label>' +
+                  '<label class="compras-preco-mobile-atualizar">' +
+                    '<input type="checkbox" class="marcarAtualizarVendaCompra" tabindex="-1" data-produto-id="' + escapeHtml(item.produtoId) + '" data-campo-preco="' + escapeHtml(preco.campo) + '" ' + (dadosPreco.atualizar ? "checked" : "") + '>' +
+                    '<span>Atualizar este preco no cadastro</span>' +
+                  '</label>' +
+                  '<div class="compras-preco-resultados-ocultos" aria-hidden="true">' +
+                    '<div class="resultadoMargemRealCompra ' + escapeHtml(classe) + '">' + escapeHtml(moeda(margemNova.real)) + '</div>' +
+                    '<div class="resultadoMargemPercentualCompra ' + escapeHtml(classe) + '">' + escapeHtml(percentual(margemNova.percentual)) + '</div>' +
+                  '</div>' +
+                '</div>'
+              );
+            }).join("") +
+          '</div>' +
+        '</section>'
+      );
+    }
+
     return (
       '<section class="compras-preco-tabela-wrap">' +
         '<h4 class="compras-preco-tabela-titulo">Precos de venda</h4>' +
@@ -5352,6 +5560,25 @@
       ? "Custo subiu " + moeda(item.diferenca)
       : "Custo caiu " + moeda(Math.abs(item.diferenca));
 
+    if (compraMobile() && resumoCustoFixoCompra) {
+      resumoCustoFixoCompra.innerHTML =
+        '<strong>' + escapeHtml(item.nome) + '</strong>' +
+        '<span>Custo anterior: ' + escapeHtml(moeda(item.custoAtual)) + '</span>' +
+        '<span>Novo custo: ' + escapeHtml(moeda(item.custoCompra)) + '</span>' +
+        (item.temFracionado
+          ? '<span>Fracionado: ' + escapeHtml(moeda(item.custoFracionadoAtual)) + ' &rarr; ' + escapeHtml(moeda(item.custoFracionadoCompra)) + '</span>'
+          : "");
+      resumoCustoFixoCompra.hidden = false;
+      if (textoAjudaConferenciaPrecosCompra) {
+        textoAjudaConferenciaPrecosCompra.hidden = true;
+      }
+    } else {
+      if (resumoCustoFixoCompra) resumoCustoFixoCompra.hidden = true;
+      if (textoAjudaConferenciaPrecosCompra) {
+        textoAjudaConferenciaPrecosCompra.hidden = false;
+      }
+    }
+
     listaConferenciaPrecosCompra.innerHTML = (
       '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
         '<div class="compras-preco-card-topo">' +
@@ -5379,7 +5606,9 @@
         ? "Salvar e finalizar compra"
         : "Salvar e proximo";
     }
-    focarPrimeiroCampoRevisaoPreco();
+    if (!compraMobile()) {
+      focarPrimeiroCampoRevisaoPreco();
+    }
   }
 
   function atualizarResultadoSimuladorPreco(simulador) {
@@ -5448,8 +5677,42 @@
     listaConferenciaPrecosCompra.scrollTop += delta;
   }
 
+  function abrirEscolhaRevisaoPrecosMobile(itens) {
+    if (!compraMobile() || !modalConferenciaPrecosCompra || !escolhaRevisaoPrecosCompra) return false;
+
+    revisaoPrecosItens = itens || [];
+    revisaoPrecosIndice = 0;
+    revisaoPrecosDecisoes = {};
+
+    if (resumoCustoFixoCompra) resumoCustoFixoCompra.hidden = true;
+    if (textoAjudaConferenciaPrecosCompra) textoAjudaConferenciaPrecosCompra.hidden = false;
+
+    if (origemDinheiroCompra) {
+      origemDinheiroCompra.classList.remove("visivel");
+      origemDinheiroCompra.setAttribute("aria-hidden", "true");
+    }
+
+    escolhaRevisaoPrecosCompra.hidden = false;
+    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.hidden = true;
+
+    const rodape = modalConferenciaPrecosCompra.querySelector(".compras-precos-rodape");
+    if (rodape) rodape.hidden = true;
+
+    modalConferenciaPrecosCompra.classList.add("visivel");
+    modalConferenciaPrecosCompra.setAttribute("aria-hidden", "false");
+    travarScrollBodyConferenciaPrecos(true);
+    return true;
+  }
+
   function abrirConferenciaPrecosCompra(itens) {
     if (!modalConferenciaPrecosCompra) return false;
+
+    if (escolhaRevisaoPrecosCompra) escolhaRevisaoPrecosCompra.hidden = true;
+    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.hidden = false;
+
+    const rodape = modalConferenciaPrecosCompra.querySelector(".compras-precos-rodape");
+    if (rodape) rodape.hidden = false;
+
     revisaoPrecosItens = itens || [];
     revisaoPrecosIndice = 0;
     revisaoPrecosDecisoes = {};
@@ -5465,6 +5728,16 @@
 
   function fecharConferenciaPrecosCompra() {
     if (!modalConferenciaPrecosCompra) return;
+
+    if (resumoCustoFixoCompra) resumoCustoFixoCompra.hidden = true;
+    if (textoAjudaConferenciaPrecosCompra) textoAjudaConferenciaPrecosCompra.hidden = false;
+
+    if (escolhaRevisaoPrecosCompra) escolhaRevisaoPrecosCompra.hidden = true;
+    if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.hidden = false;
+
+    const rodape = modalConferenciaPrecosCompra.querySelector(".compras-precos-rodape");
+    if (rodape) rodape.hidden = false;
+
     modalConferenciaPrecosCompra.classList.remove("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
     travarScrollBodyConferenciaPrecos(false);
@@ -5481,6 +5754,23 @@
     botaoEnvioAtual = null;
   }
 
+  function definirTodosCustosParaEnvioSemPrecos() {
+    if (!camposAtualizarCustoCompra) return;
+    camposAtualizarCustoCompra.innerHTML = "";
+
+    const ids = new Set();
+    revisaoPrecosItens.forEach(function(item) {
+      if (item && item.produtoId) ids.add(item.produtoId);
+    });
+
+    ids.forEach(function(produtoId) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "atualizar_custo_produto_ids[]";
+      input.value = produtoId;
+      camposAtualizarCustoCompra.appendChild(input);
+    });
+  }
   function definirCustosSelecionadosParaEnvio(atualizarSelecionados) {
     if (!camposAtualizarCustoCompra) return;
     camposAtualizarCustoCompra.innerHTML = "";
@@ -5548,6 +5838,7 @@
     sincronizarTodosPrecosUnitarios();
     salvarDecisaoProdutoAtual();
     definirCustosSelecionadosParaEnvio(atualizarSelecionados);
+    if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
     conferenciaPrecosConfirmada = true;
     modalConferenciaPrecosCompra.classList.remove("visivel");
     modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
@@ -5740,7 +6031,29 @@
 
       const finalizandoCompra = acaoCompra && ["confirmar_financeiro", "finalizar"].includes(acaoCompra.value);
 
-      if (finalizandoCompra && !conferenciaPrecosConfirmada) {
+      if (compraMobile() && finalizandoCompra) {
+        if (compraAVista() && !fechamentoOrigemConfirmado) {
+          event.preventDefault();
+          envioAcionadoPeloBotao = false;
+          abrirOrigemDinheiroCompra();
+          return;
+        }
+
+        if (!conferenciaPrecosConfirmada) {
+          const divergencias = divergenciasPrecoCompra();
+          if (divergencias.length) {
+            event.preventDefault();
+            envioAcionadoPeloBotao = false;
+            abrirEscolhaRevisaoPrecosMobile(divergencias);
+            return;
+          }
+          definirCustosSelecionadosParaEnvio(false);
+          conferenciaPrecosConfirmada = true;
+          if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
+        }
+      }
+
+      if (!compraMobile() && finalizandoCompra && !conferenciaPrecosConfirmada) {
         const divergencias = divergenciasPrecoCompra();
         if (divergencias.length) {
           event.preventDefault();
@@ -5752,7 +6065,7 @@
         conferenciaPrecosConfirmada = true;
       }
 
-      if (compraAVista() && finalizandoCompra && !fechamentoOrigemConfirmado) {
+      if (!compraMobile() && compraAVista() && finalizandoCompra && !fechamentoOrigemConfirmado) {
         event.preventDefault();
         envioAcionadoPeloBotao = false;
         abrirOrigemDinheiroCompra();
@@ -5782,7 +6095,7 @@
 
       if (botaoEnvioAtual) {
         botaoEnvioAtual.disabled = true;
-        botaoEnvioAtual.textContent = acaoCompra && acaoCompra.value === "salvar_rascunho" ? "Salvando..." : "Enviando...";
+        botaoEnvioAtual.textContent = acaoCompra && acaoCompra.value === "salvar_rascunho" ? "Salvando rascunho..." : "Finalizando a compra...";
       }
     });
   }
@@ -5850,7 +6163,17 @@
     delete formCompra.dataset.enviando;
     window.compraMobileMantendoItemVisivel = false;
     envioAcionadoPeloBotao = false;
-    definirEnvioModalEmAndamento(true);
+
+    if (compraMobile()) {
+      if (origemDinheiroCompra) {
+        origemDinheiroCompra.classList.remove("visivel");
+        origemDinheiroCompra.setAttribute("aria-hidden", "true");
+      }
+      definirEnvioModalEmAndamento(false);
+    } else {
+      definirEnvioModalEmAndamento(true);
+    }
+
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
   }
 
@@ -5860,6 +6183,85 @@
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       confirmarFechamentoOrigemCompra();
+    });
+  }
+
+  if (btnVoltarFinanceiroCompra) {
+    btnVoltarFinanceiroCompra.addEventListener("click", function() {
+      if (modalConferenciaPrecosCompra) {
+        modalConferenciaPrecosCompra.classList.remove("visivel");
+        modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
+      }
+
+      travarScrollBodyConferenciaPrecos(false);
+
+      if (compraAVista() && origemDinheiroCompra) {
+        fechamentoOrigemConfirmado = false;
+        origemDinheiroCompra.classList.add("visivel");
+        origemDinheiroCompra.setAttribute("aria-hidden", "false");
+        atualizarResumoOrigemDinheiroCompra();
+        focarSelecionando(primeiroCampoOrigemCompra());
+        return;
+      }
+
+      fechamentoOrigemConfirmado = false;
+      envioAcionadoPeloBotao = false;
+      delete formCompra.dataset.enviando;
+      focarCampo(btnSalvarCompra);
+    });
+  }
+
+  if (btnFinalizarRevisarDepoisCompra) {
+    btnFinalizarRevisarDepoisCompra.addEventListener("click", function() {
+      if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "1";
+
+      definirTodosCustosParaEnvioSemPrecos();
+      conferenciaPrecosConfirmada = true;
+      fechamentoOrigemConfirmado = true;
+
+      if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
+      atualizarFluxoMobileCompra();
+
+      if (formCompra.dataset.confirmarFinanceiroUrl) {
+        formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
+      }
+
+      sincronizarTodosPrecosUnitarios();
+
+      if (modalConferenciaPrecosCompra) {
+        modalConferenciaPrecosCompra.classList.remove("visivel");
+        modalConferenciaPrecosCompra.setAttribute("aria-hidden", "true");
+      }
+      travarScrollBodyConferenciaPrecos(false);
+
+      delete formCompra.dataset.enviando;
+      envioAcionadoPeloBotao = true;
+
+      formCompra.requestSubmit
+        ? formCompra.requestSubmit()
+        : formCompra.submit();
+    });
+  }
+
+  if (btnRevisarPrecosAgoraCompra) {
+    btnRevisarPrecosAgoraCompra.addEventListener("click", function() {
+      if (escolhaRevisaoPrecosCompra) escolhaRevisaoPrecosCompra.hidden = true;
+      if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.hidden = false;
+
+      const rodape = modalConferenciaPrecosCompra
+        ? modalConferenciaPrecosCompra.querySelector(".compras-precos-rodape")
+        : null;
+      if (rodape) rodape.hidden = false;
+
+      if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
+
+      revisaoPrecosIndice = 0;
+      revisaoPrecosDecisoes = {};
+      revisaoPrecosItens.forEach(function(item) {
+        decisaoProduto(item);
+      });
+
+      renderizarConferenciaPrecos();
     });
   }
 

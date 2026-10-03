@@ -3182,6 +3182,13 @@ def _compra_post_mobile(request):
     return valor in {"1", "true", "sim", "mobile", "on"}
 
 
+def _compra_revisao_precos_pendente_post(request):
+    if not _compra_post_mobile(request):
+        return False
+    valor = str(request.POST.get("revisao_precos_pendente") or "").strip().lower()
+    return valor in {"1", "true", "sim", "on"}
+
+
 def _validar_origem_compra_mobile(valores):
     if _financeiro_dinheiro(valores.get("caixa") or Decimal("0.00")) > Decimal("0.00"):
         raise ValueError("No celular, use Sangria/Reserva ou Banco/Pix. O Caixa nao fica disponivel.")
@@ -11919,7 +11926,7 @@ def _criar_contas_pagar_compra(compra):
         )
 
 
-def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None):
+def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None, revisao_precos_pendente=False):
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
@@ -11946,10 +11953,11 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
 
         _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
 
+        compra.revisao_precos_pendente = bool(revisao_precos_pendente)
         compra.estoque_entrada_realizada = True
         compra.estoque_entrada_realizada_em = timezone.now()
         compra.status = Compra.STATUS_FINALIZADA
-        compra.save(update_fields=["estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
+        compra.save(update_fields=["revisao_precos_pendente", "estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
 
         if _compra_pagamento_a_prazo(compra.tipo_pagamento):
             _criar_contas_pagar_compra(compra)
@@ -12003,9 +12011,9 @@ def compras_nova(request):
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
                     if dados["compra_conta_futura"]:
-                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
         except Exception:
             logger.exception("Falha ao salvar compra")
             messages.error(request, "Nao foi possivel salvar a compra.")
@@ -12070,9 +12078,9 @@ def compra_editar(request, pk):
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos)
                     if dados["compra_conta_futura"]:
-                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
         except (ValueError, IndexError) as exc:
             if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
                 return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
@@ -12152,7 +12160,7 @@ def compra_finalizar(request, pk):
                     compra = Compra.objects.select_for_update().get(pk=compra.pk)
                     _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
                     _salvar_pagamento_nota_compra_lista(request, compra, dados)
-                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos)
+                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
