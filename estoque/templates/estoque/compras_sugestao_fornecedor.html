@@ -1401,6 +1401,10 @@
       grid-template-columns: 1fr;
     }
 
+    #mobileSugestaoProdutos .sugestao-mobile-card.sugestao-tratada-mobile {
+      display: none !important;
+    }
+
     .sugestao-topo-mobile-hidden {
       display: none !important;
     }
@@ -3135,6 +3139,12 @@
   }
 
   function existeNaLista(produtoId) {
+    const ehMobile = window.matchMedia("(max-width: 860px)").matches;
+    if (ehMobile && typeof window.sugestaoMobileCardsParaLista === "function") {
+      return window.sugestaoMobileCardsParaLista(
+        mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]")
+      ).some((card) => String(card.dataset.produtoId) === String(produtoId));
+    }
     return Array.from(tbody.querySelectorAll("tr[data-produto-id]")).some((el) => {
       return String(el.dataset.produtoId) === String(produtoId);
     });
@@ -3517,6 +3527,14 @@
     }
 
     const produto = produtoComValoresManuais(produtoBase);
+    // Substitui o par visual de um produto removido ao adicionar novamente pela busca.
+    if (window.matchMedia("(max-width: 860px)").matches) {
+      [tbody, mobile].forEach((raiz) => {
+        raiz.querySelectorAll("[data-produto-id]").forEach((elemento) => {
+          if (String(elemento.dataset.produtoId) === String(produto.id)) elemento.remove();
+        });
+      });
+    }
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
 
@@ -3548,7 +3566,7 @@
       mobileVisivel &&
       typeof window.adicionarCardSugestaoNaLista === "function"
     ) {
-      window.adicionarCardSugestaoNaLista(cardManual);
+      window.adicionarCardSugestaoNaLista(cardManual, false);
     }
 
     atualizarResumoDepoisDeAdicionar();
@@ -3745,7 +3763,12 @@
         window.setTimeout(function() {
           const itemParaRolar = focoSeguro.closest("[data-produto-id]");
           if (itemParaRolar && typeof itemParaRolar.scrollIntoView === "function") {
-            itemParaRolar.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (window.matchMedia("(max-width: 860px)").matches &&
+                typeof window.rolarProximoProdutoSugestaoMobile === "function") {
+              window.rolarProximoProdutoSugestaoMobile(itemParaRolar);
+            } else {
+              itemParaRolar.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
           }
           focoSeguro.focus({ preventScroll: true });
           if (typeof focoSeguro.select === "function") {
@@ -3781,6 +3804,47 @@
   let botaoRemoverOrigem = null;
   let remocaoEmAndamento = false;
   let focoPrecoPendentePorEnter = null;
+  const produtosTratadosMobile = new Set();
+  let fluxoAdicaoMobile = 0;
+
+  function ehMobileLista() {
+    return window.matchMedia("(max-width: 860px)").matches;
+  }
+
+  function ocultarProdutoTratado(card) {
+    if (!ehMobileLista() || !card) return;
+    produtosTratadosMobile.add(String(card.dataset.produtoId));
+    card.classList.add("sugestao-tratada-mobile");
+  }
+
+  function rolarProximoProdutoMobile(proximo) {
+    if (!ehMobileLista()) return;
+    const alvo = proximo || document.getElementById("btnToggleAdicionarProdutosMobile") || mobile;
+    alvo.scrollIntoView({ behavior: "instant", block: proximo ? "start" : "center" });
+    if (proximo) window.scrollBy({ top: -80, left: 0, behavior: "instant" });
+  }
+
+  window.rolarProximoProdutoSugestaoMobile = rolarProximoProdutoMobile;
+
+  function confirmarAdicaoMobile(card, item) {
+    if (!ehMobileLista() || modoEdicaoLista) return;
+    const sequencia = ++fluxoAdicaoMobile;
+    const ordem = cards();
+    const seguintes = ordem.slice(ordem.indexOf(card) + 1).concat(ordem.slice(0, ordem.indexOf(card)));
+    produtosTratadosMobile.add(String(card.dataset.produtoId));
+    window.setTimeout(function() {
+      ocultarProdutoTratado(card);
+      if (sequencia !== fluxoAdicaoMobile || !ehMobileLista()) return;
+      if (item?.isConnected) item.scrollIntoView({ behavior: "instant", block: "center" });
+      window.setTimeout(function() {
+        if (sequencia !== fluxoAdicaoMobile || !ehMobileLista()) return;
+        const proximo = seguintes.find((alvo) => alvo.isConnected &&
+          !produtosTratadosMobile.has(String(alvo.dataset.produtoId)) &&
+          alvo.getClientRects().length);
+        rolarProximoProdutoMobile(proximo);
+      }, 1300);
+    }, 350);
+  }
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
@@ -4109,21 +4173,35 @@
     if (itemEmEdicao === item) itemEmEdicao = null;
   }
 
-  function adicionarCardNaLista(card) {
+  function adicionarCardNaLista(card, confirmarFluxo = true) {
     if (!card || card.dataset.naLista === "1") return;
     marcarBotao(card, true);
-    renderItem(card);
+    const item = renderItem(card);
     atualizarVazio();
+    if (confirmarFluxo) confirmarAdicaoMobile(card, item);
+    else ocultarProdutoTratado(card);
   }
 
   window.adicionarCardSugestaoNaLista = adicionarCardNaLista;
 
   function removerItemDaLista(item) {
     const card = cardPorId(item.dataset.produtoId);
+    const ordem = ehMobileLista() ? cards() : [];
+    const indice = ordem.indexOf(card);
+    const seguintes = indice >= 0 ? ordem.slice(indice + 1).concat(ordem.slice(0, indice)) : ordem;
     if (itemEmEdicao === item) itemEmEdicao = null;
-    if (card) marcarBotao(card, false);
+    if (card) {
+      marcarBotao(card, false);
+      ocultarProdutoTratado(card);
+    }
     item.remove();
     atualizarVazio();
+    if (ehMobileLista()) {
+      const proximo = seguintes.find((alvo) => alvo.isConnected &&
+        !produtosTratadosMobile.has(String(alvo.dataset.produtoId)) &&
+        alvo.getClientRects().length);
+      rolarProximoProdutoMobile(proximo);
+    }
   }
 
   function abrirModalRemoverItem(item, botaoOrigem) {
