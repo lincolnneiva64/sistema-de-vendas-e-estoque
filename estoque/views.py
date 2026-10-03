@@ -7042,8 +7042,8 @@ def clientes(request):
 
             cliente = form.save(commit=False)
 
-            cliente_duplicado = encontrar_cliente_duplicado(cliente)
-            if cliente_duplicado:
+            cliente_duplicado, campo_duplicado = detectar_cliente_duplicado(cliente)
+            if cliente_duplicado and campo_duplicado != "whatsapp":
                 form.add_error(None, MENSAGEM_CLIENTE_DUPLICADO)
                 return render(
                     request,

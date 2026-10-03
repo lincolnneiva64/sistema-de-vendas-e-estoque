@@ -778,8 +778,12 @@
         aviso.textContent = dados.mensagem || "Ja existe um cliente parecido cadastrado. Verifique antes de cadastrar novamente.";
         aviso.classList.add("visivel");
         campoAviso?.classList.add("cliente-duplicado-campo");
-        atualizarBloqueioDuplicado(true, campoAviso);
-        focarCampoDuplicado();
+        if (dados.campo === "whatsapp") {
+          atualizarBloqueioDuplicado(false, null);
+        } else {
+          atualizarBloqueioDuplicado(true, campoAviso);
+          focarCampoDuplicado();
+        }
       } catch (erro) {
         return;
       }
