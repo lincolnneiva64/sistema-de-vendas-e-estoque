@@ -216,16 +216,29 @@ def ordenar_itens_operacionais(itens):
     )
 
 
-def ordenar_itens_operacionais_rapidos(itens):
-    return sorted(
-        itens,
-        key=lambda item: (
-            not item["atrasada"],
+def ordenar_itens_operacionais_rapidos(itens, data_referencia):
+    def chave_ordenacao(item):
+        data_agendada = item["tarefa"].data_agendada
+        if item["atrasada"]:
+            prioridade = 0
+        elif data_agendada == data_referencia:
+            prioridade = 1
+        elif data_agendada > data_referencia:
+            prioridade = 3
+        else:
+            prioridade = 2
+        return (
+            prioridade,
+            data_agendada if prioridade == 3 else data_referencia,
             item["horario"] is None,
             item["horario"] or timezone.datetime.max.time(),
-            item["tarefa"].data_agendada,
+            data_agendada,
             item["locacao"].id,
-        ),
+        )
+
+    return sorted(
+        itens,
+        key=chave_ordenacao,
     )
 
 
@@ -572,7 +585,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
             and item["tarefa"].data_agendada < data_referencia - timedelta(days=2)
         )
-    itens = ordenar_itens_operacionais_rapidos(itens)
+    itens = ordenar_itens_operacionais_rapidos(itens, data_referencia)
     for indice, item in enumerate(itens, start=1):
         item["ordem_operacional"] = indice
 

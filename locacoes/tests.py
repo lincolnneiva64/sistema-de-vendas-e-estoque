@@ -1957,6 +1957,32 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
         self.assertIsNone(checklist["grupos"]["recolhimentos"][0]["horario"])
 
+    def test_painel_rapido_hoje_antes_de_futuras_com_horario_mais_cedo(self):
+        hoje = date(2026, 10, 4)
+        futuro = date(2026, 11, 8)
+        futura_nove = self.criar_locacao(
+            data_entrega=futuro, horario_entrega=time(9, 0),
+        )
+        futura_oito = self.criar_locacao(
+            data_entrega=futuro, horario_entrega=time(8, 0),
+        )
+        entrega_hoje = self.criar_locacao(
+            data_entrega=hoje, horario_entrega=time(10, 30),
+        )
+
+        painel = painel_operacional_rapido_locacoes(
+            self.factory.get("/vendas/"), data_referencia=hoje,
+        )
+
+        self.assertEqual(
+            [item["locacao"].id for item in painel["itens"]],
+            [entrega_hoje.id, futura_oito.id, futura_nove.id],
+        )
+        self.assertEqual(
+            [item["ordem_operacional"] for item in painel["itens"]],
+            [1, 2, 3],
+        )
+
     def test_painel_rapido_mostra_atrasadas_e_hoje_sem_futuras_ou_concluidas(self):
         entrega_atrasada = self.criar_locacao(
             pessoa_avulsa_nome="Entrega Atrasada",
