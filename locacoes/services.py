@@ -488,6 +488,12 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
 
     # Adiciona somente a PRÓXIMA data futura que contenha tarefas operacionais
     # (entrega ou recolhimento). Não alterar checklist_operacional_locacoes().
+    tarefas_encerradas = TarefaOperacionalLocacao.objects.filter(
+        status__in=[
+            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+            TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+        ],
+    )
     next_entrega_date = (
         Locacao.objects
         .filter(
@@ -498,6 +504,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             ],
         )
         .order_by("data_entrega")
+        .exclude(pk__in=tarefas_encerradas.filter(tipo=TarefaOperacionalLocacao.TIPO_ENTREGA).values("locacao_id"))
         .values_list("data_entrega", flat=True)
         .first()
     )
@@ -511,6 +518,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             ],
         )
         .order_by("data_prevista_devolucao")
+        .exclude(pk__in=tarefas_encerradas.filter(tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO).values("locacao_id"))
         .values_list("data_prevista_devolucao", flat=True)
         .first()
     )
@@ -559,6 +567,11 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
                 item["data_label"] = proxima_data.strftime("%d/%m")
             itens.append(item)
 
+    for item in itens:
+        item["entrega_antiga"] = (
+            item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
+            and item["tarefa"].data_agendada < data_referencia - timedelta(days=2)
+        )
     itens = ordenar_itens_operacionais_rapidos(itens)
     for indice, item in enumerate(itens, start=1):
         item["ordem_operacional"] = indice
@@ -592,6 +605,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
 
         item["proxima"] = (
             not item["vencida"]
+            and item["tarefa"].data_agendada == checklist["data"]
             and item["horario"] is not None
             and hora_atual is not None
             and item["horario"] >= hora_atual
@@ -604,8 +618,9 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
     return {
         "data": checklist["data"],
         "itens": itens,
-        "total": len(itens),
-        "total_entregas": len(entregas),
+        "total": sum(not item["entrega_antiga"] for item in itens),
+        "total_entregas": sum(not item["entrega_antiga"] for item in entregas),
         "total_recolhimentos": len(recolhimentos),
-        "alerta": any(item["vencida"] for item in itens),
+        "total_entregas_antigas": sum(item["entrega_antiga"] for item in itens),
+        "alerta": any(item["vencida"] and not item["entrega_antiga"] for item in itens),
     }

@@ -33,6 +33,7 @@ urlpatterns = [
         views.conferencia_recolhimento,
         name="conferencia_recolhimento",
     ),
+    path("tarefas-operacionais/<int:pk>/resolver/", views.resolver_tarefa_operacional, name="resolver_tarefa_operacional"),
     path("tarefas-operacionais/<int:pk>/confirmar/", views.confirmar_tarefa_operacional, name="confirmar_tarefa_operacional"),
     path("tarefas-operacionais/<int:pk>/nao-possivel/", views.tarefa_operacional_nao_possivel, name="tarefa_operacional_nao_possivel"),
     path("<int:pk>/", views.detalhe, name="detalhe"),

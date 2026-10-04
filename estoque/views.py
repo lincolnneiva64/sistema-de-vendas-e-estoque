@@ -1554,7 +1554,7 @@ def _avisos_visitas_painel_vendas(avisos_visitas_fornecedores):
 def _contexto_alertas_locacoes(hoje=None):
     hoje = hoje or timezone.localdate()
     try:
-        from locacoes.models import Locacao
+        from locacoes.models import Locacao, TarefaOperacionalLocacao
     except ImportError:
         return {
             "locacoes_alertas_operacionais": [],
@@ -1570,10 +1570,14 @@ def _contexto_alertas_locacoes(hoje=None):
         Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
     ]
     alertas = []
+    resolvidas = TarefaOperacionalLocacao.objects.filter(
+        status=TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+    )
     entregas = (
         Locacao.objects.select_related("cliente")
         .prefetch_related("itens")
         .filter(data_entrega=hoje, status=Locacao.STATUS_RESERVADA)
+        .exclude(pk__in=resolvidas.filter(tipo=TarefaOperacionalLocacao.TIPO_ENTREGA).values("locacao_id"))
         .order_by("horario_entrega", "id")
     )
     for locacao in entregas:
@@ -1597,6 +1601,7 @@ def _contexto_alertas_locacoes(hoje=None):
             ],
         )
         .order_by("horario_evento", "id")
+        .exclude(pk__in=resolvidas.filter(tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO).values("locacao_id"))
     )
     for locacao in recolhimentos:
         necessidade = Locacao.necessidades_itens(
@@ -1622,6 +1627,7 @@ def _contexto_alertas_locacoes(hoje=None):
             ],
         )
         .order_by("data_prevista_devolucao", "id")
+        .exclude(pk__in=resolvidas.filter(tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO).values("locacao_id"))
     )
     for locacao in atrasadas:
         necessidade = Locacao.necessidades_itens(

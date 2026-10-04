@@ -1118,11 +1118,13 @@ class TarefaOperacionalLocacao(models.Model):
     STATUS_PARCIAL = "parcial"
     STATUS_CONFIRMADA = "confirmada"
     STATUS_NAO_POSSIVEL = "nao_possivel"
+    STATUS_RESOLVIDA_ADMIN = "resolvida_admin"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
         (STATUS_PARCIAL, "Parcial"),
         (STATUS_CONFIRMADA, "Confirmada"),
         (STATUS_NAO_POSSIVEL, "Nao foi possivel realizar"),
+        (STATUS_RESOLVIDA_ADMIN, "Resolvida administrativamente"),
     ]
 
     locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="tarefas_operacionais")
@@ -1135,6 +1137,9 @@ class TarefaOperacionalLocacao(models.Model):
     tentativa_em = models.DateTimeField(blank=True, null=True)
     tentativa_por = models.CharField(max_length=120, blank=True)
     motivo_nao_realizado = models.TextField(blank=True)
+    resolvida_em = models.DateTimeField(blank=True, null=True)
+    resolvida_por = models.CharField(max_length=120, blank=True)
+    motivo_resolucao = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -1155,8 +1160,41 @@ class TarefaOperacionalLocacao(models.Model):
             self.STATUS_NAO_POSSIVEL,
         }
 
+    def resolver_administrativamente(self, motivo, responsavel=""):
+        motivo = str(motivo or "").strip()
+        if not motivo or len(motivo) > 500:
+            raise ValidationError("Informe um motivo de ate 500 caracteres.")
+        with transaction.atomic():
+            tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if not tarefa.pendente_operacional:
+                raise ValidationError("Esta tarefa ja foi encerrada.")
+            anterior = tarefa.status
+            agora = timezone.now()
+            tarefa.status = self.STATUS_RESOLVIDA_ADMIN
+            tarefa.resolvida_em = agora
+            tarefa.resolvida_por = str(responsavel or "Sistema").strip()[:120]
+            tarefa.motivo_resolucao = motivo
+            tarefa.save(update_fields=[
+                "status", "resolvida_em", "resolvida_por",
+                "motivo_resolucao", "atualizado_em",
+            ])
+            EventoLocacao.objects.create(
+                locacao_id=tarefa.locacao_id,
+                tipo="tarefa_resolvida_admin",
+                responsavel=tarefa.resolvida_por,
+                descricao=(
+                    f"Resolucao administrativa da tarefa #{tarefa.pk}.\n"
+                    f"Tipo: {tarefa.tipo}\nStatus anterior: {anterior}\n"
+                    f"Data/hora: {timezone.localtime(agora).isoformat()}\n"
+                    f"Responsavel: {tarefa.resolvida_por}\nMotivo: {motivo}\n"
+                    "Encerramento da pendencia sem confirmar checklist fisico."
+                ),
+            )
+        self.refresh_from_db()
+        return self
+
     def confirmar(self, responsavel="", observacao=""):
-        if self.status == self.STATUS_CONFIRMADA:
+        if self.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
             raise ValidationError("Esta tarefa operacional ja foi confirmada.")
 
         responsavel = str(responsavel or "").strip()
@@ -1165,7 +1203,7 @@ class TarefaOperacionalLocacao(models.Model):
 
         with transaction.atomic():
             tarefa = TarefaOperacionalLocacao.objects.select_for_update().select_related("locacao").get(pk=self.pk)
-            if tarefa.status == self.STATUS_CONFIRMADA:
+            if tarefa.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
                 raise ValidationError("Esta tarefa operacional ja foi confirmada.")
 
             locacao = tarefa.locacao
@@ -1204,7 +1242,7 @@ class TarefaOperacionalLocacao(models.Model):
         motivo = str(motivo or "").strip()
         if not motivo:
             raise ValidationError("Informe o motivo/observacao para manter a pendencia.")
-        if self.status == self.STATUS_CONFIRMADA:
+        if self.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
             raise ValidationError("Esta tarefa ja foi confirmada. Registre uma correcao antes de alterar.")
 
         self.status = self.STATUS_NAO_POSSIVEL
@@ -1472,7 +1510,7 @@ class ConferenciaEntregaLocacao(models.Model):
                     "Esta tarefa nao corresponde a uma entrega."
                 )
 
-            if tarefa.status == TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+            if tarefa.status in {TarefaOperacionalLocacao.STATUS_CONFIRMADA, TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN}:
                 raise ValidationError(
                     "Esta entrega ja foi confirmada."
                 )
@@ -2058,8 +2096,10 @@ class ConferenciaRecolhimentoLocacao(models.Model):
                 )
 
             if (
-                tarefa.status
-                == TarefaOperacionalLocacao.STATUS_CONFIRMADA
+                tarefa.status in {
+                    TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+                    TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+                }
             ):
                 raise ValidationError(
                     "Este recolhimento ja foi concluido."

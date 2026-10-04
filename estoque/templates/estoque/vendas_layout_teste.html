@@ -859,6 +859,17 @@ select {
     transform: none;
     box-shadow: none;
 }
+.locacoes-rapidas-resolver {
+    justify-self: start;
+    padding: 6px 2px;
+    border: 0;
+    background: transparent;
+    color: #475569;
+    font-size: 12px;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.locacoes-rapidas-card[hidden], .locacoes-rapidas-tab[hidden] { display: none; }
 .locacoes-rapidas-confirmado {
     display: none;
     color: #166534;
@@ -3067,6 +3078,7 @@ td:first-child {
                     <button type="button" class="locacoes-rapidas-tab ativo" data-locacoes-filtro="tudo">Tudo {{ locacoes_operacionais.total }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="entrega">Entregas {{ locacoes_operacionais.total_entregas }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="recolhimento">Recolhimentos {{ locacoes_operacionais.total_recolhimentos }}</button>
+                    <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="antigas" {% if not locacoes_operacionais.total_entregas_antigas %}hidden{% endif %}>Entregas antigas {{ locacoes_operacionais.total_entregas_antigas }}</button>
                 </div>
                 <div class="locacoes-rapidas-lista" data-locacoes-lista>
                     {% for item in locacoes_operacionais.itens %}
@@ -3075,6 +3087,9 @@ td:first-child {
                             data-locacoes-card
                             data-tipo="{{ item.tipo }}"
                             data-tarefa-id="{{ item.tarefa.id }}"
+                            data-entrega-antiga="{{ item.entrega_antiga|yesno:'1,0' }}"
+                            data-vencida="{{ item.vencida|yesno:'1,0' }}"
+                            {% if item.entrega_antiga %}hidden{% endif %}
                         >
                             <div class="locacoes-rapidas-topo">
                                 <div>
@@ -3136,6 +3151,11 @@ td:first-child {
                                 </button>
                             </div>
                             <div class="locacoes-rapidas-confirmado">Checklist enviado</div>
+                            <button type="button" class="locacoes-rapidas-resolver"
+                                data-resolver-url="{% url 'locacoes:resolver_tarefa_operacional' item.tarefa.pk %}">
+                                Dar como resolvida
+                            </button>
+                            <p class="locacoes-rapidas-alerta" data-resolver-erro role="alert" hidden></p>
                         </article>
                     {% empty %}
                         <div class="locacoes-rapidas-empty" data-locacoes-empty>
@@ -6179,6 +6199,7 @@ function coletarDadosVenda() {
 
     return {
         venda_id: vendaEdicaoVenda?.id || null,
+        ajuste_separacao_id: ajusteSeparacaoVenda?.separacao_id || null,
         next: vendaEdicaoRetornoUrl || "",
         pedido_id: pedidoImportadoVenda?.id || null,
         cliente_id: clienteId.value || null,
@@ -6790,10 +6811,14 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
     const cards = Array.from(painel.querySelectorAll("[data-locacoes-card]"));
     const vazioFiltro = painel.querySelector("[data-locacoes-sem-filtro]");
 
+    let filtroAtual = "tudo";
     function aplicarFiltro(filtro) {
+        filtroAtual = filtro;
         let visiveis = 0;
         cards.forEach((card) => {
-            const mostrar = filtro === "tudo" || card.dataset.tipo === filtro;
+            const antiga = card.dataset.entregaAntiga === "1";
+            const mostrar = card.isConnected && (filtro === "antigas"
+                ? antiga : !antiga && (filtro === "tudo" || card.dataset.tipo === filtro));
             card.hidden = !mostrar;
             if (mostrar) visiveis += 1;
         });
@@ -6805,6 +6830,30 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         }
     }
 
+    function atualizarContadores() {
+        const ativos = cards.filter(card => card.isConnected);
+        const recentes = ativos.filter(card => card.dataset.entregaAntiga !== "1");
+        const antigas = ativos.length - recentes.length;
+        const contagens = {
+            tudo: recentes.length,
+            entrega: recentes.filter(card => card.dataset.tipo === "entrega").length,
+            recolhimento: recentes.filter(card => card.dataset.tipo === "recolhimento").length,
+            antigas,
+        };
+        const rotulos = {tudo: "Tudo", entrega: "Entregas", recolhimento: "Recolhimentos", antigas: "Entregas antigas"};
+        tabs.forEach(tab => {
+            const filtro = tab.dataset.locacoesFiltro;
+            tab.textContent = rotulos[filtro] + " " + contagens[filtro];
+            if (filtro === "antigas") tab.hidden = antigas === 0;
+        });
+        const lateral = document.getElementById("locacoesOperacionaisVenda");
+        const badge = lateral?.querySelector(".locacoes-operacionais-badge");
+        if (badge) badge.textContent = recentes.length;
+        lateral?.classList.toggle("alerta", recentes.some(card => card.dataset.vencida === "1"));
+        if (filtroAtual === "antigas" && antigas === 0) filtroAtual = "tudo";
+        aplicarFiltro(filtroAtual);
+    }
+
     tabs.forEach((tab) => {
         tab.addEventListener("click", () => aplicarFiltro(tab.dataset.locacoesFiltro || "tudo"));
     });
@@ -6814,6 +6863,38 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         const botao = card.querySelector(".locacoes-rapidas-whatsapp");
         const aviso = card.querySelector(".locacoes-rapidas-alerta");
         const confirmar = card.querySelector(".locacoes-rapidas-confirmar");
+        const resolver = card.querySelector(".locacoes-rapidas-resolver");
+        const erroResolucao = card.querySelector("[data-resolver-erro]");
+        resolver?.addEventListener("click", async () => {
+            const motivo = window.prompt(
+                "Use apenas quando a entrega ou o recolhimento já aconteceu na prática, mas não foi registrado corretamente. " +
+                "Isso encerra somente a pendência; não confirma checklist nem altera materiais ou valores.\n\nInforme um motivo curto (até 500 caracteres):"
+            );
+            if (motivo === null) return;
+            if (!motivo.trim() || motivo.trim().length > 500) {
+                erroResolucao.textContent = "Informe um motivo de até 500 caracteres.";
+                erroResolucao.hidden = false;
+                return;
+            }
+            if (!window.confirm("Dar esta tarefa como resolvida administrativamente?\nMotivo: " + motivo.trim())) return;
+            resolver.disabled = true;
+            erroResolucao.hidden = true;
+            try {
+                const resposta = await fetch(resolver.dataset.resolverUrl, {
+                    method: "POST",
+                    headers: {"X-CSRFToken": obterCookie("csrftoken"), "X-Requested-With": "XMLHttpRequest"},
+                    body: new URLSearchParams({motivo: motivo.trim()}),
+                });
+                const dados = await resposta.json();
+                if (!resposta.ok || !dados.ok) throw new Error(dados.erro || "Não foi possível resolver a tarefa.");
+                card.remove();
+                atualizarContadores();
+            } catch (erro) {
+                erroResolucao.textContent = erro.message || "Não foi possível resolver a tarefa. Tente novamente.";
+                erroResolucao.hidden = false;
+                resolver.disabled = false;
+            }
+        });
         const chaveFuncionario = "locacoes.operacional.funcionario." + (card.dataset.tarefaId || "");
         const chaveEnviado = "locacoes.operacional.enviado." + (card.dataset.tarefaId || "");
 
@@ -6866,7 +6947,7 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         atualizarEnvio();
     });
 
-    aplicarFiltro("tudo");
+    atualizarContadores();
 })();
 
 document.addEventListener("click", () => {

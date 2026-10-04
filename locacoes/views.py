@@ -122,6 +122,10 @@ def _acoes_locacao(locacao, request=None):
             locacao,
             TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
         )
+    if tarefa_entrega and tarefa_entrega.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
+        tarefa_entrega = None
+    if tarefa_recolhimento and tarefa_recolhimento.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
+        tarefa_recolhimento = None
     whatsapp_recolhimento = (
         _whatsapp_recolhimento_context(request, tarefa_recolhimento)
         if request and tarefa_recolhimento
@@ -515,7 +519,10 @@ def _whatsapp_recolhimento_context(request, tarefa):
     locacao = tarefa.locacao
     if tarefa.tipo != TarefaOperacionalLocacao.TIPO_RECOLHIMENTO:
         return {}
-    if tarefa.status == TarefaOperacionalLocacao.STATUS_CONFIRMADA:
+    if tarefa.status in {
+        TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+    }:
         return {}
     if locacao.status not in {
         Locacao.STATUS_ENTREGUE,
@@ -1477,6 +1484,9 @@ def conferencia_entrega(request, pk):
         tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
     )
     locacao = tarefa.locacao
+    if tarefa.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
+        messages.info(request, "Esta tarefa foi resolvida administrativamente.")
+        return redirect("locacoes:detalhe", pk=locacao.pk)
     responsavel_checklist = _nome_funcionario_checklist_por_id(
         request.GET.get("funcionario")
     ) or str(request.GET.get("responsavel") or "").strip()
@@ -1874,6 +1884,9 @@ def conferencia_recolhimento(request, pk):
         tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
     )
     locacao = tarefa.locacao
+    if tarefa.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
+        messages.info(request, "Esta tarefa foi resolvida administrativamente.")
+        return redirect("locacoes:detalhe", pk=locacao.pk)
     responsavel_checklist = _nome_funcionario_checklist_por_id(
         request.GET.get("funcionario")
     )
@@ -2090,6 +2103,19 @@ def conferencia_recolhimento(request, pk):
             "historico": historico,
         },
     )
+
+
+@require_POST
+def resolver_tarefa_operacional(request, pk):
+    tarefa = get_object_or_404(TarefaOperacionalLocacao, pk=pk)
+    try:
+        tarefa.resolver_administrativamente(
+            motivo=request.POST.get("motivo", ""),
+            responsavel=_responsavel_request(request),
+        )
+    except ValidationError as exc:
+        return JsonResponse({"ok": False, "erro": "; ".join(exc.messages)}, status=400)
+    return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
 
 
 @require_POST
