@@ -1,0 +1,28 @@
+<script>
+  (function () {
+    const formulario = document.getElementById("filtros-locacoes");
+    const limpar = document.getElementById("limpar-filtros-locacoes");
+    let temporizador;
+    let enviando = false;
+    function agendarFiltro(event) {
+      if (!event.target.matches("input, select")) return;
+      clearTimeout(temporizador);
+      temporizador = setTimeout(function () {
+        if (!enviando && formulario.checkValidity()) {
+          formulario.requestSubmit();
+        }
+      }, 350);
+    }
+    formulario.addEventListener("input", agendarFiltro);
+    formulario.addEventListener("change", agendarFiltro);
+    formulario.addEventListener("submit", function (event) {
+      clearTimeout(temporizador);
+      if (enviando) event.preventDefault();
+      enviando = true;
+    });
+    limpar.addEventListener("click", function () {
+      clearTimeout(temporizador);
+      enviando = true;
+    });
+  })();
+</script>

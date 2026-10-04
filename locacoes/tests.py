@@ -373,13 +373,11 @@ class LocacoesUxPadraoTests(TestCase):
         dados.update(extras)
         return dados
 
-    def test_lista_abre_com_periodo_de_hoje_preenchido(self):
-        hoje = timezone.localdate().isoformat()
-
+    def test_lista_abre_com_datas_vazias_e_visao_de_hoje_em_diante(self):
         response = self.client.get(reverse("locacoes:lista"), secure=True)
 
-        self.assertContains(response, f'name="data_inicio" value="{hoje}"')
-        self.assertContains(response, f'name="data_fim" value="{hoje}"')
+        self.assertContains(response, 'name="data_inicio" value=""')
+        self.assertContains(response, 'name="data_fim" value=""')
         self.assertContains(response, "data-enter-nav")
 
     def test_nova_locacao_abre_com_datas_de_hoje_preenchidas(self):

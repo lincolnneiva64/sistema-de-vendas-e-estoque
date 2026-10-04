@@ -715,9 +715,8 @@ def lista(request):
     status = request.GET.get("status", "").strip()
     financeiro = request.GET.get("financeiro", "").strip()
     hoje = timezone.localdate()
-    primeira_abertura = not request.GET
-    data_inicio_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_inicio", "").strip()
-    data_fim_texto = hoje.isoformat() if primeira_abertura else request.GET.get("data_fim", "").strip()
+    data_inicio_texto = request.GET.get("data_inicio", "").strip()
+    data_fim_texto = request.GET.get("data_fim", "").strip()
     data_inicio = parse_date(data_inicio_texto or "")
     data_fim = parse_date(data_fim_texto or "")
     locacoes_qs = (
@@ -746,11 +745,13 @@ def lista(request):
         locacoes_qs = locacoes_qs.filter(data_entrega__gte=data_inicio)
     if data_fim:
         locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
+    if not data_inicio and not data_fim:
+        locacoes_qs = locacoes_qs.filter(data_entrega__gte=hoje)
     if financeiro == "com_saldo":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__gt=Decimal("0.00"))
     elif financeiro == "quitadas":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__lte=Decimal("0.00"))
-    locacoes = list(locacoes_qs)
+    locacoes = list(locacoes_qs.order_by("data_entrega", "horario_entrega", "id"))
     for locacao in locacoes:
         locacao.necessidade_pendente_lista = Locacao.necessidades_itens(
             [

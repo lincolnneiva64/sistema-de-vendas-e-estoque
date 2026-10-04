@@ -474,7 +474,8 @@
 
     <section class="cardx">
       <h2>Filtros da consulta</h2>
-      <form method="get" class="filters" data-enter-nav>
+      <p class="muted">Sem datas selecionadas, mostrando entregas de hoje em diante. Informe datas para consultar outro período.</p>
+      <form method="get" class="filters" id="filtros-locacoes" data-enter-nav>
         <div>
           <label class="form-label">Status</label>
           <select name="status" class="form-select">
@@ -501,7 +502,7 @@
           <input class="form-control" type="date" name="data_fim" value="{{ data_fim }}">
         </div>
         <div>
-          <button class="btn btn-locacoes w-100" type="submit">Filtrar</button>
+          <a class="btn btn-locacoes w-100" href="{% url 'locacoes:lista' %}" id="limpar-filtros-locacoes">Limpar filtros</a>
         </div>
       </form>
     </section>
@@ -600,6 +601,7 @@
       </div>
     </section>
   </main>
+  {% include "locacoes/includes/filtros_consulta.html" %}
   {% include "locacoes/includes/enter_nav.html" %}
 {% include "estoque/includes/atalho_despesa_global.html" %}
 </body>
