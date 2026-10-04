@@ -747,6 +747,8 @@ def lista(request):
         locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
     if not data_inicio and not data_fim:
         locacoes_qs = locacoes_qs.filter(data_entrega__gte=hoje)
+        if not status:
+            locacoes_qs = locacoes_qs.exclude(status=Locacao.STATUS_CANCELADA)
     if financeiro == "com_saldo":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__gt=Decimal("0.00"))
     elif financeiro == "quitadas":

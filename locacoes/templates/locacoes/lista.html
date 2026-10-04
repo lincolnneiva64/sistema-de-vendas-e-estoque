@@ -479,7 +479,8 @@
         <div>
           <label class="form-label">Status</label>
           <select name="status" class="form-select">
-            <option value="">Todos</option>
+            <option value="" {% if not status_filtro %}selected{% endif %}>Padrão (sem canceladas)</option>
+            <option value="todos" {% if status_filtro == 'todos' %}selected{% endif %}>Todos</option>
             {% for valor, rotulo in status_opcoes %}
               <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
             {% endfor %}
