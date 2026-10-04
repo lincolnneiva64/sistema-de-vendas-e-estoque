@@ -1993,6 +1993,7 @@ align-items: center;
     &uarr; Topo
   </button>
 </div>
+{% include 'estoque/grupos_produtos.html' %}
 <div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
     
@@ -2012,7 +2013,17 @@ align-items: center;
       <tr id="produto-{{ produto.id }}" data-produto-id="{{ produto.id }}" data-produto-search="{{ produto.nome|default:'Produto sem nome' }}" data-status="{% if produto.quantidade == 0 %}zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}limite{% else %}normal{% endif %}" data-categoria="{% if produto.categoria %}{{ produto.categoria|lower }}{% else %}__sem_categoria__{% endif %}" class="linha-produto {% if produto.quantidade == 0 %}table-zerado{% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}table-critico{% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}table-limite{% else %}table-ok{% endif %}{% if not produto.ativo %} produto-inativo{% endif %}" style="transition: all 0.15s ease;">
     <td class="produto-card-nome">
       <div class="produto-nome-linha">
+        <label class="grupo-produto-selecao" hidden>
+          <input type="checkbox" class="grupo-produto-checkbox" value="{{ produto.id }}" {% if produto.vinculo_grupo %}disabled{% endif %}>
+          <span>{% if produto.vinculo_grupo %}Já vinculado{% else %}Selecionar{% endif %} {{ produto.nome }}</span>
+        </label>
         <span class="produto-nome-texto">{{ produto.nome|default:"Produto sem nome" }}</span>
+        {% if produto.vinculo_grupo %}
+          <button type="button" class="grupo-produto-vinculo" data-grupo-url="{% url 'estoque:grupos_produtos_detalhe' produto.vinculo_grupo.grupo_id %}">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg>
+            <span>Vinculado · {{ produto.vinculo_grupo.grupo.nome }} · <strong>{{ produto.grupo_quantidade }} produto{{ produto.grupo_quantidade|pluralize:"s" }}</strong></span>
+          </button>
+        {% endif %}
       </div>
       <div class="produto-categoria-inline">
         {% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}

@@ -30,6 +30,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .models import GrupoProdutoVinculado
 from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoFaturaCartao, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
@@ -1702,7 +1703,8 @@ def home(request):
     ativos_param = request.GET.get("ativos")
     mostrar_ativos = ativos_param != "0"
 
-    produtos_base = Produto.objects.filter(excluido=False).annotate(
+    produtos_base = Produto.objects.filter(excluido=False).select_related("vinculo_grupo__grupo").annotate(
+        grupo_quantidade=Count("vinculo_grupo__grupo__membros", distinct=True),
         prioridade=Case(
             When(quantidade=0, then=Value(0)),
             When(quantidade__gt=0, quantidade__lte=F("estoque_minimo"), then=Value(1)),
@@ -1744,6 +1746,10 @@ def home(request):
         )
 
     # Contadores
+    resumo_vinculos = GrupoProdutoVinculado.objects.aggregate(
+        produtos_vinculados_total=Count("membros__produto_id", distinct=True),
+        grupos_vinculados_total=Count("pk", distinct=True),
+    )
     total_produtos = produtos_status_base.count()
     produtos_ativos_count = produtos_base.filter(ativo=True).count()
     produtos_inativos_count = produtos_base.filter(ativo=False).count()
@@ -1811,6 +1817,7 @@ def home(request):
             "produtos_inativos_count": produtos_inativos_count,
             "categorias_ativas": categorias_ativas,
             "total_produtos": total_produtos,
+            **resumo_vinculos,
             "zerado_count": zerado_count,
             "criticos_count": criticos_count,
             "limite_count": limite_count,
@@ -15672,6 +15679,47 @@ def _separacao_tem_ajuste_nota(separacao):
     return _montar_payload_ajuste_separacao_venda(separacao) is not None
 
 
+def _ajustes_separacao_foram_aplicados(venda, payload_ajuste):
+    if not payload_ajuste or not payload_ajuste.get("itens"):
+        return False
+
+    for ajuste in payload_ajuste["itens"]:
+        tipo = ajuste.get("tipo_sugestao")
+        item_venda_id = ajuste.get("item_venda_id")
+
+        if tipo == "remover_item":
+            if ItemVenda.objects.filter(pk=item_venda_id, venda=venda).exists():
+                return False
+            continue
+
+        if tipo == "alterar_quantidade":
+            quantidade_sugerida = ajuste.get("quantidade_sugerida")
+            if not quantidade_sugerida:
+                return False
+
+            item_atual = ItemVenda.objects.filter(
+                pk=item_venda_id,
+                venda=venda,
+            ).first()
+            if not item_atual:
+                return False
+
+            quantidade_atual = Decimal(item_atual.quantidade or 0).quantize(
+                Decimal("0.001")
+            )
+            quantidade_esperada = Decimal(str(quantidade_sugerida)).quantize(
+                Decimal("0.001")
+            )
+            if quantidade_atual != quantidade_esperada:
+                return False
+            continue
+
+        # Ajustes que exigem revisao manual nunca sao encerrados automaticamente.
+        return False
+
+    return True
+
+
 def _recalcular_status_separacao_da_venda(venda, usuario=None):
     separacao = SeparacaoVenda.objects.filter(venda=venda).first()
     if not separacao:
@@ -22199,6 +22247,24 @@ def gravar_venda(request):
         if not venda_em_edicao:
             return erro_gravar_venda("Venda informada para edicao nao foi encontrada.", status=404)
 
+    ajuste_separacao_id = str(dados.get("ajuste_separacao_id") or "").strip()
+    separacao_ajuste_edicao = None
+
+    if ajuste_separacao_id:
+        if not venda_em_edicao or not ajuste_separacao_id.isdigit():
+            return erro_gravar_venda("Separacao informada para ajuste e invalida.")
+
+        separacao_ajuste_edicao = SeparacaoVenda.objects.filter(
+            pk=int(ajuste_separacao_id),
+            venda=venda_em_edicao,
+        ).first()
+
+        if not separacao_ajuste_edicao:
+            return erro_gravar_venda(
+                "Separacao informada para ajuste nao pertence a esta venda.",
+                status=404,
+            )
+
     if not itens:
         return erro_gravar_venda("Inclua pelo menos 1 item antes de gravar a venda.")
 
@@ -22398,6 +22464,18 @@ def gravar_venda(request):
                     .select_for_update()
                     .get(pk=venda_em_edicao.pk, cancelada=False)
                 )
+
+                payload_ajuste_separacao = None
+                if separacao_ajuste_edicao:
+                    separacao_ajuste_edicao = (
+                        SeparacaoVenda.objects
+                        .select_for_update()
+                        .get(pk=separacao_ajuste_edicao.pk, venda=venda)
+                    )
+                    payload_ajuste_separacao = _montar_payload_ajuste_separacao_venda(
+                        separacao_ajuste_edicao
+                    )
+
                 pagamento_antigo_imediato = _venda_pagamento_imediato(venda.tipo_pagamento)
                 pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
                 conversao_prazo_para_vista = (
@@ -22837,6 +22915,36 @@ def gravar_venda(request):
                         "edicao unificada da venda",
                     )
                 _recalcular_status_separacao_da_venda(venda, request.user)
+
+                if (
+                    separacao_ajuste_edicao
+                    and payload_ajuste_separacao
+                    and _ajustes_separacao_foram_aplicados(
+                        venda,
+                        payload_ajuste_separacao,
+                    )
+                ):
+                    agora = timezone.now()
+                    separacao_ajuste_edicao.revisao_pendente = False
+                    separacao_ajuste_edicao.teve_revisao = True
+                    separacao_ajuste_edicao.revisao_concluida_em = agora
+                    separacao_ajuste_edicao.status = SeparacaoVenda.STATUS_SEPARADA
+                    separacao_ajuste_edicao.save(
+                        update_fields=[
+                            "revisao_pendente",
+                            "teve_revisao",
+                            "revisao_concluida_em",
+                            "status",
+                            "atualizado_em",
+                        ]
+                    )
+
+                    _registrar_evento_venda(
+                        venda,
+                        "alteracao_separacao_atendida",
+                        "Ajustes da separacao aplicados pela edicao da venda.",
+                        usuario=request.user,
+                    )
 
         except ValueError as exc:
             return erro_gravar_venda(str(exc))

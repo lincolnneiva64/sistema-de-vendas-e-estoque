@@ -1,0 +1,317 @@
+<style>
+.grupo-produtos-barra { max-width:720px; margin:12px auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.grupo-produtos-barra > button { flex-shrink:0; }
+.grupo-produtos-resumo { display:inline-flex; align-items:center; gap:6px; padding:4px 6px; color:#657080; font-size:13px; font-weight:500; white-space:nowrap; }
+.grupo-produtos-barra button, .grupo-produtos-modal button { min-height:44px; padding:8px 14px; border:1px solid #ced4da; border-radius:8px; background:#fff; color:#212529; }
+.grupo-produto-selecao:not([hidden]) { display:flex; align-items:center; gap:8px; min-height:44px; font-size:13px; cursor:pointer; }
+.grupo-produto-checkbox, .grupo-produtos-opcao input { width:22px; height:22px; flex-shrink:0; }
+.grupo-produto-vinculo { display:inline-flex; align-items:flex-start; gap:7px; max-width:100%; box-sizing:border-box; margin-top:6px; border:1px solid #729ed7; border-radius:10px; padding:6px 9px; background:#dbe9fc; color:#193f70; font-size:12px; font-weight:650; line-height:1.5; text-align:left; cursor:pointer; }
+.grupo-produto-vinculo svg { width:18px; height:18px; flex-shrink:0; stroke-width:2.6; }
+.grupo-produto-vinculo > span { min-width:0; overflow-wrap:anywhere; }
+.grupo-produto-vinculo strong { font-weight:800; }
+.grupo-produto-vinculo:hover { background:#cee0f9; border-color:#5d8cc9; }
+.grupo-produto-vinculo:focus-visible { outline:2px solid #214b80; outline-offset:2px; }
+.grupo-produtos-modal { width:min(92vw,580px); max-height:85vh; overflow:auto; border:1px solid #ced4da; border-radius:14px; padding:20px; box-sizing:border-box; }
+.grupo-produtos-modal::backdrop { background:rgba(0,0,0,.45); }
+.grupo-produtos-modal input[type=text], .grupo-produtos-modal input[type=search] { width:100%; min-height:44px; margin:8px 0; padding:8px; box-sizing:border-box; border:1px solid #ced4da; border-radius:8px; }
+.grupo-produto-membro { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #eee; }
+.grupo-produto-membro span { min-width:0; overflow-wrap:anywhere; }
+.grupo-produto-membro button { flex-shrink:0; }
+.grupo-produtos-opcao { display:flex; align-items:center; gap:10px; min-height:44px; padding:6px 0; cursor:pointer; }
+.grupo-produtos-opcao[hidden] { display:none; }
+.grupo-produtos-acoes { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+.grupo-produtos-modal .grupo-produtos-perigo { color:#a52834; border-color:#e7bec4; }
+.grupo-produtos-status:not(:empty) { padding:10px; border-radius:8px; background:#edf8f0; color:#236039; }
+.grupo-produtos-erro { color:#b42318; }
+#grupoProdutoAdicionarPainel, #grupoProdutoExcluirConfirmacao { margin-top:14px; padding:12px; border:1px solid #dce3eb; border-radius:10px; }
+#grupoProdutoElegiveis { max-height:260px; overflow:auto; }
+.grupo-produtos-nota { color:#657080; font-size:13px; }
+@media (max-width:860px) { .grupo-produtos-modal { padding:16px; } .grupo-produto-vinculo { padding:8px 10px; } }
+</style>
+<div class="grupo-produtos-barra">
+  <button type="button" id="grupoProdutoAtivar">Vincular produtos</button>
+  <button type="button" id="grupoProdutoCriar" hidden disabled>Criar grupo</button>
+  <button type="button" id="grupoProdutoGerenciar">Gerenciar grupos vinculados</button>
+  <span class="grupo-produtos-resumo"><span aria-hidden="true">🔗</span> {{ produtos_vinculados_total }} vinculado{{ produtos_vinculados_total|pluralize:"s" }} · {{ grupos_vinculados_total }} grupo{{ grupos_vinculados_total|pluralize:"s" }}</span>
+  <span id="grupoProdutoContagem" aria-live="polite"></span>
+</div>
+<p id="grupoProdutoMensagemPagina" class="grupo-produtos-status" role="status" style="max-width:720px; margin:8px auto;"></p>
+<dialog id="grupoProdutoModal" class="grupo-produtos-modal" aria-labelledby="grupoProdutoTitulo">
+  <form id="grupoProdutoForm">
+    {% csrf_token %}
+    <h2 id="grupoProdutoTitulo">Criar grupo</h2>
+    <label for="grupoProdutoNome">Nome do grupo</label>
+    <input type="text" id="grupoProdutoNome" maxlength="120" required>
+    <p id="grupoProdutoQuantidade"></p>
+    <div id="grupoProdutoMembros"></div>
+    <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções de membros são salvas ao confirmar cada ação.</p>
+    <div class="grupo-produtos-acoes">
+      <button type="button" id="grupoProdutoAdicionar" hidden>Adicionar produtos</button>
+      <button type="button" id="grupoProdutoExcluir" class="grupo-produtos-perigo" hidden>Excluir grupo</button>
+    </div>
+    <section id="grupoProdutoAdicionarPainel" aria-labelledby="grupoProdutoAdicionarTitulo" hidden>
+      <h3 id="grupoProdutoAdicionarTitulo">Adicionar produtos</h3>
+      <label for="grupoProdutoBusca">Buscar produto disponível</label>
+      <input type="search" id="grupoProdutoBusca" placeholder="Nome do produto">
+      <div id="grupoProdutoElegiveis"></div>
+      <div class="grupo-produtos-acoes">
+        <button type="button" id="grupoProdutoConfirmarAdicao" disabled>Confirmar adição</button>
+        <button type="button" id="grupoProdutoCancelarAdicao">Cancelar</button>
+      </div>
+    </section>
+    <section id="grupoProdutoExcluirConfirmacao" hidden>
+      <p>Excluir este grupo? Todos os produtos ficarão sem vínculo e continuarão cadastrados.</p>
+      <div class="grupo-produtos-acoes">
+        <button type="button" id="grupoProdutoConfirmarExclusao" class="grupo-produtos-perigo">Confirmar exclusão</button>
+        <button type="button" id="grupoProdutoCancelarExclusao">Cancelar</button>
+      </div>
+    </section>
+    <p id="grupoProdutoSucesso" class="grupo-produtos-status" role="status"></p>
+    <p id="grupoProdutoErro" class="grupo-produtos-erro" role="alert"></p>
+    <div class="grupo-produtos-acoes">
+      <button type="submit" id="grupoProdutoSalvar">Salvar grupo</button>
+      <button type="button" id="grupoProdutoFechar">Fechar</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="grupoProdutoGerenciarModal" class="grupo-produtos-modal" aria-labelledby="grupoProdutoGerenciarTitulo">
+  <h2 id="grupoProdutoGerenciarTitulo">Gerenciar grupos vinculados</h2>
+  <div id="grupoProdutoGrupos"></div>
+  <p id="grupoProdutoGerenciarErro" class="grupo-produtos-erro" role="alert"></p>
+  <div class="grupo-produtos-acoes"><button type="button" id="grupoProdutoGerenciarFechar">Fechar</button></div>
+</dialog>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const el = id => document.getElementById(id);
+  const modal = el('grupoProdutoModal'), form = el('grupoProdutoForm');
+  const ativar = el('grupoProdutoAtivar'), criar = el('grupoProdutoCriar');
+  const nome = el('grupoProdutoNome'), membros = el('grupoProdutoMembros');
+  const erro = el('grupoProdutoErro'), sucesso = el('grupoProdutoSucesso'), salvar = el('grupoProdutoSalvar');
+  const painelAdicao = el('grupoProdutoAdicionarPainel'), painelExclusao = el('grupoProdutoExcluirConfirmacao');
+  const gerenciarModal = el('grupoProdutoGerenciarModal');
+  const urlCriar = "{% url 'estoque:grupos_produtos_criar' %}";
+  const urlLista = "{% url 'estoque:grupos_produtos_lista' %}";
+  let modo = false, grupoUrl = null, selecionados = [], alterado = false, ocupado = false, excluido = false;
+  const boxes = Array.from(document.querySelectorAll('.grupo-produto-checkbox'));
+  function quantidade(total) { return total + (total === 1 ? ' produto' : ' produtos'); }
+  try {
+    const mensagem = sessionStorage.getItem('grupoProdutosMensagem');
+    if (mensagem) { el('grupoProdutoMensagemPagina').textContent = mensagem; sessionStorage.removeItem('grupoProdutosMensagem'); }
+  } catch (_) {}
+  // Restaurar uma unica vez o ponto da listagem apos criar um grupo.
+  const chaveFoco = 'grupoProdutosFoco:' + window.location.pathname + window.location.search;
+  let idsRecemVinculados = [];
+  try {
+    idsRecemVinculados = JSON.parse(sessionStorage.getItem(chaveFoco) || '[]');
+    sessionStorage.removeItem(chaveFoco);
+  } catch (_) {}
+  if (Array.isArray(idsRecemVinculados) && idsRecemVinculados.length) {
+    window.addEventListener('load', function () {
+      requestAnimationFrame(function () {
+        const ids = new Set(idsRecemVinculados.map(String));
+        const primeiro = Array.from(document.querySelectorAll('.linha-produto[data-produto-id]'))
+          .find(linha => ids.has(linha.dataset.produtoId) && linha.getClientRects().length);
+        if (!primeiro) return;
+        const selo = primeiro.querySelector('.grupo-produto-vinculo');
+        if (selo) selo.focus({preventScroll: true});
+        const topo = document.querySelector('.topo-produtos-sticky');
+        const estiloTopo = topo && getComputedStyle(topo);
+        const respiro = 24 + (estiloTopo && estiloTopo.position === 'sticky'
+          ? topo.getBoundingClientRect().height + (parseFloat(estiloTopo.top) || 0) : 0);
+        primeiro.scrollIntoView({block: 'start', behavior: 'instant'});
+        window.scrollBy({top: -respiro, behavior: 'instant'});
+      });
+    }, {once: true});
+  }
+  function atualizarSelecao() {
+    selecionados = boxes.filter(box => box.checked).map(box => box.value);
+    criar.disabled = selecionados.length < 2;
+    el('grupoProdutoContagem').textContent = modo ? selecionados.length + ' selecionados. Produtos já vinculados exigem remoção do vínculo atual.' : '';
+  }
+  async function requisitar(url, dados) {
+    const opcoes = dados ? {method:'POST', headers:{'X-CSRFToken':form.querySelector('[name=csrfmiddlewaretoken]').value}, body:dados} : {};
+    const resposta = await fetch(url, opcoes);
+    let resultado;
+    try { resultado = await resposta.json(); }
+    catch (_) { throw new Error('Não foi possível concluir. Atualize a listagem.'); }
+    if (!resposta.ok) throw new Error(resultado.erro || 'Não foi possível concluir. Atualize a listagem.');
+    return resultado;
+  }
+  function payload(acao) { const dados = new FormData(); dados.set('acao', acao); return dados; }
+  function abrir(titulo) {
+    erro.textContent = ''; sucesso.textContent = ''; membros.replaceChildren();
+    painelAdicao.hidden = true; painelExclusao.hidden = true; excluido = false;
+    el('grupoProdutoTitulo').textContent = titulo;
+    salvar.textContent = grupoUrl ? 'Salvar alterações' : 'Salvar grupo';
+    salvar.hidden = false; nome.disabled = false;
+    ['grupoProdutoAdicionar', 'grupoProdutoExcluir', 'grupoProdutoNota'].forEach(id => { el(id).hidden = !grupoUrl; });
+    modal.showModal(); nome.focus();
+  }
+  function grupoEncerrado(mensagem) {
+    excluido = true; alterado = true;
+    membros.replaceChildren(); el('grupoProdutoQuantidade').textContent = quantidade(0);
+    nome.disabled = true; salvar.hidden = true;
+    ['grupoProdutoAdicionar', 'grupoProdutoExcluir', 'grupoProdutoNota'].forEach(id => { el(id).hidden = true; });
+    painelAdicao.hidden = true; painelExclusao.hidden = true;
+    sucesso.textContent = mensagem; el('grupoProdutoFechar').focus();
+  }
+  async function executarAcao(dados, apos) {
+    if (ocupado || excluido) return;
+    ocupado = true; erro.textContent = ''; sucesso.textContent = '';
+    // Impedir envios repetidos e fechamento durante uma operação.
+    const controles = Array.from(form.querySelectorAll('button, input')).map(no => [no, no.disabled]);
+    controles.forEach(([no]) => { no.disabled = true; });
+    try {
+      const resultado = await requisitar(grupoUrl, dados);
+      alterado = true;
+      if (resultado.excluido) grupoEncerrado(resultado.mensagem);
+      else { mostrarMembros(resultado.grupo.produtos); sucesso.textContent = resultado.mensagem; }
+      if (apos) apos(resultado);
+    } catch (e) { erro.textContent = e.message; }
+    finally {
+      controles.forEach(([no, disabled]) => { no.disabled = disabled; });
+      if (excluido) nome.disabled = true;
+      ocupado = false;
+      if (excluido) el('grupoProdutoFechar').focus();
+    }
+  }
+  ativar.addEventListener('click', function () {
+    if (ocupado) return;
+    modo = !modo; ativar.textContent = modo ? 'Cancelar seleção' : 'Vincular produtos'; criar.hidden = !modo;
+    boxes.forEach(box => { box.closest('label').hidden = !modo; if (!modo) box.checked = false; });
+    atualizarSelecao();
+  });
+  boxes.forEach(box => {
+    box.closest('label').addEventListener('click', event => event.stopPropagation());
+    box.addEventListener('change', atualizarSelecao);
+  });
+  criar.addEventListener('click', async function () {
+    if (ocupado) return;
+    ocupado = true; criar.disabled = true;
+    try {
+      const dados = payload('sugerir'); selecionados.forEach(id => dados.append('produto_ids', id));
+      const resultado = await requisitar(urlCriar, dados);
+      grupoUrl = null; alterado = false; nome.value = resultado.nome; abrir('Criar grupo');
+      el('grupoProdutoQuantidade').textContent = quantidade(selecionados.length) + ' selecionados';
+    } catch (e) { el('grupoProdutoContagem').textContent = e.message; }
+    finally { ocupado = false; criar.disabled = selecionados.length < 2; }
+  });
+  function mostrarMembros(produtos) {
+    membros.replaceChildren(); el('grupoProdutoQuantidade').textContent = quantidade(produtos.length) + (produtos.length === 1 ? ' vinculado' : ' vinculados');
+    produtos.forEach(produto => {
+      const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';
+      const texto = document.createElement('span'); texto.textContent = produto.nome;
+      const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Remover';
+      botao.setAttribute('aria-label', 'Remover ' + produto.nome + ' do grupo');
+      botao.addEventListener('click', () => {
+        const dados = payload('remover'); dados.set('produto_id', produto.id);
+        executarAcao(dados, () => { painelAdicao.hidden = true; });
+      });
+      linha.append(texto, botao); membros.append(linha);
+    });
+  }
+  async function editarGrupo(url) {
+    if (ocupado) return;
+    ocupado = true;
+    try {
+      const grupo = await requisitar(url);
+      grupoUrl = url; alterado = false;
+      gerenciarModal.close(); nome.value = grupo.nome;
+      abrir('Editar grupo vinculado'); mostrarMembros(grupo.produtos);
+    } catch (e) {
+      if (gerenciarModal.open) el('grupoProdutoGerenciarErro').textContent = e.message;
+      else el('grupoProdutoContagem').textContent = e.message;
+    } finally { ocupado = false; }
+  }
+  document.querySelectorAll('.grupo-produto-vinculo').forEach(botao => botao.addEventListener('click', event => {
+    event.stopPropagation(); editarGrupo(botao.dataset.grupoUrl);
+  }));
+  el('grupoProdutoGerenciar').addEventListener('click', async function () {
+    if (ocupado) return;
+    ocupado = true; el('grupoProdutoGerenciarErro').textContent = '';
+    el('grupoProdutoGrupos').textContent = 'Carregando grupos…'; gerenciarModal.showModal();
+    try {
+      const resultado = await requisitar(urlLista); const lista = el('grupoProdutoGrupos'); lista.replaceChildren();
+      if (!resultado.grupos.length) lista.textContent = 'Nenhum grupo vinculado cadastrado.';
+      resultado.grupos.forEach(grupo => {
+        const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';
+        const texto = document.createElement('span'); texto.textContent = grupo.nome + ' · ' + quantidade(grupo.quantidade);
+        const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Editar';
+        botao.setAttribute('aria-label', 'Editar grupo ' + grupo.nome);
+        botao.addEventListener('click', () => editarGrupo(grupo.url)); linha.append(texto, botao); lista.append(linha);
+      });
+    } catch (e) { el('grupoProdutoGerenciarErro').textContent = e.message; el('grupoProdutoGrupos').replaceChildren(); }
+    finally { ocupado = false; }
+  });
+  function atualizarElegiveis() {
+    const busca = el('grupoProdutoBusca').value.trim().toLocaleLowerCase();
+    const opcoes = Array.from(el('grupoProdutoElegiveis').querySelectorAll('label'));
+    opcoes.forEach(opcao => { opcao.hidden = !opcao.textContent.toLocaleLowerCase().includes(busca); });
+    const total = opcoes.filter(opcao => opcao.querySelector('input').checked).length;
+    el('grupoProdutoConfirmarAdicao').disabled = total === 0;
+    el('grupoProdutoConfirmarAdicao').textContent = total ? 'Confirmar adição (' + total + ')' : 'Confirmar adição';
+  }
+  el('grupoProdutoAdicionar').addEventListener('click', async function () {
+    if (ocupado || excluido) return;
+    ocupado = true; erro.textContent = ''; painelExclusao.hidden = true;
+    try {
+      const resultado = await requisitar(grupoUrl + '?elegiveis=1');
+      const lista = el('grupoProdutoElegiveis'); lista.replaceChildren(); el('grupoProdutoBusca').value = '';
+      if (!resultado.produtos.length) lista.textContent = 'Nenhum produto ativo disponível para adicionar.';
+      resultado.produtos.forEach(produto => {
+        const label = document.createElement('label'); label.className = 'grupo-produtos-opcao';
+        const input = document.createElement('input'); input.type = 'checkbox'; input.value = produto.id;
+        const texto = document.createElement('span'); texto.textContent = produto.nome;
+        input.addEventListener('change', atualizarElegiveis); label.append(input, texto); lista.append(label);
+      });
+      painelAdicao.hidden = false; atualizarElegiveis(); el('grupoProdutoBusca').focus();
+    } catch (e) { erro.textContent = e.message; }
+    finally { ocupado = false; }
+  });
+  el('grupoProdutoBusca').addEventListener('input', atualizarElegiveis);
+  el('grupoProdutoBusca').addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
+  el('grupoProdutoCancelarAdicao').addEventListener('click', () => { if (!ocupado) { painelAdicao.hidden = true; el('grupoProdutoAdicionar').focus(); } });
+  el('grupoProdutoConfirmarAdicao').addEventListener('click', () => {
+    const dados = payload('adicionar');
+    el('grupoProdutoElegiveis').querySelectorAll('input:checked').forEach(input => dados.append('produto_ids', input.value));
+    executarAcao(dados, () => { painelAdicao.hidden = true; el('grupoProdutoAdicionar').focus(); });
+  });
+  el('grupoProdutoExcluir').addEventListener('click', () => {
+    if (ocupado) return;
+    painelAdicao.hidden = true; painelExclusao.hidden = false; el('grupoProdutoCancelarExclusao').focus();
+  });
+  el('grupoProdutoCancelarExclusao').addEventListener('click', () => { if (!ocupado) { painelExclusao.hidden = true; el('grupoProdutoExcluir').focus(); } });
+  el('grupoProdutoConfirmarExclusao').addEventListener('click', () => {
+    const dados = payload('excluir'); dados.set('confirmar', '1'); executarAcao(dados);
+  });
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault(); if (ocupado || excluido) return;
+    if (grupoUrl) {
+      const dados = payload('renomear'); dados.set('nome', nome.value);
+      await executarAcao(dados, resultado => { if (resultado.grupo) nome.value = resultado.grupo.nome; });
+      return;
+    }
+    ocupado = true; salvar.disabled = true; erro.textContent = '';
+    try {
+      const dados = payload('criar'); dados.set('nome', nome.value); selecionados.forEach(id => dados.append('produto_ids', id));
+      const resultado = await requisitar(urlCriar, dados);
+      try { sessionStorage.setItem('grupoProdutosMensagem', resultado.mensagem); } catch (_) {}
+      try {
+        sessionStorage.setItem(chaveFoco, JSON.stringify(resultado.produtos.map(produto => produto.id)));
+      } catch (_) {}
+      // A mensagem também permanece visível caso a atualização da página demore.
+      sucesso.textContent = resultado.mensagem; window.location.reload();
+    } catch (e) { erro.textContent = e.message; }
+    finally { ocupado = false; salvar.disabled = false; }
+  });
+  el('grupoProdutoFechar').addEventListener('click', () => { if (!ocupado) modal.close(); });
+  el('grupoProdutoGerenciarFechar').addEventListener('click', () => { if (!ocupado) gerenciarModal.close(); });
+  [modal, gerenciarModal].forEach(dialog => dialog.addEventListener('cancel', event => { if (ocupado) event.preventDefault(); }));
+  modal.addEventListener('close', () => {
+    if (alterado) {
+      try { sessionStorage.setItem('grupoProdutosMensagem', sucesso.textContent); } catch (_) {}
+      window.location.reload();
+    }
+  });
+});
+</script>

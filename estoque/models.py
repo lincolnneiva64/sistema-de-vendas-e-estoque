@@ -15,6 +15,23 @@ PRECOS_PRODUTO_CONTROLADOS = frozenset({
 })
 
 
+class GrupoProdutoVinculado(models.Model):
+    nome = models.CharField(max_length=120)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+    produtos = models.ManyToManyField(
+        "Produto", through="MembroGrupoProduto", related_name="grupos_vinculados",
+    )
+
+    def __str__(self):
+        return self.nome
+
+
+class MembroGrupoProduto(models.Model):
+    grupo = models.ForeignKey(GrupoProdutoVinculado, on_delete=models.CASCADE, related_name="membros")
+    produto = models.OneToOneField("Produto", on_delete=models.CASCADE, related_name="vinculo_grupo")
+
+
 class ProdutoQuerySet(models.QuerySet):
     def update(self, **kwargs):
         campos = PRECOS_PRODUTO_CONTROLADOS.intersection(kwargs)

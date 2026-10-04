@@ -1,9 +1,13 @@
 from django.urls import path
 from . import views
+from . import views_grupos_produtos
 
 app_name = "estoque"
 
 urlpatterns = [
+    path("produtos/grupos/", views_grupos_produtos.grupos_lista, name="grupos_produtos_lista"),
+    path("produtos/grupos/criar/", views_grupos_produtos.grupos_criar, name="grupos_produtos_criar"),
+    path("produtos/grupos/<int:grupo_id>/", views_grupos_produtos.grupos_detalhe, name="grupos_produtos_detalhe"),
     path("", views.home, name="home"),
     path("sincronizacao-firebird/", views.sincronizacao_firebird, name="sincronizacao_firebird"),
     path("painel-financeiro/", views.painel_financeiro, name="painel_financeiro"),
