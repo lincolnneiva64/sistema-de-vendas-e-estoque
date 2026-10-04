@@ -3075,9 +3075,9 @@ td:first-child {
             <div class="atalhos-venda-painel" id="locacoesOperacionaisVendaPainel">
                 <h2 class="atalhos-venda-titulo">Entregas e Recolhimentos</h2>
                 <div class="locacoes-rapidas-tabs" role="tablist" aria-label="Filtro de entregas e recolhimentos">
-                    <button type="button" class="locacoes-rapidas-tab ativo" data-locacoes-filtro="tudo">Tudo {{ locacoes_operacionais.total }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="entrega">Entregas {{ locacoes_operacionais.total_entregas }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="recolhimento">Recolhimentos {{ locacoes_operacionais.total_recolhimentos }}</button>
+                    <button type="button" class="locacoes-rapidas-tab ativo" data-locacoes-filtro="tudo">Tudo {{ locacoes_operacionais.total }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="antigas" {% if not locacoes_operacionais.total_entregas_antigas %}hidden{% endif %}>Entregas antigas {{ locacoes_operacionais.total_entregas_antigas }}</button>
                 </div>
                 <div class="locacoes-rapidas-lista" data-locacoes-lista>
