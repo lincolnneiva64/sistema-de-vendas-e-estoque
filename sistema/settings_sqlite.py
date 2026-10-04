@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'estoque',
     'locacoes',
+    'offline',
     
 
 ]
@@ -52,6 +53,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'sistema.urls'
+OFFLINE_ENVIRONMENT_ID = config("OFFLINE_ENVIRONMENT_ID", default="").strip()
 
 TEMPLATES = [
     {

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb"><title>Piloto offline · Observações</title><link rel="stylesheet" href="/static/offline/pilot.css"></head>
+<body><main id="offline-pilot">
+<nav><a href="/">Voltar ao sistema</a> <a href="/offline/login/?next=/offline/">Autenticar online</a></nav>
+<h1>Observação operacional</h1>
+<p>Registre uma observação em uma tarefa preparada. Este piloto não confirma entregas ou recolhimentos.</p>
+<div id="offline-status" role="status" aria-live="polite">Verificando armazenamento…</div>
+<p id="offline-stability"></p>
+<button id="offline-prepare" type="button">Preparar / atualizar dados online</button>
+<p id="offline-diagnostic"></p>
+<form id="offline-form"><label for="offline-task">Tarefa disponível neste dispositivo</label><select id="offline-task" required></select><label for="offline-note">Observação</label><textarea id="offline-note" required maxlength="2000" rows="4" placeholder="Ex.: Ligar antes de chegar."></textarea><button id="offline-save" disabled>Salvar neste dispositivo</button></form>
+<p id="offline-message" role="status" aria-live="polite"></p>
+<button id="offline-sync" type="button" disabled>Sincronizar agora</button>
+<h2>Fila e histórico</h2><ul id="offline-operations"></ul>
+<details><summary>Diagnóstico e recuperação</summary><p>Dispositivo: <span id="offline-device"></span></p><p id="offline-storage"></p><p>Preserve os dados do site. A exportação contém observações e identificadores pessoais; guarde-a em local protegido. Não contém senhas, cookies ou tokens.</p><button id="offline-export" type="button">Exportar fila e histórico (JSON)</button></details>
+</main><script type="module" src="/static/offline/app.js"></script></body></html>

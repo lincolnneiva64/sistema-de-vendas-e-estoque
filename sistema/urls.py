@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    path('', include('offline.urls')),
     path('locacoes/', include('locacoes.urls', namespace='locacoes')),
     path('', include('estoque.urls', namespace='estoque')),
 
