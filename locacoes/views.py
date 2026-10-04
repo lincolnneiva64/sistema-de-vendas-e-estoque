@@ -48,6 +48,7 @@ from .models import (
 from estoque.models import Funcionario
 from .services import (
     checklist_operacional_locacoes,
+    historico_operacional_do_dia,
     obter_ou_criar_tarefa_operacional,
     tarefas_ativas_da_locacao,
     telefone_funcionario_checklist,
@@ -1438,6 +1439,13 @@ def checklist_operacional(request):
     if not data_referencia:
         data_referencia = timezone.localdate()
     checklist = checklist_operacional_locacoes(data_referencia=data_referencia)
+    historico = historico_operacional_do_dia(data_referencia)
+    resumo_dia = {
+        "entregas_concluidas": sum(item["tipo"] == "entrega" for item in historico["fisicas"]),
+        "recolhimentos_concluidos": sum(item["tipo"] == "recolhimento" for item in historico["fisicas"]),
+        "pendencias": checklist["total"],
+        "devolucoes_atrasadas": len(checklist["grupos"]["devolucoes_atrasadas"]),
+    }
     for grupo in checklist["grupos"].values():
         for indice, item in enumerate(grupo, start=1):
             item["ordem_operacional"] = indice
@@ -1457,6 +1465,8 @@ def checklist_operacional(request):
         "locacoes/checklist_operacional.html",
         {
             "checklist": checklist,
+            "historico_dia": historico,
+            "resumo_dia": resumo_dia,
             "data_referencia": data_referencia,
             "foco_tarefa_id": request.GET.get("tarefa", "").strip(),
             "acao_form": AcaoOperacionalLocacaoForm(),

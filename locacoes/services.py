@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from estoque.models import Funcionario
 
-from .models import Locacao, TarefaOperacionalLocacao
+from .models import EventoLocacao, Locacao, TarefaOperacionalLocacao
 
 
 STATUS_LOCACAO_ENCERRADOS = {
@@ -419,6 +419,75 @@ def checklist_operacional_locacoes(
             or tem_atrasada
         ),
     }
+
+
+def historico_operacional_do_dia(data_referencia):
+    """Consulta encerramentos registrados, sem criar ou modificar tarefas."""
+    fisicas = []
+    administrativas = []
+
+    def item(locacao, tipo, instante, responsavel="", motivo=""):
+        return {
+            "locacao": locacao,
+            "cliente": locacao.nome_contratante,
+            "tipo": tipo,
+            "instante": instante,
+            "materiais": resumo_materiais_compacto(materiais_locacao(locacao)),
+            "status": "Entregue" if tipo == "entrega" else "Recolhido",
+            "responsavel": responsavel,
+            "motivo": motivo,
+        }
+
+    tarefas = (
+        TarefaOperacionalLocacao.objects.select_related("locacao__cliente")
+        .prefetch_related("locacao__itens")
+    )
+    for tarefa in tarefas.filter(
+        status=TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+        confirmado_em__date=data_referencia,
+    ).order_by("confirmado_em", "id"):
+        fisicas.append(item(tarefa.locacao, tarefa.tipo, tarefa.confirmado_em, tarefa.confirmado_por))
+
+    for tarefa in tarefas.filter(
+        status=TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+        resolvida_em__date=data_referencia,
+    ).order_by("resolvida_em", "id"):
+        administrativas.append(item(
+            tarefa.locacao, tarefa.tipo, tarefa.resolvida_em,
+            tarefa.resolvida_por, tarefa.motivo_resolucao,
+        ))
+
+    # Operacoes antigas feitas diretamente na locacao tambem registram eventos.
+    # A tarefa confirmada e a fonte principal; nao duplicar seu evento.
+    eventos = (
+        EventoLocacao.objects.filter(criado_em__date=data_referencia, tipo__in=["entregue", "devolucao"])
+        .select_related("locacao__cliente")
+        .prefetch_related("locacao__itens", "locacao__tarefas_operacionais", "locacao__eventos")
+        .order_by("criado_em", "id")
+    )
+    vistos = {(registro["locacao"].pk, registro["tipo"]) for registro in fisicas}
+    for evento in eventos:
+        tipo = "entrega" if evento.tipo == "entregue" else "recolhimento"
+        chave = (evento.locacao_id, tipo)
+        if chave in vistos or any(
+            tarefa.tipo == tipo and tarefa.status in {
+                TarefaOperacionalLocacao.STATUS_CONFIRMADA,
+                TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+            }
+            for tarefa in evento.locacao.tarefas_operacionais.all()
+        ):
+            continue
+        if tipo == "recolhimento":
+            # Uma devolucao parcial nao e um recolhimento concluido.
+            if evento.locacao.status not in {Locacao.STATUS_DEVOLVIDA, Locacao.STATUS_DEVOLVIDA_COM_AVARIA}:
+                continue
+            ultimo = next((e for e in evento.locacao.eventos.all() if e.tipo == "devolucao"), None)
+            if ultimo is None or ultimo.pk != evento.pk:
+                continue
+        fisicas.append(item(evento.locacao, tipo, evento.criado_em, evento.responsavel))
+        vistos.add(chave)
+    fisicas.sort(key=lambda registro: registro["instante"])
+    return {"fisicas": fisicas, "administrativas": administrativas}
 
 
 def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None):

@@ -41,6 +41,10 @@
     .btn-loc { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 850; }
     .btn-loc:hover, .btn-loc:focus { background: #c2410c; border-color: #c2410c; color: #fff; }
     .empty { border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; background: #fff; color: #64748b; }
+    .resumo-dia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .resumo-dia div { padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+    .historico-item { border-left-color: #15803d; border-color: #bbf7d0; box-shadow: none; }
+    .historico-admin { border-color: #cbd5e1; border-left-color: #64748b; box-shadow: none; }
     @media (min-width: 680px) {
       .envio-linha { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
       .campos { grid-template-columns: 1fr 1fr; }
@@ -52,7 +56,7 @@
     <header class="top">
       <div>
         <h1>Entregas e Recolhimentos</h1>
-        <p class="muted mb-0">{{ checklist.total }} acao(oes) pendente(s) em {{ data_referencia|date:"d/m/Y" }}.</p>
+        <p class="muted mb-0">{{ data_referencia|date:"d/m/Y" }}</p>
       </div>
       <a class="btn btn-outline-secondary btn-sm" href="{% url 'estoque:vendas' %}">Vendas</a>
     </header>
@@ -68,9 +72,59 @@
       <button class="btn btn-loc" type="submit">Abrir dia</button>
     </form>
 
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Entregas" itens=checklist.grupos.entregas tipo="entrega" total_tarefas=checklist.total %}
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Recolhimentos" itens=checklist.grupos.recolhimentos tipo="recolhimento" total_tarefas=checklist.total %}
-    {% include "locacoes/includes/checklist_grupo.html" with titulo="Devolucoes atrasadas" itens=checklist.grupos.devolucoes_atrasadas tipo="recolhimento" total_tarefas=checklist.total %}
+    <section class="resumo-dia" aria-label="Resumo do dia">
+      <div>Entregas concluídas: <strong>{{ resumo_dia.entregas_concluidas }}</strong></div>
+      <div>Recolhimentos concluídos: <strong>{{ resumo_dia.recolhimentos_concluidos }}</strong></div>
+      <div>Pendências atuais: <strong>{{ resumo_dia.pendencias }}</strong></div>
+      <div>Devoluções atrasadas: <strong>{{ resumo_dia.devolucoes_atrasadas }}</strong></div>
+    </section>
+
+    {% if not checklist.total and not historico_dia.fisicas and not historico_dia.administrativas %}
+      <p class="empty">Não há operações registradas nem pendências para este dia.</p>
+    {% endif %}
+
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Entregas pendentes" mensagem_vazia="Nenhuma entrega pendente." itens=checklist.grupos.entregas tipo="entrega" total_tarefas=checklist.total %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Recolhimentos pendentes" mensagem_vazia="Nenhum recolhimento pendente." itens=checklist.grupos.recolhimentos tipo="recolhimento" total_tarefas=checklist.total %}
+    {% include "locacoes/includes/checklist_grupo.html" with titulo="Devoluções atrasadas" mensagem_vazia="Nenhuma devolução atrasada." itens=checklist.grupos.devolucoes_atrasadas tipo="recolhimento" total_tarefas=checklist.total %}
+
+    <section class="grupo" id="historico-dia">
+      <h2>Histórico do dia</h2>
+      {% for operacao in historico_dia.fisicas %}
+        <article class="item historico-item">
+          <div class="linha-topo">
+            <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
+            {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+          </div>
+          <div class="dados">
+            <strong>{{ operacao.status }}</strong>
+            <span>{{ operacao.materiais }}</span>
+            {% if operacao.responsavel %}<span>Responsável: {{ operacao.responsavel }}</span>{% endif %}
+          </div>
+        </article>
+      {% empty %}
+        <p class="empty">Nenhuma entrega ou recolhimento concluído nesta data.</p>
+      {% endfor %}
+    </section>
+
+    {% if historico_dia.administrativas %}
+      <section class="grupo" id="resolucoes-administrativas-dia">
+        <h2>Resoluções administrativas</h2>
+        {% for operacao in historico_dia.administrativas %}
+          <article class="item historico-admin">
+            <div class="linha-topo">
+              <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
+              {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+            </div>
+            <div class="dados">
+              <strong>Resolvida administrativamente — {{ operacao.tipo|capfirst }}</strong>
+              <span>{{ operacao.materiais }}</span>
+              {% if operacao.motivo %}<span>Motivo: {{ operacao.motivo }}</span>{% endif %}
+              {% if operacao.responsavel %}<span>Responsável: {{ operacao.responsavel }}</span>{% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% endif %}
   </main>
   {% include "locacoes/includes/enter_nav.html" %}
   <script>

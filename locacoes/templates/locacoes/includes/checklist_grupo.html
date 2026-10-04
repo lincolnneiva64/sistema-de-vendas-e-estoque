@@ -190,7 +190,7 @@
     </article>
   {% empty %}
     <div class="empty">
-      Nenhuma pendência nesta seção.
+      {{ mensagem_vazia|default:"Nenhuma pendência nesta seção." }}
     </div>
   {% endfor %}
 </section>
