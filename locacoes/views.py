@@ -873,6 +873,7 @@ def _quadro_disponibilidade_locacao(
     excluir_id=None,
     configuracao=None,
     locacoes_rua=None,
+    data_prevista_devolucao=None,
 ):
     if not data_entrega:
         return None
@@ -880,6 +881,7 @@ def _quadro_disponibilidade_locacao(
         "data": data_entrega.isoformat(),
         **Locacao.quadro_disponibilidade(
             data_entrega,
+            data_prevista_devolucao=data_prevista_devolucao,
             excluir_id=excluir_id,
             configuracao=configuracao,
             locacoes_rua=locacoes_rua,
@@ -896,6 +898,7 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
     )
     quadro = _quadro_disponibilidade_locacao(
         data_entrega,
+        data_prevista_devolucao=data_prevista_devolucao,
         excluir_id=excluir_id,
         configuracao=configuracao,
         locacoes_rua=locacoes_rua,

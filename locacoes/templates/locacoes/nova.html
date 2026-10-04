@@ -601,11 +601,20 @@
         </div>
         <div class="disponibilidade-topo-linhas">
           <div class="disponibilidade-topo-linha estoque">
-            <span>Em estoque</span>
+            <span>Disponíveis agora</span>
             <div class="disponibilidade-topo-valores">
               <strong id="resumoEstoqueJogos">0</strong> jogos |
               <strong id="resumoEstoqueMesas">0</strong> mesas |
               <strong id="resumoEstoqueCadeiras">0</strong> cadeiras
+            </div>
+          </div>
+          <div class="disponibilidade-topo-linha entregar">
+            <span id="resumoEntregarTitulo">A entregar hoje</span>
+            <div class="disponibilidade-topo-valores">
+              <strong id="resumoEntregarJogos">0</strong> jogos |
+              <strong id="resumoEntregarMesas">0</strong> mesas |
+              <strong id="resumoEntregarCadeiras">0</strong> cadeiras
+              <small id="resumoEntregarHorario" class="d-block muted"></small>
             </div>
           </div>
           <div class="disponibilidade-topo-linha recolher">
@@ -617,11 +626,12 @@
             </div>
           </div>
           <div class="disponibilidade-topo-linha previsto">
-            <span>Total previsto</span>
+            <span>Total previsto livre</span>
             <div class="disponibilidade-topo-valores">
               <strong id="resumoPrevistoJogos">0</strong> jogos |
               <strong id="resumoPrevistoMesas">0</strong> mesas |
               <strong id="resumoPrevistoCadeiras">0</strong> cadeiras
+              <small class="d-block muted">Após recolhimentos previstos, se retornarem em bom estado.</small>
             </div>
           </div>
         </div>
@@ -1395,6 +1405,16 @@
         atualizarLinhaQuadro("estoque_agora", quadro);
         atualizarLinhaQuadro("previsto_recolher", quadro);
         atualizarLinhaQuadro("potencial_data", quadro);
+        const entrega = quadro?.entregar_hoje || {};
+        ["jogos", "mesas", "cadeiras"].forEach((chave) => {
+          document.getElementById("resumoEntregar" + chave[0].toUpperCase() + chave.slice(1)).textContent = numeroInteiro(entrega[chave]);
+        });
+        document.getElementById("resumoEntregarTitulo").textContent =
+          entrega.quantidade_entregas === 1 && entrega.proxima_entrega
+            ? `A entregar hoje às ${entrega.proxima_entrega}` : "A entregar hoje";
+        document.getElementById("resumoEntregarHorario").textContent =
+          entrega.quantidade_entregas > 1 && entrega.proxima_entrega
+            ? `Próxima entrega: ${entrega.proxima_entrega}` : "";
       }
 
       function atualizarMensagemDisponibilidade(dados) {

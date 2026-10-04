@@ -569,10 +569,9 @@ class Locacao(models.Model):
         excluir_id=None,
         configuracao=None,
         locacoes_rua=None,
+        data_prevista_devolucao=None,
     ):
         configuracao = configuracao or ConfiguracaoLocacao.obter()
-        total_mesas = int(configuracao.total_mesas or 0)
-        total_cadeiras = int(configuracao.total_cadeiras or 0)
         if locacoes_rua is None:
             locacoes_rua = cls.locacoes_com_material_na_rua()
             if excluir_id:
@@ -584,12 +583,9 @@ class Locacao(models.Model):
                 if not excluir_id or locacao.pk != excluir_id
             ]
 
-        na_rua = {"mesas": 0, "cadeiras": 0}
         previsto = {"mesas": 0, "cadeiras": 0}
         for locacao in locacoes_rua:
             pendente = cls.material_pendente_na_rua(locacao)
-            na_rua["mesas"] += pendente["mesas"]
-            na_rua["cadeiras"] += pendente["cadeiras"]
             if locacao.data_prevista_devolucao <= data_referencia:
                 previsto["mesas"] += pendente["mesas"]
                 previsto["cadeiras"] += pendente["cadeiras"]
@@ -606,9 +602,34 @@ class Locacao(models.Model):
                 "cadeiras": cadeiras,
             }
 
+        disponibilidade = cls.disponibilidade_periodo(
+            data_referencia,
+            data_prevista_devolucao or data_referencia,
+            excluir_id=excluir_id,
+            configuracao=configuracao,
+            locacoes_rua=locacoes_rua,
+        )
         estoque_agora = linha(
-            max(total_mesas - na_rua["mesas"], 0),
-            max(total_cadeiras - na_rua["cadeiras"], 0),
+            disponibilidade["disponivel_mesas"],
+            disponibilidade["disponivel_cadeiras"],
+        )
+        # Entregas ainda comprometidas no dia civil atual, sem inferir
+        # execucao a partir do status de tarefas administrativas.
+        entregas = cls.objects.filter(
+            status=cls.STATUS_RESERVADA, data_entrega=timezone.localdate(),
+        ).prefetch_related("itens").order_by("horario_entrega", "pk")
+        if excluir_id:
+            entregas = entregas.exclude(pk=excluir_id)
+        entregas = list(entregas)
+        componentes = {"mesas": 0, "cadeiras": 0}
+        for locacao in entregas:
+            necessidade = cls.necessidades_quantidades_contratadas(locacao.quantidades_contratadas())
+            componentes["mesas"] += necessidade["mesas"]
+            componentes["cadeiras"] += necessidade["cadeiras"]
+        entregar_hoje = linha(**componentes)
+        entregar_hoje["quantidade_entregas"] = len(entregas)
+        entregar_hoje["proxima_entrega"] = (
+            entregas[0].horario_entrega.strftime("%H:%M") if entregas else None
         )
         previsto_recolher = linha(
             previsto["mesas"],
@@ -621,6 +642,7 @@ class Locacao(models.Model):
 
         return {
             "estoque_agora": estoque_agora,
+            "entregar_hoje": entregar_hoje,
             "previsto_recolher": previsto_recolher,
             "potencial_data": potencial_data,
         }
