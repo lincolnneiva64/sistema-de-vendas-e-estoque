@@ -31,6 +31,17 @@ def authorized(view):
 
 @require_GET
 @never_cache
+def session(request):
+    authenticated = request.user.is_authenticated
+    return JsonResponse({
+        "authenticated": authenticated,
+        "can_prepare": authenticated and request.user.has_perm("offline.registrar_observacao"),
+        "username": request.user.get_username() if authenticated else "",
+    })
+
+
+@require_GET
+@never_cache
 def health(request):
     try:
         with connection.cursor() as cursor:

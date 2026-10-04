@@ -74,6 +74,7 @@ function showTasks() {
 }
 async function prepare() {
     try {
+        await checkSession();
         const response = await fetchTimed('/api/offline/snapshot/');
         if (response.status === 401) throw new Error('Faça login online e volte para preparar. A fila existente foi preservada.');
         if (!response.ok) throw new Error('Preparação recusada. Confira sua permissão e conexão.');
@@ -97,6 +98,24 @@ async function prepare() {
         else message('Snapshot salvo, mas Service Worker indisponível. Use HTTPS ou localhost para abrir sem rede.');
         await probe(); await changed();
     } catch (error) { message(error.message); }
+}
+async function checkSession() {
+    if (!pilot) return;
+    const login = document.getElementById('offline-login');
+    const status = document.getElementById('offline-session');
+    if (!login || !status) return;
+    try {
+        const response = await fetchTimed('/api/offline/session/');
+        if (!response.ok) throw new Error('Sessão indisponível.');
+        const data = await response.json();
+        login.hidden = data.authenticated === true;
+        status.textContent = data.authenticated
+            ? `Autenticado como ${data.username}. ` + (data.can_prepare ? 'Pode preparar / atualizar dados online.' : 'Sem permissão para preparar dados do piloto.')
+            : 'Autentique-se online para preparar / atualizar dados.';
+    } catch {
+        login.hidden = false;
+        status.textContent = 'Não foi possível verificar a autenticação online. Dados locais preservados.';
+    }
 }
 async function save(event) {
     event.preventDefault();
@@ -166,6 +185,7 @@ async function exportDiagnostic() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function start() {
+    await checkSession();
     repo = new Repository(await openDB());
     snapshot = await repo.get('snapshots', 'pilot');
     if (!pilot && !snapshot) return;
@@ -183,9 +203,9 @@ async function start() {
     }
     channel?.addEventListener('message', () => render().catch(error => message(error.message)));
     window.addEventListener('offline', failConnection);
-    window.addEventListener('online', () => { void probe(); });
+    window.addEventListener('online', () => { void checkSession(); void probe(); });
     window.addEventListener('pagehide', () => { stability.reset(); inFlight?.abort(); });
-    window.addEventListener('pageshow', () => { stability.reset(); void probe(); });
+    window.addEventListener('pageshow', () => { stability.reset(); void checkSession(); void probe(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { stability.valid(performance.now(), Date.now()); void probe(); } });
     setInterval(() => { void probe().catch(error => message(error.message)); }, POLICY.interval);
     setInterval(() => { if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) failConnection(); void render().catch(error => message(error.message)); }, 1000);

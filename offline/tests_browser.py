@@ -15,6 +15,39 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_login_return_session_and_prepare(self):
+        user, rental, task, _ = fixtures()
+        with TemporaryDirectory(prefix='offline-auth-browser-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': "window.authErrors=[]; const originalConsoleError=console.error; console.error=(...args)=>{authErrors.push(args.join(' ')); originalConsoleError(...args)}; window.addEventListener('error',e=>authErrors.push(e.message)); window.addEventListener('unhandledrejection',e=>authErrors.push(String(e.reason)));"})
+                tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
+                tab.wait("document.getElementById('offline-session')?.textContent.includes('Autentique-se online')")
+                self.assertFalse(tab.evaluate("document.getElementById('offline-login').hidden"))
+                self.assertEqual(tab.evaluate('authErrors'), [])
+                tab.evaluate("document.getElementById('offline-login').click()")
+                tab.wait("location.pathname === '/offline/login/' && !!document.querySelector('[name=username]')")
+                self.assertEqual(tab.evaluate("document.querySelector('[name=next]').value"), '/offline/')
+                self.assertEqual(tab.evaluate('authErrors'), [])
+                tab.evaluate("document.querySelector('[name=username]').value='offline-pilot'; document.querySelector('[name=password]').value='test-only'; document.querySelector('form button').click()")
+                tab.wait("location.pathname === '/offline/' && document.getElementById('offline-session')?.textContent.includes('Autenticado como offline-pilot')")
+                self.assertTrue(tab.evaluate("document.getElementById('offline-login').hidden"))
+                tab.evaluate("window.prepareRequests=[]; const originalFetch=window.fetch; window.fetch=(url,options)=>{prepareRequests.push(String(url));return originalFetch(url,options)};")
+                tab.wait("!document.getElementById('offline-prepare').disabled && !!document.getElementById('offline-device').textContent")
+                tab.evaluate("document.getElementById('offline-prepare').click()")
+                tab.wait("document.getElementById('offline-message').textContent.includes('Preparação salva')")
+                self.assertIn('/api/offline/snapshot/', tab.evaluate('prepareRequests'))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-task').value"), str(task.pk))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-task').options.length"), 1)
+                self.assertEqual(tab.evaluate('authErrors'), [])
+                tab.wait('!!navigator.serviceWorker.controller')
+                tab.call('Page.navigate', {'url': self.live_server_url + '/offline/login/?next=/offline/'})
+                tab.wait("location.pathname === '/offline/' && document.getElementById('offline-login')?.hidden")
+                self.assertEqual(tab.evaluate('authErrors'), [])
+            finally:
+                chrome.stop()
+
     def test_persistence_offline_sync_failures_and_multiple_tabs(self):
         user, rental, task, _ = fixtures()
         client = Client()

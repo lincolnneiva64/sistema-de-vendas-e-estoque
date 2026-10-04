@@ -35,6 +35,20 @@ def fixtures():
 
 
 class OfflineAPITests(TestCase):
+    def test_login_and_session_preparation(self):
+        anonymous = Client()
+        self.assertEqual(anonymous.get('/api/offline/session/').json(), {
+            'authenticated': False, 'can_prepare': False, 'username': '',
+        })
+        self.assertEqual(anonymous.get('/offline/login/?next=/offline/').status_code, 200)
+        response = anonymous.post('/offline/login/', {'username': self.user.username, 'password': 'test-only'})
+        self.assertRedirects(response, '/offline/')
+        self.assertTrue(anonymous.get('/api/offline/session/').json()['can_prepare'])
+        self.assertRedirects(anonymous.get('/offline/login/'), '/offline/')
+        self.user.user_permissions.clear()
+        self.assertFalse(anonymous.get('/api/offline/session/').json()['can_prepare'])
+        self.assertEqual(anonymous.get('/api/offline/snapshot/').status_code, 403)
+
     def setUp(self):
         self.user, self.rental, self.task, self.command = fixtures()
         self.client.force_login(self.user)
