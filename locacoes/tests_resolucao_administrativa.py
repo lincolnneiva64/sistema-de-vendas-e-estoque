@@ -154,6 +154,31 @@ class ResolucaoAdministrativaTests(TestCase):
         self.assertFalse(item["vencida"])
         self.assertEqual(item["data_label"], "Amanhã")
 
+    def test_aba_lateral_janela_de_trinta_minutos(self):
+        from django.template.loader import render_to_string
+        self.tarefa(horario_entrega=time(10, 30))
+        antiga = self.tarefa(data_entrega=self.hoje - timedelta(days=1))
+        antiga.resolver_administrativamente("Já realizada")
+        for hora, estado in ((time(9, 59), "normal"), (time(10, 0), "advertencia"),
+                             (time(10, 12), "advertencia"), (time(10, 29), "advertencia"),
+                             (time(10, 30), "alerta"), (time(10, 31), "alerta")):
+            with self.subTest(hora=hora):
+                painel = self.painel(hora)
+                self.assertEqual(painel["alerta"], estado == "alerta")
+                self.assertEqual(painel["advertencia_lateral"], estado == "advertencia")
+                html = render_to_string("estoque/vendas_layout_teste.html", {"locacoes_operacionais": painel})
+                import re
+                classes = re.search(r'<aside class="([^"]+)" id="locacoesOperacionaisVenda"', html)[1].split()
+                self.assertEqual("alerta" in classes, estado == "alerta")
+                self.assertEqual("advertencia" in classes, estado == "advertencia")
+                self.assertNotIn(antiga.pk, [i["tarefa"].pk for i in painel["itens"]])
+
+    def test_aba_lateral_futura_nao_adverte(self):
+        self.tarefa(data_entrega=self.hoje + timedelta(days=1), horario_entrega=time(10, 30))
+        painel = self.painel(time(10, 12))
+        self.assertFalse(painel["alerta"])
+        self.assertFalse(painel["advertencia_lateral"])
+
     def test_resolucao_exige_csrf(self):
         from django.test import Client
         tarefa = self.tarefa()

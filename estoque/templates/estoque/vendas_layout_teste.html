@@ -667,6 +667,10 @@ select {
     border-color: #2563eb;
     min-height: 154px;
 }
+.locacoes-operacionais-venda.advertencia .atalhos-venda-toggle {
+    background: #db2777;
+    border-color: #db2777;
+}
 .locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
     background: #dc2626;
     border-color: #dc2626;
@@ -3067,7 +3071,7 @@ td:first-child {
                 </div>
             </div>
         </aside>
-        <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% endif %}" id="locacoesOperacionaisVenda" aria-label="Entregas e Recolhimentos">
+        <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% elif locacoes_operacionais.advertencia_lateral %}advertencia{% endif %}" id="locacoesOperacionaisVenda" aria-label="Entregas e Recolhimentos">
             <button type="button" class="atalhos-venda-toggle" id="btnLocacoesOperacionaisVenda" aria-expanded="false" aria-controls="locacoesOperacionaisVendaPainel">
                 Entregas e Recolhimentos
                 <span class="locacoes-operacionais-badge">{{ locacoes_operacionais.total }}</span>
@@ -3089,6 +3093,8 @@ td:first-child {
                             data-tarefa-id="{{ item.tarefa.id }}"
                             data-entrega-antiga="{{ item.entrega_antiga|yesno:'1,0' }}"
                             data-vencida="{{ item.vencida|yesno:'1,0' }}"
+                            data-data-lateral="{{ item.tarefa.data_agendada|date:'Y-m-d' }}"
+                            data-horario-lateral="{{ item.horario_lateral|floatformat:'0u' }}"
                             {% if item.entrega_antiga %}hidden{% endif %}
                         >
                             <div class="locacoes-rapidas-topo">
@@ -6849,10 +6855,32 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         const lateral = document.getElementById("locacoesOperacionaisVenda");
         const badge = lateral?.querySelector(".locacoes-operacionais-badge");
         if (badge) badge.textContent = recentes.length;
-        lateral?.classList.toggle("alerta", recentes.some(card => card.dataset.vencida === "1"));
+        atualizarAlertaLateral();
         if (filtroAtual === "antigas" && antigas === 0) filtroAtual = "tudo";
         aplicarFiltro(filtroAtual);
     }
+
+    function atualizarAlertaLateral() {
+        const agora = new Date();
+        const hoje = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(agora);
+        const recentes = cards.filter(card => card.isConnected && card.dataset.entregaAntiga !== "1");
+        let atrasada = false;
+        let advertencia = false;
+        recentes.forEach(card => {
+            const data = card.dataset.dataLateral;
+            const horario = Number(card.dataset.horarioLateral);
+            if (data < hoje || (data === hoje && horario > 0 && horario <= agora.getTime())) {
+                atrasada = true;
+            } else if (data === hoje && horario > 0 && horario - agora.getTime() <= 30 * 60 * 1000) {
+                advertencia = true;
+            }
+        });
+        locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);
+        locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && advertencia);
+    }
+    setInterval(atualizarAlertaLateral, 1000);
 
     tabs.forEach((tab) => {
         tab.addEventListener("click", () => aplicarFiltro(tab.dataset.locacoesFiltro || "tudo"));

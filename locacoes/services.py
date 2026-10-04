@@ -628,6 +628,20 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             ).total_seconds() <= 60 * 60
         )
 
+        # Janela exclusiva da aba lateral; preserva a antecedência dos cards.
+        item["horario_lateral"] = (
+            timezone.make_aware(
+                timezone.datetime.combine(item["tarefa"].data_agendada, item["horario"])
+            ).timestamp() * 1000
+            if item["horario"] is not None else None
+        )
+        item["advertencia_lateral"] = (
+            item["proxima"]
+            and (timezone.datetime.combine(checklist["data"], item["horario"])
+                 - timezone.datetime.combine(checklist["data"], hora_atual)
+                 ).total_seconds() <= 30 * 60
+        )
+
     return {
         "data": checklist["data"],
         "itens": itens,
@@ -636,4 +650,5 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         "total_recolhimentos": len(recolhimentos),
         "total_entregas_antigas": sum(item["entrega_antiga"] for item in itens),
         "alerta": any(item["vencida"] and not item["entrega_antiga"] for item in itens),
+        "advertencia_lateral": any(item["advertencia_lateral"] and not item["entrega_antiga"] for item in itens),
     }
