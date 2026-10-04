@@ -668,8 +668,10 @@ select {
     min-height: 154px;
 }
 .locacoes-operacionais-venda.advertencia .atalhos-venda-toggle {
-    background: #db2777;
-    border-color: #db2777;
+    background: #fce7f3;
+    border-color: #f9a8d4;
+    color: #831843;
+    animation: none;
 }
 .locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
     background: #dc2626;
@@ -743,8 +745,8 @@ select {
     display: grid;
     gap: 6px;
     padding: 9px;
-    border: 1px solid #fed7aa;
-    border-left: 5px solid #ea580c;
+    border: 1px solid #bfdbfe;
+    border-left: 5px solid #2563eb;
     border-radius: 8px;
     background: #fff;
     box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08);
@@ -756,19 +758,14 @@ select {
     animation: locacoesCardPulso 315s ease-in-out infinite;
 }
 .locacoes-rapidas-card.proxima {
-    border-color: #fde68a;
-    border-left-color: #d97706;
-    background: #fffdf5;
-    animation: locacoesCardAtencao 315s ease-in-out infinite;
+    border-color: #f9a8d4;
+    border-left-color: #f9a8d4;
+    background: #fce7f3;
+    animation: none;
 }
 @keyframes locacoesCardPulso {
     0%, 4.76% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.26), 0 7px 18px rgba(15, 23, 42, 0.08); }
     2.38% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.10), 0 10px 22px rgba(185, 28, 28, 0.18); }
-    4.77%, 100% { box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08); }
-}
-@keyframes locacoesCardAtencao {
-    0%, 4.76% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.22), 0 7px 18px rgba(15, 23, 42, 0.08); }
-    2.38% { box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.09), 0 10px 22px rgba(146, 64, 14, 0.14); }
     4.77%, 100% { box-shadow: 0 7px 18px rgba(15, 23, 42, 0.08); }
 }
 .locacoes-rapidas-topo {
@@ -3087,7 +3084,7 @@ td:first-child {
                 <div class="locacoes-rapidas-lista" data-locacoes-lista>
                     {% for item in locacoes_operacionais.itens %}
                         <article
-                            class="locacoes-rapidas-card {% if item.vencida %}atrasada{% elif item.proxima %}proxima{% endif %}"
+                            class="locacoes-rapidas-card {% if item.vencida %}atrasada{% elif item.advertencia_lateral %}proxima{% endif %}"
                             data-locacoes-card
                             data-tipo="{{ item.tipo }}"
                             data-tarefa-id="{{ item.tarefa.id }}"
@@ -6872,9 +6869,15 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
             const data = card.dataset.dataLateral;
             const horario = Number(card.dataset.horarioLateral);
             if (data < hoje || (data === hoje && horario > 0 && horario <= agora.getTime())) {
+                card.classList.add("atrasada");
+                card.classList.remove("proxima");
                 atrasada = true;
             } else if (data === hoje && horario > 0 && horario - agora.getTime() <= 30 * 60 * 1000) {
+                card.classList.remove("atrasada");
+                card.classList.add("proxima");
                 advertencia = true;
+            } else {
+                card.classList.remove("atrasada", "proxima");
             }
         });
         locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);

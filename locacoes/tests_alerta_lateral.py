@@ -23,7 +23,11 @@ class AlertaLateralBrowserTests(SimpleTestCase):
         const locacoesOperacionaisVenda = {classList: {toggle(nome, ativo) {
             if (ativo) estados.add(nome); else estados.delete(nome);
         }}};
-        const card = {isConnected: true, dataset: {entregaAntiga: "0",
+        const classesCard = new Set();
+        const card = {isConnected: true, classList: {
+            add(...nomes) { nomes.forEach(nome => classesCard.add(nome)); },
+            remove(...nomes) { nomes.forEach(nome => classesCard.delete(nome)); }
+        }, dataset: {entregaAntiga: "0",
             dataLateral: "2026-10-04", horarioLateral: String(new RealDate("2026-10-04T10:30:00-03:00").getTime())}};
         const cards = [card];
         """ + funcao + """
@@ -32,10 +36,14 @@ class AlertaLateralBrowserTests(SimpleTestCase):
             atualizarAlertaLateral();
             const atual = estados.has("alerta") ? "alerta" : estados.has("advertencia") ? "advertencia" : "normal";
             if (atual !== esperado) throw Error(hora + ": " + atual + " != " + esperado);
+            if (card.isConnected) {
+                const estadoCard = classesCard.has("atrasada") ? "alerta" : classesCard.has("proxima") ? "advertencia" : "normal";
+                if (estadoCard !== esperado) throw Error(hora + ": card " + estadoCard + " != " + esperado);
+            }
         }
         try {
             for (const [hora, estado] of [["09:59", "normal"], ["10:00", "advertencia"],
-                ["10:12", "advertencia"], ["10:29", "advertencia"],
+                ["10:12", "advertencia"], ["10:26", "advertencia"], ["10:29", "advertencia"],
                 ["10:30", "alerta"], ["10:31", "alerta"]]) verificar(hora, estado);
             card.dataset.dataLateral = "2026-10-05";
             verificar("10:12", "normal");
