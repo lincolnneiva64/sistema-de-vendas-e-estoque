@@ -83,6 +83,12 @@
       box-shadow: 0 4px 10px rgba(154, 52, 18, 0.08);
     }
 
+    .top-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
     .top .btn:hover,
     .top .btn:focus {
       border-color: var(--locacoes-orange);
@@ -529,6 +535,14 @@
         margin-top: 16px;
       }
 
+      .top-nav {
+        margin-top: 16px;
+      }
+
+      .top-nav .btn {
+        margin-top: 0;
+      }
+
       .grid,
       .grid-3,
       .availability,
@@ -612,7 +626,15 @@
           </div>
         </div>
       </div>
-      <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+      {% if modo_edicao %}
+        <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Voltar</a>
+      {% else %}
+        <nav class="top-nav" aria-label="Atalhos de navegação">
+          <a class="btn btn-outline-secondary" href="{% url 'locacoes:lista' %}">Consulta de locações</a>
+          <a class="btn btn-outline-secondary" href="{% url 'estoque:vendas' %}">Vendas</a>
+          <a class="btn btn-outline-secondary" href="{% url 'estoque:home' %}">Painel principal</a>
+        </nav>
+      {% endif %}
     </header>
 
     {% if messages %}
