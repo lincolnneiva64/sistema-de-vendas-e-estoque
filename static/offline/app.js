@@ -1,4 +1,5 @@
 import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState} from './core.js';
+import {renderIndicator} from './presentation.js';
 
 const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
@@ -89,7 +90,7 @@ async function render() {
     const pending = scoped.filter(op => op.status !== 'confirmada');
     const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
-    if (badge) { badge.textContent = state.label; badge.dataset.state = state.kind; }
+    renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
     if (globalSync) {
@@ -99,6 +100,7 @@ async function render() {
     }
     if (!pilot) return;
     const stabilityText = document.getElementById('offline-stability');
+    stabilityText.hidden = state.kind === 'waiting';
     stabilityText.dataset.state = state.kind;
     stabilityText.textContent = state.kind === 'waiting' ? 'Verificando estabilidade para sincronização segura · ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' de 15 minutos · ' + state.count + (state.count === 1 ? ' operação aguardando' : ' operações aguardando') : stability.connected ? 'CONEXÃO ESTÁVEL HÁ ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' MINUTOS · mínimo 15' : 'Comunicação com o servidor indisponível ou ainda não verificada.';
     syncButton(document.getElementById('offline-sync'), !state.canSync || !navigator.locks, state.count, state.kind === 'syncing');

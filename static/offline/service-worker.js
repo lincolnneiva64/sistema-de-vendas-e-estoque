@@ -1,5 +1,5 @@
-const CACHE = 'offline-pilot-shell-v6';
-const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css'];
+const CACHE = 'offline-pilot-shell-v7';
+const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js'];
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);
@@ -8,6 +8,8 @@ self.addEventListener('install', event => {
             if (!response.ok) throw new Error('Arquivo offline indisponível: ' + url);
             await cache.put(url, response);
         }
+        // Activate the refreshed shell without forcing a reload during local work.
+        await self.skipWaiting();
     })());
 });
 self.addEventListener('activate', event => {

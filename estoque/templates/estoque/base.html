@@ -88,7 +88,7 @@
 </head>
 <body class="bg-light" style="padding-bottom: 16px;">
 
-<link rel="stylesheet" href="{% static 'offline/indicator.css' %}">
+<link rel="stylesheet" href="{% static 'offline/indicator.css' %}?v=7">
 {% include "estoque/includes/offline_global.html" %}
 
     {% block content %}{% endblock %}
@@ -195,6 +195,6 @@
             recolherBotaoMobile();
         })();
     </script>
-<script type="module" src="{% static 'offline/app.js' %}"></script>
+<script type="module" src="{% static 'offline/app.js' %}?v=7"></script>
 </body>
 </html>
