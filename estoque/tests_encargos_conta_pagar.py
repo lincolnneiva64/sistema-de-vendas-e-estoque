@@ -101,21 +101,29 @@ class EncargosAutomaticosContaPagarTests(TestCase):
                         tab.evaluate(f"window.{nome} += " + json.dumps(conteudo[inicio:inicio + 8000]))
                 tab.evaluate("document.body.innerHTML = window.htmlTeste;true")
                 tab.evaluate("eval(window.scriptTeste)")
+                tab.evaluate("document.querySelector('.btnAbrirBaixaContaPagar').click()")
+                tab.wait("document.activeElement.id === 'totalEfetivoContaPagar'")
+                self.assertEqual(tab.evaluate("document.querySelector('label[for=totalEfetivoContaPagar]').textContent"), "Total pago no boleto/comprovante")
+                self.assertTrue(tab.evaluate("document.getElementById('valorPagoContaPagar').readOnly && document.getElementById('jurosBancariosContaPagar').readOnly && document.getElementById('totalCalculadoContaPagar').readOnly"))
                 tab.evaluate("window.setTimeout=()=>0;window.fetch=async(url,options)=>{window.dadosBaixa=Object.fromEntries(options.body);return {ok:true,json:async()=>({ok:true})}}")
                 for total, principal, encargos in [
                     ("627,00", "617,00", "10,00"),
                     ("617,00", "617,00", "0,00"),
-                    ("400,00", "400,00", "0,00"),
+                    ("300,00", "300,00", "0,00"),
                 ]:
                     with self.subTest(total=total):
                         tab.evaluate("document.querySelector('.btnAbrirBaixaContaPagar').click()")
                         tab.evaluate("document.getElementById('totalEfetivoContaPagar').value=" + json.dumps(total) + ";document.getElementById('totalEfetivoContaPagar').dispatchEvent(new Event('input',{bubbles:true}))")
                         valores = tab.evaluate("['valorPagoContaPagar','jurosBancariosContaPagar','totalEfetivoContaPagar','valorSaidaBancoContaPagar'].map(id=>document.getElementById(id).value)")
                         self.assertEqual(valores, [principal, encargos, total, total])
+                        self.assertEqual(tab.evaluate("document.getElementById('totalCalculadoContaPagar').value"), total)
+                        tab.evaluate("document.getElementById('dataPagamentoContaPagar').dispatchEvent(new Event('change'))")
+                        self.assertEqual(tab.evaluate("document.getElementById('totalEfetivoContaPagar').value"), total)
                         tab.evaluate("document.getElementById('totalEfetivoContaPagar').dispatchEvent(new Event('blur'));document.getElementById('formBaixaContaPagar').dispatchEvent(new Event('submit',{cancelable:true}))")
                         dados = tab.evaluate("window.dadosBaixa")
                         self.assertEqual(dados["valor_pago"], principal)
                         self.assertEqual(dados["juros_bancarios"], encargos)
                         self.assertEqual(dados["total_efetivamente_pago"], total)
+                        self.assertEqual(sum(Decimal(dados[campo].replace('.', '').replace(',', '.')) for campo in ['valor_saida_caixa', 'valor_saida_reserva', 'valor_saida_banco']), Decimal(total.replace(',', '.')))
             finally:
                 chrome.stop()

@@ -441,6 +441,12 @@
 
         <div class="cp-baixa-valores">
           <div class="cp-baixa-field">
+            <label for="totalEfetivoContaPagar">Total pago no boleto/comprovante</label>
+            <input id="totalEfetivoContaPagar" type="text"
+                   inputmode="decimal" autocomplete="off" value="0,00">
+          </div>
+
+          <div class="cp-baixa-field">
             <label for="valorPagoContaPagar">Principal que será pago</label>
             <input id="valorPagoContaPagar" name="valor_pago" type="text"
                    inputmode="decimal" autocomplete="off">
@@ -453,9 +459,8 @@
           </div>
 
           <div class="cp-baixa-total">
-            <label for="totalEfetivoContaPagar">Total efetivamente pago</label>
-            <input id="totalEfetivoContaPagar" type="text"
-                   inputmode="decimal" autocomplete="off" value="0,00">
+            <label for="totalCalculadoContaPagar">Total efetivamente pago</label>
+            <input id="totalCalculadoContaPagar" type="text" readonly value="0,00">
           </div>
         </div>
 
@@ -675,6 +680,10 @@
   grid-template-columns:1fr 1fr 1fr;
   gap:16px;
   align-items:end;
+}
+
+#modalBaixaContaPagar .cp-baixa-valores > .cp-baixa-field:first-child{
+  grid-column:1 / -1;
 }
 
 #modalBaixaContaPagar .cp-baixa-field label,
@@ -1250,8 +1259,9 @@
     if (previewPrincipal) previewPrincipal.textContent = moeda(principal);
     if (previewJuros) previewJuros.textContent = moeda(juros);
     if (previewTotal) previewTotal.textContent = moeda(total);
+    document.getElementById("totalCalculadoContaPagar").value = valorInput(total);
 
-    if (totalEfetivo && document.activeElement !== totalEfetivo) {
+    if (totalEfetivo && modoCorrecaoPagamento && document.activeElement !== totalEfetivo) {
       totalEfetivo.value = valorInput(total);
     }
 
@@ -1276,8 +1286,10 @@
   let baixaCalculadaPeloTotal = false;
 
   function abrirModal(botao) {
-    baixaCalculadaPeloTotal = false;
+    baixaCalculadaPeloTotal = true;
     modoCorrecaoPagamento = false;
+    valorPago.readOnly = true;
+    jurosBancarios.readOnly = true;
     modoCorrecaoDiferenca = false;
     totalAnteriorEdicao = 0;
     distribuicaoAtualEdicao = { caixa: 0, reserva: 0, banco: 0 };
@@ -1304,13 +1316,15 @@
     modal?.classList.add("aberto");
     modal?.setAttribute("aria-hidden", "false");
     window.setTimeout(function () {
-      valorPago?.focus();
-      valorPago?.select();
+      totalEfetivo?.focus();
+      totalEfetivo?.select();
     }, 0);
   }
 
   function abrirModalEdicao(pagamento) {
     modoCorrecaoPagamento = true;
+    valorPago.readOnly = false;
+    jurosBancarios.readOnly = false;
     modoCorrecaoDiferenca = Boolean(pagamento.correcao_por_diferenca);
     totalAnteriorEdicao = numero(pagamento.total_pago);
     distribuicaoAtualEdicao = {
@@ -1448,6 +1462,7 @@
     if (previewPrincipal) previewPrincipal.textContent = moeda(principal);
     if (previewJuros) previewJuros.textContent = moeda(encargos);
     if (previewTotal) previewTotal.textContent = moeda(principal + encargos);
+    document.getElementById("totalCalculadoContaPagar").value = valorInput(principal + encargos);
 
     if (modoCorrecaoDiferenca) {
       atualizarPreview(true);
