@@ -160,12 +160,12 @@ export function indicatorState({operations, stability, now, wall, syncing = fals
     let kind, label;
     if (!connected) { kind = 'offline'; label = count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente'; }
     else if (!authenticated) { kind = 'auth'; label = 'ONLINE — autenticação necessária para preparar/sincronizar' + (count ? ' · ' + quantity + ' preservadas' : ''); }
-    else if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress + '\u2026'; }
+    else if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress.replace('/', ' de ') + '\u2026'; }
     else if (pending.some(op => op.status === 'conflito')) { kind = 'conflict'; label = 'Conflito de sincronização — revisão necessária'; }
     else if (notice && notice.until > wall) { kind = notice.kind; label = notice.label; }
     else if (ready && sendable) { kind = 'ready'; label = 'Conexão estável — ' + quantity + (count === 1 ? ' pronta' : ' prontas') + ' para sincronizar'; }
-    else if (pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
-    else if (!ready && (count || stability.reconnecting)) { kind = 'waiting'; label = 'Conexão restabelecida — verificando estabilidade (' + Math.floor(stability.elapsed(now, wall) / 60000) + '/15 min)' + (count ? ' \u00b7 ' + quantity + (count === 1 ? ' pendente' : ' pendentes') : ''); }
+    else if (ready && pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
+    else if (!ready && (count || stability.reconnecting)) { kind = 'waiting'; label = 'Conexão restabelecida — Verificando estabilidade para sincronização segura (' + Math.floor(stability.elapsed(now, wall) / 60000) + ' de 15 minutos)' + (count ? ' \u00b7 ' + quantity + ' aguardando' : ''); }
     else { kind = 'online'; label = 'ONLINE'; }
     return {kind, label, count, canSync: ready && authenticated && sendable && !syncing};
 }

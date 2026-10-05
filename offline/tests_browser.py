@@ -126,7 +126,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate("document.getElementById('offline-prepare').click()")
                 tab.wait("document.getElementById('offline-task').options.length === 1")
                 self.save(tab, 'Sales indicator test')
-                tab.wait("document.getElementById('offline-status').textContent.includes('/15 min)')")
+                tab.wait("document.getElementById('offline-status').textContent.includes(' de 15 minutos)')")
                 started = tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).stable_since")
                 tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
                 tab.wait("document.getElementById('offline-global')?.dataset.state === 'waiting'")
@@ -149,7 +149,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-global').dataset.state === 'waiting'")
                 tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
                 self.ready(tab)
-                tab.wait("document.getElementById('offline-status').textContent.includes('/15 min)')")
+                tab.wait("document.getElementById('offline-status').textContent.includes(' de 15 minutos)')")
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
             finally:
                 chrome.stop()
@@ -180,18 +180,18 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     tab.evaluate(f"localStorage.setItem('test-offset',Number(localStorage.getItem('test-offset')||0)+{milliseconds});window.dispatchEvent(new Event('online'))")
                     tab.wait("(await testRepo.all('metadata')).some(v=>v.key.startsWith('communication:') && v.last_success_at > Date.now()-2000)")
                 def minutes(target):
-                    tab.wait(f"document.getElementById('offline-status').textContent.includes('({target}/15 min)')")
+                    tab.wait(f"document.getElementById('offline-status').textContent.includes('({target} de 15 minutos)')")
                 for _ in range(16):
                     step()
                 minutes(8)
                 tab.call('Page.navigate', {'url': self.live_server_url + '/'})
-                tab.wait("document.getElementById('offline-status')?.textContent.includes('(8/15 min)')")
+                tab.wait("document.getElementById('offline-status')?.textContent.includes('(8 de 15 minutos)')")
                 tab.call('Page.reload')
-                tab.wait("document.getElementById('offline-status')?.textContent.includes('(8/15 min)')")
+                tab.wait("document.getElementById('offline-status')?.textContent.includes('(8 de 15 minutos)')")
                 second = chrome.tab()
                 second.call('Page.addScriptToEvaluateOnNewDocument', {'source': script})
                 self.load(second)
-                second.wait("document.getElementById('offline-status').textContent.includes('(8/15 min)')")
+                second.wait("document.getElementById('offline-status').textContent.includes('(8 de 15 minutos)')")
                 second.call('Page.close')
                 chrome.stop()
                 chrome.start()
@@ -254,7 +254,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate("window.prepareRequests=[]; const originalFetch=window.fetch; window.fetch=(url,options)=>{prepareRequests.push(String(url));return originalFetch(url,options)};")
                 tab.wait("!document.getElementById('offline-prepare').disabled && !!document.getElementById('offline-device').textContent")
                 tab.evaluate("document.getElementById('offline-prepare').click()")
-                tab.wait("document.getElementById('offline-message').textContent.includes('Preparação salva')")
+                tab.wait("document.getElementById('offline-message').textContent.includes('Dados preparados')")
                 self.assertIn('/api/offline/snapshot/', tab.evaluate('prepareRequests'))
                 self.assertEqual(tab.evaluate("document.getElementById('offline-task').value"), str(task.pk))
                 self.assertEqual(tab.evaluate("document.getElementById('offline-task').options.length"), 1)
@@ -279,7 +279,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': session_cookie, 'url': self.live_server_url, 'httpOnly': True})
                 self.load(tab)
                 tab.evaluate("document.getElementById('offline-prepare').click()")
-                tab.wait("document.getElementById('offline-message').textContent.includes('Preparação salva')")
+                tab.wait("document.getElementById('offline-message').textContent.includes('Dados preparados')")
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("!!(await navigator.serviceWorker.ready).active"))
                 # Core invariants with an injected clock, using production policy unchanged.
@@ -329,7 +329,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
                 tab.evaluate("IDBObjectStore.prototype.add=realAdd;true")
                 self.network(tab, False)
-                tab.wait("document.getElementById('offline-stability').textContent.includes('CONEXÃO ESTÁVEL')")
+                tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
                 self.clock(tab)
                 self.advance_to_ready(tab)
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)  # No automatic synchronization.
@@ -339,7 +339,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.load(second)
                 second.evaluate("window.lockHeld=false; navigator.locks.request('offline-pilot-sync',async()=>{window.lockHeld=true;await new Promise(r=>window.releaseLock=r)}); true")
                 second.wait('window.lockHeld')
-                tab.evaluate("window.confirm=()=>true;document.getElementById('offline-sync').click()")
+                tab.evaluate("window.autoConfirmObserver?.disconnect();window.autoConfirmObserver=new MutationObserver(()=>{const b=document.getElementById('offline-modal-confirm');if(document.getElementById('offline-sync-modal')?.open&&!b.disabled&&!b.hidden)b.click()});autoConfirmObserver.observe(document.body,{subtree:true,attributes:true});document.getElementById('offline-sync').click()")
                 tab.wait("document.getElementById('offline-message').textContent.includes('Outra aba')")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
                 second.evaluate('window.releaseLock();true')
@@ -351,6 +351,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     const r=await realFetch(...args);if(args[0]==='/api/offline/observations/'){await r.text();window.fetch=realFetch;throw Error('response lost after commit')}return r};
                     document.getElementById('offline-sync').click();true""")
                 tab.wait("document.getElementById('offline-operations').textContent.includes('resultado_desconhecido')")
+                tab.wait("document.getElementById('offline-modal-text').textContent==='Sincronização interrompida — operações preservadas'")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 1)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).filter(o=>o.status==='pendente').length"), 1)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).find(o=>o.status==='resultado_desconhecido').operation_id"), original_id)
@@ -385,6 +386,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 task.delete()
                 tab.evaluate("document.getElementById('offline-sync').click()")
                 tab.wait("document.getElementById('offline-operations').textContent.includes('conflito')")
+                tab.wait("document.getElementById('offline-modal-text').textContent==='Conflito de sincronização — revisão necessária'")
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).find(o=>o.status==='conflito').payload.observacao"), 'Sessão expirada preserva fila')
             finally:
                 chrome.stop()
@@ -440,6 +442,69 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
             finally:
                 chrome.stop()
 
+    def test_offline_ux_busy_cancel_progress_and_mobile(self):
+        user, _, _, _ = fixtures()
+        client = Client()
+        client.force_login(user)
+        with TemporaryDirectory(prefix='offline-ux-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                self.load(tab)
+                tab.evaluate("window.baseFetch=fetch;window.snapshotCalls=0;window.fetch=async(u,o)=>{if(u==='/api/offline/snapshot/'){snapshotCalls++;await new Promise(r=>window.releasePrepare=r)}return baseFetch(u,o)};const b=document.getElementById('offline-prepare');b.click();b.dispatchEvent(new Event('click'));window.prepareImmediate={disabled:b.disabled,text:b.textContent}")
+                self.assertEqual(tab.evaluate('prepareImmediate'), {'disabled': True, 'text': 'Preparando...'})
+                tab.wait('!!window.releasePrepare')
+                tab.evaluate('window.releasePrepare();true')
+                tab.wait("!document.getElementById('offline-prepare').disabled")
+                self.assertEqual(tab.evaluate('snapshotCalls'), 1)
+                self.assertIn('Dados preparados', tab.evaluate("document.getElementById('offline-message').textContent"))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-task').options.length"), 1)
+                tab.evaluate("window.fetch=baseFetch;window.originalCreate=testRepo.constructor.prototype.create;window.createCalls=0;testRepo.constructor.prototype.create=async function(...a){createCalls++;await new Promise(r=>window.releaseSave=r);return originalCreate.apply(this,a)};document.getElementById('offline-note').value='Uma operação';document.getElementById('offline-form').requestSubmit();document.getElementById('offline-form').dispatchEvent(new Event('submit',{cancelable:true}));window.saveImmediate={disabled:document.getElementById('offline-save').disabled,text:document.getElementById('offline-save').textContent}")
+                self.assertEqual(tab.evaluate('saveImmediate'), {'disabled': True, 'text': 'Salvando...'})
+                self.assertEqual(tab.evaluate('createCalls'), 1)
+                self.assertEqual(tab.evaluate("document.getElementById('offline-note').value"), 'Uma operação')
+                tab.evaluate('window.releaseSave();true')
+                tab.wait("!document.getElementById('offline-save').disabled")
+                self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
+                self.assertEqual(tab.evaluate("document.getElementById('offline-note').value"), '')
+                tab.evaluate("testRepo.constructor.prototype.create=async()=>{throw Error('quota simulation')};document.getElementById('offline-note').value='Preservar texto';document.getElementById('offline-form').requestSubmit()")
+                tab.wait("!document.getElementById('offline-save').disabled")
+                self.assertIn('Não foi possível salvar', tab.evaluate("document.getElementById('offline-message').textContent"))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-note').value"), 'Preservar texto')
+                self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/snapshot/'?Promise.reject(Error('network simulation')):baseFetch(u,o);document.getElementById('offline-prepare').click()")
+                tab.wait("!document.getElementById('offline-prepare').disabled")
+                self.assertIn('Não foi possível preparar', tab.evaluate("document.getElementById('offline-message').textContent"))
+                tab.evaluate('window.fetch=baseFetch;testRepo.constructor.prototype.create=originalCreate;true')
+                self.save(tab, 'Segunda operação')
+                self.clock(tab)
+                tab.evaluate('autoConfirmObserver.disconnect();true')
+                tab.wait("document.getElementById('offline-status').dataset.state==='waiting'")
+                self.assertIn('de 15 minutos', tab.evaluate("document.getElementById('offline-stability').textContent"))
+                self.assertFalse(tab.evaluate("document.getElementById('offline-sync').classList.contains('offline-sync-ready')"))
+                self.advance_to_ready(tab)
+                self.assertTrue(tab.evaluate("document.getElementById('offline-sync').classList.contains('offline-sync-ready')"))
+                tab.evaluate("window.confirm=window.alert=()=>{throw Error('native dialog')};document.getElementById('offline-sync').click()")
+                tab.wait("document.getElementById('offline-sync-modal').open")
+                for width in (390, 320):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 640, 'deviceScaleFactor': 1, 'mobile': True})
+                    self.assertTrue(tab.evaluate("(()=>{const r=document.getElementById('offline-sync-modal').getBoundingClientRect();const a=document.getElementById('offline-modal-confirm').getBoundingClientRect(),b=document.getElementById('offline-modal-cancel').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&(a.left>=b.right||a.top>=b.bottom)})()"))
+                tab.evaluate("document.getElementById('offline-modal-cancel').click()")
+                tab.wait("!document.getElementById('offline-sync').disabled")
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                tab.evaluate("window.progressTexts=[];window.progressObserver=new MutationObserver(()=>progressTexts.push(document.getElementById('offline-modal-text').textContent));progressObserver.observe(document.getElementById('offline-modal-text'),{childList:true});document.getElementById('offline-sync').click()")
+                tab.wait("document.getElementById('offline-sync-modal').open")
+                tab.evaluate("document.getElementById('offline-modal-confirm').click();document.getElementById('offline-modal-confirm').click()")
+                tab.wait("document.getElementById('offline-modal-text').textContent==='Sincronização concluída'")
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 2)
+                self.assertIn('Sincronizando 1 de 2...', tab.evaluate('progressTexts'))
+                self.assertIn('Sincronizando 2 de 2...', tab.evaluate('progressTexts'))
+                self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-status').dataset.state"), 'success')
+            finally:
+                chrome.stop()
+
     def ready(self, tab):
         tab.wait("!!document.getElementById('offline-device')?.textContent")
         tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
@@ -449,20 +514,23 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         self.ready(tab)
 
     def network(self, tab, offline):
+        # Let the previous probe finish before toggling the simulated network.
+        tab.evaluate("await new Promise(resolve=>setTimeout(resolve,150));true")
         tab.call('Network.emulateNetworkConditions', {'offline': offline, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
         tab.evaluate("window.dispatchEvent(new Event('offline'))" if offline else "window.dispatchEvent(new Event('online'))")
 
     def save(self, tab, text):
         import json
         tab.evaluate("document.getElementById('offline-message').textContent='';document.getElementById('offline-note').value=" + json.dumps(text) + ";document.getElementById('offline-form').requestSubmit()")
-        tab.wait("document.getElementById('offline-message').textContent.includes('Observação salva neste dispositivo')")
+        tab.wait("document.getElementById('offline-message').textContent.includes('Salvo neste dispositivo')")
 
     def clock(self, tab):
-        tab.evaluate("window.clockOffset=0;window.realNow=performance.now.bind(performance);window.realWall=Date.now;performance.now=()=>realNow()+clockOffset;Date.now=()=>realWall()+clockOffset;window.confirm=()=>true")
+        tab.evaluate("window.clockOffset=0;window.realNow=performance.now.bind(performance);window.realWall=Date.now;performance.now=()=>realNow()+clockOffset;Date.now=()=>realWall()+clockOffset;window.autoConfirmObserver?.disconnect();window.autoConfirmObserver=new MutationObserver(()=>{const b=document.getElementById('offline-modal-confirm');if(document.getElementById('offline-sync-modal')?.open&&!b.disabled&&!b.hidden)b.click()});autoConfirmObserver.observe(document.body,{subtree:true,attributes:true})")
 
     def advance_to_ready(self, tab):
         # Each success is observed; no test shortcut exists in the production frontend.
         for _ in range(32):
+            tab.evaluate("await new Promise(resolve=>setTimeout(resolve,150));true")
             tab.evaluate("window.clockOffset+=30000;window.probeFinished=false;(()=>{const previous=window.fetch;window.fetch=async(...a)=>{const r=await previous(...a);if(a[0]==='/api/offline/health/'){window.fetch=previous;const clone=r.clone();await clone.text();setTimeout(()=>window.probeFinished=true,50)}return r}})();window.dispatchEvent(new Event('online'));true")
             tab.wait('window.probeFinished')
         tab.wait("!(document.getElementById('offline-sync') || document.getElementById('offline-global-sync')).disabled")

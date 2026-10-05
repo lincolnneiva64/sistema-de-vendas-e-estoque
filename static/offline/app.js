@@ -7,9 +7,54 @@ let notice = null, remoteSync = null;
 let authenticated = false;
 let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
-let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, stopped = false, progress = '', probing = false, leaving = false;
+let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probing = false, leaving = false;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
+const modal = document.createElement('dialog');
+modal.id = 'offline-sync-modal';
+modal.className = 'offline-sync-modal';
+modal.setAttribute('aria-labelledby', 'offline-modal-title');
+modal.innerHTML = `<h2 id="offline-modal-title">Sincronizar operações?</h2><p id="offline-modal-count"></p><p id="offline-modal-text" role="status" aria-live="polite"></p><div class="offline-modal-actions"><button type="button" id="offline-modal-cancel">Agora não</button><button type="button" id="offline-modal-confirm">Sincronizar agora</button></div>`;
+document.body.append(modal);
+const modalText = modal.querySelector('#offline-modal-text');
+const modalConfirm = modal.querySelector('#offline-modal-confirm');
+const modalCancel = modal.querySelector('#offline-modal-cancel');
+let modalResolve = null;
+function closeModal() {
+    if (syncing) return;
+    modal.close(); modalResolve?.(false); modalResolve = null;
+}
+modalCancel.addEventListener('click', closeModal);
+modal.addEventListener('cancel', event => { event.preventDefault(); closeModal(); });
+modalConfirm.addEventListener('click', () => {
+    if (!modalResolve) return;
+    modalConfirm.disabled = true; modalCancel.disabled = true;
+    const resolve = modalResolve; modalResolve = null; resolve(true);
+});
+function confirmSynchronization(count) {
+    modal.querySelector('#offline-modal-title').textContent = 'Sincronizar operações?';
+    modal.querySelector('#offline-modal-count').textContent = count + (count === 1 ? ' operação aguardando' : ' operações aguardando');
+    modalText.textContent = 'A conexão está estável. As operações pendentes serão enviadas agora para o servidor.';
+    modalConfirm.hidden = false; modalConfirm.disabled = false;
+    modalCancel.disabled = false; modalCancel.textContent = 'Agora não';
+    if (!modal.open) modal.showModal();
+    return new Promise(resolve => { modalResolve = resolve; });
+}
+function finishModal(text) {
+    modalText.textContent = text;
+    modalConfirm.hidden = true; modalCancel.disabled = false; modalCancel.textContent = 'Fechar';
+}
+function busyButton(button, busy, label) {
+    if (!button) return;
+    button.textContent = label;
+    button.setAttribute('aria-busy', String(busy));
+}
+function syncButton(button, disabled, count, active = syncing) {
+    if (!button) return;
+    button.disabled = disabled || syncOpening;
+    button.classList.toggle('offline-sync-ready', !button.disabled);
+    busyButton(button, active, active ? 'Sincronizando...' : syncOpening ? 'Aguardando confirmação...' : 'Sincronizar agora' + (!button.disabled ? ' — ' + count + (count === 1 ? ' operação' : ' operações') : ''));
+}
 function message(text) {
     if (globalIndicator) { notice = {kind: 'error', label: text, until: Date.now() + 10000}; void render().catch(() => {}); }
     const target = document.getElementById('offline-message');
@@ -42,22 +87,27 @@ async function render() {
     const scoped = operations.filter(op => op.actor_id === (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id)
         && op.environment_id === (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id));
     const pending = scoped.filter(op => op.status !== 'confirmada');
-    const ready = stability.ready(performance.now(), Date.now());
     const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
-    if (badge) badge.textContent = state.label;
+    if (badge) { badge.textContent = state.label; badge.dataset.state = state.kind; }
+    if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
     if (globalSync) {
         globalSync.hidden = !pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
-        globalSync.disabled = !state.canSync || !navigator.locks || !snapshot
-            || snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment;
+        syncButton(globalSync, !state.canSync || !navigator.locks || !snapshot
+            || snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment, state.count, state.kind === 'syncing');
     }
     if (!pilot) return;
-    document.getElementById('offline-stability').textContent = stability.connected ? 'CONEXÃO ESTÁVEL HÁ ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' MINUTOS · mínimo 15' : 'Comunicação com o servidor indisponível ou ainda não verificada.';
-    const sendable = pending.filter(op => op.actor_id === snapshot?.actor.id && op.environment_id === snapshot?.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status));
-    document.getElementById('offline-sync').disabled = !authenticated || !ready || !sendable.length || syncing || !navigator.locks;
-    document.getElementById('offline-save').disabled = !snapshot || syncing || saving;
-    document.getElementById('offline-prepare').disabled = syncing;
+    const stabilityText = document.getElementById('offline-stability');
+    stabilityText.dataset.state = state.kind;
+    stabilityText.textContent = state.kind === 'waiting' ? 'Verificando estabilidade para sincronização segura · ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' de 15 minutos · ' + state.count + (state.count === 1 ? ' operação aguardando' : ' operações aguardando') : stability.connected ? 'CONEXÃO ESTÁVEL HÁ ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' MINUTOS · mínimo 15' : 'Comunicação com o servidor indisponível ou ainda não verificada.';
+    syncButton(document.getElementById('offline-sync'), !state.canSync || !navigator.locks, state.count, state.kind === 'syncing');
+    const saveButton = document.getElementById('offline-save');
+    saveButton.disabled = !snapshot || syncing || saving;
+    busyButton(saveButton, saving, saving ? 'Salvando...' : 'Salvar neste dispositivo');
+    const prepareButton = document.getElementById('offline-prepare');
+    prepareButton.disabled = syncing || preparing;
+    busyButton(prepareButton, preparing, preparing ? 'Preparando...' : 'Preparar / atualizar dados online');
     const list = document.getElementById('offline-operations');
     list.replaceChildren();
     for (const op of operations.sort((a, b) => b.sequence - a.sequence)) {
@@ -108,6 +158,10 @@ function showTasks() {
     }
 }
 async function prepare() {
+    if (preparing || syncing) return;
+    preparing = true;
+    const button = document.getElementById('offline-prepare');
+    button.disabled = true; busyButton(button, true, 'Preparando...');
     try {
         if (!await checkSession()) throw new Error('Autentique-se novamente para preparar. Fila preservada.');
         const response = await fetchTimed('/api/offline/snapshot/');
@@ -128,11 +182,12 @@ async function prepare() {
         }
         await repo.put('metadata', {key: 'persistence', diagnostic});
         document.getElementById('offline-storage').textContent = diagnostic;
-        message('Preparação salva neste dispositivo. ' + diagnostic);
+        message('Dados preparados neste dispositivo. ' + diagnostic);
         if ('serviceWorker' in navigator) { await navigator.serviceWorker.register('/service-worker.js', {scope: '/'}); await navigator.serviceWorker.ready; }
         else message('Snapshot salvo, mas Service Worker indisponível. Use HTTPS ou localhost para abrir sem rede.');
         await probe(); await changed();
-    } catch (error) { message(error.message); }
+    } catch (error) { message('Não foi possível preparar os dados: ' + error.message); }
+    finally { preparing = false; await render(); }
 }
 async function checkSession() {
     const login = document.getElementById('offline-login');
@@ -163,18 +218,27 @@ async function save(event) {
     event.preventDefault();
     if (saving) return;
     saving = true;
-    const button = document.getElementById('offline-save'); button.disabled = true;
+    const button = document.getElementById('offline-save'); button.disabled = true; busyButton(button, true, 'Salvando...');
     try {
         const task = snapshot?.tasks.find(t => t.id === document.getElementById('offline-task').value);
         const text = document.getElementById('offline-note').value.trim();
         if (!task || !text || text.length > 2000) throw new Error('Escolha uma tarefa preparada e informe até 2000 caracteres.');
         const op = await repo.create(snapshot, task, text);
-        message('Observação salva neste dispositivo · ' + op.operation_id);
+        message('Salvo neste dispositivo · ' + op.operation_id);
         document.getElementById('offline-note').value = ''; await changed();
     } catch (error) { message('Não foi possível salvar neste dispositivo: ' + error.message); }
     finally { saving = false; await render(); }
 }
 async function synchronize() {
+    if (syncOpening || syncing) return;
+    syncOpening = true;
+    for (const button of [globalSync, document.getElementById('offline-sync')]) {
+        if (button) { button.disabled = true; button.classList.remove('offline-sync-ready'); button.textContent = 'Aguardando confirmação...'; }
+    }
+    try { await runSynchronization(); }
+    finally { syncOpening = false; await render(); }
+}
+async function runSynchronization() {
     if (!snapshot || (globalIndicator && (snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment))) return;
     if (!navigator.locks || !stability.ready(performance.now(), Date.now()) || syncing) return;
     if (!await checkSession()) { message('Autentique-se novamente e confira sua permissão. Fila preservada.'); await render(); return; }
@@ -183,7 +247,7 @@ async function synchronize() {
         await refreshCommunication();
         if (!stability.ready(performance.now(), Date.now())) return;
         const operations = (await repo.all('operations')).filter(op => op.actor_id === snapshot.actor.id && op.environment_id === snapshot.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
-        if (!operations.length || !window.confirm(`Conexão estável. ${operations.length} operações aguardando sincronização. Deseja sincronizar agora?`)) return;
+        if (!operations.length || !await confirmSynchronization(operations.length)) return;
         syncing = true; stopped = false; notice = null; progress = '0/' + operations.length; await changed();
         let confirmed = 0;
         try {
@@ -222,15 +286,22 @@ async function synchronize() {
                     // but let the health-check decide whether the server is offline.
                     stopped = true;
                     await repo.communication(communicationScope(), {type: 'failure', at: Date.now()});
-                    await probe(); message('Erro de sincronização. Dados preservados.'); break;
+                    await probe(); message('Sincronização interrompida — operações preservadas'); break;
                 }
             }
-            if (!stopped) {
-                message('Sincroniza\u00e7\u00e3o conclu\u00edda. Confira os resultados e eventuais conflitos no hist\u00f3rico.');
-                notice = {kind: 'success', label: 'Sincroniza\u00e7\u00e3o conclu\u00edda \u2014 ' + confirmed + (confirmed === 1 ? ' opera\u00e7\u00e3o confirmada' : ' opera\u00e7\u00f5es confirmadas'), until: Date.now() + 8000};
-            }
+
         } catch (error) { message(error.message); }
-        finally { syncing = false; csrf = ''; await changed(); }
+        finally {
+            const results = await repo.all('operations');
+            const conflict = results.some(op => op.actor_id === snapshot.actor.id && op.environment_id === snapshot.environment_id && op.status === 'conflito');
+            const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id) && op.status !== 'confirmada');
+            const text = conflict ? 'Conflito de sincronização — revisão necessária' : stopped || remaining ? 'Sincronização interrompida — operações preservadas' : 'Sincronização concluída';
+            finishModal(text);
+            const feedback = document.getElementById('offline-message');
+            if (feedback) feedback.textContent = text;
+            notice = {kind: conflict ? 'conflict' : stopped || remaining ? 'error' : 'success', label: text, until: Date.now() + 10000};
+            syncing = false; csrf = ''; await changed();
+        }
     });
 }
 async function exportDiagnostic() {
