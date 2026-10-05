@@ -48,6 +48,7 @@ def ambiente_sistema(request):
         local_aviso = LOCAL_LINK_HINT
 
     return {
+        "offline_environment_id": getattr(settings, "OFFLINE_ENVIRONMENT_ID", "") or host.lower(),
         "ambiente_atual": ambiente,
         "ambiente_host_atual": hostname,
         "ambiente_is_online": is_online_host(host),

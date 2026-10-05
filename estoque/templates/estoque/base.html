@@ -88,6 +88,13 @@
 </head>
 <body class="bg-light" style="padding-bottom: 16px;">
 
+<link rel="stylesheet" href="{% static 'offline/indicator.css' %}">
+<section id="offline-global" class="offline-global" data-actor="{{ request.user.pk|default:'' }}" data-environment="{{ offline_environment_id }}" data-state="checking" aria-label="Conexão e sincronização">
+    <span id="offline-status" role="status" aria-live="polite">Verificando conexão…</span>
+    <button id="offline-global-sync" type="button" disabled hidden>Sincronizar agora</button>
+    <a href="/offline/">Detalhes offline</a>
+</section>
+
     {% block content %}{% endblock %}
 
     {% include "estoque/includes/atalho_despesa_global.html" %}
@@ -112,9 +119,9 @@
                 return Math.max(
                     window.pageYOffset || 0,
                     window.scrollY || 0,
-                    elementoRolagem ? elementoRolagem.scrollTop || 0 : 0,
-                    document.documentElement ? document.documentElement.scrollTop || 0 : 0,
-                    document.body ? document.body.scrollTop || 0 : 0
+                    elementoRolagem — elementoRolagem.scrollTop || 0 : 0,
+                    document.documentElement — document.documentElement.scrollTop || 0 : 0,
+                    document.body — document.body.scrollTop || 0 : 0
                 );
             }
 
@@ -192,7 +199,6 @@
             recolherBotaoMobile();
         })();
     </script>
-<a id="offline-status" href="/offline/" style="position:fixed;bottom:8px;left:8px;z-index:9999;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:12px;text-decoration:none">Piloto offline</a>
 <script type="module" src="{% static 'offline/app.js' %}"></script>
 </body>
 </html>

@@ -26,8 +26,19 @@ export class Stability {
         if (this.last !== null && (now - this.last > this.policy.maxGap || wall - this.lastWall > this.policy.maxGap || wall < this.lastWall)) this.reset();
         return this.connected;
     }
-    ready(now, wall) { return this.valid(now, wall) && now - this.started >= this.policy.window; }
-    elapsed(now, wall) { return this.valid(now, wall) ? Math.max(0, now - this.started) : 0; }
+    ready(now, wall) { return this.valid(now, wall) && this.last - this.started >= this.policy.window; }
+    elapsed(now, wall) { return this.valid(now, wall) ? Math.max(0, this.last - this.started) : 0; }
+    restore(value, now, wall) {
+        this.reset();
+        this.reconnecting = !!value?.reconnecting;
+        if (!value?.connected || !Number.isFinite(value.stable_since) || !Number.isFinite(value.last_success_at)
+            || value.stable_since > value.last_success_at || wall < value.last_success_at
+            || wall - value.last_success_at > this.policy.maxGap) return;
+        this.lastWall = value.last_success_at;
+        this.last = now - (wall - value.last_success_at);
+        this.started = this.last - (value.last_success_at - value.stable_since);
+        this.connected = true;
+    }
 }
 
 export function openDB() {
@@ -67,6 +78,29 @@ export class Repository {
         return this.transaction([store], false, (tx, done) => { tx.objectStore(store).getAll().onsuccess = event => done(event.target.result); });
     }
     put(store, value) { return this.transaction([store], true, tx => tx.objectStore(store).put(value)); }
+    communication(scope, event = null) {
+        const key = 'communication:' + JSON.stringify([scope.environment_id, scope.actor_id]);
+        return this.transaction(['metadata'], true, (tx, done) => {
+            const store = tx.objectStore('metadata');
+            store.get(key).onsuccess = request => {
+                let value = request.target.result || {key, ...scope, connected: false, stable_since: null, last_success_at: null};
+                if (event?.type === 'failure') {
+                    value = {...value, connected: false, stable_since: null, last_success_at: null,
+                        failed_at: event.at, reconnecting: true};
+                } else if (event?.type === 'success' && (value.failed_at == null || event.started_at > value.failed_at)) {
+                    // An older request cannot undo a failure observed by another tab.
+                    if (value.last_success_at == null || event.at >= value.last_success_at) {
+                        const continuous = value.connected && event.at >= value.last_success_at
+                            && event.at - value.last_success_at <= POLICY.maxGap;
+                        value = {...value, connected: true, stable_since: continuous ? value.stable_since : event.at,
+                            last_success_at: event.at};
+                    }
+                }
+                if (event) store.put(value);
+                done(value);
+            };
+        });
+    }
     identity() {
         return this.transaction(['metadata'], true, (tx, done) => {
             const store = tx.objectStore('metadata');
@@ -113,4 +147,24 @@ export function validReceipt(result, operation) {
     return result && result.operation_id === operation.operation_id && result.hash === operation.payload_hash
         && (result.status === 'conflito' || (result.status === 'confirmada' && Number.isSafeInteger(result.record_id)
             && result.record_id > 0 && typeof result.completed_at === 'string' && Number.isFinite(Date.parse(result.completed_at))));
+}
+
+// Both the detailed panel and the global indicator consume this projection.
+export function indicatorState({operations, stability, now, wall, syncing = false, progress = '', notice = null}) {
+    const pending = operations.filter(op => op.status !== 'confirmada');
+    const count = pending.length;
+    const connected = stability.valid(now, wall);
+    const ready = stability.ready(now, wall);
+    const sendable = pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
+    const quantity = count + (count === 1 ? ' operação' : ' operações');
+    let kind, label;
+    if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress + '\u2026'; }
+    else if (pending.some(op => op.status === 'conflito')) { kind = 'conflict'; label = 'Conflito de sincronização — revisão necessária'; }
+    else if (notice && notice.until > wall) { kind = notice.kind; label = notice.label; }
+    else if (!connected) { kind = 'offline'; label = count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente'; }
+    else if (ready && sendable) { kind = 'ready'; label = 'Conexão estável — ' + quantity + (count === 1 ? ' pronta' : ' prontas') + ' para sincronizar'; }
+    else if (pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
+    else if (!ready && (count || stability.reconnecting)) { kind = 'waiting'; label = 'Conexão restabelecida — verificando estabilidade (' + Math.floor(stability.elapsed(now, wall) / 60000) + '/15 min)' + (count ? ' \u00b7 ' + quantity + (count === 1 ? ' pendente' : ' pendentes') : ''); }
+    else { kind = 'online'; label = 'ONLINE'; }
+    return {kind, label, count, canSync: ready && sendable && !syncing};
 }

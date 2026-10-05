@@ -1,29 +1,53 @@
-import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt} from './core.js';
+import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState} from './core.js';
 
 const pilot = !!document.getElementById('offline-pilot');
+const globalIndicator = document.getElementById('offline-global');
+const globalSync = document.getElementById('offline-global-sync');
+let notice = null, remoteSync = null;
 const badge = document.getElementById('offline-status');
-let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, stopped = false, progress = '', probing = false;
+let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, stopped = false, progress = '', probing = false, leaving = false;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 function message(text) {
+    if (globalIndicator) { notice = {kind: 'error', label: text, until: Date.now() + 10000}; void render().catch(() => {}); }
     const target = document.getElementById('offline-message');
     if (target) target.textContent = text;
 }
-function changed() { channel?.postMessage('changed'); return render(); }
+function broadcast() {
+    const scope = communicationScope();
+    channel?.postMessage({type: 'changed', syncing, progress, at: Date.now(), notice,
+        actor: scope.actor_id, environment: scope.environment_id});
+}
+function changed() { broadcast(); return render(); }
+function communicationScope() {
+    return {environment_id: globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id,
+        actor_id: globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id};
+}
+async function refreshCommunication(event = null) {
+    const scope = communicationScope();
+    if (!scope.actor_id || !scope.environment_id) { stability.reset(); return; }
+    const value = await repo.communication(scope, event);
+    stability.restore(value, performance.now(), Date.now());
+    if (!stability.connected && syncing) { stopped = true; inFlight?.abort(); }
+    if (event) broadcast();
+}
 async function render() {
     if (!repo) return;
+    await refreshCommunication();
     const operations = await repo.all('operations');
-    const pending = operations.filter(op => op.status !== 'confirmada');
+    const scoped = operations.filter(op => op.actor_id === (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id)
+        && op.environment_id === (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id));
+    const pending = scoped.filter(op => op.status !== 'confirmada');
     const ready = stability.ready(performance.now(), Date.now());
-    let label;
-    if (syncing) label = 'SINCRONIZANDO ' + progress;
-    else if (!stability.valid(performance.now(), Date.now())) label = 'OFFLINE · ' + pending.length + ' operações aguardando sincronização';
-    else if (pending.some(op => op.status === 'conflito')) label = 'CONFLITO · revisão necessária';
-    else if (pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) label = 'ERRO DE SINCRONIZAÇÃO · dados preservados';
-    else if (ready && pending.length) label = 'PRONTO PARA SINCRONIZAR · ' + pending.length + ' operações pendentes';
-    else if (pending.length) label = 'CONEXÃO RESTABELECIDA · aguardando estabilidade (' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + '/15 min)';
-    else label = 'ONLINE';
-    if (badge) badge.textContent = snapshot ? label : 'Piloto offline · preparar';
+    const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
+        syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice});
+    if (badge) badge.textContent = state.label;
+    if (globalIndicator) globalIndicator.dataset.state = state.kind;
+    if (globalSync) {
+        globalSync.hidden = !pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
+        globalSync.disabled = !state.canSync || !navigator.locks || !snapshot
+            || snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment;
+    }
     if (!pilot) return;
     document.getElementById('offline-stability').textContent = stability.connected ? 'CONEXÃO ESTÁVEL HÁ ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' MINUTOS · mínimo 15' : 'Comunicação com o servidor indisponível ou ainda não verificada.';
     const sendable = pending.filter(op => op.actor_id === snapshot?.actor.id && op.environment_id === snapshot?.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status));
@@ -39,9 +63,11 @@ async function render() {
     }
     document.getElementById('offline-diagnostic').textContent = snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · snapshot: ${snapshot.prepared_at} · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.';
 }
-function failConnection() {
-    stability.reset(); stopped = true; inFlight?.abort();
-    void render().catch(error => message(error.message));
+async function failConnection() {
+    stability.reset(); stability.reconnecting = true; stopped = true;
+    if (syncing) notice = {kind: 'error', label: 'Sincroniza\u00e7\u00e3o interrompida — opera\u00e7\u00f5es preservadas', until: Date.now() + 10000}; inFlight?.abort();
+    await refreshCommunication({type: 'failure', at: Date.now()});
+    await render();
 }
 async function fetchTimed(url, options = {}) {
     const controller = new AbortController();
@@ -55,13 +81,14 @@ async function fetchTimed(url, options = {}) {
     finally { clearTimeout(timer); if (inFlight === controller) inFlight = null; }
 }
 async function probe() {
-    if (!snapshot || probing) return;
+    if (probing || (!snapshot && !globalIndicator)) return;
     probing = true;
+    const started_at = Date.now();
     try {
         const response = await fetchTimed('/api/offline/health/');
-        if (!response.ok || !validHealth(await response.json(), snapshot.environment_id)) throw new Error('Servidor indisponível ou ambiente/protocolo incompatível.');
-        stability.success(performance.now(), Date.now());
-    } catch { failConnection(); }
+        if (!response.ok || !validHealth(await response.json(), (globalIndicator ? globalIndicator.dataset.environment : snapshot.environment_id))) throw new Error('Servidor indisponível ou ambiente/protocolo incompatível.');
+        await refreshCommunication({type: 'success', at: Date.now(), started_at});
+    } catch { if (!leaving) await failConnection(); }
     finally { probing = false; await render(); }
 }
 function showTasks() {
@@ -85,7 +112,7 @@ async function prepare() {
         const {csrf_token, ...safe} = data; // Never persist CSRF or credentials.
         const next = {...safe, key: 'pilot', prepared_at: new Date().toISOString()};
         await repo.put('snapshots', next);
-        snapshot = next; stability.reset(); showTasks();
+        snapshot = next; showTasks();
         let diagnostic = 'Persistência não suportada por este navegador.';
         if (navigator.storage?.persist) {
             try { diagnostic = await navigator.storage.persist() ? 'Armazenamento persistente concedido.' : 'Persistência não concedida; preserve os dados deste site e exporte a fila.'; }
@@ -133,13 +160,16 @@ async function save(event) {
     finally { saving = false; await render(); }
 }
 async function synchronize() {
+    if (!snapshot || (globalIndicator && (snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment))) return;
     if (!navigator.locks || !stability.ready(performance.now(), Date.now()) || syncing) return;
     await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => {
         if (!lock) { message('Outra aba está sincronizando.'); return; }
+        await refreshCommunication();
         if (!stability.ready(performance.now(), Date.now())) return;
         const operations = (await repo.all('operations')).filter(op => op.actor_id === snapshot.actor.id && op.environment_id === snapshot.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
         if (!operations.length || !window.confirm(`Conexão estável. ${operations.length} operações aguardando sincronização. Deseja sincronizar agora?`)) return;
-        syncing = true; stopped = false;
+        syncing = true; stopped = false; notice = null; progress = '0/' + operations.length; await changed();
+        let confirmed = 0;
         try {
             // Refresh session/CSRF online without overwriting the prepared snapshot.
             const session = await fetchTimed('/api/offline/snapshot/');
@@ -148,7 +178,8 @@ async function synchronize() {
             if (identity.actor.id !== snapshot.actor.id || identity.environment_id !== snapshot.environment_id || identity.protocol_version !== 1) throw new Error('Usuário/ambiente diferente. Fila preservada.');
             csrf = identity.csrf_token;
             for (let index = 0; index < operations.length; index++) {
-                if (stopped || !stability.ready(performance.now(), Date.now())) { failConnection(); break; }
+                await refreshCommunication();
+                if (stopped || !stability.ready(performance.now(), Date.now())) { await failConnection(); break; }
                 const operation = {...operations[index], status: 'enviando', attempts: operations[index].attempts + 1};
                 await repo.put('operations', operation); progress = `${index + 1}/${operations.length}`; await changed();
                 try {
@@ -166,13 +197,16 @@ async function synchronize() {
                     if (![200, 409].includes(response.status)) throw new Error('Servidor indisponível.');
                     const result = await response.json();
                     if (!validReceipt(result, operation)) throw new Error('Confirmação do servidor inválida.');
-                    await repo.record(operation, result); await changed();
+                    await repo.record(operation, result); if (result.status === 'confirmada') confirmed++; await changed();
                 } catch (error) {
                     await repo.put('operations', {...operation, status: 'resultado_desconhecido', last_error: error.message + ' Reenviar o mesmo UUID após estabilidade.'});
-                    failConnection(); message('Erro de sincronização. Dados preservados.'); break;
+                    await failConnection(); message('Erro de sincronização. Dados preservados.'); break;
                 }
             }
-            if (!stopped) message('Sincronização concluída. Confira os resultados e eventuais conflitos no histórico.');
+            if (!stopped) {
+                message('Sincroniza\u00e7\u00e3o conclu\u00edda. Confira os resultados e eventuais conflitos no hist\u00f3rico.');
+                notice = {kind: 'success', label: 'Sincroniza\u00e7\u00e3o conclu\u00edda \u2014 ' + confirmed + (confirmed === 1 ? ' opera\u00e7\u00e3o confirmada' : ' opera\u00e7\u00f5es confirmadas'), until: Date.now() + 8000};
+            }
         } catch (error) { message(error.message); }
         finally { syncing = false; csrf = ''; await changed(); }
     });
@@ -188,7 +222,7 @@ async function start() {
     await checkSession();
     repo = new Repository(await openDB());
     snapshot = await repo.get('snapshots', 'pilot');
-    if (!pilot && !snapshot) return;
+    if (!pilot && !globalIndicator) return;
     if (navigator.locks) await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => { if (lock) await repo.recover(); });
     if (pilot) {
         const identity = await repo.identity();
@@ -201,14 +235,18 @@ async function start() {
         document.getElementById('offline-export').addEventListener('click', () => exportDiagnostic().catch(error => message(error.message)));
         if (!navigator.locks) message('Sincronização indisponível neste navegador: Web Locks necessária. A fila pode ser salva e exportada.');
     }
-    channel?.addEventListener('message', () => render().catch(error => message(error.message)));
-    window.addEventListener('offline', failConnection);
+    globalSync?.addEventListener('click', () => synchronize().catch(error => message(error.message)));
+    channel?.addEventListener('message', event => {
+        if (event.data?.type === 'changed' && event.data.actor === (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id) && event.data.environment === (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id)) { remoteSync = event.data.syncing ? event.data : null; notice = event.data.notice; }
+        repo.get('snapshots', 'pilot').then(value => { snapshot = value; return render(); }).catch(error => message(error.message));
+    });
+    window.addEventListener('offline', () => { void failConnection().catch(error => message(error.message)); });
     window.addEventListener('online', () => { void checkSession(); void probe(); });
-    window.addEventListener('pagehide', () => { stability.reset(); inFlight?.abort(); });
-    window.addEventListener('pageshow', () => { stability.reset(); void checkSession(); void probe(); });
+    window.addEventListener('pagehide', () => { leaving = true; inFlight?.abort(); });
+    window.addEventListener('pageshow', () => { leaving = false; void checkSession(); void probe(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { stability.valid(performance.now(), Date.now()); void probe(); } });
     setInterval(() => { void probe().catch(error => message(error.message)); }, POLICY.interval);
-    setInterval(() => { if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) failConnection(); void render().catch(error => message(error.message)); }, 1000);
+    setInterval(() => { if (syncing) broadcast(); if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) void failConnection().catch(error => message(error.message)); void render().catch(error => message(error.message)); }, 1000);
     await probe(); await render();
 }
 start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });
