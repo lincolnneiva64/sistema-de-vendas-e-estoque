@@ -10,6 +10,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from locacoes.models import TarefaOperacionalLocacao
+from estoque.models import EntregaRotaItem
 from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command
 
 
@@ -55,9 +56,28 @@ def health(request):
 @require_GET
 @authorized
 def snapshot(request):
+    rota_id = request.GET.get("rota")
+    if rota_id is not None:
+        if not rota_id.isdigit() or len(rota_id) > 18:
+            return JsonResponse({"erro": "Rota invalida."}, status=400)
+        items = EntregaRotaItem.objects.filter(rota_id=rota_id).exclude(status="cancelada").select_related("venda")
+        return JsonResponse({
+            "environment_id": environment_id(request), "protocol_version": 1,
+            "actor": {"id": str(request.user.pk), "name": request.user.get_username()},
+            "csrf_token": get_token(request),
+            "tasks": [{"id": str(i.pk), "kind": "entrega_venda", "rota_id": str(i.rota_id),
+                       "venda_id": str(i.venda_id), "status": i.status,
+                       "label": f"Entrega · Venda #{i.venda_id}"} for i in items if not i.venda.cancelada],
+        })
     tasks = TarefaOperacionalLocacao.objects.filter(status__in=ACTIVE_STATUSES).exclude(
         locacao__status__in=["cancelada", "devolvida", "devolvida_com_avaria"]
-    ).select_related("locacao").order_by("data_agendada", "pk")[:200]
+    ).select_related("locacao").order_by("data_agendada", "pk")
+    task_id = request.GET.get("task")
+    if task_id is not None:
+        if not task_id.isdigit() or len(task_id) > 18:
+            return JsonResponse({"erro": "Tarefa invalida."}, status=400)
+        tasks = tasks.filter(pk=task_id)
+    tasks = tasks[:200]
     return JsonResponse({
         "environment_id": environment_id(request), "protocol_version": 1,
         "actor": {"id": str(request.user.pk), "name": request.user.get_username()},

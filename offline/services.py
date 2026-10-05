@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from locacoes.models import EventoLocacao, Locacao, TarefaOperacionalLocacao
+from estoque.models import EntregaRotaItem, EventoVenda
 from .models import OperacaoSincronizacao
 
 PROTOCOL_VERSION = 1
@@ -32,7 +33,8 @@ def validate_command(data, user, environment):
         raise ValidationError("A operacao pertence a outro usuario.")
     if command["environment_id"] != environment:
         raise ValidationError("Ambiente incorreto.")
-    if command["type"] != OPERATION_TYPE or type(command["schema_version"]) is not int or command["schema_version"] != 1:
+    sale_note = command["type"] == "observacao_entrega_venda"
+    if command["type"] not in {OPERATION_TYPE, "observacao_entrega_venda"} or type(command["schema_version"]) is not int or command["schema_version"] != 1:
         raise ValidationError("Protocolo de operacao incompativel.")
     if not isinstance(command["aggregate_id"], str) or not command["aggregate_id"].isdigit() or len(command["aggregate_id"]) > 18:
         raise ValidationError("Tarefa invalida.")
@@ -42,11 +44,14 @@ def validate_command(data, user, environment):
     if created is None or timezone.is_naive(created):
         raise ValidationError("Data invalida.")
     payload = command["payload"]
-    if not isinstance(payload, dict) or set(payload) != {"locacao_id", "tarefa_status", "observacao"}:
+    expected = {"rota_id", "venda_id", "tarefa_status", "observacao"} if sale_note else {"locacao_id", "tarefa_status", "observacao"}
+    if not isinstance(payload, dict) or set(payload) != expected:
         raise ValidationError("Conteudo de observacao invalido.")
-    if not isinstance(payload["locacao_id"], str) or not payload["locacao_id"].isdigit() or len(payload["locacao_id"]) > 18:
-        raise ValidationError("Locacao invalida.")
-    if payload["tarefa_status"] not in ACTIVE_STATUSES:
+    for key in ({"rota_id", "venda_id"} if sale_note else {"locacao_id"}):
+        if not isinstance(payload[key], str) or not payload[key].isdigit() or len(payload[key]) > 18:
+            raise ValidationError("Identificador invalido.")
+    statuses = {value for value, _ in EntregaRotaItem.STATUS_CHOICES} - {"cancelada"} if sale_note else ACTIVE_STATUSES
+    if payload["tarefa_status"] not in statuses:
         raise ValidationError("Estado de tarefa invalido.")
     note = payload["observacao"]
     if not isinstance(note, str) or not note.strip() or len(note) > 2000:
@@ -75,6 +80,9 @@ def process_operation(command, user):
             return {"operation_id": command["operation_id"], "status": "conflito", "hash": digest, "erro": "UUID ja utilizado com outro conteudo."}, 409
         return operation.resultado, 409 if operation.status == "conflito" else 200
 
+    if command["type"] == "observacao_entrega_venda":
+        return _process_sale_note(operation, command, user, digest)
+
     # Same lock order as rental registration routines: task, then rental.
     task = TarefaOperacionalLocacao.objects.select_for_update().filter(pk=int(command["aggregate_id"])).first()
     rental = Locacao.objects.select_for_update().filter(pk=task.locacao_id).first() if task else None
@@ -99,4 +107,26 @@ def process_operation(command, user):
     operation.resultado = result
     operation.concluido_em = now
     operation.save(update_fields=["referencia", "status", "resultado", "concluido_em", "erro"])
+    return result, 200 if compatible else 409
+
+
+def _process_sale_note(operation, command, user, digest):
+    item = EntregaRotaItem.objects.select_for_update().select_related("venda").filter(pk=int(command["aggregate_id"])).first()
+    payload = command["payload"]
+    compatible = bool(item and str(item.rota_id) == payload["rota_id"]
+                      and str(item.venda_id) == payload["venda_id"] and item.status == payload["tarefa_status"]
+                      and item.status != "cancelada" and not item.venda.cancelada)
+    now = timezone.now()
+    result = {"operation_id": command["operation_id"], "hash": digest,
+              "status": "confirmada" if compatible else "conflito", "record_id": None, "completed_at": now.isoformat()}
+    if compatible:
+        event = EventoVenda.objects.create(venda=item.venda, tipo_evento="observacao_offline",
+            descricao=f"Rota #{item.rota_id}, bloco #{item.pk}: {payload['observacao']}",
+            canal="offline", usuario=user.get_username()[:120])
+        result["record_id"] = event.pk
+    else:
+        result["erro"] = "Entrega/venda ausente ou alterada. Observacao preservada para revisao."
+        operation.erro = result["erro"]
+    operation.status, operation.resultado, operation.concluido_em = result["status"], result, now
+    operation.save(update_fields=["status", "resultado", "concluido_em", "erro"])
     return result, 200 if compatible else 409

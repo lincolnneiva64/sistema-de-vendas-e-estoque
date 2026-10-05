@@ -100,14 +100,26 @@ class Chrome:
             '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', f'--user-data-dir={self.profile}', 'about:blank'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startup)
         deadline = time.monotonic() + 15
-        while not port_file.exists():
-            if self.process.poll() is not None or time.monotonic() > deadline:
-                raise RuntimeError('Chrome did not start')
-            time.sleep(.05)
-        self.port = int(port_file.read_text().splitlines()[0])
-        with urlopen(f'http://127.0.0.1:{self.port}/json/version', timeout=10) as response:
-            self.browser = DevTools(json.load(response)['webSocketDebuggerUrl'])
-        return self
+        try:
+            while self.process.poll() is None and time.monotonic() < deadline:
+                try:
+                    # Windows can expose this file while Chrome is still writing/locking it.
+                    self.port = int(port_file.read_text().splitlines()[0])
+                    with urlopen(f'http://127.0.0.1:{self.port}/json/version', timeout=1) as response:
+                        debugger = json.load(response)['webSocketDebuggerUrl']
+                    self.browser = DevTools(debugger)
+                    return self
+                except (OSError, ValueError, IndexError, KeyError):
+                    time.sleep(.05)
+            raise RuntimeError('Chrome did not become ready')
+        except Exception:
+            # start() runs before each test's finally; a startup failure must own cleanup.
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill(); self.process.wait(timeout=5)
+            raise
 
     def tab(self):
         target = self.browser.call('Target.createTarget', {'url': 'about:blank'})['targetId']
@@ -116,6 +128,17 @@ class Chrome:
         tab = DevTools(next(t['webSocketDebuggerUrl'] for t in tabs if t['id'] == target))
         tab.call('Page.enable')
         return tab
+
+    def worker(self):
+        # startWorker acknowledges scheduling; the target can appear later.
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            with urlopen(f'http://127.0.0.1:{self.port}/json/list', timeout=1) as response:
+                target = next((t for t in json.load(response) if t['type'] == 'service_worker'), None)
+            if target:
+                return DevTools(target['webSocketDebuggerUrl'])
+            time.sleep(.05)
+        raise RuntimeError('Service Worker target did not become ready')
 
     def stop(self):
         try:

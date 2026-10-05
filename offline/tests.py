@@ -34,7 +34,73 @@ def fixtures():
     return user, rental, task, command
 
 
+class SaleDeliveryOfflineTests(TestCase):
+    def setUp(self):
+        from estoque.models import EntregaRota, EntregaRotaItem
+        self.user, _, task, self.command = fixtures()
+        sale = Venda.objects.create(data_venda=task.data_agendada)
+        route = EntregaRota.objects.create(tipo='unitaria')
+        self.item = EntregaRotaItem.objects.create(rota=route, venda=sale)
+        self.command.update(type='observacao_entrega_venda', aggregate_id=str(self.item.pk),
+            payload={'rota_id':str(route.pk), 'venda_id':str(sale.pk),
+                     'tarefa_status':self.item.status, 'observacao':'Observação adicional'})
+        self.client.force_login(self.user)
+
+    def send(self, command):
+        return self.client.post('/api/offline/observations/', data=json.dumps({**command, 'payload_hash':command_hash(command)}), content_type='application/json')
+
+    def test_sale_note_idempotent_and_physical_data_unchanged(self):
+        from estoque.models import EventoVenda, EntregaRotaItem
+        before = EntregaRotaItem.objects.filter(pk=self.item.pk).values().get()
+        snapshot = self.client.get(f'/api/offline/snapshot/?rota={self.item.rota_id}').json()
+        self.assertEqual(snapshot['tasks'][0]['kind'], 'entrega_venda')
+        first = self.send(self.command)
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(self.send(self.command).json(), first.json())
+        self.assertEqual(EventoVenda.objects.filter(tipo_evento='observacao_offline').count(), 1)
+        self.assertEqual(EntregaRotaItem.objects.filter(pk=self.item.pk).values().get(), before)
+
+    def test_reject_physical_payload_and_changed_delivery(self):
+        for field in ('quantidade', 'conferido_cliente', 'entrega_concluida', 'status', 'estoque', 'avaria', 'locacao_id'):
+            command = copy.deepcopy(self.command)
+            command['payload'][field] = True
+            self.assertEqual(self.send(command).status_code, 400)
+        self.item.status = 'cancelada'; self.item.save(update_fields=['status'])
+        response = self.send(self.command)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['status'], 'conflito')
+
+    def test_normal_online_checklist_still_saves_physical_confirmation(self):
+        response = self.client.post(f'/entregas/{self.item.rota_id}/checklist/', {
+            'salvar_bloco':f'{self.item.pk}:entrega',
+            f'conferido_{self.item.pk}':'on', f'concluida_{self.item.pk}':'on',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertTrue(self.item.conferido_cliente)
+        self.assertTrue(self.item.entrega_concluida)
+        self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+
+
 class OfflineAPITests(TestCase):
+    def test_checklist_pages_and_targeted_snapshot(self):
+        rental, task = self.rental, self.task
+        for path in ('/locacoes/checklist-operacional/',
+                     f'/locacoes/tarefas-operacionais/{task.pk}/conferencia-entrega/'):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, f'data-checklist-task="{task.pk}"')
+            self.assertContains(response, '/static/offline/checklist.js')
+        rental.status = 'entregue'
+        rental._permitir_alterar_status = True
+        rental.save(update_fields=['status'])
+        pickup = TarefaOperacionalLocacao.objects.create(locacao=rental, tipo='recolhimento', data_agendada=task.data_agendada)
+        response = self.client.get(f'/locacoes/tarefas-operacionais/{pickup.pk}/conferencia-recolhimento/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'data-checklist-task="{pickup.pk}"')
+        snapshot = self.client.get(f'/api/offline/snapshot/?task={pickup.pk}').json()
+        self.assertEqual([t['id'] for t in snapshot['tasks']], [str(pickup.pk)])
+
     def test_login_and_session_preparation(self):
         anonymous = Client()
         self.assertEqual(anonymous.get('/api/offline/session/').json(), {

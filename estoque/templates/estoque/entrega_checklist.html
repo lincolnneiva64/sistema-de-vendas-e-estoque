@@ -790,6 +790,13 @@
     {% endif %}
 
     </form>
+    <section aria-label="Observações adicionais offline">
+      {% for item_rota in itens_entrega %}
+        <h2>Observação adicional — venda #{{ item_rota.venda_id }}</h2>
+        <section data-checklist-task="{{ item_rota.pk }}" data-checklist-kind="entrega_venda" data-rota-id="{{ rota.pk }}" data-venda-id="{{ item_rota.venda_id }}"></section>
+      {% endfor %}
+    </section>
+    {% include 'locacoes/includes/offline_checklist.html' with offline_indicator_present=True %}
   </div>
 </main>
 

@@ -15,6 +15,216 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_probe_completion_and_stale_session_response(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-probe-race-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.setCookie', {'name':'sessionid', 'value':client.cookies['sessionid'].value, 'url':self.live_server_url})
+                self.load(tab)
+                # Hold real response processing at explicit barriers, not elapsed-time guesses.
+                tab.evaluate("""window.probeBaseFetch=fetch;window.holdHealth=true;window.holdSession=true;
+                    window.fetch=async(...args)=>{const r=await probeBaseFetch(...args);
+                        if(args[0]==='/api/offline/health/'&&holdHealth){holdHealth=false;await new Promise(resolve=>window.releaseHealth=resolve)}
+                        if(args[0]==='/api/offline/session/'&&holdSession){holdSession=false;await new Promise(resolve=>window.releaseSession=resolve)}
+                        return r};
+                    window.probeCompleted=false;window.appModule=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);
+                    window.firstProbe=appModule.probe();firstProbe.then(()=>window.probeCompleted=true);true""")
+                tab.wait('!!window.releaseHealth')
+                self.assertTrue(tab.evaluate('appModule.probe()===firstProbe'))
+                self.assertFalse(tab.evaluate('probeCompleted'))
+                tab.evaluate('releaseHealth();true')
+                tab.wait('!!window.releaseSession')
+                self.assertFalse(tab.evaluate('probeCompleted'))
+                tab.evaluate("""window.holdLatest=true;window.fetch=async(...args)=>{
+                    if(args[0]==='/api/offline/session/'&&holdLatest){holdLatest=false;await new Promise(resolve=>window.releaseLatest=resolve)}
+                    return probeBaseFetch(...args)};
+                    window.dispatchEvent(new Event('online'));true""")
+                tab.wait('!!window.releaseLatest')
+                tab.evaluate('releaseSession();await new Promise(resolve=>setTimeout(resolve,0));true')
+                self.assertFalse(tab.evaluate('probeCompleted'))
+                tab.evaluate('releaseLatest();await firstProbe;window.fetch=probeBaseFetch;true')
+                self.assertTrue(tab.evaluate('probeCompleted'))
+                self.assertTrue(tab.evaluate("document.getElementById('offline-session').textContent.includes('Autenticado como')"))
+                # online starts a session request and a probe; complete the old failure last.
+                tab.evaluate("""window.holdStale=true;window.staleReturned=false;
+                    window.fetch=async(...args)=>{if(args[0]==='/api/offline/session/'&&holdStale){holdStale=false;
+                        await new Promise(resolve=>window.releaseStale=resolve);window.staleReturned=true;throw Error('old session request failed')}
+                        return probeBaseFetch(...args)};
+                    window.dispatchEvent(new Event('online'));true""")
+                tab.wait('!!window.releaseStale')
+                tab.evaluate('await appModule.probe();true')
+                self.assertTrue(tab.evaluate("document.getElementById('offline-session').textContent.includes('Autenticado como')"))
+                tab.evaluate('releaseStale();await new Promise(resolve=>setTimeout(resolve,0));true')
+                self.assertTrue(tab.evaluate('staleReturned'))
+                self.assertTrue(tab.evaluate("document.getElementById('offline-session').textContent.includes('Autenticado como')"))
+                tab.evaluate('window.fetch=probeBaseFetch;true')
+            finally:
+                chrome.stop()
+
+    def test_real_delivery_and_pickup_routes(self):
+        from estoque.models import Venda, Cliente, EntregaRota, EntregaRotaItem, EntregaChecklistItem, EventoVenda, Produto
+        from locacoes.models import TarefaOperacionalLocacao, EventoLocacao, Locacao, MovimentoEstoqueLocacao
+        real_fixture = os.environ.get('OFFLINE_REAL_ROUTE_FIXTURE')
+        if real_fixture:
+            from django.core.management import call_command
+            call_command('loaddata', real_fixture, verbosity=0)
+        user, rental, task, _ = fixtures()
+        if real_fixture:
+            route = EntregaRota.objects.get(pk=134)
+            item = route.itens.exclude(status='cancelada').first()
+            pickup = TarefaOperacionalLocacao.objects.get(pk=os.environ['OFFLINE_REAL_PICKUP'])
+        else:
+            sale = Venda.objects.create(data_venda=task.data_agendada, cliente=Cliente.objects.create(nome='Teste da rota'))
+            route = EntregaRota.objects.create(pk=134, tipo='unitaria')
+            item = EntregaRotaItem.objects.create(rota=route, venda=sale)
+            rental.status = 'entregue'
+            rental._permitir_alterar_status = True
+            rental.save(update_fields=['status'])
+            pickup = TarefaOperacionalLocacao.objects.create(locacao=rental, tipo='recolhimento', data_agendada=task.data_agendada)
+        client = Client(); client.force_login(user)
+        for path, template, entity, event_model in (
+            ('/entregas/134/checklist/', 'estoque/entrega_checklist.html', item, EventoVenda),
+            (f'/locacoes/tarefas-operacionais/{pickup.pk}/conferencia-recolhimento/', 'locacoes/conferencia_recolhimento.html', pickup, EventoLocacao),
+        ):
+            response = client.get(path)
+            self.assertTemplateUsed(response, template)
+            before = type(entity).objects.filter(pk=entity.pk).values().get()
+            physical_before = {
+                model._meta.label: list(model.objects.values())
+                for model in (EntregaChecklistItem, Produto, Locacao, MovimentoEstoqueLocacao)
+            }
+            with TemporaryDirectory(prefix='offline-real-route-') as profile:
+                chrome = Chrome(CHROME, profile).start()
+                try:
+                    tab = chrome.tab(); tab.call('Network.enable')
+                    tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                    tab.call('Page.navigate', {'url': self.live_server_url + path})
+                    tab.wait("!!document.querySelector('[data-local-note]') && !!navigator.serviceWorker.controller")
+                    try:
+                        tab.wait("['online','waiting'].includes(document.getElementById('offline-status').dataset.state)")
+                    except AssertionError:
+                        self.fail(str(tab.evaluate("({path:location.pathname,status:document.getElementById('offline-status').outerHTML,body:document.body.innerText.slice(-1500)})")))
+                    self.assertEqual(tab.evaluate("document.querySelectorAll('#offline-global').length"), 1)
+                    self.network(tab, True)
+                    tab.wait("document.getElementById('offline-status').dataset.state==='offline'")
+                    tab.evaluate("document.querySelector('[data-local-note] textarea').value='Observação da rota real';document.querySelector('[data-local-note]').requestSubmit()")
+                    tab.wait("document.querySelector('[data-local-note] [role=status]').textContent==='Salvo neste dispositivo'")
+                    import json
+                    from urllib.request import urlopen
+                    from .browser_support import DevTools
+                    worker = chrome.worker()
+                    worker.call('Network.enable')
+                    worker.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                    tab.call('Page.reload')
+                    tab.wait("document.body.dataset.localChecklist==='true' && !!document.querySelector('[data-local-note]')")
+                    tab.wait("document.querySelector('[data-checklist-task] summary').textContent.includes('1 pendência')")
+                    self.assertEqual(tab.evaluate('location.pathname'), path)
+                    self.assertTrue(tab.evaluate("[...document.querySelectorAll('form:not([data-local-note]) input,form:not([data-local-note]) select,form:not([data-local-note]) textarea,form:not([data-local-note]) button[type=submit]')].every(e=>e.disabled)"))
+                    worker.call('Network.emulateNetworkConditions', {'offline': False, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                    self.network(tab, False)
+                    tab.evaluate("window.dispatchEvent(new Event('online'))")
+                    try:
+                        tab.wait("document.getElementById('offline-status').dataset.state==='waiting'", timeout=40)
+                    except AssertionError:
+                        self.fail(str(tab.evaluate("({path:location.pathname,status:document.getElementById('offline-status').outerHTML,online:navigator.onLine,indicator:document.getElementById('offline-global').dataset,health:await fetch('/api/offline/health/').then(r=>r.json()),session:await fetch('/api/offline/session/').then(r=>r.json())})")))
+                    tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                    self.clock(tab); self.advance_to_ready(tab)
+                    tab.evaluate("document.getElementById('offline-global-sync').click()")
+                    tab.wait("(await testRepo.all('operations'))[0].status==='confirmada'")
+                    self.assertEqual(event_model.objects.filter(**({'tipo_evento':'observacao_offline'} if event_model is EventoVenda else {'tipo':'observacao_offline'})).count(), 1)
+                    self.assertEqual(type(entity).objects.filter(pk=entity.pk).values().get(), before)
+                    self.assertEqual({model._meta.label: list(model.objects.values()) for model in (EntregaChecklistItem, Produto, Locacao, MovimentoEstoqueLocacao)}, physical_before)
+                    offset = tab.evaluate('clockOffset')
+                    tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': f'const auditWall=Date.now;Date.now=()=>auditWall()+{offset};'})
+                    tab.call('Page.reload')
+                    try:
+                        tab.wait("!!document.querySelector('[data-local-note]') && !document.body.dataset.localChecklist && document.getElementById('offline-status').dataset.state!=='checking' && !document.querySelector('[data-offline-blocked]')")
+                    except AssertionError:
+                        self.fail(str(tab.evaluate("({path:location.pathname,local:document.body.dataset.localChecklist,status:document.getElementById('offline-status').outerHTML,blocked:[...document.querySelectorAll('[data-offline-blocked]')].map(e=>e.outerHTML)})")))
+                finally:
+                    chrome.stop()
+            print(f'Chrome OK: {path} — online, offline, observação local, refresh, pendência, reconexão e sincronização manual; dados físicos preservados.', flush=True)
+
+    def test_rental_checklist_local_note_refresh_and_manual_sync(self):
+        user, rental, task, _ = fixtures()
+        client = Client()
+        client.force_login(user)
+        path = f'/locacoes/tarefas-operacionais/{task.pk}/conferencia-entrega/'
+        with TemporaryDirectory(prefix='offline-checklist-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': "window.checklistErrors=[];addEventListener('error',e=>checklistErrors.push(e.message));addEventListener('unhandledrejection',e=>checklistErrors.push(String(e.reason)))"})
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.call('Page.navigate', {'url': self.live_server_url + path})
+                tab.wait("!!document.querySelector('[data-local-note]') && !!navigator.serviceWorker.controller")
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                tab.wait("document.getElementById('offline-status').dataset.state==='online'")
+                self.assertTrue(tab.evaluate("!!(await testRepo.get('snapshots','checklist:'+location.pathname+location.search))"))
+                self.network(tab, True)
+                tab.wait("document.getElementById('offline-status').dataset.state==='offline'")
+                tab.evaluate("document.querySelector('[data-local-note] textarea').value='Portão lateral';document.querySelector('[data-local-note]').requestSubmit()")
+                tab.wait("document.querySelector('[data-local-note] [role=status]').textContent==='Salvo neste dispositivo'")
+                original = tab.evaluate("(await testRepo.all('operations'))[0].operation_id")
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                # Another prepared page can replace the pilot's task list.
+                # This checklist must retain its own task snapshot.
+                tab.evaluate("(async()=>{const s=await testRepo.get('snapshots','pilot');await testRepo.put('snapshots',{...s,tasks:[]});return true})()")
+                # CDP page emulation does not disconnect the Service Worker target.
+                import json
+                from urllib.request import urlopen
+                from .browser_support import DevTools
+                worker = chrome.worker()
+                worker.call('Network.enable')
+                worker.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Page.reload')
+                try:
+                    tab.wait("document.body.dataset.localChecklist==='true' && !!document.querySelector('[data-local-note]')")
+                except AssertionError:
+                    self.fail(str(tab.evaluate("({html:document.body.innerText,errors:window.checklistErrors,url:location.href})")))
+                self.assertEqual(tab.evaluate('location.pathname'), path)
+                tab.wait("document.querySelector('[data-checklist-task] summary').textContent.includes('1 pendência')")
+                self.assertTrue(tab.evaluate("[...document.querySelectorAll('form:not([data-local-note]) input,form:not([data-local-note]) select,form:not([data-local-note]) textarea,form:not([data-local-note]) button[type=submit]')].every(b=>b.disabled)"))
+                # Restart the browser process with the same persistent profile.
+                chrome.stop()
+                chrome = Chrome(CHROME, profile).start()
+                tab = chrome.tab()
+                tab.call('ServiceWorker.enable')
+                tab.call('ServiceWorker.startWorker', {'scopeURL': self.live_server_url + '/'})
+                worker = chrome.worker()
+                worker.call('Network.enable')
+                worker.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Network.enable')
+                tab.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Page.navigate', {'url': self.live_server_url + path})
+                tab.wait("document.body.dataset.localChecklist==='true' && !!document.querySelector('[data-local-note]')")
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                self.assertEqual(tab.evaluate("(await testRepo.all('operations'))[0].operation_id"), original)
+                for width in (390, 320):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': True})
+                    self.assertTrue(tab.evaluate("document.querySelector('[data-local-note] textarea').getBoundingClientRect().right<=innerWidth"))
+                self.network(tab, False)
+                worker.call('Network.emulateNetworkConditions', {'offline': False, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.evaluate("window.dispatchEvent(new Event('online'))")
+                tab.wait("document.getElementById('offline-status').dataset.state==='waiting'")
+                self.assertTrue(tab.evaluate("document.getElementById('offline-global-sync').disabled"))
+                self.clock(tab)
+                self.advance_to_ready(tab)
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                tab.evaluate("document.getElementById('offline-global-sync').click()")
+                tab.wait("(await testRepo.all('operations'))[0].status==='confirmada'")
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 1)
+                rental.refresh_from_db(); task.refresh_from_db()
+                self.assertEqual(task.status, 'pendente')
+                self.assertEqual(rental.status, 'reservada')
+            finally:
+                chrome.stop()
+
     def test_shared_state_visuals_on_pilot_and_sales(self):
         user, _, _, _ = fixtures()
         client = Client()
@@ -34,15 +244,19 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v7') || keys.includes('offline-pilot-shell-v6'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v7');
+                    if(!keys.includes('offline-pilot-shell-v10') || keys.includes('offline-pilot-shell-v9'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v10');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
                 })()"""))
                 for path in ('/offline/', '/vendas/'):
+                    # Page.navigate returns before the previous document is replaced.
+                    # Its indicator/clock must not satisfy readiness for the next page.
+                    tab.evaluate('window.previousVisualDocument=true;true')
                     tab.call('Page.navigate', {'url': self.live_server_url + path})
-                    tab.wait("!!document.getElementById('offline-status')?.dataset.presentation")
+                    tab.wait("!window.previousVisualDocument && !!document.getElementById('offline-status')?.dataset.presentation")
+                    tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;return true})()")
                     tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
                     # Restore only the isolated fixture between the two pages.
                     tab.evaluate("(async()=>{const op=(await testRepo.all('operations'))[0];await testRepo.put('operations',{...op,status:'pendente'});return true})()")
@@ -381,8 +595,6 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.load(tab)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations'))[0].operation_id"), original_id)
                 self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
-                # Browser restart may discard a session cookie; simulate fresh online authentication.
-                tab.call('Network.setCookie', {'name': 'sessionid', 'value': session_cookie, 'url': self.live_server_url, 'httpOnly': True})
                 # A failed IDB commit must not announce success.
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const {Repository}=await import('/static/offline/core.js');
@@ -397,7 +609,24 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
                 tab.evaluate("IDBObjectStore.prototype.add=realAdd;true")
                 self.network(tab, False)
-                tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
+                # Reauthenticate after reconnection and its old requests have completed.
+                # Do not depend on restoration of the pre-restart session cookie.
+                client = Client(); client.force_login(user)
+                session_cookie = client.cookies['sessionid'].value
+                tab.call('Network.setCookie', {'name':'sessionid', 'value':session_cookie, 'url':self.live_server_url, 'httpOnly':True})
+                tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.probe();return true})()")
+                # The quota-error notice deliberately remains visible for 10 seconds.
+                # Assert completed connectivity/authentication, not its transient UI priority.
+                self.assertTrue(tab.evaluate("(async()=>{const s=await testRepo.get('snapshots','pilot');return (await testRepo.communication({actor_id:s.actor.id,environment_id:s.environment_id})).connected})()"))
+                if not tab.evaluate("document.getElementById('offline-session').textContent.includes('Autenticado como')"):
+                    from django.contrib.sessions.models import Session
+                    cookies = tab.call('Network.getCookies', {'urls':[self.live_server_url]})['cookies']
+                    details = tab.evaluate("(async()=>{const response=await fetch('/api/offline/session/');return {sessionStatus:response.status,session:await response.json(),ui:document.getElementById('offline-session').textContent,state:document.getElementById('offline-status').dataset.state,online:navigator.onLine}})()")
+                    details.update(cookie_matches=any(c['name']=='sessionid' and c['value']==session_cookie for c in cookies),
+                        session_cookie_count=sum(c['name']=='sessionid' for c in cookies),
+                        server_session_exists=Session.objects.filter(session_key=session_cookie).exists())
+                    self.fail(str(details))
+                self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
                 self.clock(tab)
                 self.advance_to_ready(tab)
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)  # No automatic synchronization.
@@ -575,6 +804,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
 
     def ready(self, tab):
         tab.wait("!!document.getElementById('offline-device')?.textContent")
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;return true})()")
         tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
 
     def load(self, tab):
@@ -582,10 +812,12 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         self.ready(tab)
 
     def network(self, tab, offline):
-        # Let the previous probe finish before toggling the simulated network.
-        tab.evaluate("await new Promise(resolve=>setTimeout(resolve,150));true")
+        # A blank tab has no app yet; otherwise drain the complete probe first.
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js'))?.src || '/static/offline/app.js');await app.initialized;await app.probe()}return true})()")
         tab.call('Network.emulateNetworkConditions', {'offline': offline, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
         tab.evaluate("window.dispatchEvent(new Event('offline'))" if offline else "window.dispatchEvent(new Event('online'))")
+        # Drain the probe triggered by native/emulated events, then verify the new conditions.
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js'))?.src || '/static/offline/app.js');await app.probe();await app.probe()}return true})()")
 
     def save(self, tab, text):
         import json
@@ -593,6 +825,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         tab.wait("document.getElementById('offline-message').textContent.includes('Salvo neste dispositivo')")
 
     def clock(self, tab):
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js'))?.src || '/static/offline/app.js');await app.initialized;await app.probe();return true})()")
         tab.evaluate("window.clockOffset=0;window.realNow=performance.now.bind(performance);window.realWall=Date.now;performance.now=()=>realNow()+clockOffset;Date.now=()=>realWall()+clockOffset;window.autoConfirmObserver?.disconnect();window.autoConfirmObserver=new MutationObserver(()=>{const b=document.getElementById('offline-modal-confirm');if(document.getElementById('offline-sync-modal')?.open&&!b.disabled&&!b.hidden)b.click()});autoConfirmObserver.observe(document.body,{subtree:true,attributes:true})")
 
     def advance_to_ready(self, tab):
@@ -602,6 +835,5 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         tab.wait("!(document.getElementById('offline-sync') || document.getElementById('offline-global-sync')).disabled")
 
     def advance_probe(self, tab):
-        tab.evaluate("await new Promise(resolve=>setTimeout(resolve,150));true")
-        tab.evaluate("window.clockOffset+=30000;window.probeFinished=false;(()=>{const previous=window.fetch;window.fetch=async(...a)=>{const r=await previous(...a);if(a[0]==='/api/offline/health/'){window.fetch=previous;const clone=r.clone();await clone.text();setTimeout(()=>window.probeFinished=true,50)}return r}})();window.dispatchEvent(new Event('online'));true")
-        tab.wait('window.probeFinished')
+        # Advance only between completed probes, without replacing fetch or guessing delays.
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js'))?.src || '/static/offline/app.js');await app.probe();window.clockOffset+=30000;await app.probe();return true})()")

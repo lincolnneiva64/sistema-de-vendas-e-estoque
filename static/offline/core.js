@@ -114,8 +114,8 @@ export class Repository {
     async create(snapshot, task, text) {
         const identity = await this.identity();
         const command = {operation_id: crypto.randomUUID(), device_id: identity.id, actor_id: snapshot.actor.id,
-            environment_id: snapshot.environment_id, type: 'observacao_operacional', schema_version: 1,
-            aggregate_id: task.id, payload: {locacao_id: task.locacao_id, tarefa_status: task.status, observacao: text},
+            environment_id: snapshot.environment_id, type: task.kind === 'entrega_venda' ? 'observacao_entrega_venda' : 'observacao_operacional', schema_version: 1,
+            aggregate_id: task.id, payload: task.kind === 'entrega_venda' ? {rota_id: task.rota_id, venda_id: task.venda_id, tarefa_status: task.status, observacao: text} : {locacao_id: task.locacao_id, tarefa_status: task.status, observacao: text},
             created_at: new Date().toISOString(), sequence: identity.sequence};
         const operation = {...command, payload_hash: await hash(command), status: 'pendente', attempts: 0, last_error: '', server_result: null};
         await this.transaction(['operations'], true, tx => tx.objectStore('operations').add(operation));

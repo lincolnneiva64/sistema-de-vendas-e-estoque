@@ -8,7 +8,7 @@ let notice = null, remoteSync = null;
 let authenticated = false;
 let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
-let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probing = false, leaving = false;
+let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 const modal = document.createElement('dialog');
@@ -136,9 +136,12 @@ async function fetchTimed(url, options = {}) {
     }
     finally { clearTimeout(timer); if (inFlight === controller) inFlight = null; }
 }
-async function probe() {
-    if (probing) return;
-    probing = true;
+export function probe() {
+    // Concurrent callers await the complete health/session/storage/render cycle.
+    if (!probePending) probePending = performProbe().finally(() => { probePending = null; });
+    return probePending;
+}
+async function performProbe() {
     const started_at = Date.now();
     try {
         const response = await fetchTimed('/api/offline/health/');
@@ -149,7 +152,7 @@ async function probe() {
         await refreshCommunication({type: 'success', at: Date.now(), started_at});
         await checkSession();
     } catch { if (!leaving) await failConnection(); }
-    finally { probing = false; await render(); }
+    finally { await render(); }
 }
 function showTasks() {
     if (!pilot) return;
@@ -191,13 +194,18 @@ async function prepare() {
     } catch (error) { message('Não foi possível preparar os dados: ' + error.message); }
     finally { preparing = false; await render(); }
 }
-async function checkSession() {
+function checkSession() {
+    sessionPending = performSessionCheck(++sessionGeneration);
+    return sessionPending;
+}
+async function performSessionCheck(generation) {
     const login = document.getElementById('offline-login');
     const status = document.getElementById('offline-session');
     try {
         const response = await fetchTimed('/api/offline/session/');
         if (!response.ok) throw new Error('Sessão indisponível.');
         const data = await response.json();
+        if (generation !== sessionGeneration) return sessionPending;
         authenticated = data.authenticated === true && data.can_prepare === true;
         if (!login || !status) return authenticated;
         login.hidden = data.authenticated === true;
@@ -205,6 +213,7 @@ async function checkSession() {
             ? `Autenticado como ${data.username}. ` + (data.can_prepare ? 'Pode preparar / atualizar dados online.' : 'Sem permissão para preparar dados do piloto.')
             : 'Autentique-se online para preparar / atualizar dados.';
     } catch {
+        if (generation !== sessionGeneration) return sessionPending;
         requireAuthentication();
     }
     return authenticated;
@@ -344,4 +353,4 @@ async function start() {
     setInterval(() => { if (syncing) broadcast(); if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) void failConnection().catch(error => message(error.message)); void render().catch(error => message(error.message)); }, 1000);
     await probe(); await render();
 }
-start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });
+export const initialized = start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });
