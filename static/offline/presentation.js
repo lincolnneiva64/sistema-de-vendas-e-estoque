@@ -1,6 +1,18 @@
 // Presentation only: state selection and synchronization remain in core/app.
 export function renderIndicator(target, state, elapsedMinutes) {
     if (!target) return;
+    const global = target.closest('.offline-global');
+    if (global?.querySelector('#offline-toggle')) {
+        const labels = {online: 'Online', waiting: 'Espera', offline: 'Offline', ready: 'Enviar',
+            syncing: 'Envio', success: 'Online', auth: 'Atenção', error: 'Erro', conflict: 'Atenção'};
+        const label = labels[state.kind] || 'Status';
+        global.querySelector('#offline-tab-label').textContent = label;
+        const badge = global.querySelector('#offline-pending-badge');
+        badge.textContent = String(state.count);
+        badge.hidden = !state.count;
+        global.querySelector('#offline-toggle').setAttribute('aria-label',
+            'Conexão e sincronização: ' + state.label + '. ' + state.count + ' operações pendentes. Abrir ou recolher detalhes');
+    }
     const quantity = state.count + (state.count === 1 ? ' operação' : ' operações');
     let title = state.label, detail = '', counter = '', pending = '';
     if (state.kind === 'waiting') {

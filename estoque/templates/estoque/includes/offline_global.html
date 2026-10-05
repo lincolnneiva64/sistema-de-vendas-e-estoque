@@ -1,5 +1,13 @@
 <section id="offline-global" class="offline-global" data-actor="{{ request.user.pk|default:'' }}" data-environment="{{ offline_environment_id }}" data-state="checking" aria-label="Conexão e sincronização">
-    <span id="offline-status" role="status" aria-live="polite">Verificando conexão…</span>
-    <button id="offline-global-sync" type="button" disabled hidden>Sincronizar agora</button>
-    <a href="/offline/">Detalhes offline</a>
+    <details class="offline-disclosure">
+        <summary id="offline-toggle" aria-label="Conexão e sincronização: verificando conexão">
+            <span id="offline-tab-label">Status</span>
+            <span id="offline-pending-badge" hidden></span>
+        </summary>
+        <div class="offline-panel">
+            <span id="offline-status" role="status" aria-live="polite">Verificando conexão…</span>
+            <button id="offline-global-sync" type="button" disabled hidden>Sincronizar agora</button>
+            <a href="/offline/">Detalhes offline</a>
+        </div>
+    </details>
 </section>

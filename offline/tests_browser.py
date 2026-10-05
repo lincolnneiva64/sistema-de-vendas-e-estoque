@@ -428,8 +428,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v12') || keys.includes('offline-pilot-shell-v11'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v12');
+                    if(!keys.includes('offline-pilot-shell-v13') || keys.includes('offline-pilot-shell-v12'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v13');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
@@ -468,11 +468,16 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 chrome.stop()
 
     def assert_state_visual(self, tab, state, color, text=None):
+        global_tab = tab.evaluate("!!document.getElementById('offline-toggle')")
+        if global_tab:
+            tab.evaluate("document.querySelector('.offline-disclosure').open=true")
+            if state == 'ready':
+                color = 'rgb(29, 78, 216)'
         for width in (1280, 390, 320):
             with self.subTest(state=state, width=width):
                 tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': width < 600})
                 self.assertEqual(tab.evaluate("document.getElementById('offline-status').dataset.state"), state)
-                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-global') || document.getElementById('offline-status')).backgroundColor"), color)
+                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-toggle') || document.getElementById('offline-status')).backgroundColor"), color)
                 self.assertTrue(tab.evaluate("(()=>{const r=document.getElementById('offline-status').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth})()"))
                 if text:
                     self.assertIn(text, tab.evaluate("document.getElementById('offline-status').textContent"))
@@ -600,7 +605,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate("document.querySelectorAll('#offline-global').length"), 1)
                 for width in (1366, 390):
                     tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 900, 'deviceScaleFactor': 1, 'mobile': width == 390})
-                    self.assertTrue(tab.evaluate("(()=>{const i=document.getElementById('offline-global').getBoundingClientRect(),v=document.getElementById('layout-vendas').getBoundingClientRect();return i.height>0 && i.top>=0 && i.bottom<=v.top && document.documentElement.scrollWidth<=innerWidth})()"))
+                    self.assertTrue(tab.evaluate("(()=>{const i=document.getElementById('offline-global').getBoundingClientRect();return i.height>0 && i.height<=80 && i.top>=0 && getComputedStyle(document.getElementById('offline-global')).position==='fixed' && document.documentElement.scrollWidth<=innerWidth})()"))
                     self.assertTrue(tab.evaluate("performance.getEntriesByType('resource').some(e=>new URL(e.name).pathname.endsWith('/offline/indicator.css')) && performance.getEntriesByType('resource').some(e=>new URL(e.name).pathname.endsWith('/offline/app.js'))"))
                     if width == 1366:
                         self.assertTrue(tab.evaluate("document.getElementById('layout-vendas').getBoundingClientRect().bottom <= innerHeight + 1"))
@@ -886,6 +891,15 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
                 tab.call('Page.navigate', {'url': self.live_server_url + '/'})
                 tab.wait("document.getElementById('offline-global')?.dataset.state === 'online'")
+                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-toggle')).color"), 'rgb(22, 101, 52)')
+                self.assertTrue(tab.evaluate("document.getElementById('offline-pending-badge').hidden"))
+                for width in (1366, 390, 320):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': width < 600})
+                    tab.evaluate("document.getElementById('offline-toggle').click()")
+                    self.assertTrue(tab.evaluate("document.querySelector('.offline-disclosure').open"))
+                    self.assertTrue(tab.evaluate("(()=>{const r=document.querySelector('.offline-panel').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&!document.querySelector('dialog[open]')})()"))
+                    tab.evaluate("document.getElementById('offline-toggle').click()")
+                    self.assertFalse(tab.evaluate("document.querySelector('.offline-disclosure').open"))
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const {Stability,indicatorState}=await import('/static/offline/core.js');
                     const s=new Stability(); const op={status:'pendente'};
@@ -906,8 +920,10 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 # Real failed health request on a normal page, without navigator.onLine.
                 tab.evaluate("window.originalFetch=fetch;window.fetch=(url,opts)=>url==='/api/offline/health/'?Promise.reject(Error('server down')):originalFetch(url,opts);window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-global').dataset.state === 'offline'")
+                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-toggle')).color"), 'rgb(153, 27, 27)')
                 tab.evaluate("window.fetch=originalFetch;window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-global').dataset.state === 'waiting'")
+                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-toggle')).color"), 'rgb(120, 53, 15)')
                 self.load(tab)
                 tab.evaluate("document.getElementById('offline-prepare').click()")
                 tab.wait("document.getElementById('offline-task').options.length === 1")
@@ -917,7 +933,11 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertIn('1 ', tab.evaluate("document.getElementById('offline-status').textContent"))
                 self.clock(tab)
                 self.advance_to_ready(tab)
+                self.assertFalse(tab.evaluate("document.querySelector('.offline-disclosure').open"))
+                self.assertEqual(tab.evaluate("document.getElementById('offline-pending-badge').textContent"), '1')
+                self.assertEqual(tab.evaluate("getComputedStyle(document.getElementById('offline-toggle')).backgroundColor"), 'rgb(29, 78, 216)')
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                tab.evaluate("document.getElementById('offline-toggle').click()")
                 tab.evaluate("document.getElementById('offline-global-sync').click()")
                 tab.wait("document.getElementById('offline-global').dataset.state === 'success'")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 1)
