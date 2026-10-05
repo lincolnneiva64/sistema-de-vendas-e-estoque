@@ -7737,6 +7737,12 @@ def conta_pagar_baixar(request, pk):
         try:
             valor = _decimal_compra(request.POST.get("valor_pago") or request.POST.get("valor"), casas=2)
             juros_bancarios = _decimal_compra(request.POST.get("juros_bancarios"), casas=2)
+            total_informado = request.POST.get("total_efetivamente_pago")
+            if total_informado is not None:
+                # O total do comprovante prevalece sobre a separacao enviada pela interface.
+                total_informado = _decimal_compra(total_informado, casas=2)
+                valor = min(total_informado, conta.valor_em_aberto)
+                juros_bancarios = max(total_informado - valor, Decimal("0.00"))
             distribuicao_saida = {
                 "caixa": _decimal_compra(request.POST.get("valor_saida_caixa"), casas=2),
                 "reserva": _decimal_compra(request.POST.get("valor_saida_reserva"), casas=2),

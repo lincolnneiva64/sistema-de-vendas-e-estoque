@@ -1237,6 +1237,12 @@
   }
 
   function atualizarPreview(redistribuir = true) {
+    if (!modoCorrecaoPagamento && numero(valorPago?.value) > numero(document.getElementById("baixaContaAberto").textContent)) {
+      const saldo = numero(document.getElementById("baixaContaAberto").textContent);
+      const excesso = numero(valorPago.value) - saldo;
+      valorPago.value = valorInput(saldo);
+      jurosBancarios.value = valorInput(numero(jurosBancarios.value) + excesso);
+    }
     const principal = numero(valorPago?.value);
     const juros = numero(jurosBancarios?.value);
     const total = principal + juros;
@@ -1267,7 +1273,10 @@
     feedback.className = "cp-alert visivel " + tipo;
   }
 
+  let baixaCalculadaPeloTotal = false;
+
   function abrirModal(botao) {
+    baixaCalculadaPeloTotal = false;
     modoCorrecaoPagamento = false;
     modoCorrecaoDiferenca = false;
     totalAnteriorEdicao = 0;
@@ -1389,10 +1398,12 @@
   });
 
   valorPago?.addEventListener("input", function () {
+    baixaCalculadaPeloTotal = false;
     atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
   jurosBancarios?.addEventListener("input", function () {
+    baixaCalculadaPeloTotal = false;
     atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
@@ -1410,7 +1421,21 @@
     atualizarPreview(modoCorrecaoDiferenca || !modoCorrecaoPagamento);
   });
 
+  function calcularBaixaPeloTotal() {
+    baixaCalculadaPeloTotal = true;
+    const saldo = numero(document.getElementById("baixaContaAberto").textContent);
+    const total = numero(totalEfetivo.value);
+    const principal = Math.min(total, saldo);
+    valorPago.value = valorInput(principal);
+    jurosBancarios.value = valorInput(Math.max(total - principal, 0));
+    atualizarPreview(true);
+  }
+
   totalEfetivo?.addEventListener("input", function () {
+    if (!modoCorrecaoPagamento) {
+      calcularBaixaPeloTotal();
+      return;
+    }
     const principal = numero(valorPago?.value);
     const total = numero(totalEfetivo.value);
 
@@ -1432,6 +1457,11 @@
   });
 
   totalEfetivo?.addEventListener("blur", function () {
+    if (!modoCorrecaoPagamento) {
+      calcularBaixaPeloTotal();
+      totalEfetivo.value = valorInput(numero(valorPago.value) + numero(jurosBancarios.value));
+      return;
+    }
     const principal = numero(valorPago?.value);
     let total = numero(totalEfetivo.value);
 
@@ -1594,6 +1624,10 @@
     }
 
     const dados = new FormData(form);
+    // Preserva pagamentos parciais com encargos editados separadamente.
+    if (!modoCorrecaoPagamento && baixaCalculadaPeloTotal) {
+      dados.set("total_efetivamente_pago", valorInput(total));
+    }
     try {
       const resposta = await fetch(urlBaixaAtual, {
         method: "POST",
