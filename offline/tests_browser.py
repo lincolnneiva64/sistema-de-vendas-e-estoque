@@ -15,6 +15,103 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_multi_tab_observed_stability(self):
+        from estoque.models import Venda, Cliente, EntregaRota, EntregaRotaItem
+        user, _, task, _ = fixtures()
+        sale = Venda.objects.create(data_venda=task.data_agendada, cliente=Cliente.objects.create(nome='Estabilidade'))
+        route = EntregaRota.objects.create(pk=135, tipo='unitaria')
+        EntregaRotaItem.objects.create(rota=route, venda=sale)
+        client = Client(); client.force_login(user)
+        clock = "const realWall=Date.now;Date.now=()=>realWall()+Number(localStorage.getItem('test-offset')||0);"
+        setup = """const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());
+            window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;
+            window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};true"""
+        with TemporaryDirectory(prefix='offline-multi-stability-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                def load(path):
+                    t = chrome.tab()
+                    t.call('Page.addScriptToEvaluateOnNewDocument', {'source': clock})
+                    t.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                    t.call('Page.navigate', {'url':self.live_server_url+path})
+                    t.wait("!!document.getElementById('offline-global')")
+                    t.evaluate(setup)
+                    return t
+                first = load('/entregas/135/checklist/')
+                first.wait("!!document.querySelector('[data-local-note]')")
+                first.evaluate("document.querySelector('[data-local-note] textarea').value='Preservar pend?ncia';document.querySelector('[data-local-note]').requestSubmit()")
+                first.wait("(await testRepo.all('operations')).length===1")
+                original = first.evaluate("JSON.stringify(await testRepo.all('operations'))")
+                def step(t, amount=30000):
+                    t.evaluate(f"localStorage.setItem('test-offset',Number(localStorage.getItem('test-offset')||0)+{amount});await app.probe();true")
+                for _ in range(10): step(first)
+                def elapsed(t): return t.evaluate("(await testRepo.communication(scope)).observed_ms")
+                baseline = elapsed(first)
+                self.assertGreaterEqual(baseline, 300000)
+                tabs = [first, load('/vendas/'), load('/caixa-banco/')]
+                for t in tabs:
+                    self.assertGreaterEqual(elapsed(t), baseline)
+                    t.call('Page.bringToFront')
+                    t.evaluate('await app.probe();true')
+                    t.wait("document.querySelector('.offline-status-counter')?.textContent.trim()==='5 de 15 minutos'")
+                # Deterministic hidden/restored lifecycle (headless Chrome has no desktop minimize button).
+                for t in tabs:
+                    t.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
+                paused = elapsed(first)
+                step(first, 3600000)
+                self.assertEqual(elapsed(first), paused)
+                for t in tabs:
+                    t.evaluate("Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
+                    self.assertLess(elapsed(t)-paused, 2000)
+                tabs[2].call('Page.close')
+                step(first)
+                self.assertGreater(elapsed(first), paused)
+                first.call('Page.reload');first.wait("!!document.getElementById('offline-global')");first.evaluate(setup)
+                self.assertGreaterEqual(elapsed(first), paused)
+                tabs[1].call('Page.close')
+                reopened = load('/vendas/')
+                self.assertGreaterEqual(elapsed(reopened), paused)
+                first.call('Page.bringToFront')
+                first.evaluate("Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
+                # Overlapping successful checks must not multiply the elapsed time.
+                self.assertTrue(first.evaluate("""const isolated={actor_id:'concurrency',environment_id:'isolated'};
+                    await testRepo.communication(isolated,{type:'success',at:100,started_at:90});
+                    await Promise.all([testRepo.communication(isolated,{type:'success',at:30100,started_at:30090,observed_since:100}),
+                        testRepo.communication(isolated,{type:'success',at:30100,started_at:30090,observed_since:100})]);
+                    const value=await testRepo.communication(isolated);
+                    if(value.observed_ms!==30000)throw Error('double credit');
+                    await testRepo.communication(isolated,{type:'success',at:45100,started_at:45090});
+                    const continued=await testRepo.communication(isolated,{type:'success',at:60100,started_at:60090,observed_since:30100});
+                    if(continued.observed_ms!==60000)throw Error('new tab discarded observed time');
+                    const legacy={key:'communication:'+JSON.stringify(['legacy','legacy']),actor_id:'legacy',environment_id:'legacy',connected:true,stable_since:100,last_success_at:300100};
+                    await testRepo.put('metadata',legacy);
+                    const adopted=await testRepo.communication(legacy,{type:'success',at:400100,started_at:400090});
+                    adopted.observed_ms===300000 && adopted.stable_since===100"""))
+                # Drain the extra probe scheduled by visibility restoration before installing the barrier.
+                first.evaluate("await app.probe();await app.probe();true")
+                # A request interrupted by hiding the page must not publish a false failure.
+                first.evaluate("""window.beforeSuspension=(await testRepo.communication(scope)).observed_ms;
+                    window.pauseFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?new Promise((resolve,reject)=>window.finishSuspended=()=>reject(Error('suspended request'))):pauseFetch(u,o);
+                    window.suspendedProbe=app.probe();true""")
+                first.wait('!!window.finishSuspended')
+                first.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));finishSuspended();await suspendedProbe;window.fetch=pauseFetch;true")
+                self.assertEqual(first.evaluate('(await testRepo.communication(scope)).observed_ms'), first.evaluate('beforeSuspension'))
+                first.evaluate("Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
+                # Storage/render errors cannot masquerade as failed health checks.
+                first.evaluate("window.originalCommunication=testRepo.constructor.prototype.communication;testRepo.constructor.prototype.communication=()=>Promise.reject(Error('storage'));try{await app.probe()}catch{};testRepo.constructor.prototype.communication=originalCommunication;true")
+                self.assertGreaterEqual(elapsed(first), paused)
+                first.evaluate("window.baseFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real health failure')):baseFetch(u,o);await app.probe();true")
+                for t in [first,reopened]:
+                    t.wait("(await testRepo.communication(scope)).observed_ms===0")
+                    t.wait("document.getElementById('offline-reset-log').textContent.includes('motivo: falha de comunica\u00e7\u00e3o')")
+                first.evaluate('window.fetch=baseFetch;await app.probe();true')
+                self.assertLess(elapsed(first), 2000)
+                self.assertEqual(first.evaluate("JSON.stringify(await testRepo.all('operations'))"), original)
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                print('Chrome: checklist 135, Vendas, Caixa/Banco, altern?ncia, suspens?o/retomada, fechamento, refresh/reabertura, falha real e fila preservada: OK', flush=True)
+            finally:
+                chrome.stop()
+
     def test_probe_completion_and_stale_session_response(self):
         user, _, _, _ = fixtures()
         client = Client(); client.force_login(user)
@@ -244,8 +341,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v10') || keys.includes('offline-pilot-shell-v9'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v10');
+                    if(!keys.includes('offline-pilot-shell-v11') || keys.includes('offline-pilot-shell-v10'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v11');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
@@ -267,7 +364,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
                     self.assert_state_visual(tab, 'waiting', 'rgb(254, 243, 199)', '1 operação aguardando')
                     self.clock(tab)
-                    # Advance in observed 30-second steps; a gap resets stability.
+                    # Advance in observed 30-second steps; gaps pause stability.
                     for _ in range(3):
                         self.advance_probe(tab)
                     tab.wait("document.querySelector('.offline-status-counter')?.textContent.includes('1 de 15 minutos')")
@@ -492,11 +589,13 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-sync').disabled")
                 tab.evaluate("document.getElementById('offline-sync').dispatchEvent(new Event('click'))")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                before_gap = tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).observed_ms")
                 step(61000)
-                minutes(0)
+                self.assertEqual(tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).observed_ms"), before_gap)
                 step()
+                before_gap = tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).observed_ms")
                 step(3600000)
-                minutes(0)
+                self.assertEqual(tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).observed_ms"), before_gap)
                 tab.evaluate("window.savedFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('failure')):savedFetch(u,o);window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-status').dataset.state === 'offline'")
                 tab.evaluate("window.fetch=savedFetch;window.dispatchEvent(new Event('online'))")
@@ -652,8 +751,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 1)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).filter(o=>o.status==='pendente').length"), 1)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).find(o=>o.status==='resultado_desconhecido').operation_id"), original_id)
-                self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
-                self.advance_to_ready(tab)
+                # A lost send response with a successful health-check preserves stability.
+                self.assertFalse(tab.evaluate("document.getElementById('offline-sync').disabled"))
                 tab.evaluate("document.getElementById('offline-sync').click()")
                 tab.wait("document.getElementById('offline-operations').textContent.includes('confirmada')")
                 tab.wait("(await testRepo.all('operations')).every(o=>o.status==='confirmada')")

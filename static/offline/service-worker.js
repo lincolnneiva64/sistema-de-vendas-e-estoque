@@ -1,4 +1,4 @@
-const CACHE = 'offline-pilot-shell-v10';
+const CACHE = 'offline-pilot-shell-v11';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js'];
 self.addEventListener('install', event => {
     event.waitUntil((async () => {

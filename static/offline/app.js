@@ -9,6 +9,7 @@ let authenticated = false;
 let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
+let observationGeneration = 0, observedSince = null;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 const modal = document.createElement('dialog');
@@ -90,6 +91,13 @@ async function render() {
     const pending = scoped.filter(op => op.status !== 'confirmada');
     const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
+    let resetLog = document.getElementById('offline-reset-log');
+    if (!resetLog && badge) {
+        resetLog = document.createElement('span'); resetLog.id = 'offline-reset-log';
+        resetLog.setAttribute('role', 'status'); badge.after(resetLog);
+    }
+    if (resetLog) resetLog.textContent = stability.failedAt
+        ? 'Estabilidade reiniciada \u00e0s ' + new Date(stability.failedAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + ' \u2014 motivo: falha de comunica\u00e7\u00e3o' : '';
     renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
@@ -142,17 +150,31 @@ export function probe() {
     return probePending;
 }
 async function performProbe() {
+    if (leaving || document.hidden) return;
+    const generation = observationGeneration;
+    // Read the failure marker before starting: millisecond timestamp ties must not reject a genuinely new check.
+    const previous = await repo.communication(communicationScope());
     const started_at = Date.now();
+    let health;
     try {
         const response = await fetchTimed('/api/offline/health/');
-        const health = await response.json();
+        health = await response.json();
         const environment = globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id;
-        if (!response.ok || typeof health.environment !== 'string' || !health.environment || !validHealth(health, environment || health.environment)) throw new Error('Servidor indisponível ou ambiente/protocolo incompatível.');
-        healthEnvironment = health.environment;
-        await refreshCommunication({type: 'success', at: Date.now(), started_at});
-        await checkSession();
-    } catch { if (!leaving) await failConnection(); }
-    finally { await render(); }
+        if (!response.ok || typeof health.environment !== 'string' || !health.environment || !validHealth(health, environment || health.environment)) throw new Error('Health-check inv\u00e1lido.');
+    } catch {
+        if (!leaving && !document.hidden && generation === observationGeneration) {
+            observedSince = null;
+            await failConnection();
+        }
+        return;
+    }
+    if (leaving || document.hidden || generation !== observationGeneration) return;
+    healthEnvironment = health.environment;
+    const at = Date.now();
+    await refreshCommunication({type: 'success', at, started_at, observed_since: observedSince, failure_seen: previous.failed_at ?? null});
+    observedSince = at;
+    await checkSession();
+    await render();
 }
 function showTasks() {
     if (!pilot) return;
@@ -271,7 +293,7 @@ async function runSynchronization() {
             csrf = identity.csrf_token;
             for (let index = 0; index < operations.length; index++) {
                 await refreshCommunication();
-                if (stopped || !stability.ready(performance.now(), Date.now())) { await failConnection(); break; }
+                if (stopped || !stability.ready(performance.now(), Date.now())) { stopped = true; await probe(); break; }
                 const operation = {...operations[index], status: 'enviando', attempts: operations[index].attempts + 1};
                 await repo.put('operations', operation); progress = `${index + 1}/${operations.length}`; await changed();
                 try {
@@ -296,7 +318,6 @@ async function runSynchronization() {
                     // Preserve the existing new stability window after an uncertain send,
                     // but let the health-check decide whether the server is offline.
                     stopped = true;
-                    await repo.communication(communicationScope(), {type: 'failure', at: Date.now()});
                     await probe(); message('Sincronização interrompida — operações preservadas'); break;
                 }
             }
@@ -346,11 +367,11 @@ async function start() {
     });
     window.addEventListener('offline', () => { void probe().catch(error => message(error.message)); });
     window.addEventListener('online', () => { void checkSession(); void probe(); });
-    window.addEventListener('pagehide', () => { leaving = true; inFlight?.abort(); });
-    window.addEventListener('pageshow', () => { leaving = false; void checkSession(); void probe(); });
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) { stability.valid(performance.now(), Date.now()); void probe(); } });
+    window.addEventListener('pagehide', () => { leaving = true; observationGeneration++; observedSince = null; inFlight?.abort(); });
+    window.addEventListener('pageshow', () => { leaving = false; void checkSession(); void probe().then(() => probe()).catch(error => message(error.message)); });
+    document.addEventListener('visibilitychange', () => { observationGeneration++; observedSince = null; if (!document.hidden) void probe().then(() => probe()).catch(error => message(error.message)); });
     setInterval(() => { void probe().catch(error => message(error.message)); }, POLICY.interval);
-    setInterval(() => { if (syncing) broadcast(); if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) void failConnection().catch(error => message(error.message)); void render().catch(error => message(error.message)); }, 1000);
-    await probe(); await render();
+    setInterval(() => { if (syncing) broadcast(); if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) void probe().catch(error => message(error.message)); void render().catch(error => message(error.message)); }, 1000);
+    await render(); await probe(); await render();
 }
 export const initialized = start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });

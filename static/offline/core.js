@@ -17,26 +17,30 @@ export async function hash(command) {
 
 export class Stability {
     constructor(policy = POLICY) { this.policy = policy; this.reset(); }
-    reset() { this.started = null; this.last = null; this.lastWall = null; this.connected = false; }
+    reset() { this.started = null; this.last = null; this.lastWall = null; this.connected = false; this.accumulated = 0; }
     success(now, wall) {
-        if (this.last === null || now - this.last > this.policy.maxGap || wall - this.lastWall > this.policy.maxGap || wall < this.lastWall) this.started = now;
+        if (this.last !== null && now >= this.last && wall >= this.lastWall
+            && now - this.last <= this.policy.maxGap && wall - this.lastWall <= this.policy.maxGap)
+            this.accumulated += Math.min(now - this.last, wall - this.lastWall);
+        this.started ??= now;
         this.last = now; this.lastWall = wall; this.connected = true;
     }
     valid(now, wall) {
-        if (this.last !== null && (now - this.last > this.policy.maxGap || wall - this.lastWall > this.policy.maxGap || wall < this.lastWall)) this.reset();
-        return this.connected;
+        return this.connected && this.last !== null && now >= this.last && wall >= this.lastWall
+            && now - this.last <= this.policy.maxGap && wall - this.lastWall <= this.policy.maxGap;
     }
-    ready(now, wall) { return this.valid(now, wall) && this.last - this.started >= this.policy.window; }
-    elapsed(now, wall) { return this.valid(now, wall) ? Math.max(0, this.last - this.started) : 0; }
+    ready(now, wall) { return this.valid(now, wall) && this.accumulated >= this.policy.window; }
+    elapsed() { return this.accumulated; }
     restore(value, now, wall) {
         this.reset();
         this.reconnecting = !!value?.reconnecting;
-        if (!value?.connected || !Number.isFinite(value.stable_since) || !Number.isFinite(value.last_success_at)
-            || value.stable_since > value.last_success_at || wall < value.last_success_at
-            || wall - value.last_success_at > this.policy.maxGap) return;
+        this.accumulated = Math.max(0, value?.observed_ms ??
+            (value?.last_success_at != null && value?.stable_since != null ? value.last_success_at - value.stable_since : 0));
+        this.failedAt = value?.failed_at;
+        if (!value?.connected || !Number.isFinite(value.last_success_at)) return;
         this.lastWall = value.last_success_at;
         this.last = now - (wall - value.last_success_at);
-        this.started = this.last - (value.last_success_at - value.stable_since);
+        this.started = this.last - this.accumulated;
         this.connected = true;
     }
 }
@@ -84,15 +88,23 @@ export class Repository {
             const store = tx.objectStore('metadata');
             store.get(key).onsuccess = request => {
                 let value = request.target.result || {key, ...scope, connected: false, stable_since: null, last_success_at: null};
-                if (event?.type === 'failure') {
+                if (event?.type === 'failure' && (value.failed_at == null || event.at > value.failed_at)) {
                     value = {...value, connected: false, stable_since: null, last_success_at: null,
-                        failed_at: event.at, reconnecting: true};
-                } else if (event?.type === 'success' && (value.failed_at == null || event.started_at > value.failed_at)) {
+                        observed_ms: 0, observed_until: null, failed_at: event.at, reset_reason: 'falha de comunica\u00e7\u00e3o', reconnecting: true};
+                } else if (event?.type === 'success' && (value.failed_at == null || event.started_at > value.failed_at
+                    || event.failure_seen === value.failed_at)) {
                     // An older request cannot undo a failure observed by another tab.
                     if (value.last_success_at == null || event.at >= value.last_success_at) {
-                        const continuous = value.connected && event.at >= value.last_success_at
-                            && event.at - value.last_success_at <= POLICY.maxGap;
-                        value = {...value, connected: true, stable_since: continuous ? value.stable_since : event.at,
+                        const accumulated = value.observed_ms ?? (value.connected ? value.last_success_at - value.stable_since : 0);
+                        // Credit only an interval observed by this tab. A new/resumed tab has no predecessor.
+                        // Serialized IDB transactions add the union of intervals, never one interval per tab.
+                        const from = Math.max(value.observed_until ?? value.last_success_at ?? event.at, event.observed_since ?? event.at);
+                        const delta = value.connected && event.at >= from && event.at - from <= POLICY.maxGap
+                            && event.observed_since != null && event.at - event.observed_since <= POLICY.maxGap
+                            ? event.at - from : 0;
+                        value = {...value, connected: true, stable_since: value.stable_since ?? event.at,
+                            observed_ms: Math.max(0, accumulated) + delta,
+                            observed_until: delta > 0 ? event.at : value.observed_until ?? value.last_success_at ?? event.at,
                             last_success_at: event.at};
                     }
                 }
