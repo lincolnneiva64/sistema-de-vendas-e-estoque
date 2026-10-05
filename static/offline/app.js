@@ -22,8 +22,10 @@ function broadcast() {
 }
 function changed() { broadcast(); return render(); }
 function communicationScope() {
-    return {environment_id: globalIndicator ? globalIndicator.dataset.environment : (snapshot?.environment_id || healthEnvironment),
-        actor_id: globalIndicator ? globalIndicator.dataset.actor : (snapshot?.actor.id || 'anonymous')};
+    // Health is meaningful before authentication or snapshot preparation on
+    // both screens. An empty template identity must not reset that result.
+    return {environment_id: (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id) || healthEnvironment,
+        actor_id: (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id) || 'anonymous'};
 }
 async function refreshCommunication(event = null) {
     const scope = communicationScope();

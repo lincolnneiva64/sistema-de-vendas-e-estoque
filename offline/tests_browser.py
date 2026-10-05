@@ -15,6 +15,49 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_sales_and_offline_health_200_session_denied_without_snapshot(self):
+        # /vendas/ is also accessible anonymously: its empty data-actor must
+        # not discard a successful health check. Exercise the actual pages.
+        with TemporaryDirectory(prefix='offline-sales-anonymous-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                for code in (401, 403):
+                    tab = chrome.tab()
+                    tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': f"""
+                        window.testErrors=[]; window.healthResponses=[]; window.sessionResponses=[];
+                        addEventListener('error',e=>testErrors.push(e.message));
+                        addEventListener('unhandledrejection',e=>testErrors.push(String(e.reason)));
+                        const originalFetch=window.fetch;
+                        window.fetch=async(u,o)=>{{
+                            if(u==='/api/offline/session/'){{sessionResponses.push({code});return new Response('{{}}',{{status:{code}}});}}
+                            const response=await originalFetch(u,o);
+                            if(u==='/api/offline/health/')healthResponses.push({{status:response.status,body:await response.clone().json()}});
+                            return response;
+                        }};
+                    """})
+                    states = []
+                    for path in ('/vendas/', '/offline/'):
+                        tab.call('Page.navigate', {'url': self.live_server_url + path})
+                        tab.wait('healthResponses.length > 0 && sessionResponses.length > 0')
+                        tab.wait("document.getElementById('offline-status')?.textContent.startsWith('ONLINE — autenticação necessária')")
+                        self.assertEqual(tab.evaluate('testErrors'), [])
+                        self.assertEqual(tab.evaluate('healthResponses[0]'), {
+                            'status': 200, 'body': {'ok': True, 'environment': 'offline-isolated-tests', 'protocol_version': 1}})
+                        self.assertEqual(tab.evaluate('sessionResponses[0]'), code)
+                        self.assertTrue(tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');const r=new Repository(await openDB());return !(await r.get('snapshots','pilot')) && !(await r.all('operations')).length;})()"))
+                        states.append(tab.evaluate("document.getElementById('offline-status').textContent"))
+                        if path == '/vendas/':
+                            self.assertEqual(tab.evaluate("document.getElementById('offline-global').dataset.state"), 'auth')
+                            self.assertEqual(tab.evaluate("document.getElementById('offline-global').dataset.actor"), '')
+                        # A cross-tab refresh must preserve the healthy projection.
+                        tab.evaluate("window.testChannel=new BroadcastChannel('offline-pilot');testChannel.postMessage({type:'changed',actor:'other',environment:'other'});true")
+                        tab.evaluate('await new Promise(r=>setTimeout(r,1100));true')
+                        self.assertEqual(tab.evaluate("document.getElementById('offline-status').textContent"), states[-1])
+                    self.assertEqual(states[0], states[1])
+                    tab.call('Page.close')
+            finally:
+                chrome.stop()
+
     def test_health_and_authentication_are_independent(self):
         user, _, _, _ = fixtures()
         client = Client()
