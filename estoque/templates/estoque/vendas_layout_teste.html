@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-{% load l10n %}
+{% load l10n static %}
 <html lang="pt-br">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1906,9 +1906,19 @@ td:first-child {
 }
 </style>
 
+<link rel="stylesheet" href="{% static 'offline/indicator.css' %}">
+<style>
+/* Reserve space for the shared indicator in the full-height desktop layout. */
+@media (min-width: 981px) {
+    body { height: 100vh; display: flex; flex-direction: column; }
+    #offline-global { flex: 0 0 auto; }
+    #layout-vendas { height: auto; flex: 1 1 0; min-height: 0; }
+}
+</style>
 </head>
 
 <body>
+{% include "estoque/includes/offline_global.html" %}
 
 {% include "estoque/includes/avisos_visitas_fornecedores.html" %}
 {% include "estoque/includes/avisos_cobrancas.html" %}
@@ -8916,6 +8926,7 @@ const operador = buscarCampoOperadorVenda();
 
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
+<script type="module" src="{% static 'offline/app.js' %}"></script>
 </body>
 </html>
 

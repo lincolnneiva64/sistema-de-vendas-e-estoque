@@ -1,0 +1,5 @@
+<section id="offline-global" class="offline-global" data-actor="{{ request.user.pk|default:'' }}" data-environment="{{ offline_environment_id }}" data-state="checking" aria-label="Conexão e sincronização">
+    <span id="offline-status" role="status" aria-live="polite">Verificando conexão…</span>
+    <button id="offline-global-sync" type="button" disabled hidden>Sincronizar agora</button>
+    <a href="/offline/">Detalhes offline</a>
+</section>

@@ -15,6 +15,54 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_sales_shared_indicator_layout_and_reload(self):
+        user, _, _, _ = fixtures()
+        client = Client()
+        client.force_login(user)
+        response = client.get('/vendas/')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'estoque/vendas_layout_teste.html')
+        self.assertTemplateUsed(response, 'estoque/includes/offline_global.html')
+        self.assertEqual(response.context['offline_environment_id'], 'offline-isolated-tests')
+        with TemporaryDirectory(prefix='offline-sales-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': "window.testErrors=[];addEventListener('error',e=>testErrors.push(e.message));addEventListener('unhandledrejection',e=>testErrors.push(String(e.reason)));"})
+                self.load(tab)
+                tab.evaluate("document.getElementById('offline-prepare').click()")
+                tab.wait("document.getElementById('offline-task').options.length === 1")
+                self.save(tab, 'Sales indicator test')
+                tab.wait("document.getElementById('offline-status').textContent.includes('/15 min)')")
+                started = tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).stable_since")
+                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                tab.wait("document.getElementById('offline-global')?.dataset.state === 'waiting'")
+                self.assertEqual(tab.evaluate('testErrors'), [])
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#offline-global').length"), 1)
+                for width in (1366, 390):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 900, 'deviceScaleFactor': 1, 'mobile': width == 390})
+                    self.assertTrue(tab.evaluate("(()=>{const i=document.getElementById('offline-global').getBoundingClientRect(),v=document.getElementById('layout-vendas').getBoundingClientRect();return i.height>0 && i.top>=0 && i.bottom<=v.top && document.documentElement.scrollWidth<=innerWidth})()"))
+                    self.assertTrue(tab.evaluate("performance.getEntriesByType('resource').some(e=>e.name.endsWith('/offline/indicator.css')) && performance.getEntriesByType('resource').some(e=>e.name.endsWith('/offline/app.js'))"))
+                    if width == 1366:
+                        self.assertTrue(tab.evaluate("document.getElementById('layout-vendas').getBoundingClientRect().bottom <= innerHeight + 1"))
+                tab.call('Page.reload')
+                tab.wait("document.getElementById('offline-global')?.dataset.state === 'waiting'")
+                self.assertEqual(tab.evaluate('testErrors'), [])
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                self.assertEqual(tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).stable_since"), started)
+                self.network(tab, True)
+                tab.wait("document.getElementById('offline-global').dataset.state === 'offline'")
+                self.network(tab, False)
+                tab.wait("document.getElementById('offline-global').dataset.state === 'waiting'")
+                tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
+                self.ready(tab)
+                tab.wait("document.getElementById('offline-status').textContent.includes('/15 min)')")
+                self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
+            finally:
+                chrome.stop()
+
     def test_shared_stability_navigation_reload_restart_and_gaps(self):
         user, _, task, _ = fixtures()
         client = Client()
