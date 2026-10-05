@@ -9,3 +9,4 @@
 .offline-global button:disabled {opacity:.55}
 .offline-global [hidden] {display:none}
 @media(max-width:575px) {.offline-global {gap:6px;font-size:12px}.offline-global #offline-status {flex-basis:100%;text-align:center}.offline-global button {min-height:44px}}
+.offline-global[data-state="auth"]{background:#fef3c7;color:#92400e;border-color:#fbbf24}

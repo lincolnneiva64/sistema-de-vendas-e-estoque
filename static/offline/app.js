@@ -4,6 +4,8 @@ const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
 const globalSync = document.getElementById('offline-global-sync');
 let notice = null, remoteSync = null;
+let authenticated = false;
+let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, stopped = false, progress = '', probing = false, leaving = false;
 const stability = new Stability();
@@ -20,8 +22,8 @@ function broadcast() {
 }
 function changed() { broadcast(); return render(); }
 function communicationScope() {
-    return {environment_id: globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id,
-        actor_id: globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id};
+    return {environment_id: globalIndicator ? globalIndicator.dataset.environment : (snapshot?.environment_id || healthEnvironment),
+        actor_id: globalIndicator ? globalIndicator.dataset.actor : (snapshot?.actor.id || 'anonymous')};
 }
 async function refreshCommunication(event = null) {
     const scope = communicationScope();
@@ -40,7 +42,7 @@ async function render() {
     const pending = scoped.filter(op => op.status !== 'confirmada');
     const ready = stability.ready(performance.now(), Date.now());
     const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
-        syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice});
+        syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
     if (badge) badge.textContent = state.label;
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
     if (globalSync) {
@@ -51,7 +53,7 @@ async function render() {
     if (!pilot) return;
     document.getElementById('offline-stability').textContent = stability.connected ? 'CONEXÃO ESTÁVEL HÁ ' + Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000) + ' MINUTOS · mínimo 15' : 'Comunicação com o servidor indisponível ou ainda não verificada.';
     const sendable = pending.filter(op => op.actor_id === snapshot?.actor.id && op.environment_id === snapshot?.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status));
-    document.getElementById('offline-sync').disabled = !ready || !sendable.length || syncing || !navigator.locks;
+    document.getElementById('offline-sync').disabled = !authenticated || !ready || !sendable.length || syncing || !navigator.locks;
     document.getElementById('offline-save').disabled = !snapshot || syncing || saving;
     document.getElementById('offline-prepare').disabled = syncing;
     const list = document.getElementById('offline-operations');
@@ -81,13 +83,17 @@ async function fetchTimed(url, options = {}) {
     finally { clearTimeout(timer); if (inFlight === controller) inFlight = null; }
 }
 async function probe() {
-    if (probing || (!snapshot && !globalIndicator)) return;
+    if (probing) return;
     probing = true;
     const started_at = Date.now();
     try {
         const response = await fetchTimed('/api/offline/health/');
-        if (!response.ok || !validHealth(await response.json(), (globalIndicator ? globalIndicator.dataset.environment : snapshot.environment_id))) throw new Error('Servidor indisponível ou ambiente/protocolo incompatível.');
+        const health = await response.json();
+        const environment = globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id;
+        if (!response.ok || typeof health.environment !== 'string' || !health.environment || !validHealth(health, environment || health.environment)) throw new Error('Servidor indisponível ou ambiente/protocolo incompatível.');
+        healthEnvironment = health.environment;
         await refreshCommunication({type: 'success', at: Date.now(), started_at});
+        await checkSession();
     } catch { if (!leaving) await failConnection(); }
     finally { probing = false; await render(); }
 }
@@ -101,9 +107,9 @@ function showTasks() {
 }
 async function prepare() {
     try {
-        await checkSession();
+        if (!await checkSession()) throw new Error('Autentique-se novamente para preparar. Fila preservada.');
         const response = await fetchTimed('/api/offline/snapshot/');
-        if (response.status === 401) throw new Error('Faça login online e volte para preparar. A fila existente foi preservada.');
+        if ([401, 403].includes(response.status)) { requireAuthentication(); throw new Error('Autentique-se novamente e confira sua permissão. Fila preservada.'); }
         if (!response.ok) throw new Error('Preparação recusada. Confira sua permissão e conexão.');
         const data = await response.json();
         if (data.protocol_version !== 1 || !data.actor?.id || !Array.isArray(data.tasks)) throw new Error('Snapshot inválido.');
@@ -127,22 +133,29 @@ async function prepare() {
     } catch (error) { message(error.message); }
 }
 async function checkSession() {
-    if (!pilot) return;
     const login = document.getElementById('offline-login');
     const status = document.getElementById('offline-session');
-    if (!login || !status) return;
     try {
         const response = await fetchTimed('/api/offline/session/');
         if (!response.ok) throw new Error('Sessão indisponível.');
         const data = await response.json();
+        authenticated = data.authenticated === true && data.can_prepare === true;
+        if (!login || !status) return authenticated;
         login.hidden = data.authenticated === true;
         status.textContent = data.authenticated
             ? `Autenticado como ${data.username}. ` + (data.can_prepare ? 'Pode preparar / atualizar dados online.' : 'Sem permissão para preparar dados do piloto.')
             : 'Autentique-se online para preparar / atualizar dados.';
     } catch {
-        login.hidden = false;
-        status.textContent = 'Não foi possível verificar a autenticação online. Dados locais preservados.';
+        requireAuthentication();
     }
+    return authenticated;
+}
+function requireAuthentication() {
+    authenticated = false;
+    const login = document.getElementById('offline-login');
+    const status = document.getElementById('offline-session');
+    if (login) login.hidden = false;
+    if (status) status.textContent = 'Autentique-se novamente e confira sua permissão. Dados locais preservados.';
 }
 async function save(event) {
     event.preventDefault();
@@ -162,6 +175,7 @@ async function save(event) {
 async function synchronize() {
     if (!snapshot || (globalIndicator && (snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment))) return;
     if (!navigator.locks || !stability.ready(performance.now(), Date.now()) || syncing) return;
+    if (!await checkSession()) { message('Autentique-se novamente e confira sua permissão. Fila preservada.'); await render(); return; }
     await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => {
         if (!lock) { message('Outra aba está sincronizando.'); return; }
         await refreshCommunication();
@@ -173,6 +187,7 @@ async function synchronize() {
         try {
             // Refresh session/CSRF online without overwriting the prepared snapshot.
             const session = await fetchTimed('/api/offline/snapshot/');
+            if ([401, 403].includes(session.status)) requireAuthentication();
             if (!session.ok) throw new Error('Autentique-se novamente e confira sua permissão. Fila preservada.');
             const identity = await session.json();
             if (identity.actor.id !== snapshot.actor.id || identity.environment_id !== snapshot.environment_id || identity.protocol_version !== 1) throw new Error('Usuário/ambiente diferente. Fila preservada.');
@@ -187,6 +202,7 @@ async function synchronize() {
                         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
                         body: JSON.stringify({...commandOf(operation), payload_hash: operation.payload_hash})});
                     if ([401, 403].includes(response.status)) {
+                        requireAuthentication();
                         await repo.put('operations', {...operation, status: 'erro', last_error: 'Sessão/permissão/CSRF: autentique-se novamente. Dados preservados.'});
                         stopped = true; message('Autenticação necessária. Fila preservada.'); break;
                     }
@@ -200,7 +216,11 @@ async function synchronize() {
                     await repo.record(operation, result); if (result.status === 'confirmada') confirmed++; await changed();
                 } catch (error) {
                     await repo.put('operations', {...operation, status: 'resultado_desconhecido', last_error: error.message + ' Reenviar o mesmo UUID após estabilidade.'});
-                    await failConnection(); message('Erro de sincronização. Dados preservados.'); break;
+                    // Preserve the existing new stability window after an uncertain send,
+                    // but let the health-check decide whether the server is offline.
+                    stopped = true;
+                    await repo.communication(communicationScope(), {type: 'failure', at: Date.now()});
+                    await probe(); message('Erro de sincronização. Dados preservados.'); break;
                 }
             }
             if (!stopped) {
@@ -240,7 +260,7 @@ async function start() {
         if (event.data?.type === 'changed' && event.data.actor === (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id) && event.data.environment === (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id)) { remoteSync = event.data.syncing ? event.data : null; notice = event.data.notice; }
         repo.get('snapshots', 'pilot').then(value => { snapshot = value; return render(); }).catch(error => message(error.message));
     });
-    window.addEventListener('offline', () => { void failConnection().catch(error => message(error.message)); });
+    window.addEventListener('offline', () => { void probe().catch(error => message(error.message)); });
     window.addEventListener('online', () => { void checkSession(); void probe(); });
     window.addEventListener('pagehide', () => { leaving = true; inFlight?.abort(); });
     window.addEventListener('pageshow', () => { leaving = false; void checkSession(); void probe(); });

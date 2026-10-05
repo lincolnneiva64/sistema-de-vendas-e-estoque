@@ -15,6 +15,54 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_health_and_authentication_are_independent(self):
+        user, _, _, _ = fixtures()
+        client = Client()
+        client.force_login(user)
+        with TemporaryDirectory(prefix='offline-classification-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                self.load(tab)
+                tab.wait("document.getElementById('offline-status').textContent.startsWith('ONLINE — autenticação')")
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.evaluate("window.dispatchEvent(new Event('online'))")
+                tab.wait("document.getElementById('offline-status').textContent === 'ONLINE'")
+                tab.evaluate("document.getElementById('offline-prepare').click()")
+                tab.wait("document.getElementById('offline-task').options.length === 1")
+                self.save(tab, 'Preservar durante autenticação')
+                operation = tab.evaluate("(await testRepo.all('operations'))[0]")
+                self.clock(tab)
+                self.advance_to_ready(tab)
+                for code in (401, 403):
+                    tab.evaluate(f"window.authFetch=window.authFetch||fetch;window.fetch=(u,o)=>u==='/api/offline/session/'?Promise.resolve(new Response('{{}}',{{status:{code}}})):authFetch(u,o);window.dispatchEvent(new Event('online'))")
+                    tab.wait("document.getElementById('offline-status').textContent.startsWith('ONLINE — autenticação')")
+                    self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
+                    self.assertEqual(tab.evaluate("(await testRepo.all('operations'))[0]"), operation)
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+                tab.evaluate("window.fetch=authFetch;window.dispatchEvent(new Event('online'))")
+                tab.wait("!document.getElementById('offline-sync').disabled")
+                self.assertEqual(tab.evaluate("(await testRepo.all('operations'))[0]"), operation)
+                offset = tab.evaluate('window.clockOffset')
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': f'const actualNow=Date.now;Date.now=()=>actualNow()+{offset};'})
+                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                tab.wait("document.getElementById('offline-global')?.dataset.state === 'ready'")
+                tab.evaluate("window.normalFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/session/'?Promise.resolve(new Response('{}',{status:401})):normalFetch(u,o);window.dispatchEvent(new Event('online'))")
+                tab.wait("document.getElementById('offline-global').dataset.state === 'auth'")
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('network failure')):normalFetch(u,o);window.dispatchEvent(new Event('online'))")
+                tab.wait("document.getElementById('offline-global').dataset.state === 'offline'")
+                tab.evaluate("window.fetch=normalFetch;window.dispatchEvent(new Event('online'))")
+                tab.wait("document.getElementById('offline-global').dataset.state === 'waiting'")
+                self.load(tab)
+                for width in (1366, 390):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 900, 'deviceScaleFactor': 1, 'mobile': width == 390})
+                    self.assertTrue(tab.evaluate("document.documentElement.scrollWidth <= innerWidth"))
+                    if width == 1366:
+                        self.assertTrue(tab.evaluate("document.getElementById('offline-save').getBoundingClientRect().top === document.getElementById('offline-sync').getBoundingClientRect().top"))
+            finally:
+                chrome.stop()
+
     def test_sales_shared_indicator_layout_and_reload(self):
         user, _, _, _ = fixtures()
         client = Client()
@@ -288,6 +336,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-message').textContent.includes('Autentique-se novamente')")
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).filter(o=>o.status==='pendente').length"), 1)
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': session_cookie, 'url': self.live_server_url, 'httpOnly': True})
+                tab.evaluate("window.dispatchEvent(new Event('online'))")
+                tab.wait("!document.getElementById('offline-sync').disabled")
                 # Missing task produces retained conflict.
                 task.delete()
                 tab.evaluate("document.getElementById('offline-sync').click()")

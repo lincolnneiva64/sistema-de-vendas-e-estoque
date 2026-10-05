@@ -10,9 +10,9 @@
 <p id="offline-stability"></p>
 <button id="offline-prepare" type="button">Preparar / atualizar dados online</button>
 <p id="offline-diagnostic"></p>
-<form id="offline-form"><label for="offline-task">Tarefa disponível neste dispositivo</label><select id="offline-task" required></select><label for="offline-note">Observação</label><textarea id="offline-note" required maxlength="2000" rows="4" placeholder="Ex.: Ligar antes de chegar."></textarea><button id="offline-save" disabled>Salvar neste dispositivo</button></form>
+<form id="offline-form"><label for="offline-task">Tarefa disponível neste dispositivo</label><select id="offline-task" required></select><label for="offline-note">Observação</label><textarea id="offline-note" required maxlength="2000" rows="2" placeholder="Ex.: Ligar antes de chegar."></textarea></form>
+<div class="offline-actions"><button id="offline-save" form="offline-form" disabled>Salvar neste dispositivo</button><button id="offline-sync" type="button" disabled>Sincronizar agora</button></div>
 <p id="offline-message" role="status" aria-live="polite"></p>
-<button id="offline-sync" type="button" disabled>Sincronizar agora</button>
 <h2>Fila e histórico</h2><ul id="offline-operations"></ul>
 <details><summary>Diagnóstico e recuperação</summary><p>Dispositivo: <span id="offline-device"></span></p><p id="offline-storage"></p><p>Preserve os dados do site. A exportação contém observações e identificadores pessoais; guarde-a em local protegido. Não contém senhas, cookies ou tokens.</p><button id="offline-export" type="button">Exportar fila e histórico (JSON)</button></details>
 </main><script type="module" src="/static/offline/app.js"></script></body></html>

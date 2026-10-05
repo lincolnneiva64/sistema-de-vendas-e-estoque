@@ -150,7 +150,7 @@ export function validReceipt(result, operation) {
 }
 
 // Both the detailed panel and the global indicator consume this projection.
-export function indicatorState({operations, stability, now, wall, syncing = false, progress = '', notice = null}) {
+export function indicatorState({operations, stability, now, wall, syncing = false, progress = '', notice = null, authenticated = true}) {
     const pending = operations.filter(op => op.status !== 'confirmada');
     const count = pending.length;
     const connected = stability.valid(now, wall);
@@ -158,13 +158,14 @@ export function indicatorState({operations, stability, now, wall, syncing = fals
     const sendable = pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
     const quantity = count + (count === 1 ? ' operação' : ' operações');
     let kind, label;
-    if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress + '\u2026'; }
+    if (!connected) { kind = 'offline'; label = count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente'; }
+    else if (!authenticated) { kind = 'auth'; label = 'ONLINE — autenticação necessária para preparar/sincronizar' + (count ? ' · ' + quantity + ' preservadas' : ''); }
+    else if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress + '\u2026'; }
     else if (pending.some(op => op.status === 'conflito')) { kind = 'conflict'; label = 'Conflito de sincronização — revisão necessária'; }
     else if (notice && notice.until > wall) { kind = notice.kind; label = notice.label; }
-    else if (!connected) { kind = 'offline'; label = count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente'; }
     else if (ready && sendable) { kind = 'ready'; label = 'Conexão estável — ' + quantity + (count === 1 ? ' pronta' : ' prontas') + ' para sincronizar'; }
     else if (pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
     else if (!ready && (count || stability.reconnecting)) { kind = 'waiting'; label = 'Conexão restabelecida — verificando estabilidade (' + Math.floor(stability.elapsed(now, wall) / 60000) + '/15 min)' + (count ? ' \u00b7 ' + quantity + (count === 1 ? ' pendente' : ' pendentes') : ''); }
     else { kind = 'online'; label = 'ONLINE'; }
-    return {kind, label, count, canSync: ready && sendable && !syncing};
+    return {kind, label, count, canSync: ready && authenticated && sendable && !syncing};
 }
