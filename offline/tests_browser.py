@@ -15,6 +15,93 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_checklist_visible_resume_observed_minutes(self):
+        self.checklist_resume_observed_minutes(suspend_probe=False)
+
+    def test_checklist_visible_resume_with_suspended_probe(self):
+        self.checklist_resume_observed_minutes(suspend_probe=True)
+
+    def checklist_resume_observed_minutes(self, suspend_probe):
+        from estoque.models import Venda, Cliente, EntregaRota, EntregaRotaItem
+        user, _, task, _ = fixtures()
+        sale = Venda.objects.create(data_venda=task.data_agendada, cliente=Cliente.objects.create(nome='Retomada'))
+        route = EntregaRota.objects.create(pk=136, tipo='unitaria')
+        EntregaRotaItem.objects.create(rota=route, venda=sale)
+        client = Client(); client.force_login(user)
+        # Drive the actual registered interval callbacks, not app.probe(), with a shared clock.
+        clock = """const realWall=Date.now;Date.now=()=>realWall()+Number(localStorage.getItem('resume-offset')||0);
+            window.monitorCallbacks=new Map();let timerSequence=0;
+            window.setInterval=(callback,delay)=>{const id=++timerSequence;monitorCallbacks.set(id,{callback,delay});return id};
+            window.clearInterval=id=>monitorCallbacks.delete(id);"""
+        setup = """const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());
+            window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;
+            window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};
+            window.realFetch=fetch;window.healthCalls=0;
+            window.fetch=(...args)=>{if(args[0]==='/api/offline/health/')healthCalls++;return realFetch(...args)};true"""
+        with TemporaryDirectory(prefix='offline-checklist-resume-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                def load(path):
+                    tab = chrome.tab()
+                    tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': clock})
+                    tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                    tab.call('Page.navigate', {'url':self.live_server_url+path})
+                    tab.wait("!!document.getElementById('offline-global')")
+                    tab.evaluate(setup)
+                    return tab
+                checklist = load('/entregas/136/checklist/')
+                checklist.wait("!!document.querySelector('[data-local-note]')")
+                checklist.evaluate("document.querySelector('[data-local-note] textarea').value='Retomar contador';document.querySelector('[data-local-note]').requestSubmit()")
+                checklist.wait("(await testRepo.all('operations')).length===1")
+                original = checklist.evaluate("JSON.stringify(await testRepo.all('operations'))")
+                def state(tab): return tab.evaluate('(await testRepo.communication(scope))')
+                def step(tab, amount=30000):
+                    before = state(tab)['last_success_at']
+                    tab.evaluate(f"localStorage.setItem('resume-offset',Number(localStorage.getItem('resume-offset')||0)+{amount});await Promise.all([...monitorCallbacks.values()].filter(timer=>timer.delay===30000).map(timer=>timer.callback()));true")
+                    tab.wait(f"(await testRepo.communication(scope)).last_success_at>{before}")
+                    tab.wait("document.querySelector('.offline-status-counter')?.textContent.trim()===" + repr(f"{state(tab)['observed_ms']//60000} de 15 minutos"))
+                for _ in range(8): step(checklist)
+                self.assertEqual(state(checklist)['observed_ms']//60000, 4)
+                # Suspend an old check at transport completion. Restoration must issue a fresh
+                # check immediately, even if the old promise has not settled yet.
+                if suspend_probe:
+                    checklist.evaluate("""window.fetch=(...args)=>args[0]==='/api/offline/health/'?
+                        new Promise((resolve,reject)=>window.releaseOldHealth=()=>reject(Error('old suspended check'))):realFetch(...args);
+                        window.oldProbe=app.probe();true""")
+                    checklist.wait('!!window.releaseOldHealth')
+                checklist.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
+                paused = state(checklist)
+                sales = load('/vendas/')
+                sales.call('Page.bringToFront')
+                sales.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
+                checklist.evaluate("localStorage.setItem('resume-offset',Number(localStorage.getItem('resume-offset')||0)+600000);for(const timer of monitorCallbacks.values())if(timer.delay===30000)timer.callback();true")
+                self.assertEqual(state(checklist)['observed_ms'], paused['observed_ms'])
+                checklist.call('Page.bringToFront')
+                calls_before_resume = checklist.evaluate('healthCalls')
+                checklist.evaluate("window.fetch=(...args)=>{if(args[0]==='/api/offline/health/')healthCalls++;return realFetch(...args)};Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
+                checklist.wait(f'healthCalls>{calls_before_resume}')
+                checklist.wait(f"(await testRepo.communication(scope)).last_success_at>{paused['last_success_at']}")
+                checklist.evaluate('await app.probe();true')  # Drain the immediate lifecycle check.
+                self.assertEqual(state(checklist)['observed_ms']//60000, 4)
+                resumed = state(checklist)
+                for minute in (5, 6):
+                    step(checklist); step(checklist)
+                    self.assertEqual(state(checklist)['observed_ms']//60000, minute)
+                self.assertEqual(state(checklist)['stable_since'], paused['stable_since'])
+                self.assertGreater(state(checklist)['observed_until'], resumed['last_success_at'])
+                self.assertGreaterEqual(checklist.evaluate('healthCalls'), 5)
+                # A late old failure cannot reset the new observation generation.
+                if suspend_probe:
+                    checklist.evaluate('releaseOldHealth();await oldProbe;true')
+                self.assertEqual(state(checklist)['observed_ms']//60000, 6)
+                sales.wait("document.querySelector('.offline-status-counter')?.textContent.trim()==='6 de 15 minutos'")
+                checklist.evaluate("window.fetch=(...args)=>args[0]==='/api/offline/health/'?Promise.reject(Error('real failure')):realFetch(...args);for(const timer of monitorCallbacks.values())if(timer.delay===30000)timer.callback();true")
+                checklist.wait("(await testRepo.communication(scope)).observed_ms===0")
+                self.assertEqual(checklist.evaluate("JSON.stringify(await testRepo.all('operations'))"), original)
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+            finally:
+                chrome.stop()
+
     def test_multi_tab_observed_stability(self):
         from estoque.models import Venda, Cliente, EntregaRota, EntregaRotaItem
         user, _, task, _ = fixtures()
@@ -341,8 +428,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v11') || keys.includes('offline-pilot-shell-v10'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v11');
+                    if(!keys.includes('offline-pilot-shell-v12') || keys.includes('offline-pilot-shell-v11'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v12');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;

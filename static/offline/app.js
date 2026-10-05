@@ -10,6 +10,7 @@ let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
 let observationGeneration = 0, observedSince = null;
+let probeGeneration = -1, healthController = null, monitorTimer = null;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 const modal = document.createElement('dialog');
@@ -134,7 +135,7 @@ async function failConnection() {
     await render();
 }
 async function fetchTimed(url, options = {}) {
-    const controller = new AbortController();
+    const controller = options.controller || new AbortController();
     if (options.synchronize) inFlight = controller;
     const timer = setTimeout(() => controller.abort(), POLICY.timeout);
     try {
@@ -146,7 +147,11 @@ async function fetchTimed(url, options = {}) {
 }
 export function probe() {
     // Concurrent callers await the complete health/session/storage/render cycle.
-    if (!probePending) probePending = performProbe().finally(() => { probePending = null; });
+    if (!probePending || probeGeneration !== observationGeneration) {
+        probeGeneration = observationGeneration;
+        const pending = performProbe().finally(() => { if (probePending === pending) probePending = null; });
+        probePending = pending;
+    }
     return probePending;
 }
 async function performProbe() {
@@ -154,10 +159,13 @@ async function performProbe() {
     const generation = observationGeneration;
     // Read the failure marker before starting: millisecond timestamp ties must not reject a genuinely new check.
     const previous = await repo.communication(communicationScope());
+    if (leaving || document.hidden || generation !== observationGeneration) return;
     const started_at = Date.now();
     let health;
+    const controller = new AbortController();
+    healthController = controller;
     try {
-        const response = await fetchTimed('/api/offline/health/');
+        const response = await fetchTimed('/api/offline/health/', {controller});
         health = await response.json();
         const environment = globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id;
         if (!response.ok || typeof health.environment !== 'string' || !health.environment || !validHealth(health, environment || health.environment)) throw new Error('Health-check inv\u00e1lido.');
@@ -167,14 +175,27 @@ async function performProbe() {
             await failConnection();
         }
         return;
+    } finally {
+        if (healthController === controller) healthController = null;
     }
     if (leaving || document.hidden || generation !== observationGeneration) return;
     healthEnvironment = health.environment;
     const at = Date.now();
     await refreshCommunication({type: 'success', at, started_at, observed_since: observedSince, failure_seen: previous.failed_at ?? null});
-    observedSince = at;
+    if (!leaving && !document.hidden && generation === observationGeneration) observedSince = at;
     await checkSession();
     await render();
+}
+function updateObservation() {
+    observationGeneration++;
+    observedSince = null;
+    healthController?.abort();
+    clearInterval(monitorTimer);
+    monitorTimer = null;
+    if (leaving || document.hidden) return;
+    // A resumed page owns a fresh monitor and cannot join a suspended old probe.
+    monitorTimer = setInterval(() => probe().catch(error => message(error.message)), POLICY.interval);
+    void probe().catch(error => message(error.message));
 }
 function showTasks() {
     if (!pilot) return;
@@ -367,10 +388,10 @@ async function start() {
     });
     window.addEventListener('offline', () => { void probe().catch(error => message(error.message)); });
     window.addEventListener('online', () => { void checkSession(); void probe(); });
-    window.addEventListener('pagehide', () => { leaving = true; observationGeneration++; observedSince = null; inFlight?.abort(); });
-    window.addEventListener('pageshow', () => { leaving = false; void checkSession(); void probe().then(() => probe()).catch(error => message(error.message)); });
-    document.addEventListener('visibilitychange', () => { observationGeneration++; observedSince = null; if (!document.hidden) void probe().then(() => probe()).catch(error => message(error.message)); });
-    setInterval(() => { void probe().catch(error => message(error.message)); }, POLICY.interval);
+    window.addEventListener('pagehide', () => { leaving = true; updateObservation(); inFlight?.abort(); });
+    window.addEventListener('pageshow', () => { leaving = false; void checkSession(); updateObservation(); });
+    document.addEventListener('visibilitychange', updateObservation);
+    updateObservation();
     setInterval(() => { if (syncing) broadcast(); if (stopped === false && syncing && !stability.valid(performance.now(), Date.now())) void probe().catch(error => message(error.message)); void render().catch(error => message(error.message)); }, 1000);
     await render(); await probe(); await render();
 }
