@@ -28,9 +28,8 @@ class FiltrosContasPagarTests(TestCase):
         paginas = {}
         for fornecedor in ['', str(garcia.pk), str(amazonia.pk), str(self.coca.pk)]:
             for inicio in ['', '2026-09-10']:
-                for situacao in ['todas', ContaPagar.STATUS_PARCIAL]:
-                    params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='', situacao=situacao)
-                    paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
+                params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='')
+                paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
         paginas[()] = self.client.get(self.url, secure=True).content
         requisicoes = []
         class Handler(BaseHTTPRequestHandler):
@@ -63,14 +62,15 @@ class FiltrosContasPagarTests(TestCase):
                         tab.call('Emulation.setDeviceMetricsOverride', dict(width=width, height=850, deviceScaleFactor=1, mobile=width == 390))
                         tab.call('Page.navigate', {'url': url})
                         tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ""')
-                        self.assertEqual(tab.evaluate('document.getElementById("cpFiltro_situacao").value'), 'todas')
-                        def esperar(count, fornecedor, situacao='todas', inicio=''):
-                            tab.wait('window.testParams && (window.testParams.fornecedor || "") === ' + json.dumps(fornecedor) + ' && (window.testParams.situacao || "todas") === ' + json.dumps(situacao) + ' && (window.testParams.data_inicio || "") === ' + json.dumps(inicio))
-                            tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ' + json.dumps(fornecedor) + ' && document.getElementById("cpFiltro_situacao").value === ' + json.dumps(situacao) + ' && document.getElementById("cpFiltro_data_inicio").value === ' + json.dumps(inicio))
+                        self.assertIsNone(tab.evaluate('document.getElementById("cpFiltro_situacao")'))
+                        def esperar(count, fornecedor, inicio=''):
+                            tab.wait('window.testParams && (window.testParams.fornecedor || "") === ' + json.dumps(fornecedor) + ' && (window.testParams.data_inicio || "") === ' + json.dumps(inicio))
+                            tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ' + json.dumps(fornecedor) + ' && document.getElementById("cpFiltro_data_inicio").value === ' + json.dumps(inicio))
                             tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,200));return true})()')
                             self.assertEqual(len(requisicoes), count + 1)
                             self.assertEqual(requisicoes[-1].get('fornecedor', ''), fornecedor)
-                            self.assertEqual(requisicoes[-1].get('situacao', 'todas'), situacao)
+                            self.assertNotIn('situacao', requisicoes[-1])
+                            self.assertNotIn('status', requisicoes[-1])
                             self.assertNotIn('q', requisicoes[-1])
                             if fornecedor:
                                 nome = Fornecedor.objects.get(pk=fornecedor).nome
@@ -102,13 +102,12 @@ class FiltrosContasPagarTests(TestCase):
                                 self.fail(f'{width=} {termo=} {clique=} {requisicoes=} DOM=' + str(tab.evaluate('({url:location.href,params:window.testParams,id:document.getElementById("cpFornecedorSelect").value,texto:document.getElementById("cpFornecedorBusca").value,foco:document.activeElement.id})')) + str(error))
                             self.assertEqual(tab.evaluate('sessionStorage.getItem("focoSubmit")'), 'cpFornecedorBusca')
                             self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_compra')
-                        for id, valor, situacao, inicio in [('cpFiltro_data_inicio', '2026-09-10', 'todas', '2026-09-10'), ('cpFiltro_situacao', ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PARCIAL, '2026-09-10')]:
-                            count = len(requisicoes)
-                            tab.evaluate('let e=document.getElementById(' + json.dumps(id) + ');e.value=' + json.dumps(valor) + ';e.dispatchEvent(new Event("change",{bubbles:true}))')
-                            esperar(count, str(self.coca.pk), situacao, inicio)
+                        count = len(requisicoes)
+                        tab.evaluate('let e=document.getElementById("cpFiltro_data_inicio");e.value="2026-09-10";e.dispatchEvent(new Event("change",{bubbles:true}))')
+                        esperar(count, str(self.coca.pk), '2026-09-10')
                         count = len(requisicoes)
                         tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.value="";e.dispatchEvent(new Event("input",{bubbles:true}))')
-                        esperar(count, '', ContaPagar.STATUS_PARCIAL, '2026-09-10')
+                        esperar(count, '', '2026-09-10')
                         count = len(requisicoes)
                         tab.evaluate('document.querySelector(".cp-filter-actions a").click()')
                         esperar(count, '')
@@ -172,8 +171,9 @@ class FiltrosContasPagarTests(TestCase):
                 self.assertEqual([c.pk for c in response.context['contas']],
                                  [c.pk for c in reload.context['contas']])
                 self.assertNotContains(response, 'Busca livre')
-                if response.context['situacao'] == 'todas':
-                    self.assertNotContains(response, '<strong>Situação:</strong>')
+                self.assertNotContains(response, '<strong>Situação:</strong>')
+                self.assertNotContains(response, 'name="situacao"')
+                self.assertNotContains(response, 'name="status"')
                 if not params:
                     self.assertNotContains(response, 'class="cp-results cp-results-filtered"')
                     self.assertEqual(response.context['situacao'], 'todas')
@@ -183,7 +183,7 @@ class FiltrosContasPagarTests(TestCase):
                     self.assertContains(response, 'Nenhuma conta corresponde aos filtros aplicados.')
 
     def test_browser_autocomplete_enter_autoaplicacao_e_responsividade(self):
-        antiga = self.client.get(self.url, {'q': 'Outro'}, secure=True)
+        antiga = self.client.get(self.url, {'q': 'Outro', 'situacao': ContaPagar.STATUS_PARCIAL}, secure=True)
         self.assertEqual([c.pk for c in antiga.context['contas']], [self.contas[3].pk])
         self.assertContains(antiga, '<strong>Busca:</strong> Outro')
         self.assertNotContains(antiga, 'name="q"')
@@ -210,20 +210,20 @@ class FiltrosContasPagarTests(TestCase):
                         tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.value="coc";e.dispatchEvent(new Event("input",{bubbles:true}));window.enter(e.id)')
                         tab.wait('window.submits.length === 1')
                         self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_compra')
-                        self.assertEqual(tab.evaluate('window.submits[0].situacao'), 'todas')
+                        self.assertNotIn('situacao', tab.evaluate('window.submits[0]'))
                         self.assertEqual(tab.evaluate('window.submits[0].fornecedor'), str(self.coca.pk))
                         enviados = tab.evaluate('window.submits[0]')
                         self.assertNotIn('q', enviados)
                         nova = self.client.get(self.url, enviados, secure=True)
                         self.assertEqual({c.pk for c in nova.context['contas']}, {c.pk for c in self.contas[:3]})
                         self.assertNotContains(nova, '<strong>Busca:</strong>')
-                        for origem, destino in [('cpFiltro_compra', 'cpFiltro_data_inicio'), ('cpFiltro_data_inicio', 'cpFiltro_data_fim'), ('cpFiltro_data_fim', 'cpFiltro_situacao'), ('cpFiltro_situacao', 'cpFiltro_situacao')]:
+                        for origem, destino in [('cpFiltro_compra', 'cpFiltro_data_inicio'), ('cpFiltro_data_inicio', 'cpFiltro_data_fim'), ('cpFiltro_data_fim', 'cpFiltro_data_fim')]:
                             tab.evaluate('window.enter(' + json.dumps(origem) + ')')
                             self.assertEqual(tab.evaluate('document.activeElement.id'), destino)
                         self.assertEqual(tab.evaluate('window.submits.length'), 1)
-                        self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_situacao')
+                        self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_data_fim')
                         # Simulate pageshow after each completed navigation; preserve the fields.
-                        for field, value in [('cpFiltro_compra', '28745'), ('cpFiltro_data_inicio', '2026-09-01'), ('cpFiltro_data_fim', '2026-09-30'), ('cpFiltro_situacao', ContaPagar.STATUS_PARCIAL), ('cpFiltro_situacao', 'todas')]:
+                        for field, value in [('cpFiltro_compra', '28745'), ('cpFiltro_data_inicio', '2026-09-01'), ('cpFiltro_data_fim', '2026-09-30')]:
                             count = tab.evaluate('window.submits.length')
                             tab.evaluate('window.dispatchEvent(new Event("pageshow"));')
                             if field == 'cpFiltro_compra':
@@ -236,7 +236,7 @@ class FiltrosContasPagarTests(TestCase):
                         tab.wait('window.submits.at(-1).fornecedor === ""')
                         self.assertEqual(tab.evaluate('window.submits.at(-1).data_inicio'), '2026-09-01')
                         self.assertEqual(tab.evaluate('window.submits.at(-1).compra'), '28745')
-                        self.assertTrue(tab.evaluate('window.submits.every(dados => !("q" in dados))'))
+                        self.assertTrue(tab.evaluate('window.submits.every(dados => !("q" in dados) && !("situacao" in dados) && !("status" in dados))'))
                         self.assertEqual(tab.evaluate('document.querySelector(".cp-filter-actions a").getAttribute("href")'), self.url)
             finally:
                 chrome.stop()
