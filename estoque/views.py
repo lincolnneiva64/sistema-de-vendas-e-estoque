@@ -28636,7 +28636,7 @@ def contas_pagar(request):
     data_fim = parse_date(request.GET.get("data_fim") or "")
     if data_inicio and data_fim and data_inicio > data_fim:
         data_inicio, data_fim = data_fim, data_inicio
-    situacao = (request.GET.get("situacao") or request.GET.get("status") or "abertas").strip()
+    situacao = (request.GET.get("situacao") or request.GET.get("status") or "todas").strip()
     atalho = (request.GET.get("atalho") or "").strip()
     hoje = timezone.localdate()
     amanha = hoje + timedelta(days=1)
@@ -28681,7 +28681,7 @@ def contas_pagar(request):
         ContaPagar.STATUS_CANCELADA,
     }
     if situacao not in situacoes_validas:
-        situacao = "abertas"
+        situacao = "todas"
 
     contas = contas_base
     periodo_tipo = "vencimento"

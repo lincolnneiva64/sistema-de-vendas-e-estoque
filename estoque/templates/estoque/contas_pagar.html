@@ -230,7 +230,7 @@
         <label for="cpFiltro_data_fim">Fim</label>
         <input type="date" id="cpFiltro_data_fim" name="data_fim" value="{{ data_fim }}">
       </div>
-      <div class="cp-field{% if situacao != 'abertas' or request.GET.situacao or request.GET.status %} cp-filter-active{% endif %}">
+      <div class="cp-field{% if situacao != 'todas' %} cp-filter-active{% endif %}">
         <label for="cpFiltro_situacao">Situacao</label>
         <select id="cpFiltro_situacao" name="situacao">
           {% for valor, texto in situacao_choices %}
@@ -238,21 +238,17 @@
           {% endfor %}
         </select>
       </div>
-      <div class="cp-field{% if termo %} cp-filter-active{% endif %}">
-        <label for="cpFiltro_q">Busca livre</label>
-        <input type="search" id="cpFiltro_q" name="q" value="{{ termo }}" placeholder="Fornecedor ou observacao">
-      </div>
       <div class="cp-filter-actions">
         <button type="submit" class="cp-btn ghost">Filtrar</button>
         <a href="{% url 'estoque:contas_pagar' %}" class="cp-btn secondary">Limpar</a>
       </div>
       {% if atalho %}<input type="hidden" name="atalho" value="{{ atalho }}">{% endif %}
     </form>
-    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %}
+    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}
       <div class="cp-active-summary" aria-label="Filtros aplicados aos resultados">
         <span class="cp-active-summary-title">Filtros ativos:</span>
         {% if fornecedor_id %}{% for fornecedor in fornecedores %}{% if fornecedor_id == fornecedor.id|stringformat:"s" %}<span class="cp-active-summary-item"><strong>Fornecedor:</strong> {{ fornecedor.nome }}</span>{% endif %}{% endfor %}{% endif %}
-        <span class="cp-active-summary-item"><strong>Situação:</strong> {% for valor, texto in situacao_choices %}{% if situacao == valor %}{{ texto }}{% endif %}{% endfor %}</span>
+        {% if situacao != 'todas' %}<span class="cp-active-summary-item"><strong>Situação:</strong> {% for valor, texto in situacao_choices %}{% if situacao == valor %}{{ texto }}{% endif %}{% endfor %}</span>{% endif %}
         {% if compra_documento %}<span class="cp-active-summary-item"><strong>Documento:</strong> {{ compra_documento }}</span>{% endif %}
         {% if data_inicio %}<span class="cp-active-summary-item"><strong>Início:</strong> {{ data_inicio }}</span>{% endif %}
         {% if data_fim %}<span class="cp-active-summary-item"><strong>Fim:</strong> {{ data_fim }}</span>{% endif %}
@@ -263,8 +259,8 @@
     <div class="cp-period-note">Para contas abertas/vencidas o periodo usa vencimento. Em Pagas ou Com juros, usa data efetiva do pagamento.</div>
   </section>
 
-  <div id="contasPagarResultados" class="cp-results{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %} cp-results-filtered{% endif %}" role="region" aria-label="Resultados de contas a pagar">
-    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %}<h2 class="cp-results-heading">Resultados filtrados: {{ contas|length }} conta{{ contas|length|pluralize:"s" }}</h2>{% endif %}
+  <div id="contasPagarResultados" class="cp-results{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %} cp-results-filtered{% endif %}" role="region" aria-label="Resultados de contas a pagar">
+    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}<h2 class="cp-results-heading">Resultados filtrados: {{ contas|length }} conta{{ contas|length|pluralize:"s" }}</h2>{% endif %}
   <section class="cp-card cp-desktop cp-table-wrap">
     <table class="cp-table">
       <thead>
@@ -365,7 +361,7 @@
             </tr>
           {% endif %}
         {% empty %}
-          <tr><td colspan="10" class="cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</td></tr>
+          <tr><td colspan="10" class="cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -440,7 +436,7 @@
         {% endif %}
       </article>
     {% empty %}
-      <div class="cp-mobile-card cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</div>
+      <div class="cp-mobile-card cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</div>
     {% endfor %}
   </section>
   </div>
@@ -1129,7 +1125,7 @@
     if (!filtrosForm) return;
     clearTimeout(filtroTimer);
     if (enviandoFiltros) return;
-    if (assinaturaFiltros() === filtrosAplicados) return;
+    if (!filtrosForm.checkValidity() || assinaturaFiltros() === filtrosAplicados) return;
     focoDepoisFiltro = typeof focoId === "string" ? focoId : document.activeElement?.id;
     if (typeof filtrosForm.requestSubmit === "function") {
       filtrosForm.requestSubmit();
@@ -1145,7 +1141,6 @@
   let navegandoFiltros = false;
   let focoDepoisFiltro = "";
   const chaveFocoFiltro = "contasPagar:foco:" + location.pathname;
-  const situacaoExplicita = {% if request.GET.situacao or request.GET.status %}true{% else %}false{% endif %};
   function assinaturaFiltros() { return new URLSearchParams(new FormData(filtrosForm)).toString(); }
   const filtrosAplicados = assinaturaFiltros();
   function guardarFocoFiltro() {
@@ -1179,7 +1174,7 @@
   function destacarFiltros() {
     filtrosForm.querySelectorAll(".cp-field").forEach(bloco => {
       const campo = bloco.querySelector("[name]");
-      bloco.classList.toggle("cp-filter-active", campo.name === "situacao" ? situacaoExplicita || campo.value !== "abertas" : Boolean(campo.value.trim()));
+      bloco.classList.toggle("cp-filter-active", campo.name === "situacao" ? campo.value !== "todas" : Boolean(campo.value.trim()));
     });
   }
   function fecharFornecedores() {
@@ -1280,7 +1275,7 @@
     });
   });
 
-  filtrosForm?.querySelectorAll("input[name='compra'], input[name='q']").forEach(function (campo) {
+  filtrosForm?.querySelectorAll("input[name='compra']").forEach(function (campo) {
     const inicial = campo.value;
     campo.addEventListener("input", () => {
       clearTimeout(filtroTimer);
@@ -1308,10 +1303,14 @@
       avancarFiltro(proximo);
     });
   });
+  document.getElementById("cpFiltro_situacao").addEventListener("keydown", event => {
+    if (event.key === "Enter") event.preventDefault();
+  });
   // Keyup deixa o select concluir sua seleção nativa antes de avançar.
   document.getElementById("cpFiltro_situacao").addEventListener("keyup", event => {
     if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
-    avancarFiltro("cpFiltro_q");
+    event.preventDefault();
+    enviarFiltros("cpFiltro_situacao");
   });
 
   function referenciaConta(botao) {
