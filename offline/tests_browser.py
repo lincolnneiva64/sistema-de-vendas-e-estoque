@@ -15,6 +15,81 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_background_checks_and_unobserved_resume(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-background-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': """
+                    window.timers=new Map();let timerId=0;
+                    window.setInterval=(callback,delay)=>{timers.set(++timerId,{callback,delay});return timerId};
+                    window.clearInterval=id=>timers.delete(id);
+                    const wall=Date.now;window.offset=0;Date.now=()=>wall()+offset;
+                    Object.defineProperty(document,'hidden',{value:false,configurable:true});
+                """})
+                tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
+                tab.wait("!!document.getElementById('offline-global')")
+                tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;
+                    const {Repository,openDB}=await import('/static/offline/core.js');window.r=new Repository(await openDB());
+                    window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};
+                    window.baseFetch=fetch;window.healthCalls=0;window.healthFetch=(u,o)=>{if(u==='/api/offline/health/')healthCalls++;return baseFetch(u,o)};window.fetch=healthFetch;true""")
+                def value(): return tab.evaluate('await r.communication(scope)')
+                def hide(hidden):
+                    tab.evaluate(f"Object.defineProperty(document,'hidden',{{value:{str(hidden).lower()},configurable:true}});document.dispatchEvent(new Event('visibilitychange'));true")
+                    if not hidden: tab.evaluate('await app.probe();true')
+                for _ in range(10): tab.evaluate('offset+=30000;await app.probe();true')
+                baseline = value()['observed_ms']
+                self.assertGreaterEqual(baseline, 300000)
+                # No callbacks during 30s, 2min or 10min: no invented time on return.
+                for gap in (30000, 120000, 600000):
+                    hide(True)
+                    tab.evaluate(f'offset+={gap};true')
+                    self.assertEqual(value()['observed_ms'], baseline)
+                    calls = tab.evaluate('healthCalls')
+                    hide(False)
+                    self.assertGreater(tab.evaluate('healthCalls'), calls)
+                    self.assertEqual(value()['observed_ms'], baseline)
+                    self.assertIsNone(value().get('failed_at'))
+                # Hidden does not stop actual health checks. Four proven intervals credit 2min.
+                hide(True)
+                for _ in range(4):
+                    tab.evaluate('offset+=30000;for(const t of timers.values())if(t.delay===30000)t.callback();await app.probe();true')
+                self.assertGreaterEqual(value()['observed_ms'], baseline+120000)
+                baseline = value()['observed_ms']
+                # A delayed unsuccessful response is suspension, not a suspicion.
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?new Promise((resolve,reject)=>window.rejectSleep=()=>reject(Error('sleep'))):baseFetch(u,o);window.sleepProbe=app.probe();true")
+                tab.wait('!!window.rejectSleep')
+                tab.evaluate('offset+=600000;rejectSleep();await sleepProbe;window.fetch=healthFetch;await app.probe();true')
+                self.assertEqual(value()['observed_ms'], baseline)
+                self.assertFalse(value().get('suspect_id'))
+                self.assertIsNone(value().get('failed_at'))
+                # A genuinely stalled old promise cannot block the first timer on wake.
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?new Promise(resolve=>window.releaseSleep=()=>resolve(new Response(JSON.stringify({})))):baseFetch(u,o);window.oldProbe=app.probe();true")
+                tab.wait('!!window.releaseSleep')
+                calls = tab.evaluate('healthCalls')
+                tab.evaluate('offset+=600000;window.fetch=healthFetch;await app.probe();releaseSleep();await oldProbe;true')
+                self.assertGreater(tab.evaluate('healthCalls'), calls)
+                self.assertEqual(value()['observed_ms'], baseline)
+                self.assertFalse(value().get('suspect_id'))
+                self.assertIsNone(value().get('failed_at'))
+                # Even a valid response delivered after sleep cannot prove the gap.
+                tab.evaluate("window.fetch=async(u,o)=>{const response=await healthFetch(u,o);if(u==='/api/offline/health/')offset+=600000;return response};await app.probe();window.fetch=healthFetch;await app.probe();true")
+                self.assertEqual(value()['observed_ms'], baseline)
+                self.assertFalse(value().get('suspect_id'))
+                # A real failure on visible resumption still needs confirmation.
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real resume failure')):baseFetch(u,o);true")
+                hide(False)
+                self.assertTrue(value().get('suspect_id'))
+                self.assertEqual(value()['observed_ms'], baseline)
+                tab.evaluate('offset+=5000;await app.probe();true')
+                self.assertEqual(value()['observed_ms'], 0)
+                self.assertIsNotNone(value().get('failed_at'))
+            finally:
+                chrome.stop()
+
     def test_legacy_reconnection_initializes_cursor_then_observes_full_window(self):
         user, _, _, _ = fixtures()
         client = Client(); client.force_login(user)
@@ -229,7 +304,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 sales = load('/vendas/')
                 sales.call('Page.bringToFront')
                 sales.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
-                checklist.evaluate("localStorage.setItem('resume-offset',Number(localStorage.getItem('resume-offset')||0)+600000);for(const timer of monitorCallbacks.values())if(timer.delay===30000)timer.callback();true")
+                # Model suspension: no monitor callback is delivered during the gap.
+                checklist.evaluate("localStorage.setItem('resume-offset',Number(localStorage.getItem('resume-offset')||0)+600000);true")
                 self.assertEqual(state(checklist)['observed_ms'], paused['observed_ms'])
                 checklist.call('Page.bringToFront')
                 calls_before_resume = checklist.evaluate('healthCalls')
@@ -299,6 +375,15 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     t.evaluate('await app.probe();true')
                     t.wait("document.querySelector('.offline-status-counter')?.textContent.trim()==='5 de 15 minutos'")
                 # Deterministic hidden/restored lifecycle (headless Chrome has no desktop minimize button).
+                first.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
+                tabs[1].evaluate("Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
+                shared_before = elapsed(first)
+                for _ in range(2):
+                    step(tabs[1])
+                    first.evaluate('await app.probe();true')
+                self.assertGreaterEqual(elapsed(first)-shared_before, 60000)
+                self.assertLess(elapsed(first)-shared_before, 62000)
+                # All tabs without callbacks: an unobserved gap must remain uncredited.
                 for t in tabs:
                     t.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));true")
                 paused = elapsed(first)
@@ -627,8 +712,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v15') || keys.includes('offline-pilot-shell-v14'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v15');
+                    if(!keys.includes('offline-pilot-shell-v16') || keys.includes('offline-pilot-shell-v15'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v16');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
@@ -1272,7 +1357,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-global-sync').disabled")
                 self.assertTrue(tab.evaluate("""const v=await other.communication(scope,{type:'success',at:Date.now(),started_at:Date.now(),observed_since:Date.now()-30000});
                     v.suspect_id!==null && v.observed_ms===""" + str(baseline)))
-                tab.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));offset+=30000;await app.probe();true")
+                tab.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));offset+=30000;true")
                 self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), baseline)
                 tab.evaluate("window.fetch=baseFetch;Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
                 self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), baseline)

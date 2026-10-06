@@ -10,7 +10,7 @@ let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
 let observationGeneration = 0, observedSince = null;
-let probeGeneration = -1, healthController = null, monitorTimer = null, confirmationTimer = null;
+let probeGeneration = -1, probeStartedAt = null, healthController = null, monitorTimer = null, confirmationTimer = null;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 const modal = document.createElement('dialog');
@@ -82,7 +82,7 @@ async function refreshCommunication(event = null) {
     stability.restore(value, performance.now(), Date.now());
     clearTimeout(confirmationTimer);
     confirmationTimer = null;
-    if (value.suspect_id && !leaving && !document.hidden) {
+    if (value.suspect_id && !leaving) {
         confirmationTimer = setTimeout(() => probe().catch(error => message(error.message)),
             Math.max(0, value.suspect_at + 5000 - Date.now()));
     }
@@ -152,20 +152,28 @@ async function fetchTimed(url, options = {}) {
     finally { clearTimeout(timer); if (inFlight === controller) inFlight = null; }
 }
 export function probe() {
+    if (probePending && probeGeneration === observationGeneration && probeStartedAt != null
+        && Date.now() - probeStartedAt > POLICY.maxGap) {
+        // An in-flight request can itself be frozen. Do not await it on wake.
+        observationGeneration++;
+        observedSince = null;
+        healthController?.abort();
+    }
     // Concurrent callers await the complete health/session/storage/render cycle.
     if (!probePending || probeGeneration !== observationGeneration) {
         probeGeneration = observationGeneration;
+        probeStartedAt = Date.now();
         const pending = performProbe().finally(() => { if (probePending === pending) probePending = null; });
         probePending = pending;
     }
     return probePending;
 }
 async function performProbe() {
-    if (leaving || document.hidden) return;
+    if (leaving) return;
     const generation = observationGeneration;
     // Read the failure marker before starting: millisecond timestamp ties must not reject a genuinely new check.
     const previous = await repo.communication(communicationScope());
-    if (leaving || document.hidden || generation !== observationGeneration) return;
+    if (leaving || generation !== observationGeneration) return;
     const started_at = Date.now();
     if (previous.suspect_id && started_at < previous.suspect_at + 5000) {
         await refreshCommunication();
@@ -173,6 +181,14 @@ async function performProbe() {
     }
     let health;
     const controller = new AbortController();
+    const startedMono = performance.now();
+    // A timeout delivered after the browser slept is not evidence of a network failure.
+    const interrupted = () => Date.now() - started_at > POLICY.timeout + 1000
+        || performance.now() - startedMono > POLICY.timeout + 1000;
+    const resume = () => {
+        observedSince = null;
+        setTimeout(() => { if (!leaving && generation === observationGeneration) void probe().catch(error => message(error.message)); }, 0);
+    };
     healthController = controller;
     try {
         const response = await fetchTimed('/api/offline/health/', {controller});
@@ -180,7 +196,8 @@ async function performProbe() {
         const environment = globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id;
         if (!response.ok || typeof health.environment !== 'string' || !health.environment || !validHealth(health, environment || health.environment)) throw new Error('Health-check inv\u00e1lido.');
     } catch {
-        if (!leaving && !document.hidden && generation === observationGeneration) {
+        if (!leaving && generation === observationGeneration) {
+            if (interrupted()) { resume(); return; }
             observedSince = null;
             await failConnection(previous.suspect_id
                 ? {type: 'confirmation', suspect_id: previous.suspect_id, ok: false, at: Date.now(), started_at}
@@ -190,13 +207,14 @@ async function performProbe() {
     } finally {
         if (healthController === controller) healthController = null;
     }
-    if (leaving || document.hidden || generation !== observationGeneration) return;
+    if (leaving || generation !== observationGeneration) return;
+    if (interrupted()) { resume(); return; }
     healthEnvironment = health.environment;
     const at = Date.now();
     await refreshCommunication(previous.suspect_id
         ? {type: 'confirmation', suspect_id: previous.suspect_id, ok: true, at, started_at}
         : {type: 'success', at, started_at, observed_since: observedSince, failure_seen: previous.failed_at ?? null});
-    if (!leaving && !document.hidden && generation === observationGeneration) observedSince = at;
+    if (!leaving && generation === observationGeneration) observedSince = at;
     await checkSession();
     await render();
 }
@@ -204,14 +222,17 @@ function updateObservation() {
     clearTimeout(confirmationTimer);
     confirmationTimer = null;
     observationGeneration++;
-    observedSince = null;
+    // Hidden pages may keep validating. Keep their last proven endpoint; the
+    // repository caps every credited interval at maxGap. Visible resumption
+    // always starts with a fresh health-check and no unobserved time credit.
+    if (leaving || !document.hidden) observedSince = null;
     healthController?.abort();
     clearInterval(monitorTimer);
     monitorTimer = null;
-    if (leaving || document.hidden) return;
+    if (leaving) return;
     // A resumed page owns a fresh monitor and cannot join a suspended old probe.
     monitorTimer = setInterval(() => probe().catch(error => message(error.message)), POLICY.interval);
-    void probe().catch(error => message(error.message));
+    if (!document.hidden) void probe().catch(error => message(error.message));
 }
 function showTasks() {
     if (!pilot) return;
