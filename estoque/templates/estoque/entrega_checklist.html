@@ -5,6 +5,12 @@
   .check-page { min-height: 100vh; background: #f4f6f9; color: #172033; padding: 12px 0 96px; overflow-x: hidden; }
   .check-page * { box-sizing: border-box; }
   .check-shell { width: min(720px, calc(100vw - 16px)); margin: 0 auto; }
+  .check-offline-history { margin: 8px 0 18px; border: 1px solid #bbd7c8; border-radius: 8px; background: #f0fdf4; color: #254537; }
+  .check-offline-history summary { min-height: 44px; padding: 12px; cursor: pointer; font-size: .9rem; font-weight: 700; }
+  .check-offline-history-list { padding: 0 12px 12px; max-height: 320px; overflow-y: auto; }
+  .check-offline-history article + article { margin-top: 12px; padding-top: 12px; border-top: 1px solid #bbd7c8; }
+  .check-offline-history-meta { font-size: .8rem; color: #52665b; overflow-wrap: anywhere; }
+  .check-offline-history-text { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .9rem; }
   .check-header {
     background: #ffffff; border: 1px solid #e0e7ef; border-radius: 14px;
     box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06); padding: 14px;
@@ -794,6 +800,19 @@
       {% for item_rota in itens_entrega %}
         <h2>Observação adicional — venda #{{ item_rota.venda_id }}</h2>
         <section data-checklist-task="{{ item_rota.pk }}" data-checklist-kind="entrega_venda" data-rota-id="{{ rota.pk }}" data-venda-id="{{ item_rota.venda_id }}"></section>
+        {% if item_rota.observacoes_sincronizadas %}
+          <details class="check-offline-history" data-synced-history="{{ item_rota.pk }}">
+            <summary>Observações já sincronizadas ({{ item_rota.observacoes_sincronizadas|length }})</summary>
+            <div class="check-offline-history-list">
+              {% for observacao in item_rota.observacoes_sincronizadas %}
+                <article>
+                  <div class="check-offline-history-meta"><time datetime="{{ observacao.criado_em|date:'c' }}">{{ observacao.criado_em|date:"d/m/Y H:i" }}</time>{% if observacao.usuario %} — {{ observacao.usuario }}{% endif %}</div>
+                  <p class="check-offline-history-text">{{ observacao.texto }}</p>
+                </article>
+              {% endfor %}
+            </div>
+          </details>
+        {% endif %}
       {% endfor %}
     </section>
     {% include 'locacoes/includes/offline_checklist.html' with offline_indicator_present=True %}

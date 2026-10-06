@@ -328,9 +328,50 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                         tab.wait("!!document.querySelector('[data-local-note]') && !document.body.dataset.localChecklist && document.getElementById('offline-status').dataset.state!=='checking' && !document.querySelector('[data-offline-blocked]')")
                     except AssertionError:
                         self.fail(str(tab.evaluate("({path:location.pathname,local:document.body.dataset.localChecklist,status:document.getElementById('offline-status').outerHTML,blocked:[...document.querySelectorAll('[data-offline-blocked]')].map(e=>e.outerHTML)})")))
+                    if event_model is EventoVenda:
+                        tab.wait("document.querySelectorAll('[data-synced-history] article').length===1")
+                        self.assertEqual(tab.evaluate("document.querySelector('.check-offline-history-text').textContent"), 'Observação da rota real')
+                        self.assertEqual(tab.evaluate("document.querySelector('[data-local-note] textarea').value"), '')
+                        self.assertTrue(tab.evaluate("document.querySelector('[data-checklist-task] summary').textContent.startsWith('0 pendência')"))
                 finally:
                     chrome.stop()
             print(f'Chrome OK: {path} — online, offline, observação local, refresh, pendência, reconexão e sincronização manual; dados físicos preservados.', flush=True)
+
+    def test_delivery_synced_history_mobile_and_local_queue_independent(self):
+        from estoque.models import Cliente, EntregaRota, EntregaRotaItem, EventoVenda, Venda
+        user, _, task, _ = fixtures()
+        sale = Venda.objects.create(data_venda=task.data_agendada, cliente=Cliente.objects.create(nome='Histórico mobile'))
+        route = EntregaRota.objects.create(tipo='unitaria')
+        item = EntregaRotaItem.objects.create(rota=route, venda=sale)
+        text = 'Texto sincronizado: ' + 'observação' * 100 + '\nSegunda linha'
+        EventoVenda.objects.create(venda=sale, tipo_evento='observacao_offline', canal='offline',
+            usuario='Lincoln', descricao=f'Rota #{route.pk}, bloco #{item.pk}: {text}')
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-history-mobile-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.call('Page.navigate', {'url': self.live_server_url + f'/entregas/{route.pk}/checklist/'})
+                tab.wait("!!document.querySelector('[data-local-note]')")
+                self.assertFalse(tab.evaluate("document.querySelector('[data-synced-history]').open"))
+                self.assertEqual(tab.evaluate("document.querySelector('.check-offline-history-text').textContent"), text)
+                self.assertTrue(tab.evaluate("document.querySelector('[data-checklist-task] summary').textContent.startsWith('0 pendência')"))
+                tab.evaluate("document.querySelector('[data-local-note] textarea').value='Nova nota local independente';document.querySelector('[data-local-note]').requestSubmit()")
+                tab.wait("document.querySelector('[data-checklist-task] summary').textContent.startsWith('1 pendência')")
+                for width in (1366, 390, 320):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': width < 600})
+                    tab.evaluate("document.querySelector('[data-synced-history] summary').click()")
+                    self.assertTrue(tab.evaluate("document.querySelector('[data-synced-history]').open"))
+                    self.assertTrue(tab.evaluate("(()=>{const h=document.querySelector('[data-synced-history]'),r=h.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&h.scrollWidth<=h.clientWidth&&document.documentElement.scrollWidth<=innerWidth&&!h.querySelector('form,input,textarea,button')})()"))
+                    self.assertEqual(tab.evaluate("document.querySelectorAll('[data-synced-history] article').length"), 1)
+                    self.assertEqual(tab.evaluate("document.querySelector('[data-local-note] textarea').value"), '')
+                    tab.evaluate("document.querySelector('[data-synced-history] summary').click()")
+                    self.assertFalse(tab.evaluate("document.querySelector('[data-synced-history]').open"))
+                self.assertEqual(EventoVenda.objects.filter(tipo_evento='observacao_offline').count(), 1)
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+            finally:
+                chrome.stop()
 
     def test_rental_checklist_local_note_refresh_and_manual_sync(self):
         user, rental, task, _ = fixtures()

@@ -21205,6 +21205,23 @@ def entrega_rota_checklist(request, pk):
     itens_entrega = [item_rota for item_rota in rota.itens.all() if entrega_rota_item_ativo(item_rota)]
     salvo_item_id = request.GET.get("salvo_item", "")
     salvo_fase = request.GET.get("salvo_fase", "")
+    # The existing offline writer stores route/block in this exact description prefix.
+    # One read for the route, then associate by sale AND full context (never substrings).
+    historicos_offline = {}
+    for item_rota in itens_entrega:
+        item_rota.observacoes_sincronizadas = []
+        historicos_offline[(item_rota.venda_id, f"Rota #{rota.id}, bloco #{item_rota.id}")] = item_rota.observacoes_sincronizadas
+    eventos_offline = EventoVenda.objects.filter(
+        venda_id__in=[item_rota.venda_id for item_rota in itens_entrega],
+        tipo_evento="observacao_offline",
+        canal="offline",
+        descricao__startswith=f"Rota #{rota.id}, bloco #",
+    ).order_by("-criado_em", "-id").values("venda_id", "descricao", "criado_em", "usuario")
+    for evento in eventos_offline:
+        contexto, separador, texto = evento["descricao"].partition(": ")
+        historico = historicos_offline.get((evento["venda_id"], contexto))
+        if separador and historico is not None:
+            historico.append({"texto": texto, "criado_em": evento["criado_em"], "usuario": evento["usuario"]})
     eventos_checklist_cliente = list(
         EventoVenda.objects.filter(
             venda_id__in=[item_rota.venda_id for item_rota in itens_entrega],
