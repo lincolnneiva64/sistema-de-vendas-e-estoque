@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Vendas - Layout Teste</title>
+    <script>window.salesOffline = {shell: {{ offline_sales_shell|yesno:'true,false' }}, active: {{ offline_sales_shell|yesno:'true,false' }} || !navigator.onLine};</script>
     {% csrf_token %}
 
     <style>
+    body[data-sales-offline="true"] .vendas-pendencias-lateral,
+    body[data-sales-offline="true"] .cobrancas-vendas-lateral,
+    body[data-sales-offline="true"] #locacoesOperacionaisVenda,
+    body[data-sales-offline="true"] #vendaGravadaBloco,
+    body[data-sales-offline="true"] #atalho-despesa-global,
+    body[data-sales-offline="true"] #revisaoPrecosPosterior,
+    body[data-sales-offline="true"] #conferenciaEstoqueContador,
+    body[data-sales-offline="true"] #btnVisualizarVenda,
+    body[data-sales-offline="true"] .cancelamento-nota-grupo { display:none !important; }
     body {
     font-family: "Segoe UI", Arial, sans-serif;
     margin: 0;
@@ -3541,6 +3551,7 @@ function numeroEstoqueVendaNormal(opcao) {
 }
 
 function produtoVendaNormalEstoqueZerado() {
+    if (window.salesOffline.active) return false;
     const opcao = vendaProdutoSelecionadoOption();
     if (!opcao || !opcao.value) return false;
     return numeroEstoqueVendaNormal(opcao) <= 0;
@@ -3837,6 +3848,7 @@ function ocultarHistoricoProdutoCliente() {
 }
 
 function renderizarHistoricoProdutoCliente(historico) {
+    if (window.salesOffline.active) { ocultarHistoricoProdutoCliente(); return; }
     if (!historicoProdutoCliente) return;
     historicoProdutoCliente.classList.remove("sem-historico");
     historicoProdutoCliente.style.display = "inline-block";
@@ -3851,6 +3863,7 @@ function renderizarHistoricoProdutoCliente(historico) {
 }
 
 function atualizarHistoricoProdutoCliente(optionProduto = null) {
+    if (window.salesOffline.active) { ocultarHistoricoProdutoCliente(); return; }
     const optionSelecionada = optionProduto || produto.options[produto.selectedIndex];
     const produtoIdSelecionado = optionSelecionada?.dataset?.produtoId || "";
     if (!clienteSelecionadoValido() || !produtoIdSelecionado) {
@@ -3979,6 +3992,7 @@ function obterClienteResumoFinanceiro(clientePreview) {
 }
 
 function guardarClienteSelecionado(cliente) {
+    if (window.salesOffline.active) return;
     if (!cliente?.id) return;
     try {
         sessionStorage.setItem(clienteResumoStorageKey, JSON.stringify(cliente));
@@ -3995,6 +4009,7 @@ function esquecerClienteSelecionado() {
 }
 
 function recuperarClienteSelecionadoCache() {
+    if (window.salesOffline.active) return null;
     try {
         const cliente = JSON.parse(sessionStorage.getItem(clienteResumoStorageKey) || "null");
         return cliente && cliente.id ? cliente : null;
@@ -4031,6 +4046,7 @@ function navegarResumoFinanceiroCliente(e) {
 }
 
 function atualizarResumoFinanceiroCliente(cliente) {
+    if (window.salesOffline.active) { clienteResumo.style.display = 'none'; return; }
     if (!clienteResumoFinanceiro) return;
     clienteResumoFinanceiro.innerHTML = "";
 
@@ -4471,6 +4487,11 @@ window.addEventListener("pageshow", function () {
 });
 
 function atualizarCabecalhoCliente(cliente) {
+    if (window.salesOffline.active) {
+        clienteResumo.classList.remove('visivel');
+        clienteResumo.style.display = 'none';
+        return;
+    }
     clienteResumoNome.textContent = cliente.nome || "-";
     clienteResumoLimite.textContent = formatarLimiteCliente(cliente.limite);
     clienteResumoStatus.textContent = normalizarStatusCliente(cliente.status);
@@ -4580,7 +4601,7 @@ function renderizarSugestoesClientes() {
 
         const meta = document.createElement("span");
         meta.className = "cliente-sugestao-meta";
-        meta.textContent = normalizarStatusCliente(cliente.status);
+        meta.textContent = window.salesOffline.active ? 'Dados locais de referência' : normalizarStatusCliente(cliente.status);
 
         item.appendChild(nome);
         item.appendChild(meta);
@@ -4650,9 +4671,24 @@ function renderizarSugestoesClientes() {
 
 let clienteBuscaTimer = null;
 const clienteBuscaCache = new Map();
+document.addEventListener('sales-offline-active', async () => {
+    clienteBuscaCache.clear();
+    clientesSugestoes = [];
+    clienteSugestoesBox.replaceChildren();
+    clienteResumo.classList.remove('visivel');
+    clienteResumo.style.display = 'none';
+    ocultarHistoricoProdutoCliente();
+    if (!window.salesOffline.available) limparClienteSelecionado();
+    else if (clienteId.value) {
+        const local = (await window.salesOffline.clients('')).find(c => String(c.id) === String(clienteId.value));
+        if (local) preencherResumoCliente(local);
+        else limparClienteSelecionado();
+    }
+});
 let clientesVendaPrecarregados = false;
 
 function precarregarClientesVendaMobile() {
+    if (window.salesOffline.active) return;
     if (clientesVendaPrecarregados) return;
     clientesVendaPrecarregados = true;
 
@@ -4696,6 +4732,7 @@ function filtrarClientesCache(texto) {
 }
 
 function renderizarClientesDoCache(texto) {
+    if (window.salesOffline.active) return false;
     const termo = texto.trim();
     const cacheExato = clienteBuscaCache.get(normalizarTextoCliente(termo));
     const listaCache = cacheExato || filtrarClientesCache(termo);
@@ -4711,6 +4748,13 @@ function renderizarClientesDoCache(texto) {
 }
 
 async function buscarClientes(texto, opcoes = {}) {
+    if (window.salesOffline.active || !navigator.onLine) {
+        await window.salesOffline.ready;
+        clientesSugestoes = ordenarClientesAutocomplete(await window.salesOffline.clients(texto), texto).slice(0, 30);
+        clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
+        renderizarSugestoesClientes();
+        return;
+    }
     const termoSolicitado = texto.trim();
     const termoNormalizado = normalizarTextoCliente(termoSolicitado);
 
@@ -4735,6 +4779,7 @@ async function buscarClientes(texto, opcoes = {}) {
         if (normalizarTextoCliente(clienteBusca.value) !== termoNormalizado) {
             return;
         }
+        if (window.salesOffline.active) return buscarClientes(texto);
 
         const listaServidor = dados.clientes || [];
         clienteBuscaCache.set(termoNormalizado, listaServidor);
@@ -4748,14 +4793,18 @@ async function buscarClientes(texto, opcoes = {}) {
         renderizarSugestoesClientes();
     } catch (erro) {
         if (erro.name !== "AbortError") {
-            clientesSugestoes = [];
-            clienteIndexAtivo = -1;
+            if (erro instanceof TypeError || !navigator.onLine) {
+                await window.salesOffline.activate();
+                clientesSugestoes = ordenarClientesAutocomplete(await window.salesOffline.clients(texto), texto).slice(0, 30);
+            } else clientesSugestoes = [];
+            clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
             renderizarSugestoesClientes();
         }
     }
 }
 
 async function atualizarClienteSelecionadoDoServidor(clienteBase) {
+    if (window.salesOffline.active) return;
     if (!clienteBase?.id) return;
 
     const clienteIdSolicitado = String(clienteBase.id);
@@ -4766,6 +4815,7 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase) {
         });
         const dados = await resposta.json();
         const clienteAtualizado = (dados.clientes || [])[0];
+        if (window.salesOffline.active) return;
         if (
             clienteAtualizado
             && clienteSelecionado?.id
@@ -5386,7 +5436,7 @@ function criarTextoEstoqueSnapshotVenda(item) {
 
     const unidade = String(item.estoque_unidade_snapshot || item.unidade || "").trim();
     const sufixoUnidade = unidade ? ` ${unidade}` : "";
-    return `Est: ${formatarQuantidadeSnapshotVenda(item.estoque_antes)}${sufixoUnidade}`;
+    return `${window.salesOffline.active ? 'Estoque de referência' : 'Est'}: ${formatarQuantidadeSnapshotVenda(item.estoque_antes)}${sufixoUnidade}`;
 }
 
 function classeBadgeItemVenda(item) {
@@ -5696,6 +5746,7 @@ function classeBadgeConferenciaEstoque(opt) {
 
 function aplicarEstadoConferenciaEstoquePreview(opt) {
     if (!estoquePreview) return;
+    if (window.salesOffline.active) estoquePreview.textContent = estoquePreview.textContent.replace(/^Estoque:/, 'Estoque de referência:');
     estoquePreview.classList.remove("estoque-conferido", "estoque-nao-conferido");
     estoquePreview.style.background = "";
     estoquePreview.style.borderColor = "";
@@ -5876,6 +5927,7 @@ function renderizarModalConferenciaEstoque(dados) {
 }
 
 function abrirModalConferenciaEstoque(opt) {
+    if (window.salesOffline.active) return;
     const produtoId = opt?.dataset?.produtoId;
     if (!produtoId || !modalConferenciaEstoque || conferenciaEstoqueRequisicaoEmAndamento) return;
     conferenciaEstoqueOptionAtual = opt;
@@ -5920,6 +5972,7 @@ function fecharModalConferenciaEstoque() {
 }
 
 async function enviarConferenciaEstoque(url, payload, mensagemSucesso) {
+    if (window.salesOffline.active || !navigator.onLine) return;
     if (!conferenciaEstoqueProdutoAtualId || conferenciaEstoqueRequisicaoEmAndamento) return;
     mostrarFeedbackConferenciaEstoque("Salvando...");
     bloquearAcoesConferenciaEstoque(true);
@@ -6123,6 +6176,7 @@ function mensagemEstoqueInsuficienteVenda(produtoOption, quantidadeSolicitada, u
 }
 
 function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
+    if (window.salesOffline.active) return true;
     const produtoNome = (produto.value || produtoBusca.value || "").trim();
     const produtoOption = obterProdutoOptionVenda(produtoNome);
     const qtdNumero = parseFloat(normalizarNumeroVenda(quantidade.value));
@@ -6492,6 +6546,10 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
 }
 /* ===== FIM PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
 function adicionarItemVendaAtual() {
+    if (window.salesOffline.active && !window.salesOffline.available) {
+        mostrarToastVenda('Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas.');
+        return false;
+    }
     garantirTipoVendaEdicaoConsumoProprio();
 
     const produtoNome = (produtoBusca.value || "").trim();
@@ -6635,6 +6693,10 @@ preco.addEventListener("keydown", (e) => {
 preco.addEventListener("input", atualizarCustoMargemVenda);
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual(dadosVendaConfirmados) {
+    if (window.salesOffline.active || !navigator.onLine) {
+        mostrarErroGravacaoVenda('Venda offline ainda não pode ser concluída nesta etapa.');
+        return;
+    }
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
 
     garantirTipoVendaEdicaoConsumoProprio();
@@ -7650,6 +7712,13 @@ function resetarAutocompleteProduto() {
 }
 
 function filtrarProdutos(texto) {
+  if (window.salesOffline.active) {
+    const normalizar = valor => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const termoLocal = normalizar(texto);
+    sugestoes = Array.from(produto.options).filter(opt => opt.value && normalizar(opt.value + ' ' + (opt.dataset.codigo || '')).includes(termoLocal));
+    indexAtivo = sugestoes.length ? 0 : -1;
+    return;
+  }
   const termo = texto.toLowerCase().trim();
   const primeiraLetra = termo.charAt(0);
 
@@ -7699,8 +7768,10 @@ function renderSugestoes() {
     const precoConferido = opt.dataset.precoConferido === "true";
     const classeEstoque = classeBadgeConferenciaEstoque(opt);
 
-    const regex = termo ? new RegExp(`(${termo})`, "i") : null;
-    const textoHighlight = regex ? texto.replace(regex, `<strong>$1</strong>`) : texto;
+    const regex = !window.salesOffline.active && termo ? new RegExp(`(${termo})`, "i") : null;
+    const textoHighlight = window.salesOffline.active
+        ? texto.replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]))
+        : regex ? texto.replace(regex, `<strong>$1</strong>`) : texto;
 
     div.innerHTML = `
     <span class="nome-item-sugestao">${textoHighlight}</span>
@@ -7713,6 +7784,10 @@ function renderSugestoes() {
 `;
 
     const badgeEstoqueSugestao = div.querySelector(".estoque-item-sugestao");
+    if (window.salesOffline.active) {
+        div.querySelector('.nome-item-sugestao').textContent = texto;
+        if (badgeEstoqueSugestao) badgeEstoqueSugestao.textContent = 'Estoque de referência: ' + estoque;
+    }
     if (badgeEstoqueSugestao) {
         badgeEstoqueSugestao.addEventListener("mousedown", (evento) => {
             evento.preventDefault();
@@ -7845,7 +7920,7 @@ produto.value = opt.value;
 produtoBusca.value = opt.value;
 
 const estoqueProdutoSelecionado = parseFloat(String(opt.dataset.estoque || "0").replace(",", "."));
-if (!isNaN(estoqueProdutoSelecionado) && estoqueProdutoSelecionado <= 0) {
+if (!window.salesOffline.active && !isNaN(estoqueProdutoSelecionado) && estoqueProdutoSelecionado <= 0) {
     quantidade.value = "";
     unidade.innerHTML = "";
     preco.value = "";
@@ -7876,11 +7951,11 @@ const unidade2 = opt.dataset.unidade2 || "";
 const fracionado = opt.dataset.fracionado === "true";
 
 if (unidade1) {
-    unidade.innerHTML += `<option value="${unidade1}">${unidade1}</option>`;
+    unidade.add(new Option(unidade1, unidade1));
 }
 
 if (fracionado && unidade2) {
-    unidade.innerHTML += `<option value="${unidade2}">${unidade2}</option>`;
+    unidade.add(new Option(unidade2, unidade2));
 }
 
 unidade.value = unidade1;
@@ -8927,6 +9002,7 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="{% static 'offline/app.js' %}?v=7"></script>
+<script type="module" src="{% static 'offline/sales.js' %}"></script>
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }

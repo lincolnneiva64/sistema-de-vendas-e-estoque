@@ -16,6 +16,18 @@ from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, vali
 from .commercial import build_commercial_snapshot
 
 
+@require_GET
+def sales_shell(request):
+    # Deliberately render without request/context processors: no session, CSRF,
+    # customer, financial or user data may enter the shared worker cache.
+    from django.template.loader import get_template
+    html = get_template('estoque/vendas_layout_teste.html').render({
+        'offline_sales_shell': True, 'offline_environment_id': environment_id(request), 'cliente_inicial': None,
+        'pedido_importado': None, 'venda_edicao': None,
+    })
+    return HttpResponse(html)
+
+
 def environment_id(request):
     return settings.OFFLINE_ENVIRONMENT_ID or request.get_host().lower()
 

@@ -287,6 +287,13 @@ async function performSessionCheck(generation) {
         const data = await response.json();
         if (generation !== sessionGeneration) return sessionPending;
         authenticated = data.authenticated === true && data.can_prepare === true;
+        if (data.authenticated === false) {
+            await repo.put('metadata', {key: 'sales-identity', actor_id: '', environment_id: healthEnvironment});
+            if ('BroadcastChannel' in window) {
+                const identityChannel = new BroadcastChannel('sales-identity');
+                identityChannel.postMessage('changed'); identityChannel.close();
+            }
+        }
         if (!login || !status) return authenticated;
         login.hidden = data.authenticated === true;
         status.textContent = data.authenticated
@@ -402,8 +409,16 @@ async function exportDiagnostic() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function start() {
-    await checkSession();
     repo = new Repository(await openDB());
+    if (globalIndicator && !window.salesOffline?.shell) {
+        await repo.put('metadata', {key: 'sales-identity', actor_id: globalIndicator.dataset.actor,
+            environment_id: globalIndicator.dataset.environment});
+        if ('BroadcastChannel' in window) {
+            const identityChannel = new BroadcastChannel('sales-identity');
+            identityChannel.postMessage('changed'); identityChannel.close();
+        }
+    }
+    await checkSession();
     snapshot = await repo.get('snapshots', 'pilot');
     if (!pilot && !globalIndicator) return;
     if (navigator.locks) await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => { if (lock) await repo.recover(); });

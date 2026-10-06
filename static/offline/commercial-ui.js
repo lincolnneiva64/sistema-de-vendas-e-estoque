@@ -7,7 +7,7 @@ if (panel && indicator.dataset.actor) {
     const scope = {actor_id: indicator.dataset.actor, environment_id: indicator.dataset.environment};
     const box = document.createElement('div');
     box.className = 'offline-commercial';
-    box.innerHTML = '<button type="button">Preparar dados de vendas</button><p role="status" aria-live="polite"></p><small>Referência local. Venda offline ainda não disponível.</small>';
+    box.innerHTML = '<button type="button">Preparar dados de vendas</button><p role="status" aria-live="polite"></p><small>Referência local para montagem. Conclusão offline ainda não disponível.</small>';
     panel.append(box);
     const button = box.querySelector('button'), status = box.querySelector('[role="status"]');
     let repo, busy = false;
@@ -31,7 +31,22 @@ if (panel && indicator.dataset.actor) {
             await ready;
             describe(await atualizarSnapshotComercial(repo, scope));
             if ('serviceWorker' in navigator) {
-                try { await navigator.serviceWorker.register('/service-worker.js', {scope: '/'}); }
+                try {
+                    const registration = await navigator.serviceWorker.register('/service-worker.js', {scope: '/'});
+                    const worker = registration.installing || registration.waiting;
+                    if (worker && worker.state !== 'activated') await new Promise((resolve, reject) => {
+                        const timer = setTimeout(() => finish(new Error('Preparação dos arquivos demorou demais.')), 15000);
+                        function finish(error) {
+                            clearTimeout(timer); worker.removeEventListener('statechange', changed);
+                            error ? reject(error) : resolve();
+                        }
+                        function changed() {
+                            if (worker.state === 'activated') finish();
+                            else if (worker.state === 'redundant') finish(new Error('Arquivos offline indisponíveis.'));
+                        }
+                        worker.addEventListener('statechange', changed); changed();
+                    });
+                }
                 catch (_) { status.textContent += ' Catálogo salvo; preparação dos arquivos offline não foi concluída.'; }
             }
         } catch (error) { status.textContent = error.name === 'AbortError' ? 'Atualização demorou demais. Catálogo anterior preservado.' : error.message; }
