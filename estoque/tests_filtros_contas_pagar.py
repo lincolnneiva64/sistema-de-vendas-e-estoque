@@ -31,6 +31,9 @@ class FiltrosContasPagarTests(TestCase):
                 params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='', data_por='compra')
                 paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
         paginas[()] = self.client.get(self.url, secure=True).content
+        for fim in ['2026-09-10', '2026-08-01']:
+            params = dict(fornecedor='', compra='', data_inicio='', data_fim=fim, data_por='compra')
+            paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
         requisicoes = []
         class Handler(BaseHTTPRequestHandler):
             def do_GET(handler):
@@ -41,6 +44,8 @@ class FiltrosContasPagarTests(TestCase):
                 params = dict(parse_qsl(parsed.query))
                 requisicoes.append(params)
                 body = paginas[chave(params)]
+                instrumentacao = b'<script>window.scrollsResultados=0;const scrollOriginal=Element.prototype.scrollIntoView;Element.prototype.scrollIntoView=function(options){if(this.id==="contasPagarResultados" || this.classList.contains("cp-empty")) window.scrollsResultados++;return scrollOriginal.call(this,options)};</script>'
+                body = body.replace(b'<head>', b'<head>' + instrumentacao)
                 marker = ('<script>window.testParams=' + json.dumps(params) + ';</script>').encode()
                 body = body.replace(b'</body>', marker + b'</body>')
                 handler.send_response(200)
@@ -117,6 +122,26 @@ class FiltrosContasPagarTests(TestCase):
                         tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.focus();e.value="sem fornecedor correspondente";e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}))')
                         self.assertEqual(tab.evaluate('document.getElementById("cpFornecedorBusca").value'), '')
                         self.assertEqual(len(requisicoes), count)
+                        for fim, vazio in [('2026-09-10', False), ('2026-08-01', True)]:
+                            count = len(requisicoes)
+                            tab.evaluate('let e=document.getElementById("cpFiltro_data_fim");e.focus();e.value=' + json.dumps(fim))
+                            tab.call('Input.dispatchKeyEvent', {'type': 'keyDown', 'key': 'Enter', 'code': 'Enter', 'windowsVirtualKeyCode': 13})
+                            tab.call('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Enter', 'code': 'Enter', 'windowsVirtualKeyCode': 13})
+                            tab.wait('window.testParams?.data_fim === ' + json.dumps(fim))
+                            tab.wait('document.activeElement.id === "contasPagarResultados" || document.activeElement.classList.contains("cp-empty")')
+                            tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,200));return true})()')
+                            self.assertEqual(len(requisicoes), count + 1)
+                            self.assertEqual(tab.evaluate('window.scrollsResultados'), 1)
+                            self.assertTrue(tab.evaluate('(()=>{let r=document.activeElement.getBoundingClientRect();return r.top>=0 && r.top<innerHeight})()'))
+                            if vazio:
+                                self.assertEqual(tab.evaluate('document.activeElement.textContent.trim()'), 'Nenhuma conta corresponde aos filtros aplicados.')
+                            else:
+                                self.assertEqual(tab.evaluate('document.activeElement.id'), 'contasPagarResultados')
+                            # Repeating Enter on already applied values focuses without a new GET.
+                            tab.evaluate('let e=document.getElementById("cpFiltro_data_fim");e.focus();e.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}))')
+                            self.assertEqual(len(requisicoes), count + 1)
+                            self.assertEqual(tab.evaluate('window.scrollsResultados'), 2)
+                            self.assertNotIn(tab.evaluate('document.activeElement.id'), ['cpFiltro_data_inicio', 'cpFiltro_data_fim'])
                 finally:
                     chrome.stop()
         finally:

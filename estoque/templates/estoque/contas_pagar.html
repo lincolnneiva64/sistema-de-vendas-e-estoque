@@ -259,7 +259,7 @@
     <div class="cp-period-note">O período usa a data de compra ou vencimento selecionada. Os atalhos mantêm suas regras: vencimento; em Pagas ou Com juros, data efetiva do pagamento.</div>
   </section>
 
-  <div id="contasPagarResultados" class="cp-results{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %} cp-results-filtered{% endif %}" role="region" aria-label="Resultados de contas a pagar">
+  <div id="contasPagarResultados" class="cp-results{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %} cp-results-filtered{% endif %}" role="region" aria-label="Resultados de contas a pagar" tabindex="-1">
     {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}<h2 class="cp-results-heading">Resultados filtrados: {{ contas|length }} conta{{ contas|length|pluralize:"s" }}</h2>{% endif %}
   <section class="cp-card cp-desktop cp-table-wrap">
     <table class="cp-table">
@@ -1157,8 +1157,28 @@
     try {
       const foco = JSON.parse(sessionStorage.getItem(chaveFocoFiltro) || "null");
       sessionStorage.removeItem(chaveFocoFiltro);
-      if (foco && foco.url === location.href && Date.now() - foco.hora < 30000) document.getElementById(foco.id)?.focus();
+      if (foco && foco.url === location.href && Date.now() - foco.hora < 30000) {
+        if (foco.id === "contasPagarResultados") focarResultados();
+        else document.getElementById(foco.id)?.focus();
+      }
     } catch (_) {}
+  }
+  function focarResultados() {
+    const resultados = document.getElementById("contasPagarResultados");
+    if (!resultados) return;
+    const vazio = Array.from(resultados.querySelectorAll(".cp-empty")).find(el => el.getClientRects().length);
+    const destino = vazio || resultados;
+    destino.setAttribute("tabindex", "-1");
+    destino.focus({ preventScroll:true });
+    destino.scrollIntoView({ block:"start", behavior:"instant" });
+  }
+  function concluirFiltros() {
+    clearTimeout(filtroTimer);
+    if (!filtrosForm.checkValidity()) return;
+    focoDepoisFiltro = "contasPagarResultados";
+    if (enviandoFiltros) { guardarFocoFiltro(); return; }
+    if (assinaturaFiltros() === filtrosAplicados) { focarResultados(); return; }
+    enviarFiltros(focoDepoisFiltro);
   }
   function avancarFiltro(id) {
     navegandoFiltros = true;
@@ -1305,11 +1325,12 @@
     });
   });
 
-  [ ["cpFiltro_data_por", "cpFiltro_data_inicio"], ["cpFiltro_data_inicio", "cpFiltro_data_fim"], ["cpFiltro_data_fim", "cpFiltro_data_fim"] ].forEach(([id, proximo]) => {
+  [ ["cpFiltro_data_por", "cpFiltro_data_inicio"], ["cpFiltro_data_inicio", "cpFiltro_data_fim"], ["cpFiltro_data_fim", null] ].forEach(([id, proximo]) => {
     document.getElementById(id).addEventListener("keydown", event => {
       if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();
-      avancarFiltro(proximo);
+      if (proximo) avancarFiltro(proximo);
+      else concluirFiltros();
     });
   });
 
