@@ -40,7 +40,8 @@
 .offline-global[data-state]{background:transparent}
 .offline-global[data-state="ready"]{--offline-bg:#1d4ed8;--offline-fg:#fff;--offline-border:#1e40af}
 .offline-disclosure{position:relative;pointer-events:auto}
-.offline-disclosure>summary{box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:5px;width:44px;height:80px;padding:5px 4px;writing-mode:vertical-rl;list-style:none;cursor:pointer;background:var(--offline-bg);color:var(--offline-fg);border:2px solid var(--offline-border);border-left:0;border-radius:0 10px 10px 0;font-weight:750;box-shadow:0 3px 10px #0f172a26}
+.offline-disclosure>summary{box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:5px;width:36px;height:80px;padding:5px 4px;writing-mode:vertical-rl;list-style:none;cursor:pointer;background:var(--offline-bg);color:var(--offline-fg);border:2px solid var(--offline-border);border-left:0;border-radius:0 10px 10px 0;font-weight:750;box-shadow:0 3px 10px #0f172a26}
+.offline-global[data-state="online"] .offline-disclosure>summary{background:#16a34a;color:#fff;border-color:#15803d}
 .offline-disclosure>summary::-webkit-details-marker{display:none}
 .offline-disclosure>summary:focus-visible{outline:3px solid #0f172a;outline-offset:2px}
 #offline-pending-badge{writing-mode:horizontal-tb;min-width:19px;min-height:19px;padding:0 3px;box-sizing:border-box;border-radius:12px;background:#fff;color:#172033;text-align:center;font-size:11px;border:1px solid #94a3b8}
