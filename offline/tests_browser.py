@@ -15,6 +15,65 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_legacy_reconnection_initializes_cursor_then_observes_full_window(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-legacy-recovery-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': """
+                    const realWall=Date.now;window.healthOffset=0;Date.now=()=>realWall()+healthOffset;
+                    window.setInterval=()=>0;window.clearInterval=()=>{};
+                    Object.defineProperty(document,'hidden',{value:false,configurable:true});
+                """})
+                tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
+                tab.wait("!!document.getElementById('offline-global') && [...document.scripts].some(s=>s.src.includes('/offline/app.js'))")
+                tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);
+                    await app.initialized;await app.probe();
+                    const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());
+                    window.scope={actor_id:document.getElementById('offline-global').dataset.actor,
+                        environment_id:document.getElementById('offline-global').dataset.environment};true""")
+                for legacy_events, future_cursor in ((False, False), (True, False), (True, True)):
+                    with self.subTest(legacy_events=legacy_events, future_cursor=future_cursor):
+                        tab.evaluate("""window.seedAt=Date.now();window.oldFailure=seedAt-3600000;
+                            window.legacy={key:'communication:'+JSON.stringify([scope.environment_id,scope.actor_id]),
+                                ...scope,connected:true,reconnecting:true,failed_at:oldFailure,
+                                reset_reason:'falha de comunicação',stable_since:seedAt-3500000,
+                                last_success_at:seedAt-30000,observed_ms:0,
+                                observed_until:seedAt""" + ('+86400000' if future_cursor else '-3500000') + """};
+                            await testRepo.put('metadata',legacy);true""")
+                        # Exercise successful HTTP health checks, including the old event shape.
+                        tab.evaluate("""window.core=await import('/static/offline/core.js');
+                            window.originalCommunication=core.Repository.prototype.communication;true""")
+                        if legacy_events:
+                            tab.evaluate("""core.Repository.prototype.communication=function(scope,event){
+                                if(event?.type==='success'){event={...event};delete event.observed_since;}
+                                return originalCommunication.call(this,scope,event);
+                            };true""")
+                        try:
+                            tab.evaluate('await app.probe();true')
+                            first = tab.evaluate('await testRepo.communication(scope)')
+                            self.assertEqual(first['observed_ms'], 0)
+                            self.assertEqual(first['observed_since'], first['last_success_at'])
+                            self.assertEqual(first['observed_until'], first['observed_since'])
+                            self.assertTrue(first['reconnecting'])
+                            tab.wait("document.getElementById('offline-global').dataset.state==='waiting'")
+                            for minute in range(1, 16):
+                                for _ in range(2):
+                                    tab.evaluate('healthOffset+=30000;await app.probe();true')
+                                state = tab.evaluate('await testRepo.communication(scope)')
+                                self.assertEqual(state['observed_ms']//60000, minute)
+                                self.assertEqual(state['reconnecting'], minute < 15)
+                                self.assertEqual(state['failed_at'], first['failed_at'])
+                                self.assertEqual(state['reset_reason'], first['reset_reason'])
+                            tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                        finally:
+                            tab.evaluate('core.Repository.prototype.communication=originalCommunication;true')
+            finally:
+                chrome.stop()
+
     def test_completed_stability_survives_reload_tabs_and_browser_restart(self):
         user, _, _, _ = fixtures()
         client = Client(); client.force_login(user)

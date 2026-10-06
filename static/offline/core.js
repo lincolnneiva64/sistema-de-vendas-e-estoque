@@ -90,22 +90,28 @@ export class Repository {
                 let value = request.target.result || {key, ...scope, connected: false, stable_since: null, last_success_at: null};
                 if (event?.type === 'failure' && (value.failed_at == null || event.at > value.failed_at)) {
                     value = {...value, connected: false, stable_since: null, last_success_at: null,
-                        observed_ms: 0, observed_until: null, failed_at: event.at, reset_reason: 'falha de comunica\u00e7\u00e3o', reconnecting: true};
+                        observed_ms: 0, observed_since: null, observed_until: null, failed_at: event.at, reset_reason: 'falha de comunica\u00e7\u00e3o', reconnecting: true};
                 } else if (event?.type === 'success' && (value.failed_at == null || event.started_at > value.failed_at
                     || event.failure_seen === value.failed_at)) {
                     // An older request cannot undo a failure observed by another tab.
                     if (value.last_success_at == null || event.at >= value.last_success_at) {
                         const accumulated = value.observed_ms ?? (value.connected ? value.last_success_at - value.stable_since : 0);
+                        const legacyRecovery = value.reconnecting && value.failed_at != null && value.observed_since === undefined;
+                        // Missing legacy event cursors may continue from the migrated cursor.
+                        // Explicit null still means a new/resumed tab observed no interval.
+                        const observedSince = event.observed_since === undefined && value.reconnecting && value.failed_at != null
+                            ? value.observed_since : event.observed_since;
                         // Credit only an interval observed by this tab. A new/resumed tab has no predecessor.
                         // Serialized IDB transactions add the union of intervals, never one interval per tab.
-                        const from = Math.max(value.observed_until ?? value.last_success_at ?? event.at, event.observed_since ?? event.at);
-                        const delta = value.connected && event.at >= from && event.at - from <= POLICY.maxGap
-                            && event.observed_since != null && event.at - event.observed_since <= POLICY.maxGap
+                        const from = Math.max(value.observed_until ?? value.last_success_at ?? event.at, observedSince ?? event.at);
+                        const delta = !legacyRecovery && value.connected && event.at >= from && event.at - from <= POLICY.maxGap
+                            && observedSince != null && event.at - observedSince <= POLICY.maxGap
                             ? event.at - from : 0;
                         const observed = Math.max(0, accumulated) + delta;
                         value = {...value, connected: true, stable_since: value.stable_since ?? event.at,
                             observed_ms: observed, reconnecting: !!value.reconnecting && observed < POLICY.window,
-                            observed_until: delta > 0 ? event.at : value.observed_until ?? value.last_success_at ?? event.at,
+                            observed_since: event.at,
+                            observed_until: legacyRecovery || delta > 0 ? event.at : value.observed_until ?? value.last_success_at ?? event.at,
                             last_success_at: event.at};
                     }
                 }
