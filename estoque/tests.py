@@ -36781,9 +36781,14 @@ class CentralContasPagarTests(TestCase):
         self.assertContains(resposta, 'id="contasPagarFiltros"')
         self.assertContains(resposta, 'select[name=\'fornecedor\'], select[name=\'situacao\'], input[name=\'data_inicio\'], input[name=\'data_fim\']', html=False)
         self.assertContains(resposta, 'input[name=\'compra\'], input[name=\'q\']', html=False)
-        self.assertContains(resposta, "function enviarFiltros()")
+        self.assertContains(resposta, "function enviarFiltros(focoId)")
         self.assertContains(resposta, 'class="cp-provider-pill"')
         self.assertContains(resposta, "Micos Distribuidora")
+
+        situacao_explicita = self.client.get(self.url, {"situacao": "abertas"}, secure=True)
+        self.assertContains(situacao_explicita, 'class="cp-field cp-filter-active"', count=1)
+        self.assertContains(situacao_explicita, 'class="cp-active-summary"')
+        self.assertNotContains(resposta, 'class="cp-field cp-filter-active"')
 
     def test_filtros_preservam_selecao_e_destacam_campos_sem_movimentar_financeiro(self):
         qualy = Fornecedor.objects.create(nome="Qualy Norte")

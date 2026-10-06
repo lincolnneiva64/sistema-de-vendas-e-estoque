@@ -37,7 +37,8 @@
   .cp-filters .cp-field:nth-child(2) { grid-column:span 3; }
   .cp-filters .cp-field:nth-child(5) { grid-column:span 3; }
   .cp-filters .cp-field:nth-child(6) { grid-column:span 6; }
-  .cp-field.cp-filter-active { border-color:#91abc9; background:#eff5fc; box-shadow:0 2px 6px rgba(22,65,115,.07); }
+  .cp-field.cp-filter-active { border:2px solid #315f96; border-left-width:5px; background:#eaf2fc; box-shadow:0 3px 10px rgba(22,65,115,.14); }
+  .cp-field.cp-filter-active label::after { content:"Em uso"; float:right; padding:2px 7px; border-radius:20px; background:#d8e6f7; color:#214c80; font-size:.65rem; letter-spacing:.02em; }
   .cp-field.cp-filter-active input, .cp-field.cp-filter-active select { border-color:#6487b5; background:#eff6ff; box-shadow:0 0 0 1px #c5d7ed; }
   .cp-field.cp-filter-active label { color:#164173; font-weight:950; }
   .cp-filters .cp-supplier-field { position:relative; grid-column:span 5; background:#f8fafc; border-color:#d7e1ed; }
@@ -231,7 +232,7 @@
         <label for="cpFiltro_data_fim">Fim</label>
         <input type="date" id="cpFiltro_data_fim" name="data_fim" value="{{ data_fim }}">
       </div>
-      <div class="cp-field{% if situacao != 'abertas' %} cp-filter-active{% endif %}">
+      <div class="cp-field{% if situacao != 'abertas' or request.GET.situacao or request.GET.status %} cp-filter-active{% endif %}">
         <label for="cpFiltro_situacao">Situacao</label>
         <select id="cpFiltro_situacao" name="situacao">
           {% for valor, texto in situacao_choices %}
@@ -249,7 +250,7 @@
       </div>
       {% if atalho %}<input type="hidden" name="atalho" value="{{ atalho }}">{% endif %}
     </form>
-    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or atalho %}
+    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or request.GET.situacao or request.GET.status or atalho %}
       <div class="cp-active-summary" aria-label="Filtros aplicados aos resultados">
         <span class="cp-active-summary-title">Filtros ativos:</span>
         {% if fornecedor_id %}{% for fornecedor in fornecedores %}{% if fornecedor_id == fornecedor.id|stringformat:"s" %}<span class="cp-active-summary-item"><strong>Fornecedor:</strong> {{ fornecedor.nome }}</span>{% endif %}{% endfor %}{% endif %}
@@ -1123,19 +1124,50 @@
     });
   }
 
-  function enviarFiltros() {
+  function enviarFiltros(focoId) {
     if (!filtrosForm) return;
     clearTimeout(filtroTimer);
     if (enviandoFiltros) return;
+    if (assinaturaFiltros() === filtrosAplicados) return;
+    focoDepoisFiltro = typeof focoId === "string" ? focoId : document.activeElement?.id;
     if (typeof filtrosForm.requestSubmit === "function") {
       filtrosForm.requestSubmit();
     } else {
+      guardarFocoFiltro();
+      enviandoFiltros = true;
       filtrosForm.submit();
     }
   }
 
   let filtroTimer;
   let enviandoFiltros = false;
+  let navegandoFiltros = false;
+  let focoDepoisFiltro = "";
+  const chaveFocoFiltro = "contasPagar:foco:" + location.pathname;
+  const situacaoExplicita = {% if request.GET.situacao or request.GET.status %}true{% else %}false{% endif %};
+  function assinaturaFiltros() { return new URLSearchParams(new FormData(filtrosForm)).toString(); }
+  const filtrosAplicados = assinaturaFiltros();
+  function guardarFocoFiltro() {
+    try {
+      const destino = new URL(filtrosForm.action || location.href);
+      destino.search = assinaturaFiltros();
+      sessionStorage.setItem(chaveFocoFiltro, JSON.stringify({ id:focoDepoisFiltro, url:destino.href, hora:Date.now() }));
+    } catch (_) { /* A navegação continua se o armazenamento estiver indisponível. */ }
+  }
+  function restaurarFocoFiltro() {
+    try {
+      const foco = JSON.parse(sessionStorage.getItem(chaveFocoFiltro) || "null");
+      sessionStorage.removeItem(chaveFocoFiltro);
+      if (foco && foco.url === location.href && Date.now() - foco.hora < 30000) document.getElementById(foco.id)?.focus();
+    } catch (_) {}
+  }
+  function avancarFiltro(id) {
+    navegandoFiltros = true;
+    clearTimeout(filtroTimer);
+    document.getElementById(id)?.focus();
+    navegandoFiltros = false;
+    enviarFiltros(id);
+  }
   const fornecedorSelect = document.getElementById("cpFornecedorSelect");
   const fornecedorBusca = document.getElementById("cpFornecedorBusca");
   const fornecedorLista = document.getElementById("cpFornecedorSugestoes");
@@ -1146,7 +1178,7 @@
   function destacarFiltros() {
     filtrosForm.querySelectorAll(".cp-field").forEach(bloco => {
       const campo = bloco.querySelector("[name]");
-      bloco.classList.toggle("cp-filter-active", campo.name === "situacao" ? campo.value !== "abertas" : Boolean(campo.value.trim()));
+      bloco.classList.toggle("cp-filter-active", campo.name === "situacao" ? situacaoExplicita || campo.value !== "abertas" : Boolean(campo.value.trim()));
     });
   }
   function fecharFornecedores() {
@@ -1158,6 +1190,8 @@
     fornecedorSelect.value = opt.value;
     fornecedorBusca.value = opt.textContent.trim();
     fecharFornecedores();
+    focoDepoisFiltro = "cpFiltro_compra";
+    document.getElementById(focoDepoisFiltro)?.focus();
     fornecedorSelect.dispatchEvent(new Event("change", { bubbles:true }));
   }
   function renderizarFornecedores() {
@@ -1212,7 +1246,7 @@
     fornecedorBusca.value = fornecedorSelect.value ? fornecedorSelect.selectedOptions[0].textContent.trim() : "";
   });
   fornecedorBusca.addEventListener("keydown", event => {
-    if (event.isComposing) return;
+    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
     if (event.key === "Escape") { event.preventDefault(); fecharFornecedores(); }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
@@ -1224,7 +1258,7 @@
     if (event.key === "Enter") {
       event.preventDefault();
       if (!fornecedorLista.hidden && sugestoesFornecedor.length) selecionarFornecedor(sugestoesFornecedor[Math.max(0, fornecedorIndice)]);
-      else if (fornecedorSelect.value || !fornecedorBusca.value.trim()) enviarFiltros();
+      else if (fornecedorSelect.value || !fornecedorBusca.value.trim()) avancarFiltro("cpFiltro_compra");
     }
   });
   destacarFiltros();
@@ -1232,14 +1266,16 @@
   filtrosForm.addEventListener("submit", event => {
     clearTimeout(filtroTimer);
     if (enviandoFiltros) { event.preventDefault(); return; }
+    guardarFocoFiltro();
     enviandoFiltros = true;
   });
-  window.addEventListener("pageshow", () => { enviandoFiltros = false; destacarFiltros(); });
+  window.addEventListener("pageshow", () => { enviandoFiltros = false; destacarFiltros(); restaurarFocoFiltro(); });
   filtrosForm?.querySelectorAll("select[name='fornecedor'], select[name='situacao'], input[name='data_inicio'], input[name='data_fim']").forEach(function (campo) {
     campo.addEventListener("change", () => {
       if (campo.name === "situacao") filtrosForm.querySelector("input[name='atalho']")?.remove();
       destacarFiltros();
-      enviarFiltros();
+      clearTimeout(filtroTimer);
+      filtroTimer = setTimeout(enviarFiltros, campo.name === "situacao" ? 150 : 0);
     });
   });
 
@@ -1249,13 +1285,32 @@
       clearTimeout(filtroTimer);
       if (campo.value !== inicial) filtroTimer = setTimeout(enviarFiltros, 800);
     });
-    campo.addEventListener("blur", () => { if (campo.value !== inicial) enviarFiltros(); });
+    campo.addEventListener("blur", () => {
+      if (!navegandoFiltros && campo.value !== inicial) {
+        clearTimeout(filtroTimer);
+        filtroTimer = setTimeout(enviarFiltros, 0);
+      }
+    });
     campo.addEventListener("keydown", function (event) {
       if (event.isComposing) return;
       if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();
-      enviarFiltros();
+      if (campo.name === "compra") avancarFiltro("cpFiltro_data_inicio");
+      else enviarFiltros(campo.id);
     });
+  });
+
+  [ ["cpFiltro_data_inicio", "cpFiltro_data_fim"], ["cpFiltro_data_fim", "cpFiltro_situacao"] ].forEach(([id, proximo]) => {
+    document.getElementById(id).addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      avancarFiltro(proximo);
+    });
+  });
+  // Keyup deixa o select concluir sua seleção nativa antes de avançar.
+  document.getElementById("cpFiltro_situacao").addEventListener("keyup", event => {
+    if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+    avancarFiltro("cpFiltro_q");
   });
 
   function referenciaConta(botao) {
