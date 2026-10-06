@@ -37,7 +37,8 @@ export class Stability {
         this.accumulated = Math.max(0, value?.observed_ms ??
             (value?.last_success_at != null && value?.stable_since != null ? value.last_success_at - value.stable_since : 0));
         this.failedAt = value?.failed_at;
-        if (!value?.connected || !Number.isFinite(value.last_success_at)) return;
+        this.suspect = !!value?.suspect_id;
+        if (this.suspect || !value?.connected || !Number.isFinite(value.last_success_at)) return;
         this.lastWall = value.last_success_at;
         this.last = now - (wall - value.last_success_at);
         this.started = this.last - this.accumulated;
@@ -88,10 +89,30 @@ export class Repository {
             const store = tx.objectStore('metadata');
             store.get(key).onsuccess = request => {
                 let value = request.target.result || {key, ...scope, connected: false, stable_since: null, last_success_at: null};
-                if (event?.type === 'failure' && (value.failed_at == null || event.at > value.failed_at)) {
+                // IDB serializes tabs; only a probe for this suspicion may resolve it.
+                // confirmed_at fences off requests started before recovery.
+                if (event?.type === 'suspect' && !value.suspect_id
+                    && (value.confirmed_at == null || event.started_at >= value.confirmed_at)
+                    && (value.failed_at == null || event.started_at > value.failed_at || event.failure_seen === value.failed_at)) {
+                    value = {...value, connected: false, suspect_id: event.id, suspect_at: event.at,
+                        observed_since: null, observed_until: null};
+                } else if (event?.type === 'confirmation' && value.suspect_id === event.suspect_id
+                    && event.started_at >= value.suspect_at + 5000) {
+                    if (event.ok) {
+                        value = {...value, suspect_id: null, suspect_at: null, confirmed_at: event.at, connected: true,
+                            stable_since: value.stable_since ?? event.at, last_success_at: event.at,
+                            observed_since: event.at, observed_until: event.at};
+                    } else {
+                        value = {...value, suspect_id: null, suspect_at: null, confirmed_at: event.at, connected: false,
+                            stable_since: null, last_success_at: null, observed_ms: 0,
+                            observed_since: null, observed_until: null, failed_at: event.at,
+                            reset_reason: 'falha de comunica\u00e7\u00e3o', reconnecting: true};
+                    }
+                } else if (event?.type === 'failure' && (value.failed_at == null || event.at > value.failed_at)) {
                     value = {...value, connected: false, stable_since: null, last_success_at: null,
                         observed_ms: 0, observed_since: null, observed_until: null, failed_at: event.at, reset_reason: 'falha de comunica\u00e7\u00e3o', reconnecting: true};
-                } else if (event?.type === 'success' && (value.failed_at == null || event.started_at > value.failed_at
+                } else if (event?.type === 'success' && !value.suspect_id
+                    && (value.confirmed_at == null || event.started_at >= value.confirmed_at) && (value.failed_at == null || event.started_at > value.failed_at
                     || event.failure_seen === value.failed_at)) {
                     // An older request cannot undo a failure observed by another tab.
                     if (value.last_success_at == null || event.at >= value.last_success_at) {

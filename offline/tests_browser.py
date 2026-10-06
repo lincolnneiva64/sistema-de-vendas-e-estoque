@@ -99,6 +99,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 # Exercise a real failed health request, followed by the complete 15-minute recovery.
                 tab.evaluate("window.realFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real outage')):realFetch(u,o);await app.probe();true")
                 tab.wait("document.getElementById('offline-global').dataset.state==='offline'")
+                self.confirm_failed_probe(tab)
                 tab.evaluate('window.fetch=realFetch;await app.probe();true')
                 tab.wait("document.getElementById('offline-global').dataset.state==='waiting'")
                 for _ in range(30):
@@ -160,6 +161,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-status').dataset.state==='online'")
                 tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real failure')):realFetch(u,o);await app.probe();true")
                 tab.wait("document.getElementById('offline-status').dataset.state==='offline'")
+                self.confirm_failed_probe(tab)
                 tab.evaluate('window.fetch=realFetch;await app.probe();true')
                 tab.wait("document.getElementById('offline-status').dataset.state==='waiting'")
                 self.clock(tab)
@@ -249,6 +251,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(state(checklist)['observed_ms']//60000, 6)
                 sales.wait("document.querySelector('.offline-status-counter')?.textContent.trim()==='6 de 15 minutos'")
                 checklist.evaluate("window.fetch=(...args)=>args[0]==='/api/offline/health/'?Promise.reject(Error('real failure')):realFetch(...args);for(const timer of monitorCallbacks.values())if(timer.delay===30000)timer.callback();true")
+                checklist.evaluate("await app.probe();true")
+                self.confirm_failed_probe(checklist)
                 checklist.wait("(await testRepo.communication(scope)).observed_ms===0")
                 self.assertEqual(checklist.evaluate("JSON.stringify(await testRepo.all('operations'))"), original)
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
@@ -341,6 +345,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 first.evaluate("window.originalCommunication=testRepo.constructor.prototype.communication;testRepo.constructor.prototype.communication=()=>Promise.reject(Error('storage'));try{await app.probe()}catch{};testRepo.constructor.prototype.communication=originalCommunication;true")
                 self.assertGreaterEqual(elapsed(first), paused)
                 first.evaluate("window.baseFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real health failure')):baseFetch(u,o);await app.probe();true")
+                self.confirm_failed_probe(first)
                 for t in [first,reopened]:
                     t.wait("(await testRepo.communication(scope)).observed_ms===0")
                     t.wait("document.getElementById('offline-reset-log').textContent.includes('motivo: falha de comunica\u00e7\u00e3o')")
@@ -622,8 +627,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v14') || keys.includes('offline-pilot-shell-v13'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v14');
+                    if(!keys.includes('offline-pilot-shell-v15') || keys.includes('offline-pilot-shell-v14'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v15');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
@@ -641,7 +646,11 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     self.network(tab, True)
                     tab.wait("document.getElementById('offline-status').dataset.state === 'offline'")
                     self.assert_state_visual(tab, 'offline', 'rgb(254, 226, 226)', '1 operação pendente')
+                    self.confirm_failed_probe(tab)
                     self.network(tab, False)
+                    client = Client(); client.force_login(user)
+                    tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url,'httpOnly':True})
+                    tab.evaluate("const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.probe();true")
                     try:
                         tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
                     except AssertionError:
@@ -763,6 +772,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.getElementById('offline-global').dataset.state === 'auth'")
                 tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('network failure')):normalFetch(u,o);window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-global').dataset.state === 'offline'")
+                self.confirm_failed_probe(tab)
                 tab.evaluate("window.fetch=normalFetch;window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-global').dataset.state === 'waiting'")
                 self.load(tab)
@@ -887,6 +897,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).observed_ms"), before_gap)
                 tab.evaluate("window.savedFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('failure')):savedFetch(u,o);window.dispatchEvent(new Event('online'))")
                 tab.wait("document.getElementById('offline-status').dataset.state === 'offline'")
+                self.confirm_failed_probe(tab)
                 tab.evaluate("window.fetch=savedFetch;window.dispatchEvent(new Event('online'))")
                 minutes(0)
                 self.assertTrue(tab.evaluate("""(async()=>{
@@ -997,6 +1008,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).length"), 1)
                 tab.evaluate("IDBObjectStore.prototype.add=realAdd;true")
                 self.network(tab, False)
+                tab.wait("!(await testRepo.all('metadata')).some(v=>v.key.startsWith('communication:') && v.suspect_id)")
                 # Reauthenticate after reconnection and its old requests have completed.
                 # Do not depend on restoration of the pre-restart session cookie.
                 client = Client(); client.force_login(user)
@@ -1226,6 +1238,65 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         import json
         tab.evaluate("document.getElementById('offline-message').textContent='';document.getElementById('offline-note').value=" + json.dumps(text) + ";document.getElementById('offline-form').requestSubmit()")
         tab.wait("document.getElementById('offline-message').textContent.includes('Salvo neste dispositivo')")
+
+    def confirm_failed_probe(self, tab):
+        tab.evaluate("""const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;await app.probe();
+            await new Promise(resolve=>setTimeout(resolve,5200));true""")
+
+    def test_transient_suspicion_confirmation_and_stale_tabs(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-suspicion-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
+                tab.wait("!!document.getElementById('offline-global')")
+                tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;await app.probe();
+                    const {Repository,openDB,Stability}=await import('/static/offline/core.js');
+                    window.r=new Repository(await openDB());window.other=new Repository(await openDB());
+                    window.scope={actor_id:document.getElementById('offline-global').dataset.actor,
+                        environment_id:document.getElementById('offline-global').dataset.environment};
+                    window.wall=Date.now;window.offset=0;Date.now=()=>wall()+offset;
+                    window.baseFetch=fetch;true""")
+                # All OK: 30 observed intervals complete the unchanged 15-minute window.
+                for _ in range(26):
+                    tab.evaluate('offset+=30000;await app.probe();true')
+                baseline = tab.evaluate('(await r.communication(scope)).observed_ms')
+                self.assertGreaterEqual(baseline, 780000)
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('transient')):baseFetch(u,o);await app.probe();true")
+                state = tab.evaluate('await r.communication(scope)')
+                self.assertTrue(state['suspect_id'])
+                self.assertEqual(state['observed_ms'], baseline)
+                tab.wait("document.getElementById('offline-global-sync').disabled")
+                self.assertTrue(tab.evaluate("""const v=await other.communication(scope,{type:'success',at:Date.now(),started_at:Date.now(),observed_since:Date.now()-30000});
+                    v.suspect_id!==null && v.observed_ms===""" + str(baseline)))
+                tab.evaluate("Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));offset+=30000;await app.probe();true")
+                self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), baseline)
+                tab.evaluate("window.fetch=baseFetch;Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));await app.probe();true")
+                self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), baseline)
+                self.assertFalse(tab.evaluate('(await r.communication(scope)).suspect_id'))
+                tab.evaluate('offset+=30000;await app.probe();true')
+                self.assertGreaterEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), baseline+30000)
+                for _ in range(3): tab.evaluate('offset+=30000;await app.probe();true')
+                self.assertGreaterEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), 900000)
+                # Actual timer runs a confirmation about five seconds after the first failure.
+                tab.evaluate("window.calls=0;window.fetch=(u,o)=>u==='/api/offline/health/'?(++calls===1?Promise.reject(Error('transient')):baseFetch(u,o)):baseFetch(u,o);await app.probe();true")
+                tab.wait('(await r.communication(scope)).suspect_id')
+                self.assertFalse(tab.evaluate("const {Stability}=await import('/static/offline/core.js');const gate=new Stability();gate.restore(await r.communication(scope),performance.now(),Date.now());gate.ready(performance.now(),Date.now())"))
+                tab.wait('calls===2 && !(await r.communication(scope)).suspect_id', timeout=9)
+                self.assertGreaterEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), 900000)
+                self.assertTrue(tab.evaluate("gate.restore(await r.communication(scope),performance.now(),Date.now());gate.ready(performance.now(),Date.now())"))
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('persistent')):baseFetch(u,o);await app.probe();window.oldId=(await r.communication(scope)).suspect_id;offset+=5001;await app.probe();true")
+                self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), 0)
+                tab.evaluate('offset+=30000;await app.probe();true')
+                self.assertTrue(tab.evaluate('(await r.communication(scope)).suspect_id!==oldId'))
+                self.assertTrue(tab.evaluate("""const v=await other.communication(scope,{type:'confirmation',suspect_id:oldId,ok:true,at:Date.now(),started_at:Date.now()});!!v.suspect_id && v.observed_ms===0"""))
+                tab.evaluate('window.fetch=baseFetch;offset+=5001;await app.probe();true')
+                self.assertEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), 0)
+            finally:
+                chrome.stop()
 
     def clock(self, tab):
         tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js'))?.src || '/static/offline/app.js');await app.initialized;await app.probe();return true})()")

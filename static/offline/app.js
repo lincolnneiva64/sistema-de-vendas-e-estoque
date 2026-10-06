@@ -10,7 +10,7 @@ let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
 let observationGeneration = 0, observedSince = null;
-let probeGeneration = -1, healthController = null, monitorTimer = null;
+let probeGeneration = -1, healthController = null, monitorTimer = null, confirmationTimer = null;
 const stability = new Stability();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
 const modal = document.createElement('dialog');
@@ -80,6 +80,12 @@ async function refreshCommunication(event = null) {
     if (!scope.actor_id || !scope.environment_id) { stability.reset(); return; }
     const value = await repo.communication(scope, event);
     stability.restore(value, performance.now(), Date.now());
+    clearTimeout(confirmationTimer);
+    confirmationTimer = null;
+    if (value.suspect_id && !leaving && !document.hidden) {
+        confirmationTimer = setTimeout(() => probe().catch(error => message(error.message)),
+            Math.max(0, value.suspect_at + 5000 - Date.now()));
+    }
     if (!stability.connected && syncing) { stopped = true; inFlight?.abort(); }
     if (event) broadcast();
 }
@@ -128,10 +134,10 @@ async function render() {
     }
     document.getElementById('offline-diagnostic').textContent = snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · snapshot: ${snapshot.prepared_at} · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.';
 }
-async function failConnection() {
-    stability.reset(); stability.reconnecting = true; stopped = true;
+async function failConnection(event) {
+    stopped = true;
     if (syncing) notice = {kind: 'error', label: 'Sincroniza\u00e7\u00e3o interrompida — opera\u00e7\u00f5es preservadas', until: Date.now() + 10000}; inFlight?.abort();
-    await refreshCommunication({type: 'failure', at: Date.now()});
+    await refreshCommunication(event);
     await render();
 }
 async function fetchTimed(url, options = {}) {
@@ -161,6 +167,10 @@ async function performProbe() {
     const previous = await repo.communication(communicationScope());
     if (leaving || document.hidden || generation !== observationGeneration) return;
     const started_at = Date.now();
+    if (previous.suspect_id && started_at < previous.suspect_at + 5000) {
+        await refreshCommunication();
+        return;
+    }
     let health;
     const controller = new AbortController();
     healthController = controller;
@@ -172,7 +182,9 @@ async function performProbe() {
     } catch {
         if (!leaving && !document.hidden && generation === observationGeneration) {
             observedSince = null;
-            await failConnection();
+            await failConnection(previous.suspect_id
+                ? {type: 'confirmation', suspect_id: previous.suspect_id, ok: false, at: Date.now(), started_at}
+                : {type: 'suspect', id: crypto.randomUUID(), at: Date.now(), started_at, failure_seen: previous.failed_at ?? null});
         }
         return;
     } finally {
@@ -181,12 +193,16 @@ async function performProbe() {
     if (leaving || document.hidden || generation !== observationGeneration) return;
     healthEnvironment = health.environment;
     const at = Date.now();
-    await refreshCommunication({type: 'success', at, started_at, observed_since: observedSince, failure_seen: previous.failed_at ?? null});
+    await refreshCommunication(previous.suspect_id
+        ? {type: 'confirmation', suspect_id: previous.suspect_id, ok: true, at, started_at}
+        : {type: 'success', at, started_at, observed_since: observedSince, failure_seen: previous.failed_at ?? null});
     if (!leaving && !document.hidden && generation === observationGeneration) observedSince = at;
     await checkSession();
     await render();
 }
 function updateObservation() {
+    clearTimeout(confirmationTimer);
+    confirmationTimer = null;
     observationGeneration++;
     observedSince = null;
     healthController?.abort();
@@ -392,6 +408,8 @@ async function start() {
         // Navigation can cancel fetch before pagehide/visibilitychange. Invalidate
         // that observation before aborting, so its rejection cannot publish a failure.
         // Keep the timer alive here: a different handler may cancel navigation.
+        clearTimeout(confirmationTimer);
+        confirmationTimer = null;
         observationGeneration++;
         observedSince = null;
         healthController?.abort();
