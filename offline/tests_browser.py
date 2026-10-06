@@ -15,6 +15,100 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_completed_stability_survives_reload_tabs_and_browser_restart(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        clock = """const realWall=Date.now;Date.now=()=>realWall()+Number(localStorage.getItem('stable-reopen-offset')||0);
+            window.monitorCallbacks=new Map();let timerSequence=0;
+            window.setInterval=(callback,delay)=>{const id=++timerSequence;monitorCallbacks.set(id,{callback,delay});return id};
+            window.clearInterval=id=>monitorCallbacks.delete(id);"""
+        setup = """window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);await app.initialized;
+            const {Repository,openDB}=await import('/static/offline/core.js');window.testRepo=new Repository(await openDB());
+            window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};true"""
+        with TemporaryDirectory(prefix='offline-stable-reopen-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                def load(path='/vendas/'):
+                    tab = chrome.tab()
+                    tab.call('Page.addScriptToEvaluateOnNewDocument', {'source': clock})
+                    tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                    tab.call('Page.navigate', {'url':self.live_server_url+path})
+                    tab.wait("!!document.getElementById('offline-global') && [...document.scripts].some(s=>s.src.includes('/offline/app.js'))")
+                    tab.evaluate(setup)
+                    return tab
+                tab = load()
+                # Exercise a real failed health request, followed by the complete 15-minute recovery.
+                tab.evaluate("window.realFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real outage')):realFetch(u,o);await app.probe();true")
+                tab.wait("document.getElementById('offline-global').dataset.state==='offline'")
+                tab.evaluate('window.fetch=realFetch;await app.probe();true')
+                tab.wait("document.getElementById('offline-global').dataset.state==='waiting'")
+                for _ in range(30):
+                    tab.evaluate("localStorage.setItem('stable-reopen-offset',Number(localStorage.getItem('stable-reopen-offset')||0)+30000);await Promise.all([...monitorCallbacks.values()].filter(t=>t.delay===30000).map(t=>t.callback()));true")
+                tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                baseline = tab.evaluate('await testRepo.communication(scope)')
+                self.assertGreaterEqual(baseline['observed_ms'], 900000)
+                for path in ('/caixa-banco/', '/vendas/'):
+                    tab.evaluate('window.oldStableDocument=true;true')
+                    tab.call('Page.navigate', {'url':self.live_server_url+path})
+                    tab.wait("!window.oldStableDocument && [...document.scripts].some(s=>s.src.includes('/offline/app.js'))")
+                    tab.evaluate(setup)
+                    tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                tab.evaluate('window.oldStableDocument=true;true')
+                tab.call('Page.reload'); tab.wait("!window.oldStableDocument && [...document.scripts].some(s=>s.src.includes('/offline/app.js'))"); tab.evaluate(setup)
+                tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                another = load()
+                another.wait("document.getElementById('offline-global').dataset.state==='online'")
+                tab.call('Page.close'); another.call('Page.close')
+                tab = load()
+                tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                tab.evaluate("localStorage.setItem('stable-reopen-offset',Number(localStorage.getItem('stable-reopen-offset')||0)+3600000);true")
+                chrome.stop(); chrome.start()
+                tab = load()
+                tab.wait("document.getElementById('offline-global').dataset.state==='online'")
+                restored = tab.evaluate('await testRepo.communication(scope)')
+                self.assertEqual(restored['stable_since'], baseline['stable_since'])
+                self.assertEqual(restored['failed_at'], baseline['failed_at'])
+                self.assertGreaterEqual(restored['observed_ms'], baseline['observed_ms'])
+                self.assertFalse(restored['reconnecting'])
+                self.assertEqual(tab.evaluate("document.getElementById('offline-reset-log').textContent"), '')
+                self.assertEqual(OperacaoSincronizacao.objects.count(), 0)
+            finally:
+                chrome.stop()
+
+    def test_navigation_cancels_health_before_pagehide_without_false_reset(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-navigation-cancel-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.setCookie', {'name':'sessionid','value':client.cookies['sessionid'].value,'url':self.live_server_url})
+                self.load(tab)
+                tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/offline/app.js')).src);
+                    await app.initialized;await app.probe();
+                    window.beforeLeaving=JSON.stringify((await testRepo.all('metadata')).filter(v=>v.key.startsWith('communication:')));
+                    window.realFetch=fetch;window.fetch=(u,o)=>u==='/api/offline/health/'?new Promise((resolve,reject)=>{
+                        window.rejectNavigation=()=>reject(Error('navigation cancelled request'));
+                        o.signal.addEventListener('abort',rejectNavigation,{once:true});
+                    }):realFetch(u,o);
+                    window.interruptedProbe=app.probe();true""")
+                tab.wait('!!window.rejectNavigation')
+                # Some cancellations occur during unload preparation, while document.hidden is still false.
+                tab.evaluate("window.dispatchEvent(new Event('beforeunload'));rejectNavigation();await interruptedProbe;true")
+                self.assertEqual(tab.evaluate("JSON.stringify((await testRepo.all('metadata')).filter(v=>v.key.startsWith('communication:')))"), tab.evaluate('beforeLeaving'))
+                # A cancelled navigation has no pageshow. It must remain usable anyway.
+                tab.evaluate("window.fetch=realFetch;await app.probe();true")
+                tab.wait("document.getElementById('offline-status').dataset.state==='online'")
+                tab.evaluate("window.fetch=(u,o)=>u==='/api/offline/health/'?Promise.reject(Error('real failure')):realFetch(u,o);await app.probe();true")
+                tab.wait("document.getElementById('offline-status').dataset.state==='offline'")
+                tab.evaluate('window.fetch=realFetch;await app.probe();true')
+                tab.wait("document.getElementById('offline-status').dataset.state==='waiting'")
+                self.clock(tab)
+                for _ in range(4): self.advance_probe(tab)
+                tab.wait("document.querySelector('.offline-status-counter')?.textContent.trim()==='2 de 15 minutos'")
+            finally:
+                chrome.stop()
+
     def test_checklist_visible_resume_observed_minutes(self):
         self.checklist_resume_observed_minutes(suspend_probe=False)
 
@@ -469,8 +563,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v13') || keys.includes('offline-pilot-shell-v12'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v13');
+                    if(!keys.includes('offline-pilot-shell-v14') || keys.includes('offline-pilot-shell-v13'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v14');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     return true;
@@ -489,7 +583,10 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     tab.wait("document.getElementById('offline-status').dataset.state === 'offline'")
                     self.assert_state_visual(tab, 'offline', 'rgb(254, 226, 226)', '1 operação pendente')
                     self.network(tab, False)
-                    tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
+                    try:
+                        tab.wait("document.getElementById('offline-status').dataset.state === 'waiting'")
+                    except AssertionError:
+                        self.fail(str(tab.evaluate("({path:location.pathname,now:Date.now(),hidden:document.hidden,state:document.getElementById('offline-status').dataset.state,session:await fetch('/api/offline/session/').then(r=>r.json()),metadata:await testRepo.all('metadata')})")))
                     self.assert_state_visual(tab, 'waiting', 'rgb(254, 243, 199)', '1 operação aguardando')
                     self.clock(tab)
                     # Advance in observed 30-second steps; gaps pause stability.

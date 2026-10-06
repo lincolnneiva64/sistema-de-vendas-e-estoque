@@ -97,7 +97,7 @@ async function render() {
         resetLog = document.createElement('span'); resetLog.id = 'offline-reset-log';
         resetLog.setAttribute('role', 'status'); badge.after(resetLog);
     }
-    if (resetLog) resetLog.textContent = stability.failedAt
+    if (resetLog) resetLog.textContent = stability.failedAt && !stability.ready(performance.now(), Date.now())
         ? 'Estabilidade reiniciada \u00e0s ' + new Date(stability.failedAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + ' \u2014 motivo: falha de comunica\u00e7\u00e3o' : '';
     renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
@@ -388,6 +388,14 @@ async function start() {
     });
     window.addEventListener('offline', () => { void probe().catch(error => message(error.message)); });
     window.addEventListener('online', () => { void checkSession(); void probe(); });
+    window.addEventListener('beforeunload', () => {
+        // Navigation can cancel fetch before pagehide/visibilitychange. Invalidate
+        // that observation before aborting, so its rejection cannot publish a failure.
+        // Keep the timer alive here: a different handler may cancel navigation.
+        observationGeneration++;
+        observedSince = null;
+        healthController?.abort();
+    });
     window.addEventListener('pagehide', () => { leaving = true; updateObservation(); inFlight?.abort(); });
     window.addEventListener('pageshow', () => { leaving = false; void checkSession(); updateObservation(); });
     document.addEventListener('visibilitychange', updateObservation);

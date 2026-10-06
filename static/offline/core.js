@@ -102,8 +102,9 @@ export class Repository {
                         const delta = value.connected && event.at >= from && event.at - from <= POLICY.maxGap
                             && event.observed_since != null && event.at - event.observed_since <= POLICY.maxGap
                             ? event.at - from : 0;
+                        const observed = Math.max(0, accumulated) + delta;
                         value = {...value, connected: true, stable_since: value.stable_since ?? event.at,
-                            observed_ms: Math.max(0, accumulated) + delta,
+                            observed_ms: observed, reconnecting: !!value.reconnecting && observed < POLICY.window,
                             observed_until: delta > 0 ? event.at : value.observed_until ?? value.last_success_at ?? event.at,
                             last_success_at: event.at};
                     }
