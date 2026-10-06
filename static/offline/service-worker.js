@@ -1,5 +1,5 @@
-const CACHE = 'offline-pilot-shell-v16';
-const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js'];
+const CACHE = 'offline-pilot-shell-v17';
+const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);

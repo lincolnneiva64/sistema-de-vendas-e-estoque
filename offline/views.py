@@ -1,4 +1,5 @@
 import json
+from uuid import UUID
 from functools import wraps
 
 from django.conf import settings
@@ -12,6 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 from locacoes.models import TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem
 from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command
+from .commercial import build_commercial_snapshot
 
 
 def environment_id(request):
@@ -99,6 +101,23 @@ def synchronize(request):
         return JsonResponse({"erro": "Operacao invalida: confira identidade, formato e hash."}, status=400)
     result, status = process_operation(command, request.user)
     return JsonResponse(result, status=status)
+
+
+@require_GET
+@authorized
+def commercial_snapshot(request):
+    if not request.user.has_perms(["estoque.view_cliente", "estoque.view_produto"]):
+        return JsonResponse({"erro": "Sem permissão para consultar o catálogo comercial."}, status=403)
+    device_id = request.GET.get("device_id")
+    if device_id is not None:
+        try:
+            if str(UUID(device_id)) != device_id:
+                raise ValueError
+        except ValueError:
+            return JsonResponse({"erro": "Device inválido."}, status=400)
+    response = JsonResponse(build_commercial_snapshot(request.user, environment_id(request), device_id))
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @require_GET

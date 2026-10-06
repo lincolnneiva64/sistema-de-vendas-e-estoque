@@ -9,5 +9,6 @@ urlpatterns = [
     path("api/offline/health/", views.health),
     path("api/offline/session/", views.session),
     path("api/offline/snapshot/", views.snapshot),
+    path("api/offline/snapshot/comercial/", views.commercial_snapshot, name="offline_commercial_snapshot"),
     path("api/offline/observations/", views.synchronize),
 ]

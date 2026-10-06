@@ -8927,6 +8927,15 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="{% static 'offline/app.js' %}?v=7"></script>
+{% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
+<style>
+    .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }
+    .offline-commercial button { max-width:100%; white-space:normal; }
+    .offline-commercial p { margin:6px 0; }
+    .offline-commercial small { display:block; }
+</style>
+<script type="module" src="{% static 'offline/commercial-ui.js' %}"></script>
+{% endif %}
 </body>
 </html>
 
