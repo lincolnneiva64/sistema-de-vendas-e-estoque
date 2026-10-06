@@ -48,6 +48,7 @@
 .offline-panel{position:absolute;left:48px;top:0;box-sizing:border-box;width:min(340px,calc(100vw - 60px));max-height:calc(100dvh - 24px);overflow:auto;display:flex;align-items:flex-start;flex-direction:column;gap:12px;padding:16px;background:var(--offline-bg);color:var(--offline-fg);border:2px solid var(--offline-border);border-radius:10px;box-shadow:0 8px 24px #0f172a33;overflow-wrap:anywhere}
 .offline-global .offline-panel #offline-status.offline-status-card{flex:0 0 auto;max-width:100%;text-align:left;justify-content:flex-start}
 .offline-panel #offline-reset-log{font-size:12px}
+.offline-global[data-state="online"] .offline-panel{background:#dcfce7;border-color:#86efac}
 .offline-global[data-state="ready"] .offline-panel{background:#eff6ff;color:#1e3a8a}
 .offline-global .offline-panel button{width:auto;max-width:100%;white-space:normal;min-height:44px}
 @media(max-width:575px){.offline-global{top:4px}.offline-disclosure>summary{height:74px;font-size:12px}.offline-panel{padding:12px;gap:10px;max-height:calc(100dvh - 12px)}}
