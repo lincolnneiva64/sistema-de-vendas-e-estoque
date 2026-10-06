@@ -13772,67 +13772,34 @@ class CorrecaoItensCompraTests(TestCase):
 
     def assert_financeiro_inalterado(self):
         self.conta_pagar.refresh_from_db()
-        self.movimento.refresh_from_db()
+        if self.movimento.pk:
+            self.movimento.refresh_from_db()
         self.assertEqual(self.conta_pagar.valor_original, Decimal("110.00"))
         self.assertEqual(self.conta_pagar.valor_em_aberto, Decimal("110.00"))
         self.assertEqual(self.movimento.valor, Decimal("110.00"))
-        self.assertEqual(self.compra.movimentos_financeiros.count(), 1)
+        self.assertEqual(self.compra.movimentos_financeiros.count(), 1 if self.movimento.pk else 0)
 
-    def test_compra_a_vista_total_alterado_redireciona_para_corrigir_origem(self):
-        resposta = self.client.post(
-            self.url,
-            self.dados(**{"quantidade[]": ["7", "2"]}),
-            follow=True,
-            secure=True,
-        )
+    def test_compra_a_vista_com_movimento_bloqueia_correcao_simples(self):
+        resposta = self.client.post(self.url, self.dados(**{"quantidade[]": ["7", "2"]}), secure=True)
+        self.assertEqual(urlsplit(resposta.url).path, reverse("estoque:compra_corrigir_itens", kwargs={"pk": self.compra.id}))
         self.produto_a.refresh_from_db(); self.compra.refresh_from_db(); self.item_a.refresh_from_db()
-        self.assertTrue(resposta.redirect_chain)
-        self.assertEqual(
-            urlsplit(resposta.redirect_chain[0][0]).path,
-            reverse("estoque:compra_corrigir_origem_pagamento", kwargs={"pk": self.compra.id}),
-        )
-        self.assertContains(resposta, "Agora ajuste a origem do pagamento")
-        self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
-        self.assertEqual(self.item_a.quantidade, Decimal("7.000"))
-        self.assertEqual(self.compra.total, Decimal("80.00"))
-        self.assertIn("Total anterior R$ 110,00", self.compra.observacao)
-        self.assertIn("Financeiro nao alterado", self.compra.observacao)
-        detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
-        self.assertContains(detalhe, "Histórico da compra")
-        self.assertContains(detalhe, "Mostrar histórico da compra")
-        conteudo = detalhe.content.decode()
-        titulo_itens = '<div class="nota-compra-card-titulo">Itens</div>'
-        titulo_financeiro = '<div class="nota-compra-card-titulo">Financeiro</div>'
-        titulo_historico = '<div class="nota-compra-card-titulo">Histórico da compra</div>'
-        self.assertLess(conteudo.index(titulo_itens), conteudo.index(titulo_financeiro))
-        self.assertLess(conteudo.index(titulo_financeiro), conteudo.index(titulo_historico))
+        self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
+        self.assertEqual(self.item_a.quantidade, Decimal("10.000"))
+        self.assertEqual(self.compra.total, Decimal("110.00"))
         self.assert_financeiro_inalterado()
 
-    def test_compra_a_prazo_total_alterado_redireciona_para_corrigir_financeiro(self):
+    def test_compra_a_prazo_com_movimento_bloqueia_correcao_simples(self):
         self.compra.tipo_pagamento = "aprazo"
         self.compra.save(update_fields=["tipo_pagamento"])
-
-        resposta = self.client.post(
-            self.url,
-            self.dados(**{"quantidade[]": ["7", "2"]}),
-            follow=True,
-            secure=True,
-        )
-
-        self.compra.refresh_from_db()
-        self.produto_a.refresh_from_db()
-        self.assertTrue(resposta.redirect_chain)
-        self.assertEqual(
-            urlsplit(resposta.redirect_chain[0][0]).path,
-            reverse("estoque:compra_corrigir_financeiro", kwargs={"pk": self.compra.id}),
-        )
-        self.assertContains(resposta, "Agora ajuste a Conta a Pagar")
-        self.assertContains(resposta, "Corrigir financeiro da Compra")
-        self.assertEqual(self.compra.total, Decimal("80.00"))
-        self.assertEqual(self.produto_a.quantidade, Decimal("17.000"))
+        resposta = self.client.post(self.url, self.dados(**{"quantidade[]": ["7", "2"]}), secure=True)
+        self.assertEqual(urlsplit(resposta.url).path, reverse("estoque:compra_corrigir_itens", kwargs={"pk": self.compra.id}))
+        self.compra.refresh_from_db(); self.produto_a.refresh_from_db()
+        self.assertEqual(self.compra.total, Decimal("110.00"))
+        self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
         self.assert_financeiro_inalterado()
 
     def test_aumentar_quantidade_aumenta_estoque_pela_diferenca(self):
+        self.movimento.delete()  # Compra sem movimento permite corrigir os itens.
         self.client.post(self.url, self.dados(**{"quantidade[]": ["15", "2"]}), secure=True)
         self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
         self.assertEqual(self.produto_a.quantidade, Decimal("25.000"))
@@ -13840,6 +13807,7 @@ class CorrecaoItensCompraTests(TestCase):
         self.assert_financeiro_inalterado()
 
     def test_alterar_preco_recalcula_total_sem_alterar_estoque(self):
+        self.movimento.delete()  # Compra sem movimento permite corrigir os itens.
         self.client.post(self.url, self.dados(**{"preco_unitario[]": ["12,00", "5,00"]}), secure=True)
         self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
         self.assertEqual(self.produto_a.quantidade, Decimal("20.000"))
@@ -13847,6 +13815,7 @@ class CorrecaoItensCompraTests(TestCase):
         self.assert_financeiro_inalterado()
 
     def test_corrigir_itens_preserva_ajuste_total_da_compra(self):
+        self.movimento.delete()  # Compra sem movimento permite corrigir os itens.
         self.compra.total_produtos = Decimal("110.00")
         self.compra.ajuste_total = Decimal("2.50")
         self.compra.total = Decimal("112.50")
@@ -13860,6 +13829,7 @@ class CorrecaoItensCompraTests(TestCase):
         self.assertEqual(self.compra.total, Decimal("82.50"))
 
     def test_remover_item_desfaz_sua_entrada_no_estoque(self):
+        self.movimento.delete()  # Compra sem movimento permite corrigir os itens.
         self.client.post(self.url, self.dados(**{"remover_item[]": [str(self.item_a.id)]}), secure=True)
         self.produto_a.refresh_from_db(); self.compra.refresh_from_db()
         self.assertFalse(ItemCompra.objects.filter(pk=self.item_a.id).exists())
@@ -13868,6 +13838,7 @@ class CorrecaoItensCompraTests(TestCase):
         self.assert_financeiro_inalterado()
 
     def test_adicionar_item_aumenta_estoque(self):
+        self.movimento.delete()  # Compra sem movimento permite corrigir os itens.
         self.client.post(self.url, self.dados(**{
             "novo_produto_id[]": [str(self.produto_c.id)],
             "nova_quantidade[]": ["5"],
@@ -13913,9 +13884,9 @@ class CorrecaoItensCompraTests(TestCase):
         detalhe = self.client.get(f"/estoque/compras/{self.compra.id}/", secure=True)
         correcao = self.client.get(self.url, secure=True)
         self.assertEqual(detalhe.status_code, 200)
-        self.assertContains(correcao, "Salvar correção dos itens")
+        self.assertContains(correcao, "Salvar altera\u00e7\u00f5es")
         self.assertContains(correcao, "Novo total")
-        self.assertContains(correcao, "Caixa/Banco e Conta a Pagar não serão alterados")
+        self.assertContains(correcao, "ja possui movimento financeiro")
         self.assertContains(correcao, 'form.addEventListener("keydown"')
         self.assertContains(correcao, 'event.key !== "Enter"')
         self.assertContains(correcao, 'event.preventDefault()')

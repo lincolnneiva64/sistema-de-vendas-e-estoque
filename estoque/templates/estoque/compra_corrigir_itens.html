@@ -110,6 +110,9 @@
     background: #ffffff;
     font-weight: 800;
   }
+  .compra-correcao-valores label { display:block; margin:8px 0; font-weight:700; }
+  .compra-correcao-valores input, .compra-correcao-valores select { display:block; width:100%; max-width:460px; padding:8px; border:1px solid #94a3b8; border-radius:6px; }
+  .compra-correcao-valores input[readonly] { background:#f1f5f9; }
 </style>
 
 <div class="compra-correcao-wrap">
@@ -261,6 +264,25 @@
     </section>
     {% endif %}
 
+    <section class="compra-correcao-card compra-correcao-valores">
+      <h2>Valor cobrado e ajuste</h2>
+      <label>Calcular por
+        <select name="modo_total_correcao" id="modoTotalCorrecao" {% if not valores_editaveis %}disabled{% endif %}>
+          <option value="ajuste">Ajuste (preservar ao alterar itens)</option>
+          <option value="valor_cobrado">Valor cobrado informado</option>
+        </select>
+      </label>
+      <label>Ajuste / diferen&ccedil;a (R$)
+        <input type="text" name="ajuste_total_correcao" id="ajusteTotalCorrecao" inputmode="decimal" value="{{ compra.ajuste_total|stringformat:'f' }}" {% if not valores_editaveis %}readonly{% endif %}>
+      </label>
+      <label>Valor cobrado (R$)
+        <input type="text" name="valor_cobrado_correcao" id="valorCobradoCorrecao" inputmode="decimal" value="{{ compra.total|stringformat:'f' }}" {% if not valores_editaveis %}readonly{% endif %}>
+      </label>
+      <p>O ajuste &eacute; preservado por padr&atilde;o. Para corrigir o valor cobrado, selecione a op&ccedil;&atilde;o correspondente.</p>
+      {% if motivo_bloqueio_valores %}<p class="compra-correcao-aviso">{{ motivo_bloqueio_valores }}</p>{% endif %}
+      <label>Motivo da corre&ccedil;&atilde;o <input type="text" name="motivo_correcao" maxlength="500"></label>
+    </section>
+
     <section class="compra-correcao-card">
       <h2>Conferência da correção</h2>
       <div class="compra-correcao-totais">
@@ -291,6 +313,43 @@
 </template>
 
 <script>
+// Centavos e arredondamento por item, como os Decimal do backend.
+function arredondarCorrecaoCompra(valor, divisor) {
+  const sinal = valor < 0n ? -1n : 1n;
+  valor = valor < 0n ? -valor : valor;
+  let inteiro = valor / divisor;
+  const resto = valor % divisor;
+  if (resto * 2n > divisor || (resto * 2n === divisor && inteiro % 2n !== 0n)) inteiro += 1n;
+  return inteiro * sinal;
+}
+function decimalCorrecaoCompra(valor, casas) {
+  let texto = String(valor ?? "").trim() || "0";
+  if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+  else if (texto.split(".").length > 2) {
+    const partes = texto.split(".");
+    const ultima = partes.pop();
+    texto = partes.join("") + (ultima.length <= casas ? "." : "") + ultima;
+  }
+  const partes = /^([+-]?)(\d*)(?:\.(\d*))?$/.exec(texto);
+  if (!partes || (!partes[2] && !partes[3])) throw new Error("Valor numerico invalido");
+  const fracao = partes[3] || "";
+  const escala = Math.max(casas, fracao.length);
+  const inteiro = BigInt((partes[2] || "0") + fracao.padEnd(escala, "0"));
+  return arredondarCorrecaoCompra((partes[1] === "-" ? -1n : 1n) * inteiro, 10n ** BigInt(escala - casas));
+}
+function totaisCorrecaoCompra(itens, modo, ajuste, cobrado) {
+  const subtotais = itens.map(function(item) {
+    const quantidade = decimalCorrecaoCompra(item.quantidade, 3);
+    const preco = decimalCorrecaoCompra(item.preco, 2);
+    if (quantidade < 0n || preco < 0n) throw new Error("Quantidade e preco nao podem ser negativos");
+    return item.removido ? 0n : arredondarCorrecaoCompra(quantidade * preco, 1000n);
+  });
+  const produtos = subtotais.reduce((soma, valor) => soma + valor, 0n);
+  const ajusteCentavos = modo === "valor_cobrado" ? decimalCorrecaoCompra(cobrado, 2) - produtos : decimalCorrecaoCompra(ajuste, 2);
+  const total = produtos + ajusteCentavos;
+  if (total < 0n) throw new Error("O valor cobrado nao pode ser negativo");
+  return {produtos, ajuste: ajusteCentavos, total, subtotais};
+}
 (function() {
   const form = document.getElementById("formCorrecaoItensCompra");
   const tbodyNovos = document.getElementById("novosItensCorrecaoCompra");
@@ -302,6 +361,13 @@
   const impactoEl = document.getElementById("impactoFinanceiroCorrecaoCompra");
   const textoImpactoEl = document.getElementById("textoImpactoFinanceiroCorrecaoCompra");
   const salvar = document.getElementById("btnSalvarCorrecaoItensCompra");
+  const modoTotal = document.getElementById("modoTotalCorrecao");
+  const ajusteInput = document.getElementById("ajusteTotalCorrecao");
+  const cobradoInput = document.getElementById("valorCobradoCorrecao");
+  const contaUnica = {% if correcao_parcelas.quantidade == 1 %}true{% else %}false{% endif %};
+  const parcelaUnica = contaUnica ? form.querySelector('[name^="parcela_valor_"]') : null;
+  const valoresEditaveis = {% if valores_editaveis %}true{% else %}false{% endif %};
+  function valorInput(centavos) { return (Number(centavos) / 100).toFixed(2).replace(".", ","); }
   if (!form) return;
 
   function numero(valor) { let texto=String(valor||"0").trim(); if(texto.includes(",")) texto=texto.replace(/\./g,"").replace(",", "."); texto=texto.replace(/[^\d.-]/g,""); return Number(texto)||0; }
@@ -318,15 +384,32 @@
       .filter(function(campo) { return !campo.disabled; });
   }
   function recalcular() {
-    let total=0;
-    form.querySelectorAll(".linha-correcao-item, .linha-novo-item-correcao").forEach(function(linha) {
-      const removido=linha.querySelector('[name="remover_item[]"]')?.checked;
-      const quantidade=numero(linha.querySelector(".campo-quantidade-correcao")?.value);
-      const preco=numero(linha.querySelector(".campo-preco-correcao")?.value);
-      const subtotal=removido?0:Math.max(quantidade,0)*Math.max(preco,0);
-      const alvo=linha.querySelector(".subtotal-correcao"); if(alvo) alvo.textContent=moeda(subtotal);
-      linha.classList.toggle("removido",Boolean(removido)); total+=subtotal;
+    const linhas = Array.from(form.querySelectorAll(".linha-correcao-item, .linha-novo-item-correcao"));
+    const itens = linhas.map(function(linha) {
+      return {
+        removido: Boolean(linha.querySelector('[name="remover_item[]"]')?.checked),
+        quantidade: linha.querySelector(".campo-quantidade-correcao")?.value,
+        preco: linha.querySelector(".campo-preco-correcao")?.value
+      };
     });
+    let totais;
+    try {
+      totais = totaisCorrecaoCompra(itens, modoTotal.value, ajusteInput.value, cobradoInput.value);
+    } catch (erro) {
+      novoTotalEl.textContent = "Confira os valores informados";
+      salvar.disabled = true;
+      return;
+    }
+    salvar.disabled = false;
+    linhas.forEach(function(linha, indice) {
+      const alvo = linha.querySelector(".subtotal-correcao");
+      if (alvo) alvo.textContent = moeda(Number(totais.subtotais[indice]) / 100);
+      linha.classList.toggle("removido", itens[indice].removido);
+    });
+    if (modoTotal.value === "ajuste") cobradoInput.value = valorInput(totais.total);
+    else ajusteInput.value = valorInput(totais.ajuste);
+    if (parcelaUnica && valoresEditaveis && document.activeElement !== parcelaUnica) parcelaUnica.value = valorInput(totais.total);
+    const total = Number(totais.total) / 100;
     const anterior=numero(totalAnteriorEl?.dataset.valor);
     if(novoTotalEl) novoTotalEl.textContent=moeda(total);
     const diferenca = total-anterior;
@@ -336,7 +419,10 @@
       const pagamento = String(impactoEl.dataset.pagamento||"").toLowerCase();
       impactoEl.classList.toggle("sem-impacto", !mudou);
       impactoEl.classList.toggle("atencao", mudou);
-      if(!mudou) {
+      if (!valoresEditaveis && mudou) {
+        textoImpactoEl.textContent = "Valores protegidos: esta compra exige um fluxo de correcao financeira especifico.";
+        salvar.disabled = true;
+      } else if(!mudou) {
         textoImpactoEl.textContent = "Sem impacto financeiro previsto.";
       } else if(["avista","pix","dinheiro","banco","cartao","cartao_credito","cartao_debito"].includes(pagamento)) {
         textoImpactoEl.textContent = "Se salvar com diferen\u00e7a, os itens e o total ser\u00e3o atualizados. O sistema solicitar\u00e1 o ajuste da origem do pagamento quando necess\u00e1rio.";
@@ -352,7 +438,15 @@
     selecionarCampo(tbodyNovos.lastElementChild?.querySelector(".campo-produto-novo-correcao"));
   }
   adicionar?.addEventListener("click",adicionarLinha);
-  form.addEventListener("input",recalcular);
+  form.addEventListener("input",function(event) {
+    if (valoresEditaveis && event.target === cobradoInput) modoTotal.value = "valor_cobrado";
+    if (valoresEditaveis && event.target === ajusteInput) modoTotal.value = "ajuste";
+    if (valoresEditaveis && event.target === parcelaUnica) {
+      modoTotal.value = "valor_cobrado";
+      cobradoInput.value = parcelaUnica.value;
+    }
+    recalcular();
+  });
   form.addEventListener("focusin",function(event) {
     if (campoNumerico(event.target)) event.target.select();
   });
