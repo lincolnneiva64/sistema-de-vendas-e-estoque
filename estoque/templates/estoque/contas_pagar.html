@@ -70,7 +70,10 @@
   .cp-money.interest:not(.zero) { color:#92400e; }
   .cp-legacy-history { display:inline-flex; align-items:center; border-radius:999px; padding:4px 8px; background:#f1f5f9; border:1px solid #cbd5e1; color:#64748b; font-size:.74rem; font-weight:900; white-space:nowrap; }
   .cp-origin a { font-weight:900; color:#164173; text-decoration:none; }
-  .cp-account { display:grid; grid-template-columns:130px minmax(190px,1fr) minmax(150px, .9fr); gap:12px; align-items:center; }
+  .cp-account { display:grid; grid-template-columns:170px minmax(190px,1fr) minmax(150px, .9fr); gap:12px; align-items:center; }
+  .cp-result-dates { display:flex; flex-direction:column; gap:4px; font-size:.78rem; line-height:1.35; }
+  .cp-result-date { color:#172033; font-weight:850; }
+  .cp-result-date strong { color:#64748b; font-weight:800; }
   .cp-account-date { font-weight:950; color:#172033; }
   .cp-account-provider { font-weight:950; color:#172033; }
   .cp-provider-marked { display:inline-flex; align-items:center; gap:7px; min-width:0; }
@@ -264,9 +267,9 @@
           <tr data-conta-pagar-id="{{ conta.pk }}">
             <td>
               <div class="cp-account">
-                <div>
-                  <span class="cp-value-label">Vencimento</span>
-                  <span class="cp-account-date">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+                <div class="cp-result-dates">
+                  {% if conta.compra_id %}<span class="cp-result-date"><strong>Compra:</strong> {{ conta.compra.data_compra|date:"d/m/Y" }}</span>{% endif %}
+                  <span class="cp-result-date"><strong>Vencimento:</strong> {{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
                 </div>
                 <div>
                   <span class="cp-value-label">Fornecedor</span>
@@ -367,7 +370,10 @@
           <span class="cp-status {{ conta.situacao_classe }}">{{ conta.situacao_texto }}</span>
         </div>
         <div class="cp-mobile-grid">
-          <div><span class="cp-mobile-label">Vencimento</span><span class="cp-mobile-value">{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span></div>
+          <div class="cp-result-dates">
+            {% if conta.compra_id %}<span class="cp-result-date"><strong>Compra:</strong> {{ conta.compra.data_compra|date:"d/m/Y" }}</span>{% endif %}
+            <span class="cp-result-date"><strong>Vencimento:</strong> {{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</span>
+          </div>
           <div><span class="cp-mobile-label">Origem</span><span class="cp-mobile-value">{% if conta.compra_id %}Compra #{{ conta.compra.id }}{% elif conta.documento_legado %}{{ conta.documento_legado }}{% else %}Conta #{{ conta.pk }}{% endif %}</span></div>
           <div><span class="cp-mobile-label">Parcela</span><span class="cp-mobile-value">{{ conta.parcela_rotulo }}</span></div>
           <div><span class="cp-mobile-label">Original</span><span class="cp-mobile-value cp-money">R$ {{ conta.valor_original|floatformat:2 }}</span></div>
