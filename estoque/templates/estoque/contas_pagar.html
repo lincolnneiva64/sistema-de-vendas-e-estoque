@@ -30,7 +30,20 @@
   .cp-summary-card.warn { border-color:#fde68a; background:#fffbeb; }
   .cp-summary-card.good { border-color:#bbf7d0; background:#f0fdf4; }
   .cp-summary-card.info { border-color:#bfdbfe; background:#eff6ff; }
-  .cp-filters { padding:14px; display:grid; grid-template-columns:1.25fr 1fr .75fr .75fr .9fr auto auto; gap:9px; align-items:end; }
+  .cp-filters { padding:14px; display:grid; grid-template-columns:2fr 1.25fr 1fr 1fr 1.1fr; gap:12px; align-items:end; }
+  .cp-filter-card { overflow:visible; }
+  .cp-filters input, .cp-filters select { box-sizing:border-box; }
+  .cp-field { min-width:0; }
+  .cp-field.cp-filter-active input, .cp-field.cp-filter-active select { border-color:#6487b5; background:#eff6ff; box-shadow:0 0 0 1px #c5d7ed; }
+  .cp-field.cp-filter-active label { color:#164173; }
+  .cp-supplier-field { position:relative; }
+  .cp-supplier-field label { font-size:.9rem; font-weight:950; }
+  .cp-supplier-suggestions { position:absolute; top:100%; left:0; right:0; z-index:50; max-height:260px; overflow:auto; background:#fff; border:1px solid #b7ccec; border-radius:8px; box-shadow:0 12px 24px rgba(15,23,42,.15); }
+  .cp-supplier-option { padding:10px; cursor:pointer; font-weight:800; }
+  .cp-supplier-option.ativa, .cp-supplier-option:hover { background:#e8f1ff; color:#164173; }
+  .cp-supplier-empty { padding:10px; color:#64748b; }
+  .cp-field input:focus-visible, .cp-field select:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+  .cp-provider-name { font-size:1.03rem; font-weight:950; color:#164173; }
   .cp-field label { display:block; font-weight:850; font-size:.78rem; margin-bottom:4px; color:#334155; }
   .cp-field input, .cp-field select { width:100%; border:1.5px solid #d3dbe8; border-radius:8px; padding:8px 10px; font-weight:750; outline:none; min-height:39px; background:#fff; }
   .cp-period-note { padding:0 14px 12px; color:#64748b; font-weight:800; font-size:.86rem; }
@@ -173,40 +186,42 @@
     </div>
   </section>
 
-  <section class="cp-card">
+  <section class="cp-card cp-filter-card">
     <form method="get" class="cp-filters" id="contasPagarFiltros">
-      <div class="cp-field">
-        <label>Fornecedor</label>
-        <select name="fornecedor">
+      <div class="cp-field cp-supplier-field{% if fornecedor_id %} cp-filter-active{% endif %}">
+        <label for="cpFornecedorSelect">Fornecedor</label>
+        <input id="cpFornecedorBusca" type="search" placeholder="Digite fornecedor..." autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="cpFornecedorSugestoes" aria-expanded="false" hidden>
+        <div id="cpFornecedorSugestoes" class="cp-supplier-suggestions" role="listbox" aria-label="Fornecedores" hidden></div>
+        <select name="fornecedor" id="cpFornecedorSelect">
           <option value="">Todos</option>
           {% for fornecedor in fornecedores %}
             <option value="{{ fornecedor.id }}" {% if fornecedor_id == fornecedor.id|stringformat:"s" %}selected{% endif %}>{{ fornecedor.nome }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="cp-field">
-        <label>Compra/documento</label>
-        <input type="search" name="compra" value="{{ compra_documento }}" placeholder="109 ou FB-2026">
+      <div class="cp-field{% if compra_documento %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_compra">Compra/documento</label>
+        <input type="search" id="cpFiltro_compra" name="compra" value="{{ compra_documento }}" placeholder="109 ou FB-2026">
       </div>
-      <div class="cp-field">
-        <label>Inicio</label>
-        <input type="date" name="data_inicio" value="{{ data_inicio }}">
+      <div class="cp-field{% if data_inicio %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_data_inicio">Inicio</label>
+        <input type="date" id="cpFiltro_data_inicio" name="data_inicio" value="{{ data_inicio }}">
       </div>
-      <div class="cp-field">
-        <label>Fim</label>
-        <input type="date" name="data_fim" value="{{ data_fim }}">
+      <div class="cp-field{% if data_fim %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_data_fim">Fim</label>
+        <input type="date" id="cpFiltro_data_fim" name="data_fim" value="{{ data_fim }}">
       </div>
-      <div class="cp-field">
-        <label>Situacao</label>
-        <select name="situacao">
+      <div class="cp-field{% if situacao != 'abertas' %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_situacao">Situacao</label>
+        <select id="cpFiltro_situacao" name="situacao">
           {% for valor, texto in situacao_choices %}
             <option value="{{ valor }}" {% if situacao == valor %}selected{% endif %}>{{ texto }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="cp-field">
-        <label>Busca livre</label>
-        <input type="search" name="q" value="{{ termo }}" placeholder="Fornecedor ou observacao">
+      <div class="cp-field{% if termo %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_q">Busca livre</label>
+        <input type="search" id="cpFiltro_q" name="q" value="{{ termo }}" placeholder="Fornecedor ou observacao">
       </div>
       <button type="submit" class="cp-btn primary">Filtrar</button>
       <a href="{% url 'estoque:contas_pagar' %}" class="cp-btn secondary">Limpar</a>
@@ -1076,6 +1091,8 @@
 
   function enviarFiltros() {
     if (!filtrosForm) return;
+    clearTimeout(filtroTimer);
+    if (enviandoFiltros) return;
     if (typeof filtrosForm.requestSubmit === "function") {
       filtrosForm.requestSubmit();
     } else {
@@ -1083,12 +1100,124 @@
     }
   }
 
+  let filtroTimer;
+  let enviandoFiltros = false;
+  const fornecedorSelect = document.getElementById("cpFornecedorSelect");
+  const fornecedorBusca = document.getElementById("cpFornecedorBusca");
+  const fornecedorLista = document.getElementById("cpFornecedorSugestoes");
+  const fornecedoresFiltro = Array.from(fornecedorSelect.options).filter(opt => opt.value);
+  let sugestoesFornecedor = [];
+  let fornecedorIndice = -1;
+  const normalizarFornecedor = texto => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  function destacarFiltros() {
+    filtrosForm.querySelectorAll(".cp-field").forEach(bloco => {
+      const campo = bloco.querySelector("[name]");
+      bloco.classList.toggle("cp-filter-active", campo.name === "situacao" ? campo.value !== "abertas" : Boolean(campo.value.trim()));
+    });
+  }
+  function fecharFornecedores() {
+    fornecedorLista.hidden = true;
+    fornecedorBusca.setAttribute("aria-expanded", "false");
+    fornecedorBusca.removeAttribute("aria-activedescendant");
+  }
+  function selecionarFornecedor(opt) {
+    fornecedorSelect.value = opt.value;
+    fornecedorBusca.value = opt.textContent.trim();
+    fecharFornecedores();
+    fornecedorSelect.dispatchEvent(new Event("change", { bubbles:true }));
+  }
+  function renderizarFornecedores() {
+    fornecedorLista.replaceChildren();
+    sugestoesFornecedor.forEach((opt, indice) => {
+      const item = document.createElement("div");
+      item.id = "cpFornecedorOpcao" + indice;
+      item.className = "cp-supplier-option" + (indice === fornecedorIndice ? " ativa" : "");
+      item.setAttribute("role", "option");
+      item.setAttribute("aria-selected", String(indice === fornecedorIndice));
+      item.textContent = opt.textContent.trim();
+      item.addEventListener("mousedown", event => event.preventDefault());
+      item.addEventListener("click", () => selecionarFornecedor(opt));
+      fornecedorLista.append(item);
+    });
+    if (!sugestoesFornecedor.length) {
+      const vazio = document.createElement("div");
+      vazio.className = "cp-supplier-empty";
+      vazio.textContent = "Nenhum fornecedor encontrado";
+      fornecedorLista.append(vazio);
+    }
+    fornecedorLista.hidden = false;
+    fornecedorBusca.setAttribute("aria-expanded", "true");
+    fornecedorBusca.removeAttribute("aria-activedescendant");
+    if (fornecedorIndice >= 0) {
+      const ativo = fornecedorLista.children[fornecedorIndice];
+      fornecedorBusca.setAttribute("aria-activedescendant", ativo.id);
+      ativo.scrollIntoView({ block:"nearest" });
+    }
+  }
+  function buscarFornecedores() {
+    const termo = normalizarFornecedor(fornecedorBusca.value);
+    if (!termo) { fecharFornecedores(); return; }
+    sugestoesFornecedor = fornecedoresFiltro.filter(opt => normalizarFornecedor(opt.textContent).includes(termo));
+    fornecedorIndice = -1;
+    renderizarFornecedores();
+  }
+  fornecedorSelect.hidden = true;
+  fornecedorBusca.hidden = false;
+  fornecedorSelect.closest(".cp-field").querySelector("label").htmlFor = fornecedorBusca.id;
+  fornecedorBusca.value = fornecedorSelect.value ? fornecedorSelect.selectedOptions[0].textContent.trim() : "";
+  fornecedorBusca.addEventListener("input", () => {
+    buscarFornecedores();
+    if (!fornecedorBusca.value.trim() && fornecedorSelect.value) {
+      fornecedorSelect.value = "";
+      fornecedorSelect.dispatchEvent(new Event("change", { bubbles:true }));
+    }
+  });
+  fornecedorBusca.addEventListener("focus", buscarFornecedores);
+  fornecedorBusca.addEventListener("blur", () => {
+    fecharFornecedores();
+    fornecedorBusca.value = fornecedorSelect.value ? fornecedorSelect.selectedOptions[0].textContent.trim() : "";
+  });
+  fornecedorBusca.addEventListener("keydown", event => {
+    if (event.isComposing) return;
+    if (event.key === "Escape") { event.preventDefault(); fecharFornecedores(); }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (fornecedorLista.hidden) buscarFornecedores();
+      if (!sugestoesFornecedor.length) return;
+      fornecedorIndice = (fornecedorIndice + (event.key === "ArrowDown" ? 1 : -1) + sugestoesFornecedor.length) % sugestoesFornecedor.length;
+      renderizarFornecedores();
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!fornecedorLista.hidden && sugestoesFornecedor.length) selecionarFornecedor(sugestoesFornecedor[Math.max(0, fornecedorIndice)]);
+      else if (fornecedorSelect.value || !fornecedorBusca.value.trim()) enviarFiltros();
+    }
+  });
+  destacarFiltros();
+  filtrosForm.addEventListener("input", destacarFiltros);
+  filtrosForm.addEventListener("submit", event => {
+    clearTimeout(filtroTimer);
+    if (enviandoFiltros) { event.preventDefault(); return; }
+    enviandoFiltros = true;
+  });
+  window.addEventListener("pageshow", () => { enviandoFiltros = false; destacarFiltros(); });
   filtrosForm?.querySelectorAll("select[name='fornecedor'], select[name='situacao'], input[name='data_inicio'], input[name='data_fim']").forEach(function (campo) {
-    campo.addEventListener("change", enviarFiltros);
+    campo.addEventListener("change", () => {
+      if (campo.name === "situacao") filtrosForm.querySelector("input[name='atalho']")?.remove();
+      destacarFiltros();
+      enviarFiltros();
+    });
   });
 
   filtrosForm?.querySelectorAll("input[name='compra'], input[name='q']").forEach(function (campo) {
+    const inicial = campo.value;
+    campo.addEventListener("input", () => {
+      clearTimeout(filtroTimer);
+      if (campo.value !== inicial) filtroTimer = setTimeout(enviarFiltros, 800);
+    });
+    campo.addEventListener("blur", () => { if (campo.value !== inicial) enviarFiltros(); });
     campo.addEventListener("keydown", function (event) {
+      if (event.isComposing) return;
       if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();
       enviarFiltros();

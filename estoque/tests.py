@@ -36785,6 +36785,34 @@ class CentralContasPagarTests(TestCase):
         self.assertContains(resposta, 'class="cp-provider-pill"')
         self.assertContains(resposta, "Micos Distribuidora")
 
+    def test_filtros_preservam_selecao_e_destacam_campos_sem_movimentar_financeiro(self):
+        qualy = Fornecedor.objects.create(nome="Qualy Norte")
+        frango = Fornecedor.objects.create(nome="Frango Americano")
+        conta = self._conta(fornecedor=qualy, documento_legado="FB-2026")
+        self._conta(fornecedor=frango, documento_legado="OUTRO")
+        pagamentos_antes = PagamentoContaPagar.objects.count()
+        movimentos_antes = MovimentoFinanceiro.objects.count()
+        filtros = {
+            "fornecedor": str(qualy.pk), "compra": "FB-2026",
+            "data_inicio": self.hoje.isoformat(),
+            "data_fim": (self.hoje + timedelta(days=30)).isoformat(),
+            "situacao": "todas", "q": "Qualy",
+        }
+        for _ in range(2):
+            resposta = self.client.get(self.url, filtros, secure=True)
+            self.assertEqual([item.pk for item in resposta.context["contas"]], [conta.pk])
+            self.assertContains(resposta, 'cp-supplier-field cp-filter-active')
+            self.assertContains(resposta, f'value="{qualy.pk}" selected')
+            self.assertContains(resposta, 'class="cp-field cp-filter-active"', count=5)
+        limpa = self.client.get(self.url, secure=True)
+        self.assertContains(limpa, 'class="cp-field cp-supplier-field"')
+        self.assertNotContains(limpa, 'class="cp-field cp-filter-active"')
+        self.assertEqual(len(limpa.context["contas"]), 2)
+        conta.refresh_from_db()
+        self.assertEqual(conta.valor_em_aberto, Decimal("1000.00"))
+        self.assertEqual(PagamentoContaPagar.objects.count(), pagamentos_antes)
+        self.assertEqual(MovimentoFinanceiro.objects.count(), movimentos_antes)
+
     def test_faixa_de_totais_historicos_nao_renderiza_na_central(self):
         self._conta(valor="246.00")
 
