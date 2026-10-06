@@ -1,5 +1,8 @@
 import json
 import re
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qsl, urlsplit
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,6 +15,116 @@ from .models import ContaPagar, Fornecedor
 
 
 class FiltrosContasPagarTests(TestCase):
+    def test_navegacao_real_fornecedor_por_enter_e_clique(self):
+        garcia = Fornecedor.objects.create(nome='Garcia Distribuidora')
+        amazonia = Fornecedor.objects.create(nome='Comercial Amazonia')
+        for fornecedor in [garcia, amazonia]:
+            for status in [ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PAGA]:
+                ContaPagar.objects.create(fornecedor=fornecedor, status=status,
+                    data_emissao=date(2026, 9, 1), data_vencimento=date(2026, 9, 10),
+                    valor_original=100, valor_em_aberto=0 if status == ContaPagar.STATUS_PAGA else 50)
+        def chave(params):
+            return tuple(sorted((k, v) for k, v in params.items() if v))
+        paginas = {}
+        for fornecedor in ['', str(garcia.pk), str(amazonia.pk), str(self.coca.pk)]:
+            for inicio in ['', '2026-09-10']:
+                for situacao in ['todas', ContaPagar.STATUS_PARCIAL]:
+                    params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='', situacao=situacao)
+                    paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
+        paginas[()] = self.client.get(self.url, secure=True).content
+        requisicoes = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(handler):
+                parsed = urlsplit(handler.path)
+                if parsed.path != self.url:
+                    handler.send_error(404)
+                    return
+                params = dict(parse_qsl(parsed.query))
+                requisicoes.append(params)
+                body = paginas[chave(params)]
+                marker = ('<script>window.testParams=' + json.dumps(params) + ';</script>').encode()
+                body = body.replace(b'</body>', marker + b'</body>')
+                handler.send_response(200)
+                handler.send_header('Content-Type', 'text/html; charset=utf-8')
+                handler.end_headers()
+                handler.wfile.write(body)
+            def log_message(self, *args):
+                pass
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with TemporaryDirectory(prefix='fornecedor-real-') as profile:
+                chrome = Chrome(r'C:\Program Files\Google\Chrome\Application\chrome.exe', profile).start()
+                try:
+                    tab = chrome.tab()
+                    url = f'http://127.0.0.1:{server.server_port}{self.url}'
+                    for width in [1280, 390]:
+                        tab.call('Emulation.setDeviceMetricsOverride', dict(width=width, height=850, deviceScaleFactor=1, mobile=width == 390))
+                        tab.call('Page.navigate', {'url': url})
+                        tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ""')
+                        self.assertEqual(tab.evaluate('document.getElementById("cpFiltro_situacao").value'), 'todas')
+                        def esperar(count, fornecedor, situacao='todas', inicio=''):
+                            tab.wait('window.testParams && (window.testParams.fornecedor || "") === ' + json.dumps(fornecedor) + ' && (window.testParams.situacao || "todas") === ' + json.dumps(situacao) + ' && (window.testParams.data_inicio || "") === ' + json.dumps(inicio))
+                            tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ' + json.dumps(fornecedor) + ' && document.getElementById("cpFiltro_situacao").value === ' + json.dumps(situacao) + ' && document.getElementById("cpFiltro_data_inicio").value === ' + json.dumps(inicio))
+                            tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,200));return true})()')
+                            self.assertEqual(len(requisicoes), count + 1)
+                            self.assertEqual(requisicoes[-1].get('fornecedor', ''), fornecedor)
+                            self.assertEqual(requisicoes[-1].get('situacao', 'todas'), situacao)
+                            self.assertNotIn('q', requisicoes[-1])
+                            if fornecedor:
+                                nome = Fornecedor.objects.get(pk=fornecedor).nome
+                                self.assertEqual(tab.evaluate('[...document.querySelectorAll(".cp-provider-name")].map(e=>e.textContent.trim())'), [nome] * tab.evaluate('document.querySelectorAll(".cp-provider-name").length'))
+                                self.assertGreater(tab.evaluate('document.querySelectorAll(".cp-provider-name").length'), 0)
+                                self.assertEqual(tab.evaluate('document.getElementById("cpFornecedorBusca").value'), nome)
+                        for termo, fornecedor, clique in [('gar', garcia, False), ('gar', garcia, True), ('amazon', amazonia, True), ('coc', self.coca, False)]:
+                            if clique and fornecedor == garcia:
+                                tab.call('Page.navigate', {'url': url})
+                                tab.wait('document.getElementById("cpFornecedorBusca")?.hidden === false && document.getElementById("cpFornecedorSelect").value === ""')
+                            count = len(requisicoes)
+                            tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.focus();e.value=' + json.dumps(termo) + ';e.dispatchEvent(new Event("input",{bubbles:true}))')
+                            self.assertEqual(tab.evaluate('document.querySelector(".cp-supplier-option").textContent'), fornecedor.nome)
+                            # Observe the order without cancelling the real GET navigation.
+                            tab.evaluate('document.getElementById("contasPagarFiltros").addEventListener("submit",()=>sessionStorage.setItem("focoSubmit",document.activeElement.id),{once:true})')
+                            if clique:
+                                tab.evaluate('document.querySelector(".cp-supplier-option").scrollIntoView({block:"center",behavior:"instant"})')
+                                tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,200));return true})()')
+                                pos = tab.evaluate('(()=>{let r=document.querySelector(".cp-supplier-option").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()')
+                                self.assertEqual(tab.evaluate('document.elementFromPoint(' + str(pos['x']) + ',' + str(pos['y']) + ').className'), 'cp-supplier-option ativa')
+                                tab.call('Input.dispatchMouseEvent', dict(type='mousePressed', button='left', clickCount=1, **pos))
+                                tab.call('Input.dispatchMouseEvent', dict(type='mouseReleased', button='left', clickCount=1, **pos))
+                            else:
+                                tab.call('Input.dispatchKeyEvent', {'type': 'keyDown', 'key': 'Enter', 'code': 'Enter', 'windowsVirtualKeyCode': 13})
+                                tab.call('Input.dispatchKeyEvent', {'type': 'keyUp', 'key': 'Enter', 'code': 'Enter', 'windowsVirtualKeyCode': 13})
+                            try:
+                                esperar(count, str(fornecedor.pk))
+                            except AssertionError as error:
+                                self.fail(f'{width=} {termo=} {clique=} {requisicoes=} DOM=' + str(tab.evaluate('({url:location.href,params:window.testParams,id:document.getElementById("cpFornecedorSelect").value,texto:document.getElementById("cpFornecedorBusca").value,foco:document.activeElement.id})')) + str(error))
+                            self.assertEqual(tab.evaluate('sessionStorage.getItem("focoSubmit")'), 'cpFornecedorBusca')
+                            self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_compra')
+                        for id, valor, situacao, inicio in [('cpFiltro_data_inicio', '2026-09-10', 'todas', '2026-09-10'), ('cpFiltro_situacao', ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PARCIAL, '2026-09-10')]:
+                            count = len(requisicoes)
+                            tab.evaluate('let e=document.getElementById(' + json.dumps(id) + ');e.value=' + json.dumps(valor) + ';e.dispatchEvent(new Event("change",{bubbles:true}))')
+                            esperar(count, str(self.coca.pk), situacao, inicio)
+                        count = len(requisicoes)
+                        tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.value="";e.dispatchEvent(new Event("input",{bubbles:true}))')
+                        esperar(count, '', ContaPagar.STATUS_PARCIAL, '2026-09-10')
+                        count = len(requisicoes)
+                        tab.evaluate('document.querySelector(".cp-filter-actions a").click()')
+                        esperar(count, '')
+                        self.assertEqual(tab.evaluate('document.getElementById("cpFiltro_data_fim").value'), '')
+                        # Unmatched text must not submit or retain a pretend selection.
+                        count = len(requisicoes)
+                        tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.focus();e.value="sem fornecedor correspondente";e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}))')
+                        self.assertEqual(tab.evaluate('document.getElementById("cpFornecedorBusca").value'), '')
+                        self.assertEqual(len(requisicoes), count)
+                finally:
+                    chrome.stop()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
     def setUp(self):
         self.url = reverse('estoque:contas_pagar')
         self.coca = Fornecedor.objects.create(nome='Coca Cola')

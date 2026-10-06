@@ -41,7 +41,8 @@
   .cp-filters .cp-field:nth-child(2) { grid-column:span 3; }
   .cp-filters .cp-field:nth-child(5) { grid-column:span 3; }
   .cp-filters .cp-field:nth-child(6) { grid-column:span 6; }
-  .cp-filters .cp-supplier-field { position:relative; grid-column:span 5; background:#f8fafc; border-color:#d7e1ed; }
+  .cp-filters .cp-supplier-field { position:relative; grid-column:span 5; background:#f3f7fc; border-color:#8da9cb; }
+  .cp-filters .cp-supplier-field input, .cp-filters .cp-supplier-field select { border-color:#8da9cb; color:#164173; }
   .cp-filters .cp-supplier-field label { font-size:.92rem; font-weight:950; color:#164173; }
   .cp-filter-actions { grid-column:span 3; display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:10px 0; }
   .cp-filter-actions .cp-btn { min-width:80px; }
@@ -1186,9 +1187,9 @@
     fornecedorSelect.value = opt.value;
     fornecedorBusca.value = opt.textContent.trim();
     fecharFornecedores();
-    focoDepoisFiltro = "cpFiltro_compra";
-    document.getElementById(focoDepoisFiltro)?.focus();
-    fornecedorSelect.dispatchEvent(new Event("change", { bubbles:true }));
+    destacarFiltros();
+    enviarFiltros("cpFiltro_compra");
+    document.getElementById("cpFiltro_compra")?.focus();
   }
   function renderizarFornecedores() {
     fornecedorLista.replaceChildren();
@@ -1222,7 +1223,7 @@
     const termo = normalizarFornecedor(fornecedorBusca.value);
     if (!termo) { fecharFornecedores(); return; }
     sugestoesFornecedor = fornecedoresFiltro.filter(opt => normalizarFornecedor(opt.textContent).includes(termo));
-    fornecedorIndice = -1;
+    fornecedorIndice = sugestoesFornecedor.length ? 0 : -1;
     renderizarFornecedores();
   }
   fornecedorSelect.hidden = true;
@@ -1254,7 +1255,13 @@
     if (event.key === "Enter") {
       event.preventDefault();
       if (!fornecedorLista.hidden && sugestoesFornecedor.length) selecionarFornecedor(sugestoesFornecedor[Math.max(0, fornecedorIndice)]);
-      else if (fornecedorSelect.value || !fornecedorBusca.value.trim()) avancarFiltro("cpFiltro_compra");
+      else if (!fornecedorBusca.value.trim() ||
+               (fornecedorSelect.value && fornecedorBusca.value === fornecedorSelect.selectedOptions[0].textContent.trim())) {
+        avancarFiltro("cpFiltro_compra");
+      } else {
+        fornecedorBusca.value = fornecedorSelect.value ? fornecedorSelect.selectedOptions[0].textContent.trim() : "";
+        fecharFornecedores();
+      }
     }
   });
   destacarFiltros();
