@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from offline.browser_support import Chrome
-from .models import ContaPagar, Fornecedor
+from .models import Compra, ContaPagar, Fornecedor
 
 
 class FiltrosContasPagarTests(TestCase):
@@ -28,7 +28,7 @@ class FiltrosContasPagarTests(TestCase):
         paginas = {}
         for fornecedor in ['', str(garcia.pk), str(amazonia.pk), str(self.coca.pk)]:
             for inicio in ['', '2026-09-10']:
-                params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='')
+                params = dict(fornecedor=fornecedor, compra='', data_inicio=inicio, data_fim='', data_por='compra')
                 paginas[chave(params)] = self.client.get(self.url, params, secure=True).content
         paginas[()] = self.client.get(self.url, secure=True).content
         requisicoes = []
@@ -135,7 +135,8 @@ class FiltrosContasPagarTests(TestCase):
             (self.coca, 20, ContaPagar.STATUS_PAGA, '28747'),
             (self.outro, 10, ContaPagar.STATUS_PARCIAL, '28745-B'),
         ]:
-            self.contas.append(ContaPagar.objects.create(
+            compra = Compra.objects.create(fornecedor=fornecedor, data_compra=date(2026, 9, dia))
+            self.contas.append(ContaPagar.objects.create(compra=compra,
                 fornecedor=fornecedor, data_emissao=date(2026, 9, 1),
                 data_vencimento=date(2026, 9, dia), status=status,
                 documento_legado=documento, valor_original=100,
@@ -206,6 +207,12 @@ class FiltrosContasPagarTests(TestCase):
                         self.assertEqual(tab.evaluate('getComputedStyle(document.querySelector(".cp-mobile")).display !== "none"'), width == 390)
                         tab.evaluate('window.submits=[];document.getElementById("contasPagarFiltros").addEventListener("submit",e=>{e.preventDefault();window.submits.push(Object.fromEntries(new FormData(e.target)))})')
                         tab.evaluate('eval(window.scriptTeste)')
+                        self.assertEqual(tab.evaluate('document.getElementById("cpFiltro_data_por").value'), 'compra')
+                        tab.evaluate('let d=document.getElementById("cpFiltro_data_inicio");d.value="0002-09-28";d.dispatchEvent(new Event("change",{bubbles:true}))')
+                        tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,100));return true})()')
+                        self.assertEqual(tab.evaluate('window.submits.length'), 0)
+                        self.assertFalse(tab.evaluate('document.getElementById("contasPagarFiltros").checkValidity()'))
+                        tab.evaluate('document.getElementById("cpFiltro_data_inicio").value=""')
                         tab.evaluate('window.change=(id,value)=>{let e=document.getElementById(id);e.value=value;e.dispatchEvent(new Event("change",{bubbles:true}))};window.enter=id=>{let e=document.getElementById(id);e.focus();e.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true,cancelable:true}));e.dispatchEvent(new KeyboardEvent("keyup",{key:"Enter",bubbles:true,cancelable:true}))}')
                         tab.evaluate('let e=document.getElementById("cpFornecedorBusca");e.value="coc";e.dispatchEvent(new Event("input",{bubbles:true}));window.enter(e.id)')
                         tab.wait('window.submits.length === 1')
@@ -217,13 +224,13 @@ class FiltrosContasPagarTests(TestCase):
                         nova = self.client.get(self.url, enviados, secure=True)
                         self.assertEqual({c.pk for c in nova.context['contas']}, {c.pk for c in self.contas[:3]})
                         self.assertNotContains(nova, '<strong>Busca:</strong>')
-                        for origem, destino in [('cpFiltro_compra', 'cpFiltro_data_inicio'), ('cpFiltro_data_inicio', 'cpFiltro_data_fim'), ('cpFiltro_data_fim', 'cpFiltro_data_fim')]:
+                        for origem, destino in [('cpFiltro_compra', 'cpFiltro_data_por'), ('cpFiltro_data_por', 'cpFiltro_data_inicio'), ('cpFiltro_data_inicio', 'cpFiltro_data_fim'), ('cpFiltro_data_fim', 'cpFiltro_data_fim')]:
                             tab.evaluate('window.enter(' + json.dumps(origem) + ')')
                             self.assertEqual(tab.evaluate('document.activeElement.id'), destino)
                         self.assertEqual(tab.evaluate('window.submits.length'), 1)
                         self.assertEqual(tab.evaluate('document.activeElement.id'), 'cpFiltro_data_fim')
                         # Simulate pageshow after each completed navigation; preserve the fields.
-                        for field, value in [('cpFiltro_compra', '28745'), ('cpFiltro_data_inicio', '2026-09-01'), ('cpFiltro_data_fim', '2026-09-30')]:
+                        for field, value in [('cpFiltro_compra', '28745'), ('cpFiltro_data_inicio', '2026-09-01'), ('cpFiltro_data_fim', '2026-09-30'), ('cpFiltro_data_por', 'vencimento')]:
                             count = tab.evaluate('window.submits.length')
                             tab.evaluate('window.dispatchEvent(new Event("pageshow"));')
                             if field == 'cpFiltro_compra':
@@ -236,6 +243,7 @@ class FiltrosContasPagarTests(TestCase):
                         tab.wait('window.submits.at(-1).fornecedor === ""')
                         self.assertEqual(tab.evaluate('window.submits.at(-1).data_inicio'), '2026-09-01')
                         self.assertEqual(tab.evaluate('window.submits.at(-1).compra'), '28745')
+                        self.assertEqual(tab.evaluate('window.submits.at(-1).data_por'), 'vencimento')
                         self.assertTrue(tab.evaluate('window.submits.every(dados => !("q" in dados) && !("situacao" in dados) && !("status" in dados))'))
                         self.assertEqual(tab.evaluate('document.querySelector(".cp-filter-actions a").getAttribute("href")'), self.url)
             finally:

@@ -38,8 +38,8 @@
   .cp-results-filtered .cp-mobile-card:last-child { margin-bottom:0; }
   .cp-filters input, .cp-filters select { box-sizing:border-box; }
   .cp-field { min-width:0; padding:10px; border:2px solid transparent; border-radius:12px; grid-column:span 2; }
-  .cp-filters .cp-field:nth-child(2) { grid-column:span 3; }
-  .cp-filters .cp-supplier-field { position:relative; grid-column:span 5; background:#f3f7fc; border-color:#8da9cb; }
+  .cp-filters .cp-field:nth-child(2) { grid-column:span 2; }
+  .cp-filters .cp-supplier-field { position:relative; grid-column:span 4; background:#f3f7fc; border-color:#8da9cb; }
   .cp-filters .cp-supplier-field input, .cp-filters .cp-supplier-field select { border-color:#8da9cb; color:#164173; }
   .cp-filters .cp-supplier-field label { font-size:.92rem; font-weight:950; color:#164173; }
   .cp-filter-actions { grid-column:span 3; display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:10px 0; }
@@ -223,13 +223,20 @@
         <label for="cpFiltro_compra">Compra/documento</label>
         <input type="search" id="cpFiltro_compra" name="compra" value="{{ compra_documento }}" placeholder="109 ou FB-2026">
       </div>
+      <div class="cp-field{% if data_inicio or data_fim %} cp-filter-active{% endif %}">
+        <label for="cpFiltro_data_por">Filtrar data por</label>
+        <select id="cpFiltro_data_por" name="data_por">
+          <option value="compra" {% if data_por == 'compra' %}selected{% endif %}>Compra</option>
+          <option value="vencimento" {% if data_por == 'vencimento' %}selected{% endif %}>Vencimento</option>
+        </select>
+      </div>
       <div class="cp-field{% if data_inicio %} cp-filter-active{% endif %}">
         <label for="cpFiltro_data_inicio">Inicio</label>
-        <input type="date" id="cpFiltro_data_inicio" name="data_inicio" value="{{ data_inicio }}">
+        <input type="date" id="cpFiltro_data_inicio" name="data_inicio" value="{{ data_inicio }}" min="1000-01-01" max="9999-12-31">
       </div>
       <div class="cp-field{% if data_fim %} cp-filter-active{% endif %}">
         <label for="cpFiltro_data_fim">Fim</label>
-        <input type="date" id="cpFiltro_data_fim" name="data_fim" value="{{ data_fim }}">
+        <input type="date" id="cpFiltro_data_fim" name="data_fim" value="{{ data_fim }}" min="1000-01-01" max="9999-12-31">
       </div>
       <div class="cp-filter-actions">
         <button type="submit" class="cp-btn ghost">Filtrar</button>
@@ -242,13 +249,14 @@
         <span class="cp-active-summary-title">Filtros ativos:</span>
         {% if fornecedor_id %}{% for fornecedor in fornecedores %}{% if fornecedor_id == fornecedor.id|stringformat:"s" %}<span class="cp-active-summary-item"><strong>Fornecedor:</strong> {{ fornecedor.nome }}</span>{% endif %}{% endfor %}{% endif %}
         {% if compra_documento %}<span class="cp-active-summary-item"><strong>Documento:</strong> {{ compra_documento }}</span>{% endif %}
-        {% if data_inicio %}<span class="cp-active-summary-item"><strong>Início:</strong> {{ data_inicio }}</span>{% endif %}
-        {% if data_fim %}<span class="cp-active-summary-item"><strong>Fim:</strong> {{ data_fim }}</span>{% endif %}
+        {% if data_inicio or data_fim %}<span class="cp-active-summary-item"><strong>Data por:</strong> {{ periodo_label }}</span>{% endif %}
+        {% if data_inicio %}<span class="cp-active-summary-item"><strong>Início:</strong> {{ data_inicio_label }}</span>{% endif %}
+        {% if data_fim %}<span class="cp-active-summary-item"><strong>Fim:</strong> {{ data_fim_label }}</span>{% endif %}
         {% if termo %}<span class="cp-active-summary-item"><strong>Busca:</strong> {{ termo }}</span>{% endif %}
         {% if atalho %}{% for item in atalhos %}{% if item.ativo %}<span class="cp-active-summary-item"><strong>Atalho:</strong> {{ item.label }}</span>{% endif %}{% endfor %}{% endif %}
       </div>
     {% endif %}
-    <div class="cp-period-note">Para contas abertas/vencidas o periodo usa vencimento. Em Pagas ou Com juros, usa data efetiva do pagamento.</div>
+    <div class="cp-period-note">O período usa a data de compra ou vencimento selecionada. Os atalhos mantêm suas regras: vencimento; em Pagas ou Com juros, data efetiva do pagamento.</div>
   </section>
 
   <div id="contasPagarResultados" class="cp-results{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %} cp-results-filtered{% endif %}" role="region" aria-label="Resultados de contas a pagar">
@@ -1169,7 +1177,8 @@
   function destacarFiltros() {
     filtrosForm.querySelectorAll(".cp-field").forEach(bloco => {
       const campo = bloco.querySelector("[name]");
-      bloco.classList.toggle("cp-filter-active", Boolean(campo.value.trim()));
+      const periodoPreenchido = Boolean(filtrosForm.elements.data_inicio.value || filtrosForm.elements.data_fim.value);
+      bloco.classList.toggle("cp-filter-active", campo.name === "data_por" ? periodoPreenchido : Boolean(campo.value.trim()));
     });
   }
   function fecharFornecedores() {
@@ -1267,7 +1276,7 @@
     enviandoFiltros = true;
   });
   window.addEventListener("pageshow", () => { enviandoFiltros = false; destacarFiltros(); restaurarFocoFiltro(); });
-  filtrosForm?.querySelectorAll("select[name='fornecedor'], input[name='data_inicio'], input[name='data_fim']").forEach(function (campo) {
+  filtrosForm?.querySelectorAll("select[name='fornecedor'], select[name='data_por'], input[name='data_inicio'], input[name='data_fim']").forEach(function (campo) {
     campo.addEventListener("change", () => {
       destacarFiltros();
       clearTimeout(filtroTimer);
@@ -1291,12 +1300,12 @@
       if (event.isComposing) return;
       if (event.key !== "Enter" || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();
-      if (campo.name === "compra") avancarFiltro("cpFiltro_data_inicio");
+      if (campo.name === "compra") avancarFiltro("cpFiltro_data_por");
       else enviarFiltros(campo.id);
     });
   });
 
-  [ ["cpFiltro_data_inicio", "cpFiltro_data_fim"], ["cpFiltro_data_fim", "cpFiltro_data_fim"] ].forEach(([id, proximo]) => {
+  [ ["cpFiltro_data_por", "cpFiltro_data_inicio"], ["cpFiltro_data_inicio", "cpFiltro_data_fim"], ["cpFiltro_data_fim", "cpFiltro_data_fim"] ].forEach(([id, proximo]) => {
     document.getElementById(id).addEventListener("keydown", event => {
       if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();

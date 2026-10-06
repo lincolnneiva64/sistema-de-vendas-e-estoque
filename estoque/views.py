@@ -28632,8 +28632,19 @@ def contas_pagar(request):
     termo = request.GET.get("q", "").strip()
     fornecedor_id = request.GET.get("fornecedor", "").strip()
     compra_documento = request.GET.get("compra", "").strip()
-    data_inicio = parse_date(request.GET.get("data_inicio") or "")
-    data_fim = parse_date(request.GET.get("data_fim") or "")
+    def ler_data_periodo(nome):
+        try:
+            valor = parse_date(request.GET.get(nome) or "")
+        except ValueError:
+            return None
+        # O input date pode emitir change antes de completar os quatro dígitos do ano.
+        return valor if valor and valor.year >= 1000 else None
+
+    data_inicio = ler_data_periodo("data_inicio")
+    data_fim = ler_data_periodo("data_fim")
+    data_por = (request.GET.get("data_por") or "compra").strip()
+    if data_por not in {"compra", "vencimento"}:
+        data_por = "compra"
     if data_inicio and data_fim and data_inicio > data_fim:
         data_inicio, data_fim = data_fim, data_inicio
     situacao = (request.GET.get("situacao") or request.GET.get("status") or "todas").strip()
@@ -28728,6 +28739,9 @@ def contas_pagar(request):
     elif atalho:
         atalho = ""
 
+    if not atalho:
+        periodo_tipo = data_por
+
     if data_inicio:
         if periodo_tipo == "pagamento":
             contas = contas.filter(
@@ -28735,7 +28749,8 @@ def contas_pagar(request):
                 pagamentos__data_pagamento__gte=data_inicio,
             ).distinct()
         else:
-            contas = contas.filter(data_vencimento__gte=data_inicio)
+            campo_periodo = "compra__data_compra" if periodo_tipo == "compra" else "data_vencimento"
+            contas = contas.filter(**{f"{campo_periodo}__gte": data_inicio})
     if data_fim:
         if periodo_tipo == "pagamento":
             contas = contas.filter(
@@ -28743,7 +28758,8 @@ def contas_pagar(request):
                 pagamentos__data_pagamento__lte=data_fim,
             ).distinct()
         else:
-            contas = contas.filter(data_vencimento__lte=data_fim)
+            campo_periodo = "compra__data_compra" if periodo_tipo == "compra" else "data_vencimento"
+            contas = contas.filter(**{f"{campo_periodo}__lte": data_fim})
 
     contas_abertas_base = contas_base.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
 
@@ -28966,6 +28982,11 @@ def contas_pagar(request):
     ).distinct().order_by("nome")
 
     query_base = request.GET.copy()
+    for nome, valor in (("data_inicio", data_inicio), ("data_fim", data_fim)):
+        if valor:
+            query_base[nome] = valor.isoformat()
+        else:
+            query_base.pop(nome, None)
     atalhos = [
         ("todas", "Todas"),
         ("vencidas", "Vencidas"),
@@ -29000,7 +29021,7 @@ def contas_pagar(request):
         *ContaPagar.STATUS_CHOICES,
     ]
 
-    periodo_label = "data de pagamento" if periodo_tipo == "pagamento" else "vencimento"
+    periodo_label = {"compra": "Compra", "vencimento": "Vencimento", "pagamento": "Data de pagamento"}[periodo_tipo]
     total_desembolsado_periodo = (principal_pago_periodo + juros_pagos_periodo).quantize(Decimal("0.01"))
 
     conta_caixa = _conta_financeira_padrao("caixa")
@@ -29093,6 +29114,9 @@ def contas_pagar(request):
             "compra_documento": compra_documento,
             "data_inicio": data_inicio.isoformat() if data_inicio else "",
             "data_fim": data_fim.isoformat() if data_fim else "",
+            "data_inicio_label": data_inicio.strftime("%d/%m/%Y") if data_inicio else "",
+            "data_fim_label": data_fim.strftime("%d/%m/%Y") if data_fim else "",
+            "data_por": data_por,
             "situacao": situacao,
             "status": situacao,
             "atalho": atalho,
