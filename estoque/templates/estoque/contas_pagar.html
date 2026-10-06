@@ -30,14 +30,28 @@
   .cp-summary-card.warn { border-color:#fde68a; background:#fffbeb; }
   .cp-summary-card.good { border-color:#bbf7d0; background:#f0fdf4; }
   .cp-summary-card.info { border-color:#bfdbfe; background:#eff6ff; }
-  .cp-filters { padding:14px; display:grid; grid-template-columns:2fr 1.25fr 1fr 1fr 1.1fr; gap:12px; align-items:end; }
+  .cp-filters { padding:16px; display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:12px; align-items:stretch; }
   .cp-filter-card { overflow:visible; }
   .cp-filters input, .cp-filters select { box-sizing:border-box; }
-  .cp-field { min-width:0; }
+  .cp-field { min-width:0; padding:10px; border:2px solid transparent; border-radius:12px; grid-column:span 2; }
+  .cp-filters .cp-field:nth-child(2) { grid-column:span 3; }
+  .cp-filters .cp-field:nth-child(5) { grid-column:span 3; }
+  .cp-filters .cp-field:nth-child(6) { grid-column:span 6; }
+  .cp-field.cp-filter-active { border-color:#91abc9; background:#eff5fc; box-shadow:0 2px 6px rgba(22,65,115,.07); }
   .cp-field.cp-filter-active input, .cp-field.cp-filter-active select { border-color:#6487b5; background:#eff6ff; box-shadow:0 0 0 1px #c5d7ed; }
-  .cp-field.cp-filter-active label { color:#164173; }
-  .cp-supplier-field { position:relative; }
-  .cp-supplier-field label { font-size:.9rem; font-weight:950; }
+  .cp-field.cp-filter-active label { color:#164173; font-weight:950; }
+  .cp-filters .cp-supplier-field { position:relative; grid-column:span 5; background:#f8fafc; border-color:#d7e1ed; }
+  .cp-filters .cp-supplier-field label { font-size:.92rem; font-weight:950; color:#164173; }
+  .cp-filters .cp-supplier-field.cp-filter-active { border:2px solid #315f96; border-left-width:5px; background:#eaf2fc; box-shadow:0 3px 10px rgba(22,65,115,.14); }
+  .cp-supplier-field.cp-filter-active label::after { content:"Em uso"; float:right; padding:2px 7px; border-radius:20px; background:#d8e6f7; color:#214c80; font-size:.65rem; letter-spacing:.02em; }
+  .cp-filter-actions { grid-column:span 3; display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:10px 0; }
+  .cp-filter-actions .cp-btn { min-width:80px; }
+  .cp-active-summary { display:flex; align-items:baseline; flex-wrap:wrap; gap:7px 10px; margin:0 16px 14px; padding:11px 13px; border:1px solid #c7d7e9; border-left:3px solid #6487b5; border-radius:9px; background:#f5f8fc; color:#334155; font-size:.8rem; line-height:1.5; overflow-wrap:anywhere; }
+  .cp-active-summary-title { color:#164173; font-weight:900; }
+  .cp-active-summary-item { max-width:100%; }
+  .cp-active-summary-item strong { color:#214c80; }
+  .cp-active-summary-item + .cp-active-summary-item::before { content:"·"; margin-right:10px; color:#91a4bc; }
+  .cp-provider-filtered .cp-provider-name { background:#edf4fc; border-radius:5px; padding:3px 6px; color:#214c80; }
   .cp-supplier-suggestions { position:absolute; top:100%; left:0; right:0; z-index:50; max-height:260px; overflow:auto; background:#fff; border:1px solid #b7ccec; border-radius:8px; box-shadow:0 12px 24px rgba(15,23,42,.15); }
   .cp-supplier-option { padding:10px; cursor:pointer; font-weight:800; }
   .cp-supplier-option.ativa, .cp-supplier-option:hover { background:#e8f1ff; color:#164173; }
@@ -120,6 +134,9 @@
   @media (max-width:1080px) {
     .cp-summary { grid-template-columns:repeat(3, minmax(150px,1fr)); }
     .cp-filters { grid-template-columns:1fr 1fr; }
+    .cp-filters .cp-field, .cp-filter-actions { grid-column:span 1; }
+    .cp-filters .cp-supplier-field, .cp-filters .cp-field:nth-child(2), .cp-filters .cp-field:nth-child(6) { grid-column:1 / -1; }
+    .cp-filters .cp-field:nth-child(5) { grid-column:span 1; }
   }
   @media (max-width:760px) {
     .cp-page { margin-top:14px; padding:0 10px 80px; }
@@ -129,6 +146,9 @@
     .cp-btn.quick { min-width:calc(50% - 8px); }
     .cp-summary { grid-template-columns:1fr 1fr; }
     .cp-filters { grid-template-columns:1fr; padding:12px; }
+    .cp-filters .cp-field, .cp-filters .cp-field:nth-child(5), .cp-filter-actions { grid-column:1 / -1; }
+    .cp-filter-actions { padding:0 10px; }
+    .cp-active-summary { margin:0 12px 12px; }
     .cp-desktop { display:none; }
     .cp-mobile { display:block; }
     .cp-modal-summary, .cp-debit-preview { grid-template-columns:1fr; }
@@ -137,7 +157,7 @@
   }
 </style>
 
-<div class="cp-page">
+<div class="cp-page{% if fornecedor_id %} cp-provider-filtered{% endif %}">
   <header class="cp-header">
     <div>
       <h1 class="cp-title">Central de Contas a Pagar</h1>
@@ -223,10 +243,24 @@
         <label for="cpFiltro_q">Busca livre</label>
         <input type="search" id="cpFiltro_q" name="q" value="{{ termo }}" placeholder="Fornecedor ou observacao">
       </div>
-      <button type="submit" class="cp-btn primary">Filtrar</button>
-      <a href="{% url 'estoque:contas_pagar' %}" class="cp-btn secondary">Limpar</a>
+      <div class="cp-filter-actions">
+        <button type="submit" class="cp-btn ghost">Filtrar</button>
+        <a href="{% url 'estoque:contas_pagar' %}" class="cp-btn secondary">Limpar</a>
+      </div>
       {% if atalho %}<input type="hidden" name="atalho" value="{{ atalho }}">{% endif %}
     </form>
+    {% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'abertas' or atalho %}
+      <div class="cp-active-summary" aria-label="Filtros aplicados aos resultados">
+        <span class="cp-active-summary-title">Filtros ativos:</span>
+        {% if fornecedor_id %}{% for fornecedor in fornecedores %}{% if fornecedor_id == fornecedor.id|stringformat:"s" %}<span class="cp-active-summary-item"><strong>Fornecedor:</strong> {{ fornecedor.nome }}</span>{% endif %}{% endfor %}{% endif %}
+        <span class="cp-active-summary-item"><strong>Situação:</strong> {% for valor, texto in situacao_choices %}{% if situacao == valor %}{{ texto }}{% endif %}{% endfor %}</span>
+        {% if compra_documento %}<span class="cp-active-summary-item"><strong>Documento:</strong> {{ compra_documento }}</span>{% endif %}
+        {% if data_inicio %}<span class="cp-active-summary-item"><strong>Início:</strong> {{ data_inicio }}</span>{% endif %}
+        {% if data_fim %}<span class="cp-active-summary-item"><strong>Fim:</strong> {{ data_fim }}</span>{% endif %}
+        {% if termo %}<span class="cp-active-summary-item"><strong>Busca:</strong> {{ termo }}</span>{% endif %}
+        {% if atalho %}{% for item in atalhos %}{% if item.ativo %}<span class="cp-active-summary-item"><strong>Atalho:</strong> {{ item.label }}</span>{% endif %}{% endfor %}{% endif %}
+      </div>
+    {% endif %}
     <div class="cp-period-note">Para contas abertas/vencidas o periodo usa vencimento. Em Pagas ou Com juros, usa data efetiva do pagamento.</div>
   </section>
 
