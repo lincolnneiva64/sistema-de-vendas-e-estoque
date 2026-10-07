@@ -54,7 +54,9 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.evaluate('clienteBusca.value=' + repr(name) + ';clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
         # Query and click in one browser task: an async autocomplete response can
         # replace the list between two separate CDP calls.
-        tab.wait('(()=>{const item=document.querySelector(".cliente-sugestao-item");if(!item)return false;item.click();return true})()')
+        tab.evaluate('window.customerRetryAt=performance.now();true')
+        # Mobile preloading can clear suggestions after the first response.
+        tab.wait('(()=>{const item=document.querySelector(".cliente-sugestao-item");if(item){item.click();return true;}if(performance.now()-customerRetryAt>500){customerRetryAt=performance.now();clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));}return false})()')
 
     def add_product(self, tab, name, quantity='2'):
         tab.evaluate('operadorVenda.value="Operador Comercial";operadorVenda.dispatchEvent(new Event("change",{bubbles:true}));produtoBusca.value=' + repr(name) + ';produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
@@ -315,7 +317,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 worker = chrome.worker(); worker.call('Network.enable')
                 worker.call('Network.emulateNetworkConditions', dict(offline=True,latency=0,downloadThroughput=0,uploadThroughput=0))
                 tab.call('Network.emulateNetworkConditions', dict(offline=True,latency=0,downloadThroughput=0,uploadThroughput=0))
-                tab.wait('salesOffline.active && !salesOffline.available && document.querySelector("#produto option[data-draft-missing]")!==null')
+                tab.wait('salesOffline.active && !salesOffline.available && document.querySelector("#produto option[data-draft-missing]")!==null', timeout=25)
                 self.assertEqual(tab.evaluate('clienteId.value'), str(self.customer.pk))
                 self.assertEqual(tab.evaluate('operadorVenda.value'), self.operator.nome)
                 self.assertEqual(tab.evaluate('tipoVenda.value'), 'A prazo')

@@ -128,7 +128,18 @@ window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
     get finalization() { return localCompletion; },
     refreshCompletion,
+    async canRecoverOnline() {
+        if (!this.ready || !bridge.eligible || blocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset) return false;
+        if (!await checkIdentity()) return false;
+        await flush();
+        const current = await loadDraft(repo, scope);
+        if (blocked || localCompletion || finalizing || current.finalization || current.confirmation || current.revision !== revision) return false;
+        const operations = await repo.all('operations');
+        return !operations.some(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
+            && op.environment_id === scope.environment_id && op.status !== 'confirmada');
+    },
     async finalizeOffline(origin) {
+        if (window.salesOffline.recovering || !window.salesOffline.active) return;
         if (finalizing) return finalizing;
         if (localCompletion) return {finalization:localCompletion, alreadyFinalized:true};
         if (!bridge.eligible || !scope || !repo) { bridge.error('Identidade local indisponível ou contexto de edição/Pedido. Rascunho preservado.'); return; }
@@ -169,6 +180,12 @@ window.salesDraftUI = {
             suppress = true;
             bridge.restore(projectAssembly(assembly)); observer.takeRecords();
         } catch (error) { showError(error); }
+        finally { suppress = false; }
+    },
+    restoreOnlineReference(assembly) {
+        if (blocked || localCompletion || finalizing || submitted) throw new Error('Montagem local protegida.');
+        suppress = true;
+        try { bridge.restore(projectAssembly(assembly)); observer.takeRecords(); }
         finally { suppress = false; }
     },
     async beforeSubmit() {

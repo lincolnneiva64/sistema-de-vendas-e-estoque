@@ -42,8 +42,8 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const cache=await caches.open('offline-pilot-shell-v22');
-                    return keys.includes('offline-pilot-shell-v22')
+                    const cache=await caches.open('offline-pilot-shell-v23');
+                    return keys.includes('offline-pilot-shell-v23')
                         && !keys.includes('offline-pilot-shell-v21')
                         && !!(await cache.match('/offline/vendas-shell/'));
                 })()""")
@@ -112,7 +112,10 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.wait("document.querySelector('.offline-commercial [role=status]').textContent.includes('Catálogo salvo')")
                 tab.wait('!document.querySelector(".offline-commercial button").disabled')
                 tab.evaluate('window.originalFetch=fetch;window.fetch=(url,options)=>String(url).includes("/clientes/autocomplete/") ? Promise.reject(new TypeError("Failed to fetch")) : originalFetch(url,options);clienteBusca.value="termo-sem-cache";clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
-                tab.wait('salesOffline.active && salesOffline.available')
+                tab.evaluate('await (await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src)).probe();true')
+                self.assertFalse(tab.evaluate('salesOffline.active'))
+                tab.evaluate('window.fetch=(url,options)=>String(url)==="/api/offline/health/" ? Promise.reject(new TypeError("route lost")) : originalFetch(url,options);window.dispatchEvent(new Event("offline"));true')
+                tab.wait('salesOffline.active && salesOffline.available', timeout=25)
                 self.assertTrue(tab.evaluate('navigator.onLine'))
                 tab.evaluate('window.fetch=originalFetch;true')
                 tab.wait('!!navigator.serviceWorker.controller')

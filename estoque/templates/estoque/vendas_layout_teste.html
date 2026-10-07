@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
     <title>Vendas - Layout Teste</title>
-    <script>window.salesOffline = {shell: {{ offline_sales_shell|yesno:'true,false' }}, active: {{ offline_sales_shell|yesno:'true,false' }} || !navigator.onLine};</script>
+    <script>window.salesOffline = {shell: {{ offline_sales_shell|yesno:'true,false' }}, active: {{ offline_sales_shell|yesno:'true,false' }}};</script>
     <script>window.salesDraftReady = new Promise(resolve => { window.salesDraftResolve = resolve; });</script>
     {% csrf_token %}
 
@@ -4761,7 +4761,7 @@ function renderizarClientesDoCache(texto) {
 }
 
 async function buscarClientes(texto, opcoes = {}) {
-    if (window.salesOffline.active || !navigator.onLine) {
+    if (window.salesOffline.active) {
         await window.salesOffline.ready;
         clientesSugestoes = ordenarClientesAutocomplete(await window.salesOffline.clients(texto), texto).slice(0, 30);
         clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
@@ -4786,7 +4786,15 @@ async function buscarClientes(texto, opcoes = {}) {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
             signal: clienteBuscaAbortController.signal,
             headers: { "X-Requested-With": "XMLHttpRequest" }
+        }).catch(erro => {
+            if (erro.name !== 'AbortError') window.salesOffline.suspect?.();
+            throw erro;
         });
+        if (!resposta.ok) {
+            const erro = new Error(resposta.status === 401 || resposta.status === 403
+                ? 'Autenticação ou permissão necessária.' : 'Falha do servidor na busca de clientes.');
+            throw erro;
+        }
         const dados = await resposta.json();
 
         if (normalizarTextoCliente(clienteBusca.value) !== termoNormalizado) {
@@ -4806,10 +4814,7 @@ async function buscarClientes(texto, opcoes = {}) {
         renderizarSugestoesClientes();
     } catch (erro) {
         if (erro.name !== "AbortError") {
-            if (erro instanceof TypeError || !navigator.onLine) {
-                await window.salesOffline.activate();
-                clientesSugestoes = ordenarClientesAutocomplete(await window.salesOffline.clients(texto), texto).slice(0, 30);
-            } else clientesSugestoes = [];
+            clientesSugestoes = [];
             clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
             renderizarSugestoesClientes();
         }
@@ -6737,7 +6742,8 @@ preco.addEventListener("input", atualizarCustoMargemVenda);
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual(dadosVendaConfirmados) {
     if (vendaGravacaoEmAndamento || vendaConfirmadaNestaMontagem) return;
-    if (window.salesOffline.active || !navigator.onLine) {
+    if (window.salesOffline.recovering) return;
+    if (window.salesOffline.active) {
         await window.salesDraftReady;
         if (!window.salesDraftBridge?.eligible) {
             mostrarErroGravacaoVenda('Edição e Pedido não podem ser concluídos offline.');

@@ -53,10 +53,11 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
         self.select_customer(tab, 'Cliente Comercial')
         self.add_product(tab, 'Produto Fracionado', quantity)
         tab.evaluate('await (await import("/static/offline/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
-        tab.evaluate('tipoVenda.value='+json.dumps(payment)+';tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();await salesOffline.activate();await salesDraftUI.flush();window.snapshotsBefore=await repo.all("snapshots");true')
+        tab.evaluate('tipoVenda.value='+json.dumps(payment)+';tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();window.fetch=(url,options)=>String(url)==="/api/offline/health/"?Promise.reject(TypeError("offline")):realFetch(url,options);await app.probe();offset+=5001;await app.probe();offset+=5001;await app.probe();await salesOffline.ready;await salesDraftUI.flush();window.snapshotsBefore=await repo.all("snapshots");true')
         origin = '{caixa:"10.00",banco:"38.00"}' if payment == 'À vista' else 'undefined'
         tab.evaluate('await salesDraftUI.finalizeOffline('+origin+');window.operation=(await repo.all("operations"))[0];true')
         tab.wait('!!salesDraftUI.finalization')
+        tab.evaluate('window.fetch=async(url,options)=>{if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};offset+=5001;await app.probe();true')
         self.assertIsNone(tab.evaluate('await repo.get("snapshots","pilot")'))
         return tab
 
@@ -193,7 +194,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                     self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].attempts'), 1)
                     # Unsafe server text is rendered as text, never interpreted.
                     tab.evaluate('window.op=(await repo.all("operations"))[0];op.last_error="<img src=x onerror=window.injected=true>";await repo.put("operations",op);await salesDraftUI.refreshCompletion();true')
-                    self.assertTrue(tab.evaluate('document.getElementById("sales-draft-status").textContent.includes("<img")'))
+                    tab.wait('document.getElementById("sales-draft-status").textContent.includes("<img")')
                     self.assertFalse(tab.evaluate('!!document.querySelector("#sales-draft-status img") || !!window.injected'))
                 finally:
                     chrome.stop()

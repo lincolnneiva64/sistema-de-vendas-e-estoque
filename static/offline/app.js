@@ -1,4 +1,4 @@
-import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState, saleOperationState} from './core.js';
+import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState, saleOperationState} from './core.js';
 import {renderIndicator} from './presentation.js';
 
 const pilot = !!document.getElementById('offline-pilot');
@@ -89,9 +89,9 @@ async function refreshCommunication(event = null) {
     stability.restore(value, performance.now(), Date.now());
     clearTimeout(confirmationTimer);
     confirmationTimer = null;
-    if (value.suspect_id && !leaving) {
+    if ((value.suspect_id || value.connection?.kind === 'checking' && value.connection.failures) && !leaving) {
         confirmationTimer = setTimeout(() => probe().catch(error => message(error.message)),
-            Math.max(0, value.suspect_at + 5000 - Date.now()));
+            Math.max(0, Math.max(value.suspect_at || 0, value.connection?.checked_at || 0) + CONNECTION_POLICY.retry - Date.now()));
     }
     if (!stability.connected && syncing) { stopped = true; inFlight?.abort(); }
     if (event) broadcast();
@@ -115,6 +115,13 @@ async function render() {
     renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
+    const observedConnection = connectionStatus(stability.connection, Date.now());
+    const connectionKind = observedConnection === 'offline' ? 'offline'
+        : observedConnection === 'online' && stability.valid(performance.now(), Date.now()) ? 'online' : 'checking';
+    if (globalIndicator && globalIndicator.dataset.connection !== connectionKind) {
+        globalIndicator.dataset.connection = connectionKind;
+        document.dispatchEvent(new CustomEvent('offline-connectivity', {detail: connectionKind}));
+    }
     if (globalSync) {
         globalSync.hidden = !pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
         syncButton(globalSync, !state.canSync || !navigator.locks || !preparedSyncScope(scope, scoped), state.count, state.kind === 'syncing');
@@ -226,6 +233,7 @@ async function performProbe() {
     if (!leaving && generation === observationGeneration) observedSince = at;
     await checkSession();
     await render();
+    document.dispatchEvent(new CustomEvent('offline-connectivity', {detail: globalIndicator?.dataset.connection}));
 }
 function updateObservation() {
     clearTimeout(confirmationTimer);
@@ -475,3 +483,4 @@ async function start() {
 }
 export const initialized = start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });
 document.addEventListener('offline-operations-changed', () => { void initialized.then(() => render()); });
+document.addEventListener('offline-connectivity-suspect', () => { void initialized.then(() => probe()).catch(error => message(error.message)); });

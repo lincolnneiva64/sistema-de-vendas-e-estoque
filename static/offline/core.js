@@ -1,4 +1,21 @@
 export const POLICY = Object.freeze({interval: 30000, timeout: 5000, window: 900000, maxGap: 60000});
+export const CONNECTION_POLICY = Object.freeze({failures: 3, duration: 10000, retry: 5000});
+
+export function connectionStatus(value, wall) {
+    return value && wall >= value.checked_at && wall - value.checked_at <= POLICY.maxGap ? value.kind : 'checking';
+}
+
+// Independent from the manual synchronization stability gate.
+export function connectionObservation(previous, event) {
+    const value = previous || {kind: 'checking', failures: 0};
+    if (!event || event.started_at < (value.checked_at ?? -Infinity)) return value;
+    if (event.ok) return {kind: 'online', failures: 0, checked_at: event.at};
+    const continuous = value.failed_since != null && event.at - value.checked_at <= POLICY.maxGap;
+    const failures = continuous ? value.failures + 1 : 1;
+    const failed_since = continuous ? value.failed_since : event.at;
+    return {kind: failures >= CONNECTION_POLICY.failures && event.at - failed_since >= CONNECTION_POLICY.duration
+        ? 'offline' : 'checking', failures, failed_since, checked_at: event.at};
+}
 export const DB_NAME = 'vendas-offline-pilot';
 export const COMMAND_FIELDS = ['operation_id', 'device_id', 'actor_id', 'environment_id', 'type', 'schema_version', 'aggregate_id', 'payload', 'created_at', 'sequence'];
 
@@ -27,7 +44,7 @@ export function reserveSequence(store, device) {
 
 export class Stability {
     constructor(policy = POLICY) { this.policy = policy; this.reset(); }
-    reset() { this.started = null; this.last = null; this.lastWall = null; this.connected = false; this.accumulated = 0; }
+    reset() { this.started = null; this.last = null; this.lastWall = null; this.connected = false; this.accumulated = 0; this.connection = {kind: 'checking', failures: 0}; }
     success(now, wall) {
         if (this.last !== null && now >= this.last && wall >= this.lastWall
             && now - this.last <= this.policy.maxGap && wall - this.lastWall <= this.policy.maxGap)
@@ -48,6 +65,7 @@ export class Stability {
             (value?.last_success_at != null && value?.stable_since != null ? value.last_success_at - value.stable_since : 0));
         this.failedAt = value?.failed_at;
         this.suspect = !!value?.suspect_id;
+        this.connection = value?.connection || {kind: 'checking', failures: 0};
         if (this.suspect || !value?.connected || !Number.isFinite(value.last_success_at)) return;
         this.lastWall = value.last_success_at;
         this.last = now - (wall - value.last_success_at);
@@ -99,6 +117,17 @@ export class Repository {
             const store = tx.objectStore('metadata');
             store.get(key).onsuccess = request => {
                 let value = request.target.result || {key, ...scope, connected: false, stable_since: null, last_success_at: null};
+                const currentConfirmation = event?.type === 'confirmation' && value.suspect_id === event.suspect_id
+                    && event.started_at >= value.suspect_at + 5000;
+                const currentObservation = ['suspect', 'success'].includes(event?.type) && !value.suspect_id
+                    && (value.confirmed_at == null || event.started_at >= value.confirmed_at)
+                    && (value.failed_at == null || event.started_at > value.failed_at || event.failure_seen === value.failed_at);
+                if (currentConfirmation || currentObservation) {
+                    value = {...value, connection: connectionObservation(value.connection, {
+                        ok: event.type === 'success' || event.ok === true,
+                        at: event.at, started_at: event.started_at,
+                    })};
+                }
                 // IDB serializes tabs; only a probe for this suspicion may resolve it.
                 // confirmed_at fences off requests started before recovery.
                 if (event?.type === 'suspect' && !value.suspect_id
@@ -233,7 +262,7 @@ export function indicatorState({operations, stability, now, wall, syncing = fals
     const sendable = pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
     const quantity = count + (count === 1 ? ' operação' : ' operações');
     let kind, label;
-    if (!connected) { kind = 'offline'; label = count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente'; }
+    if (!connected) { kind = connectionStatus(stability.connection, wall) === 'offline' ? 'offline' : 'checking'; label = kind === 'offline' ? (count ? 'OFFLINE — ' + quantity + ' aguardando sincronização' : 'OFFLINE — trabalhando localmente') : 'Verificando comunicação com o servidor'; }
     else if (!authenticated) { kind = 'auth'; label = 'ONLINE — autenticação necessária para preparar/sincronizar' + (count ? ' · ' + quantity + ' preservadas' : ''); }
     else if (syncing) { kind = 'syncing'; label = 'Sincronizando ' + progress.replace('/', ' de ') + '\u2026'; }
     else if (pending.some(op => op.status === 'conflito')) { kind = 'conflict'; label = 'Conflito de sincronização — revisão necessária'; }

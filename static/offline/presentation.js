@@ -3,7 +3,7 @@ export function renderIndicator(target, state, elapsedMinutes) {
     if (!target) return;
     const global = target.closest('.offline-global');
     if (global?.querySelector('#offline-toggle')) {
-        const labels = {online: 'Online', waiting: 'Espera', offline: 'Offline', ready: 'Enviar',
+        const labels = {checking: 'Verificando', online: 'Online', waiting: 'Espera', offline: 'Offline', ready: 'Enviar',
             syncing: 'Envio', success: 'Online', auth: 'Atenção', error: 'Erro', conflict: 'Atenção'};
         const label = labels[state.kind] || 'Status';
         global.querySelector('#offline-tab-label').textContent = label;
