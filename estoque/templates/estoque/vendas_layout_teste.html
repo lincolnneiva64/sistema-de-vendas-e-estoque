@@ -6,6 +6,7 @@
     <meta charset="UTF-8">
     <title>Vendas - Layout Teste</title>
     <script>window.salesOffline = {shell: {{ offline_sales_shell|yesno:'true,false' }}, active: {{ offline_sales_shell|yesno:'true,false' }} || !navigator.onLine};</script>
+    <script>window.salesDraftReady = new Promise(resolve => { window.salesDraftResolve = resolve; });</script>
     {% csrf_token %}
 
     <style>
@@ -3415,6 +3416,7 @@ const precoMargemCusto = document.getElementById("precoMargemCusto");
 const precoConferidoBadge = document.getElementById("precoConferidoBadge");
 const tabelaBody = document.getElementById("tabelaProdutos");
 const btnGravarVenda = document.getElementById("btnGravarVenda");
+let vendaGravacaoEmAndamento = false, vendaConfirmadaNestaMontagem = false, novaMontagemAposConfirmacao = false;
 const btnVisualizarVenda = document.getElementById("btnVisualizarVenda");
 const btnNovaVenda = document.getElementById("btnNovaVenda");
 const btnNovaVendaEdicao = document.getElementById("btnNovaVendaEdicao");
@@ -4093,6 +4095,7 @@ function limparClienteSelecionado() {
     }
     clienteResumo.classList.remove("visivel");
     esquecerClienteSelecionado();
+    document.dispatchEvent(new Event('sales-draft-change'));
 }
 
 dataVenda.value = dataLocalHojeInput();
@@ -4461,6 +4464,7 @@ function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
     if (carregarDetalheCompleto) {
         atualizarClienteSelecionadoDoServidor(cliente);
     }
+    document.dispatchEvent(new Event('sales-draft-change'));
 }
 
 function clienteSelecionadoValido() {
@@ -4492,6 +4496,7 @@ function atualizarCabecalhoCliente(cliente) {
         clienteResumo.style.display = 'none';
         return;
     }
+    clienteResumo.style.display = '';
     clienteResumoNome.textContent = cliente.nome || "-";
     clienteResumoLimite.textContent = formatarLimiteCliente(cliente.limite);
     clienteResumoStatus.textContent = normalizarStatusCliente(cliente.status);
@@ -4678,11 +4683,19 @@ document.addEventListener('sales-offline-active', async () => {
     clienteResumo.classList.remove('visivel');
     clienteResumo.style.display = 'none';
     ocultarHistoricoProdutoCliente();
-    if (!window.salesOffline.available) limparClienteSelecionado();
+    if (!window.salesOffline.available) {
+        if (!window.salesDraftUI?.ready) limparClienteSelecionado();
+    }
     else if (clienteId.value) {
+        const preserveDraftHeader = window.salesDraftUI?.ready;
+        const previousType = tipoVenda.value, previousDue = vencimentoVenda.value;
+        const previousTerm = clienteSelecionado?.prazo;
         const local = (await window.salesOffline.clients('')).find(c => String(c.id) === String(clienteId.value));
-        if (local) preencherResumoCliente(local);
-        else limparClienteSelecionado();
+        if (local) {
+            preencherResumoCliente(preserveDraftHeader ? {...local, prazo:previousTerm ?? local.prazo} : local);
+            if (preserveDraftHeader) { tipoVenda.value = previousType; vencimentoVenda.value = previousDue; }
+        }
+        else if (!preserveDraftHeader) limparClienteSelecionado();
     }
 });
 let clientesVendaPrecarregados = false;
@@ -4803,7 +4816,7 @@ async function buscarClientes(texto, opcoes = {}) {
     }
 }
 
-async function atualizarClienteSelecionadoDoServidor(clienteBase) {
+async function atualizarClienteSelecionadoDoServidor(clienteBase, preservarMontagem = false) {
     if (window.salesOffline.active) return;
     if (!clienteBase?.id) return;
 
@@ -4822,7 +4835,10 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase) {
             && !clienteResumoSuspenso
             && String(clienteSelecionado.id) === clienteIdSolicitado
         ) {
-            preencherResumoCliente(clienteAtualizado);
+            if (preservarMontagem) {
+                clienteSelecionado = {...clienteAtualizado, nome:clienteSelecionado.nome, prazo:clienteSelecionado.prazo};
+                atualizarCabecalhoCliente(clienteSelecionado);
+            } else preencherResumoCliente(clienteAtualizado);
         }
     } catch (erro) {
     }
@@ -5091,6 +5107,17 @@ function atualizarLinhaItemVenda(linha, item) {
     linha.children[2].textContent = linha.dataset.unidade;
     linha.children[3].textContent = precoItem;
     linha.children[4].textContent = totalInformado;
+    const reference = obterProdutoOptionVenda(item.produto_nome);
+    if (reference && !reference.dataset.draftMissing) {
+        linha.dataset.draftFator = normalizarNumeroVenda(reference.dataset.fator) || '0';
+        linha.dataset.draftUnidade1 = reference.dataset.unidade1 || item.unidade;
+        linha.dataset.draftUnidade2 = reference.dataset.unidade2 || '';
+        linha.dataset.draftFracionado = String(reference.dataset.fracionado === 'true');
+        delete linha.dataset.draftReview;
+    } else if (linha.dataset.draftReview) {
+        const badge = document.createElement('small'); badge.className = 'item-venda-estoque-badge';
+        badge.textContent = 'Produto fora do catálogo — revisar'; linha.children[0].append(badge);
+    }
 }
 
 function obterProdutoOptionVenda(valorProduto) {
@@ -5187,10 +5214,12 @@ const un = (linha.dataset.unidade || linha.children[2].textContent).trim();
 const valor = (linha.dataset.precoUnitario || linha.children[3].textContent).trim();
 
 // joga nos inputs
-produto.value = nome;
+const optionDaLinha = Array.from(produto.options).find(opt => opt.dataset.produtoId === linha.dataset.produtoId)
+    || Array.from(produto.options).find(opt => opt.text.trim() === nome);
+produto.value = optionDaLinha?.value || nome;
 produto.dispatchEvent(new Event("change"));
-produtoBusca.value = nome;
-const optionEdicao = Array.from(produto.options).find(opt => opt.text.trim() === nome);
+produtoBusca.value = optionDaLinha?.value || nome;
+const optionEdicao = optionDaLinha;
 
 if (optionEdicao) {
     const unidade1Edicao = optionEdicao.dataset.unidade1 || "";
@@ -5234,6 +5263,7 @@ if (optionEdicao) {
     }
 }
 
+if (un && !Array.from(unidade.options).some(option => option.value === un)) unidade.add(new Option(un + ' (referência local)', un));
 unidade.value = un;
 preco.value = valor;setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -5324,6 +5354,11 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
   function atualizarTotalGeral() {
     let total = 0;
     const linhas = tabelaBody.querySelectorAll("tr");
+    if (vendaConfirmadaNestaMontagem && novaMontagemAposConfirmacao && linhas.length) {
+        vendaConfirmadaNestaMontagem = false;
+        novaMontagemAposConfirmacao = false;
+        btnGravarVenda.disabled = window.salesOffline.active;
+    }
 
     linhas.forEach((tr) => {
         const texto = tr.children[4].textContent
@@ -5409,7 +5444,8 @@ function limparVendaAposGravacao() {
     atualizarTotalGeral();
 
     if (btnGravarVenda) {
-        btnGravarVenda.disabled = false;
+        novaMontagemAposConfirmacao = vendaConfirmadaNestaMontagem;
+        btnGravarVenda.disabled = vendaConfirmadaNestaMontagem || window.salesOffline.active;
         btnGravarVenda.textContent = "Gravar Venda";
     }
 }
@@ -5508,6 +5544,12 @@ function criarLinhaItemVenda(item) {
         linha.appendChild(celula);
     });
 
+    const reference = obterProdutoOptionVenda(item.produto_nome);
+    linha.dataset.draftFator = item.fator ?? reference?.dataset.fator ?? '0';
+    linha.dataset.draftUnidade1 = item.unidade1 ?? reference?.dataset.unidade1 ?? item.unidade;
+    linha.dataset.draftUnidade2 = item.unidade2 ?? reference?.dataset.unidade2 ?? '';
+    linha.dataset.draftFracionado = String(item.fracionado ?? (reference?.dataset.fracionado === 'true'));
+    if (reference?.dataset.draftMissing) linha.dataset.draftReview = 'true';
     return linha;
 }
 
@@ -6109,6 +6151,7 @@ function atualizarCustoMargemVenda() {
 }
 
 function validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto) {
+    if (window.salesOffline.active) return true;
     const custo = custoProdutoVendaParaUnidade(produtoOption, unidadeTexto);
     if (custo > 0 && precoNumero < custo) {
         mostrarToastVenda(`Preço de venda abaixo do custo. Custo: ${formatarMoedaVenda(custo)}.`);
@@ -6546,7 +6589,7 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
 }
 /* ===== FIM PROXIMO PRODUTO AUTOMATICO AO ADICIONAR - CHATGPT 2026-06-10 ===== */
 function adicionarItemVendaAtual() {
-    if (window.salesOffline.active && !window.salesOffline.available) {
+    if (window.salesOffline.active && !window.salesOffline.available && !linhaSelecionada) {
         mostrarToastVenda('Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas.');
         return false;
     }
@@ -6693,11 +6736,14 @@ preco.addEventListener("keydown", (e) => {
 preco.addEventListener("input", atualizarCustoMargemVenda);
 /* ===== FIM JS ADICIONAR ITEM VENDA MOBILE - CHATGPT 2026-06-10 ===== */
 async function gravarVendaAtual(dadosVendaConfirmados) {
+    if (vendaGravacaoEmAndamento || vendaConfirmadaNestaMontagem) return;
     if (window.salesOffline.active || !navigator.onLine) {
         mostrarErroGravacaoVenda('Venda offline ainda não pode ser concluída nesta etapa.');
         return;
     }
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;
+    await window.salesDraftReady;
+    if (window.salesDraftUI && !await window.salesDraftUI.beforeSubmit()) return;
 
     garantirTipoVendaEdicaoConsumoProprio();
     const dadosVenda = dadosVendaConfirmados || coletarDadosVenda();
@@ -6728,10 +6774,13 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         }
     }
 
+    if (vendaGravacaoEmAndamento || vendaConfirmadaNestaMontagem) return;
+    vendaGravacaoEmAndamento = true;
     btnGravarVenda.disabled = true;
     btnGravarVenda.textContent = "Gravando...";
 
     try {
+        window.salesDraftUI?.prepareSubmission();
         const resposta = await fetch(gravarVendaUrl, {
             method: "POST",
             headers: {
@@ -6744,7 +6793,9 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
 
         const retorno = await resposta.json();
 
-        if (!resposta.ok || !retorno.sucesso) {
+        const vendaIdValido = /^[1-9]\d*$/.test(String(retorno.venda_id)) && Number.isSafeInteger(Number(retorno.venda_id));
+        if (!resposta.ok || retorno.sucesso !== true || !vendaIdValido) {
+            window.salesDraftUI?.failedSubmission();
             mostrarErroGravacaoVenda(
                 retorno.mensagem || "Não foi possível gravar a venda."
             );
@@ -6754,6 +6805,14 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         vendaGravadaId = retorno.venda_id;
         vendaGravadaUrl = retorno.visualizar_url || "";
         vendaSalvaComSucesso = true;
+        vendaConfirmadaNestaMontagem = !vendaEdicaoVenda?.id;
+        try {
+            window.salesDraftUI?.confirmSubmission(retorno.venda_id);
+            await window.salesDraftUI?.confirmedSuccess();
+        } catch (erroLocal) {
+            const aviso = document.querySelector('#sales-draft-status [role="status"]');
+            if (aviso) aviso.textContent = 'Venda #' + vendaGravadaId + ' confirmada. Limpeza local não concluída; o rascunho não será restaurado como pendente.';
+        }
         atualizarEstoquesProdutosVenda(retorno.produtos_estoque_atualizados);
         mostrarToastVenda(retorno.mensagem || ("Venda #" + vendaGravadaId + " gravada com sucesso."));
         if (vendaEdicaoVenda?.id && vendaEdicaoRetornoUrl && retorno.visualizar_url) {
@@ -6769,10 +6828,14 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             limparVendaAposGravacao();
         }
     } catch (erro) {
-        mostrarErroGravacaoVenda(
-            erro?.message || "Falha de comunicação ao gravar a venda."
-        );
+        if (vendaSalvaComSucesso) {
+            mostrarToastVenda('Venda #' + vendaGravadaId + ' confirmada. Não repita a gravação; houve falha na atualização local da tela.');
+        } else {
+            try { window.salesDraftUI?.failedSubmission(); } catch (_) { /* Keep the safety marker if local storage fails. */ }
+            mostrarErroGravacaoVenda(erro?.message || "Falha de comunicação ao gravar a venda.");
+        }
     } finally {
+        vendaGravacaoEmAndamento = false;
         if (!vendaSalvaComSucesso) {
             btnGravarVenda.disabled = false;
             btnGravarVenda.textContent = textoBotaoPadrao;
@@ -7769,7 +7832,7 @@ function renderSugestoes() {
     const classeEstoque = classeBadgeConferenciaEstoque(opt);
 
     const regex = !window.salesOffline.active && termo ? new RegExp(`(${termo})`, "i") : null;
-    const textoHighlight = window.salesOffline.active
+    const textoHighlight = window.salesOffline.active || opt.dataset.draftMissing
         ? texto.replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]))
         : regex ? texto.replace(regex, `<strong>$1</strong>`) : texto;
 
@@ -8191,6 +8254,87 @@ document.addEventListener("click", (e) => {
 
 atualizarTotalGeral();
 
+// A narrow bridge reuses the existing renderer without persisting HTML or finance.
+window.salesDraftBridge = {
+    eligible: !vendaEdicaoVenda?.id && !pedidoImportadoVenda?.id && !clienteInicialVenda?.id
+        && !['editar', 'pedido_id', 'cliente_id'].some(key => new URL(location.href).searchParams.has(key)),
+    capture() {
+        const selected = produto.options[produto.selectedIndex];
+        const lancamento = selected?.dataset.produtoId && (quantidade.value || linhaSelecionada) ? {
+            produto_id:selected.dataset.produtoId, produto_nome:selected.value,
+            quantidade:quantidade.value, unidade:unidade.value, preco:preco.value,
+            fator:normalizarNumeroVenda(selected.dataset.fator) || '0', unidade1:selected.dataset.unidade1 || '',
+            unidade2:selected.dataset.unidade2 || '', fracionado:selected.dataset.fracionado === 'true',
+            indice_edicao:linhaSelecionada ? Array.from(tabelaBody.rows).indexOf(linhaSelecionada) : null,
+        } : null;
+        return {
+            cliente: clienteSelecionadoValido() ? {id:String(clienteSelecionado.id), nome:clienteSelecionado.nome,
+                prazo:parseInt(clienteSelecionado.prazo || '0', 10)} : null,
+            operador:operadorVenda.value, tipo_venda:tipoVenda.value,
+            data_venda:dataVenda.value, data_vencimento:vencimentoVenda.value, lancamento,
+            itens:coletarItensVenda().map((item, index) => {
+                const row = tabelaBody.rows[index];
+                return {...item, fator:normalizarNumeroVenda(row.dataset.draftFator) || '0', unidade1:row.dataset.draftUnidade1 || item.unidade,
+                    unidade2:row.dataset.draftUnidade2 || '', fracionado:row.dataset.draftFracionado === 'true'};
+            }),
+        };
+    },
+    restore(draft) {
+        limparItensVenda();
+        if (draft.cliente) {
+            preencherResumoCliente(draft.cliente);
+            clienteResumo.style.display = 'none';
+            if (!window.salesOffline.active) atualizarClienteSelecionadoDoServidor(draft.cliente, true);
+        }
+        else limparClienteSelecionado();
+        dataVenda.value = draft.data_venda;
+        vencimentoVenda.value = draft.data_vencimento;
+        for (const [select, value] of [[operadorVenda, draft.operador], [tipoVenda, draft.tipo_venda]]) {
+            if (value && !Array.from(select.options).some(o => o.value === value)) select.add(new Option(value + ' (referência local)', value));
+            select.value = value;
+        }
+        for (const item of draft.itens) {
+            const existing = Array.from(produto.options).find(o => o.dataset.produtoId === item.produto_id && !o.dataset.draftMissing);
+            if (!existing) {
+                const option = new Option(item.produto_nome, item.produto_nome);
+                Object.assign(option.dataset, {produtoId:item.produto_id, unidade1:item.unidade1, unidade2:item.unidade2,
+                    unidade:item.unidade1, fator:item.fator, fracionado:String(item.fracionado),
+                    preco:item.preco_unitario, preco2:item.preco_unitario, estoque:'0', draftMissing:'true'});
+                produto.add(option);
+            }
+            const row = criarLinhaItemVenda({...item, valor_total:item.subtotal_referencia});
+            if (!existing) row.dataset.draftReview = 'true';
+            const badge = document.createElement('small');
+            badge.className = 'item-venda-estoque-badge';
+            badge.textContent = existing ? 'Referência local — revalidar' : 'Produto fora do catálogo — revisar';
+            row.children[0].append(badge);
+            tabelaBody.append(row);
+        }
+        atualizarTotalGeral();
+        if (draft.lancamento) {
+            const editor = draft.lancamento;
+            if (editor.indice_edicao !== null) tabelaBody.rows[editor.indice_edicao]?.click();
+            let option = Array.from(produto.options).find(o => o.dataset.produtoId === editor.produto_id);
+            if (!option) {
+                option = new Option(editor.produto_nome, editor.produto_nome);
+                Object.assign(option.dataset, {produtoId:editor.produto_id, fator:editor.fator,
+                    unidade1:editor.unidade1, unidade2:editor.unidade2, fracionado:String(editor.fracionado),
+                    preco:normalizarNumeroVenda(editor.preco), preco2:normalizarNumeroVenda(editor.preco), estoque:'0', draftMissing:'true'});
+                produto.add(option);
+            }
+            produto.value = option.value; produtoBusca.value = option.value;
+            unidade.replaceChildren();
+            for (const unit of new Set([editor.unidade1, ...(editor.fracionado ? [editor.unidade2] : []), editor.unidade].filter(Boolean))) unidade.add(new Option(unit, unit));
+            quantidade.value = editor.quantidade; unidade.value = editor.unidade; preco.value = editor.preco;
+            atualizarCustoMargemVenda();
+        }
+        window.atualizarSelectsBonitosVenda?.();
+    },
+    clear() { limparItensVenda(); limparCabecalhoVenda(true); atualizarTotalGeral(); },
+    confirmDiscard() { return confirmarAcaoVenda('Descartar o rascunho local e limpar a montagem?'); },
+    error(message) { mostrarErroGravacaoVenda(message); },
+};
+document.dispatchEvent(new Event('sales-draft-bridge-ready'));
 });
 </script>
 
@@ -9003,6 +9147,7 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="{% static 'offline/app.js' %}?v=7"></script>
 <script type="module" src="{% static 'offline/sales.js' %}"></script>
+<script type="module" src="{% static 'offline/sales-draft-ui.js' %}"></script>
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }

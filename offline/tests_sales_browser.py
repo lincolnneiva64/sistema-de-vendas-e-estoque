@@ -16,6 +16,7 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(Path(CHROME).is_file(), 'Chrome indisponível')
 class OfflineSalesBrowserTests(StaticLiveServerTestCase):
+    reset_sequences = True
     def test_offline_assembly_safe_shell_and_no_mutations(self):
         user, customer, product, operator, *_ = commercial_fixtures()
         product.quantidade = 0

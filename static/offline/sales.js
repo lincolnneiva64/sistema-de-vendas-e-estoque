@@ -27,6 +27,8 @@ function options(id, items, value, label) {
     select.value = selected;
 }
 state.activate = async () => {
+    const mountedDraft = window.salesDraftUI?.ready && window.salesDraftBridge?.eligible
+        ? window.salesDraftBridge.capture() : null;
     state.active = true;
     state.available = false;
     document.body.dataset.salesOffline = 'true';
@@ -56,6 +58,7 @@ state.activate = async () => {
         for (const id of ['produto', 'operadorVenda', 'tipoVenda']) options(id, [], () => '', () => '');
         banner.textContent = 'Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas. Venda offline ainda não pode ser concluída nesta etapa.';
     }
+    if (mountedDraft && scope) await window.salesDraftUI.restoreReference(mountedDraft);
     window.atualizarSelectsBonitosVenda?.();
     document.dispatchEvent(new Event('sales-offline-active'));
 };
@@ -93,7 +96,7 @@ if (indicator) new MutationObserver(() => {
 window.addEventListener('online', () => {
     if (!state.active) return;
     const link = document.createElement('a'); link.href = '/vendas/';
-    link.textContent = ' Reabrir online (a montagem local não será mantida).';
+    link.textContent = ' Reabrir online (a montagem salva será restaurada como rascunho local).';
     banner.append(link);
 });
 // A mounted local sale must never reach an official action, even via keyboard.
