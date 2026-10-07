@@ -15,6 +15,31 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 
 @skipUnless(os.environ.get('OFFLINE_BROWSER_TESTS') != '0' and Path(CHROME).is_file(), 'Chrome unavailable or OFFLINE_BROWSER_TESTS=0')
 class OfflineBrowserTests(StaticLiveServerTestCase):
+    def test_checklist_navigation_uses_cached_shell_when_offline(self):
+        user, _, _, _ = fixtures()
+        client = Client(); client.force_login(user)
+        with TemporaryDirectory(prefix='offline-checklist-shell-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                self.load(tab)
+                tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
+                previous_time_origin = tab.evaluate('performance.timeOrigin')
+                tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
+                tab.wait('performance.timeOrigin !== ' + str(previous_time_origin) + ' && !!navigator.serviceWorker.controller', timeout=20)
+
+                worker = chrome.worker(self.live_server_url + '/service-worker.js')
+                worker.call('Network.enable')
+                worker.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
+                tab.call('Page.navigate', {'url': self.live_server_url + '/locacoes/checklist-operacional/'})
+                tab.wait("document.title==='Checklist local' && document.getElementById('local-message')?.textContent.includes('não foi preparado')", timeout=20)
+                self.assertEqual(tab.evaluate('location.pathname'), '/locacoes/checklist-operacional/')
+            finally:
+                chrome.stop()
+
     def test_background_checks_and_unobserved_resume(self):
         user, _, _, _ = fixtures()
         client = Client(); client.force_login(user)
@@ -712,10 +737,11 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v21');
+                    if(!keys.includes('offline-pilot-shell-v22') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v22');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js','commercial.js','commercial-ui.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
+                    if(!(await cache.match('/offline/vendas-shell/')))return false;
                     return true;
                 })()"""))
                 for path in ('/offline/', '/vendas/'):

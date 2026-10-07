@@ -129,12 +129,15 @@ class Chrome:
         tab.call('Page.enable')
         return tab
 
-    def worker(self):
+    def worker(self, target_url=None):
         # startWorker acknowledges scheduling; the target can appear later.
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             with urlopen(f'http://127.0.0.1:{self.port}/json/list', timeout=1) as response:
-                target = next((t for t in json.load(response) if t['type'] == 'service_worker'), None)
+                target = next((t for t in json.load(response)
+                               if t['type'] == 'service_worker'
+                               and (t['url'] == target_url if target_url
+                                    else not t['url'].startswith('chrome-extension://'))), None)
             if target:
                 return DevTools(target['webSocketDebuggerUrl'])
             time.sleep(.05)

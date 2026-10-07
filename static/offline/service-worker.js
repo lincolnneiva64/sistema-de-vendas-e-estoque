@@ -1,4 +1,4 @@
-const CACHE = 'offline-pilot-shell-v21';
+const CACHE = 'offline-pilot-shell-v22';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
 self.addEventListener('install', event => {
@@ -24,11 +24,8 @@ self.addEventListener('fetch', event => {
     if (event.request.method === 'GET' && url.origin === self.location.origin
         && event.request.mode === 'navigate' && url.pathname === '/vendas/') {
         event.respondWith((async () => {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5000);
-            try { return await fetch(event.request, {signal: controller.signal, cache: 'no-store'}); }
+            try { return await fetch(event.request, {cache: 'no-store'}); }
             catch { return (await caches.match('/offline/vendas-shell/', {cacheName: CACHE})) || Response.error(); }
-            finally { clearTimeout(timer); }
         })());
         return;
     }

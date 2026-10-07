@@ -17,6 +17,75 @@ CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\
 @skipUnless(Path(CHROME).is_file(), 'Chrome indisponível')
 class OfflineSalesBrowserTests(StaticLiveServerTestCase):
     reset_sequences = True
+
+    def test_slow_online_navigation_stays_online_without_reload_recovery(self):
+        user, _, _, *_ = commercial_fixtures()
+        client = Client()
+        client.force_login(user)
+        with TemporaryDirectory(prefix='offline-sales-slow-navigation-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                tab.wait('!!document.querySelector(".offline-commercial button") && !!salesOffline.activate')
+                self.assertFalse(tab.evaluate('salesOffline.shell'))
+                self.assertFalse(tab.evaluate('salesOffline.active'))
+                self.assertTrue(tab.evaluate('!!document.querySelector("#produto option[data-produto-id]")'))
+                tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
+                previous_time_origin = tab.evaluate('performance.timeOrigin')
+                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                tab.wait('performance.timeOrigin !== ' + str(previous_time_origin) + ' && !!navigator.serviceWorker.controller && !!window.salesOffline?.activate', timeout=20)
+                self.assertFalse(tab.evaluate('salesOffline.shell'))
+                self.assertFalse(tab.evaluate('salesOffline.active'))
+                self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
+                cache_has_sales_shell = tab.evaluate("""(async()=>{
+                    const keys=await caches.keys();
+                    const cache=await caches.open('offline-pilot-shell-v22');
+                    return keys.includes('offline-pilot-shell-v22')
+                        && !keys.includes('offline-pilot-shell-v21')
+                        && !!(await cache.match('/offline/vendas-shell/'));
+                })()""")
+                self.assertTrue(cache_has_sales_shell)
+
+                worker = chrome.worker(self.live_server_url + '/service-worker.js')
+                worker.call('Runtime.enable')
+                worker.evaluate("""
+                    (() => {
+                        const originalFetch = self.fetch.bind(self);
+                        self.salesSlowNavigationProbe = {started: false, signalAborted: null, status: null};
+                        self.fetch = async (input, init) => {
+                            const requestUrl = new URL(input instanceof Request ? input.url : input, self.location.origin);
+                            if (requestUrl.pathname !== '/vendas/') return originalFetch(input, init);
+                            self.salesSlowNavigationProbe.started = true;
+                            await new Promise(resolve => setTimeout(resolve, 6100));
+                            self.salesSlowNavigationProbe.signalAborted = !!init?.signal?.aborted;
+                            const response = await originalFetch(input, init);
+                            self.salesSlowNavigationProbe.status = response.status;
+                            return response;
+                        };
+                        true;
+                    })()
+                """)
+
+                previous_time_origin = tab.evaluate('performance.timeOrigin')
+                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                tab.wait('performance.timeOrigin !== ' + str(previous_time_origin) + ' && !!document.querySelector(".offline-commercial button") && !!window.salesOffline?.activate', timeout=20)
+                self.assertEqual(tab.evaluate('location.pathname'), '/vendas/')
+                self.assertFalse(tab.evaluate('salesOffline.shell'))
+                self.assertFalse(tab.evaluate('salesOffline.active'))
+                self.assertTrue(tab.evaluate('!!document.querySelector("#produto option[data-produto-id]")'))
+                self.assertTrue(tab.evaluate('!!document.getElementById("clienteBusca")'))
+                self.assertTrue(tab.evaluate('!!document.getElementById("btnGravarVenda")'))
+                self.assertNotEqual(tab.evaluate('document.getElementById("btnGravarVenda").textContent.trim()'), 'Salvar venda offline')
+                probe = worker.evaluate('self.salesSlowNavigationProbe')
+                self.assertTrue(probe['started'])
+                self.assertFalse(probe['signalAborted'])
+                self.assertEqual(probe['status'], 200)
+            finally:
+                chrome.stop()
+
     def test_offline_assembly_safe_shell_and_no_mutations(self):
         user, customer, product, operator, *_ = commercial_fixtures()
         product.quantidade = 0
@@ -54,6 +123,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.wait('salesOffline.active && document.getElementById("btnGravarVenda").textContent==="Salvar venda offline"')
                 tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
                 tab.wait('window.salesOffline?.shell && !!window.salesOffline?.clients && !!document.querySelector("#produto option[data-produto-id]")')
+                self.assertTrue(tab.evaluate('salesOffline.shell && salesOffline.active'))
                 self.assertTrue(tab.evaluate('document.getElementById("sales-offline-notice").textContent.includes("Modo offline")'))
                 tab.evaluate('clienteBusca.value="Mercadinho";clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
                 tab.wait('!!document.querySelector(".cliente-sugestao-item")')
