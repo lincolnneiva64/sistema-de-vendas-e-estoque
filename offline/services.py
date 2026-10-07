@@ -10,6 +10,8 @@ from django.utils.dateparse import parse_datetime
 from locacoes.models import EventoLocacao, Locacao, TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem, EventoVenda
 from .models import OperacaoSincronizacao
+from .sale_commands import SALE_OPERATION_TYPE, execute_sale, validate_sale_payload
+from estoque.services.vendas import ErroGravarVenda
 
 PROTOCOL_VERSION = 1
 OPERATION_TYPE = "observacao_operacional"
@@ -34,9 +36,13 @@ def validate_command(data, user, environment):
     if command["environment_id"] != environment:
         raise ValidationError("Ambiente incorreto.")
     sale_note = command["type"] == "observacao_entrega_venda"
-    if command["type"] not in {OPERATION_TYPE, "observacao_entrega_venda"} or type(command["schema_version"]) is not int or command["schema_version"] != 1:
+    sale_create = command["type"] == SALE_OPERATION_TYPE
+    if command["type"] not in {OPERATION_TYPE, "observacao_entrega_venda", SALE_OPERATION_TYPE} or type(command["schema_version"]) is not int or command["schema_version"] != 1:
         raise ValidationError("Protocolo de operacao incompativel.")
-    if not isinstance(command["aggregate_id"], str) or not command["aggregate_id"].isdigit() or len(command["aggregate_id"]) > 18:
+    if sale_create:
+        if command["aggregate_id"] != command["operation_id"]:
+            raise ValidationError("Identidade da nova venda invalida.")
+    elif not isinstance(command["aggregate_id"], str) or not command["aggregate_id"].isdigit() or len(command["aggregate_id"]) > 18:
         raise ValidationError("Tarefa invalida.")
     if type(command["sequence"]) is not int or not 0 < command["sequence"] <= 9007199254740991:
         raise ValidationError("Sequencia invalida.")
@@ -44,6 +50,11 @@ def validate_command(data, user, environment):
     if created is None or timezone.is_naive(created):
         raise ValidationError("Data invalida.")
     payload = command["payload"]
+    if sale_create:
+        validate_sale_payload(payload)
+        if data["payload_hash"] != command_hash(command):
+            raise ValidationError("Hash do comando invalido.")
+        return command
     expected = {"rota_id", "venda_id", "tarefa_status", "observacao"} if sale_note else {"locacao_id", "tarefa_status", "observacao"}
     if not isinstance(payload, dict) or set(payload) != expected:
         raise ValidationError("Conteudo de observacao invalido.")
@@ -76,9 +87,13 @@ def process_operation(command, user):
         },
     )
     if not created:
+        operation = OperacaoSincronizacao.objects.select_for_update().get(pk=operation.pk)
         if operation.actor_id != user.pk or operation.payload_hash != digest or operation.comando != command:
             return {"operation_id": command["operation_id"], "status": "conflito", "hash": digest, "erro": "UUID ja utilizado com outro conteudo."}, 409
         return operation.resultado, 409 if operation.status == "conflito" else 200
+
+    if command["type"] == SALE_OPERATION_TYPE:
+        return _process_sale_creation(operation, command, user, digest)
 
     if command["type"] == "observacao_entrega_venda":
         return _process_sale_note(operation, command, user, digest)
@@ -108,6 +123,27 @@ def process_operation(command, user):
     operation.concluido_em = now
     operation.save(update_fields=["referencia", "status", "resultado", "concluido_em", "erro"])
     return result, 200 if compatible else 409
+
+
+def _process_sale_creation(operation, command, user, digest):
+    try:
+        # Roll back all sale effects before persisting a definitive conflict.
+        # The outer process_operation transaction also covers receipt completion.
+        with transaction.atomic():
+            sale = execute_sale(command["payload"], user).venda
+    except ErroGravarVenda as exc:
+        sale = None
+        error = exc.mensagem
+    now = timezone.now()
+    result = {"operation_id": command["operation_id"], "hash": digest,
+              "status": "confirmada" if sale else "conflito",
+              "record_id": sale.pk if sale else None, "completed_at": now.isoformat()}
+    if sale is None:
+        result["erro"] = error
+        operation.erro = error
+    operation.status, operation.resultado, operation.concluido_em = result["status"], result, now
+    operation.save(update_fields=["status", "resultado", "concluido_em", "erro"])
+    return result, 200 if sale else 409
 
 
 def _process_sale_note(operation, command, user, digest):
