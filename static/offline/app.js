@@ -1,4 +1,4 @@
-import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState} from './core.js';
+import {POLICY, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState, saleOperationState} from './core.js';
 import {renderIndicator} from './presentation.js';
 
 const pilot = !!document.getElementById('offline-pilot');
@@ -6,6 +6,7 @@ const globalIndicator = document.getElementById('offline-global');
 const globalSync = document.getElementById('offline-global-sync');
 let notice = null, remoteSync = null;
 let authenticated = false;
+let salesIdentity = null;
 let healthEnvironment = location.host;
 const badge = document.getElementById('offline-status');
 let repo, snapshot, csrf = '', inFlight, syncing = false, saving = false, preparing = false, syncOpening = false, stopped = false, progress = '', probePending = null, sessionGeneration = 0, sessionPending = null, leaving = false;
@@ -68,12 +69,18 @@ function broadcast() {
     channel?.postMessage({type: 'changed', syncing, progress, at: Date.now(), notice,
         actor: scope.actor_id, environment: scope.environment_id});
 }
-function changed() { broadcast(); return render(); }
+function changed() { broadcast(); document.dispatchEvent(new Event('offline-operation-updated')); return render(); }
 function communicationScope() {
     // Health is meaningful before authentication or snapshot preparation on
     // both screens. An empty template identity must not reset that result.
     return {environment_id: (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id) || healthEnvironment,
-        actor_id: (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id) || 'anonymous'};
+        actor_id: (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id)
+            || (salesIdentity && globalIndicator && salesIdentity.environment_id === globalIndicator.dataset.environment
+                ? salesIdentity.actor_id : null) || 'anonymous'};
+}
+function preparedSyncScope(scope, operations) {
+    return scope.actor_id !== 'anonymous' && ((snapshot?.actor.id === scope.actor_id && snapshot.environment_id === scope.environment_id)
+        || operations.some(op => op.type === 'criar_venda'));
 }
 async function refreshCommunication(event = null) {
     const scope = communicationScope();
@@ -93,8 +100,8 @@ async function render() {
     if (!repo) return;
     await refreshCommunication();
     const operations = await repo.all('operations');
-    const scoped = operations.filter(op => op.actor_id === (globalIndicator ? globalIndicator.dataset.actor : snapshot?.actor.id)
-        && op.environment_id === (globalIndicator ? globalIndicator.dataset.environment : snapshot?.environment_id));
+    const scope = communicationScope();
+    const scoped = operations.filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
     const pending = scoped.filter(op => op.status !== 'confirmada');
     const state = indicatorState({operations: scoped, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
@@ -110,8 +117,7 @@ async function render() {
     if (globalIndicator) globalIndicator.dataset.state = state.kind;
     if (globalSync) {
         globalSync.hidden = !pending.some(op => ['pendente', 'erro', 'resultado_desconhecido'].includes(op.status));
-        syncButton(globalSync, !state.canSync || !navigator.locks || !snapshot
-            || snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment, state.count, state.kind === 'syncing');
+        syncButton(globalSync, !state.canSync || !navigator.locks || !preparedSyncScope(scope, scoped), state.count, state.kind === 'syncing');
     }
     if (!pilot) return;
     const stabilityText = document.getElementById('offline-stability');
@@ -129,8 +135,9 @@ async function render() {
     list.replaceChildren();
     for (const op of operations.sort((a, b) => b.sequence - a.sequence)) {
         const row = document.createElement('li');
-        row.textContent = op.type === 'criar_venda'
-            ? `${op.status} · Venda offline · referência ${op.operation_id.slice(0,8)} · usuário ${op.actor_id}` + (op.server_result?.record_id ? ` · venda #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '')
+        const sale = op.type === 'criar_venda' ? saleOperationState(op) : null;
+        row.textContent = sale
+            ? `${sale.label} · referência ${op.operation_id.slice(0,8)} · usuário ${op.actor_id}` + (sale.error ? ' · ' + sale.error : '')
             : `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
         list.append(row);
     }
@@ -339,14 +346,17 @@ async function synchronize() {
     finally { syncOpening = false; await render(); }
 }
 async function runSynchronization() {
-    if (!snapshot || (globalIndicator && (snapshot.actor.id !== globalIndicator.dataset.actor || snapshot.environment_id !== globalIndicator.dataset.environment))) return;
+    const scope = communicationScope();
+    if (scope.actor_id === 'anonymous') return;
     if (!navigator.locks || !stability.ready(performance.now(), Date.now()) || syncing) return;
     if (!await checkSession()) { message('Autentique-se novamente e confira sua permissão. Fila preservada.'); await render(); return; }
     await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => {
         if (!lock) { message('Outra aba está sincronizando.'); return; }
         await refreshCommunication();
         if (!stability.ready(performance.now(), Date.now())) return;
-        const operations = (await repo.all('operations')).filter(op => op.actor_id === snapshot.actor.id && op.environment_id === snapshot.environment_id && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
+        const scoped = (await repo.all('operations')).filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
+        if (!preparedSyncScope(scope, scoped)) return;
+        const operations = scoped.filter(op => ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
         if (!operations.length || !await confirmSynchronization(operations.length)) return;
         syncing = true; stopped = false; notice = null; progress = '0/' + operations.length; await changed();
         let confirmed = 0;
@@ -356,13 +366,14 @@ async function runSynchronization() {
             if ([401, 403].includes(session.status)) requireAuthentication();
             if (!session.ok) throw new Error('Autentique-se novamente e confira sua permissão. Fila preservada.');
             const identity = await session.json();
-            if (identity.actor.id !== snapshot.actor.id || identity.environment_id !== snapshot.environment_id || identity.protocol_version !== 1) throw new Error('Usuário/ambiente diferente. Fila preservada.');
+            if (identity.actor?.id !== scope.actor_id || identity.environment_id !== scope.environment_id || identity.protocol_version !== 1) throw new Error('Usuário/ambiente diferente. Fila preservada.');
             csrf = identity.csrf_token;
             for (let index = 0; index < operations.length; index++) {
                 await refreshCommunication();
                 if (stopped || !stability.ready(performance.now(), Date.now())) { stopped = true; await probe(); break; }
                 const operation = {...operations[index], status: 'enviando', attempts: operations[index].attempts + 1};
                 await repo.put('operations', operation); progress = `${index + 1}/${operations.length}`; await changed();
+                let receiptPersisted = false;
                 try {
                     const response = await fetchTimed('/api/offline/observations/', {method: 'POST', synchronize: true,
                         headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
@@ -378,10 +389,11 @@ async function runSynchronization() {
                     }
                     if (![200, 409].includes(response.status)) throw new Error('Servidor indisponível.');
                     const result = await response.json();
-                    if (!validReceipt(result, operation)) throw new Error('Confirmação do servidor inválida.');
-                    await repo.record(operation, result); if (result.status === 'confirmada') confirmed++; await changed();
+                    if (!validReceipt(result, operation, response.status)) throw new Error('Confirmação do servidor inválida.');
+                    await repo.record(operation, result); receiptPersisted = true;
+                    if (result.status === 'confirmada') confirmed++; await changed();
                 } catch (error) {
-                    await repo.put('operations', {...operation, status: 'resultado_desconhecido', last_error: error.message + ' Reenviar o mesmo UUID após estabilidade.'});
+                    if (!receiptPersisted) await repo.put('operations', {...operation, status: 'resultado_desconhecido', last_error: error.message + ' Reenviar o mesmo UUID após estabilidade.'});
                     // Preserve the existing new stability window after an uncertain send,
                     // but let the health-check decide whether the server is offline.
                     stopped = true;
@@ -392,7 +404,7 @@ async function runSynchronization() {
         } catch (error) { message(error.message); }
         finally {
             const results = await repo.all('operations');
-            const conflict = results.some(op => op.actor_id === snapshot.actor.id && op.environment_id === snapshot.environment_id && op.status === 'conflito');
+            const conflict = results.some(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id && op.status === 'conflito');
             const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id) && op.status !== 'confirmada');
             const text = conflict ? 'Conflito de sincronização — revisão necessária' : stopped || remaining ? 'Sincronização interrompida — operações preservadas' : 'Sincronização concluída';
             finishModal(text);
@@ -420,10 +432,12 @@ async function start() {
             identityChannel.postMessage('changed'); identityChannel.close();
         }
     }
+    salesIdentity = await repo.get('metadata', 'sales-identity');
     await checkSession();
     snapshot = await repo.get('snapshots', 'pilot');
     if (!pilot && !globalIndicator) return;
     if (navigator.locks) await navigator.locks.request('offline-pilot-sync', {ifAvailable: true}, async lock => { if (lock) await repo.recover(); });
+    document.dispatchEvent(new Event('offline-operation-updated'));
     if (pilot) {
         const identity = await repo.identity();
         document.getElementById('offline-device').textContent = identity.id;

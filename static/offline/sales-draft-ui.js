@@ -1,5 +1,5 @@
 import './sales.js';
-import {Repository, openDB} from './core.js';
+import {Repository, openDB, saleOperationState} from './core.js';
 import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline} from './sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
@@ -12,6 +12,10 @@ const message = document.createElement('span'); message.setAttribute('role', 'st
 const discard = document.createElement('button'); discard.type = 'button'; discard.textContent = 'Descartar rascunho';
 discard.id = 'sales-draft-discard'; discard.disabled = true;
 box.append(message, discard);
+const officialLink = document.createElement('a');
+officialLink.id = 'sales-official-sale-link'; officialLink.hidden = true;
+officialLink.target = '_blank'; officialLink.rel = 'noopener noreferrer';
+box.append(officialLink);
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
 let repo, scope, revision = 0, saved = '', blocked = false, suppress = true, ignoreReset = false;
@@ -19,6 +23,8 @@ let timer, pending = Promise.resolve(), submitted = null;
 let replaceConfirmed = false;
 let preparedSubmission = false;
 let localCompletion = null, finalizing = null;
+let completionView = null;
+let completionGeneration = 0;
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
 const observer = new MutationObserver(() => { if (!ignoreReset) schedule(0); });
 const meaningful = assembly => assembly.cliente || assembly.operador || assembly.tipo_venda || assembly.itens.length || assembly.lancamento;
@@ -27,7 +33,8 @@ function showError(error) { message.textContent = error.message || 'Não foi pos
 function offlineActions() {
     if (!window.salesOffline.active && !localCompletion) return;
     const button = document.getElementById('btnGravarVenda');
-    const label = localCompletion ? 'Venda offline pendente' : 'Salvar venda offline';
+    const label = localCompletion ? completionView?.recordId ? 'Venda sincronizada'
+        : completionView?.status === 'conflito' ? 'Venda offline em revisão' : 'Venda offline pendente' : 'Salvar venda offline';
     const disabled = !!localCompletion || !!finalizing || blocked || !scope || !bridge.eligible;
     if (button.textContent !== label) button.textContent = label;
     if (button.disabled !== disabled) button.disabled = disabled;
@@ -42,6 +49,25 @@ function completed(marker) {
     resetVisual(); discard.disabled = true;
     for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) field.disabled = true;
     message.textContent = `Venda salva neste aparelho e aguardando sincronização. Sem número oficial. Referência ${marker.operation_id.slice(0,8)}. Será enviada manualmente quando a conexão estiver estável.`;
+    offlineActions();
+    void refreshCompletion().catch(showError);
+}
+async function refreshCompletion() {
+    const generation = ++completionGeneration;
+    if (!localCompletion || !repo || !scope || !await checkIdentity()) return;
+    const operation = await repo.get('operations', localCompletion.operation_id);
+    if (generation !== completionGeneration) return;
+    if (operation && (operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
+        || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
+        throw new Error('Identidade da operação local incompatível. Dados preservados.');
+    completionView = saleOperationState(operation);
+    message.textContent = `${completionView.label} Referência ${localCompletion.operation_id.slice(0,8)}.`
+        + (completionView.error ? ' ' + completionView.error : '');
+    officialLink.hidden = !completionView.recordId;
+    if (completionView.recordId) {
+        officialLink.href = completionView.url;
+        officialLink.textContent = `Ver venda #${completionView.recordId}`;
+    } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
     offlineActions();
 }
 function schedule(delay = 250) {
@@ -86,17 +112,22 @@ function resetVisual() {
     suppress = false;
 }
 async function checkIdentity() {
-    if (!scope || !repo) return;
+    if (!scope || !repo) return false;
     const identity = await repo.get('metadata', 'sales-identity'), device = await repo.get('metadata', 'device');
     if (identity?.actor_id !== scope.actor_id || identity?.environment_id !== scope.environment_id || device?.id !== scope.device_id) {
         blocked = true; clearTimeout(timer); resetVisual();
+        completionGeneration++;
         message.textContent = 'Identidade mudou. Rascunho anterior preservado e montagem limpa.';
         discard.disabled = true;
+        officialLink.hidden = true;
+        return false;
     }
+    return true;
 }
 window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
     get finalization() { return localCompletion; },
+    refreshCompletion,
     async finalizeOffline(origin) {
         if (finalizing) return finalizing;
         if (localCompletion) return {finalization:localCompletion, alreadyFinalized:true};
@@ -241,6 +272,14 @@ for (const eventName of ['click', 'keydown']) document.addEventListener(eventNam
 document.addEventListener('visibilitychange', () => { if (document.hidden) void flush(); });
 window.addEventListener('pagehide', () => { if (!ignoreReset) void flush(); });
 window.addEventListener('focus', () => { void checkIdentity(); });
+window.addEventListener('focus', () => { void refreshCompletion().catch(showError); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshCompletion().catch(showError); });
+document.addEventListener('offline-operation-updated', () => { void refreshCompletion().catch(showError); });
+const operationChannel = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
+if (operationChannel) operationChannel.onmessage = event => {
+    if (scope && event.data?.type === 'changed' && event.data.actor === scope.actor_id
+        && event.data.environment === scope.environment_id) void refreshCompletion().catch(showError);
+};
 const identityChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-identity') : null;
 if (identityChannel) identityChannel.onmessage = () => { void checkIdentity(); };
 if (channel) channel.onmessage = async event => {

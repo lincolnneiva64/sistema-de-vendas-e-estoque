@@ -96,12 +96,13 @@ if (indicator) new MutationObserver(() => {
 window.addEventListener('online', () => {
     if (!state.active) return;
     const link = document.createElement('a'); link.href = '/vendas/';
-    link.textContent = ' Reabrir online (a montagem salva será restaurada como rascunho local).';
+    link.textContent = state.completed ? ' Reabrir online para consultar o estado da venda.'
+        : ' Reabrir online (a montagem salva será restaurada como rascunho local).';
     banner.append(link);
 });
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
-    if ((state.completed && event.target.closest('#layout-vendas')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
+    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);

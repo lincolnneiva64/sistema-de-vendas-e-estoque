@@ -50,9 +50,11 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                     raise
 
     def select_customer(self, tab, name):
+        tab.evaluate('await (await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src)).initialized;await salesOffline.ready;true')
         tab.evaluate('clienteBusca.value=' + repr(name) + ';clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
-        tab.wait('!!document.querySelector(".cliente-sugestao-item")')
-        tab.evaluate('document.querySelector(".cliente-sugestao-item").click();true')
+        # Query and click in one browser task: an async autocomplete response can
+        # replace the list between two separate CDP calls.
+        tab.wait('(()=>{const item=document.querySelector(".cliente-sugestao-item");if(!item)return false;item.click();return true})()')
 
     def add_product(self, tab, name, quantity='2'):
         tab.evaluate('operadorVenda.value="Operador Comercial";operadorVenda.dispatchEvent(new Event("change",{bubbles:true}));produtoBusca.value=' + repr(name) + ';produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')

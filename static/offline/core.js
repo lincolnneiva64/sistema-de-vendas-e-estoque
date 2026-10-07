@@ -181,7 +181,9 @@ export class Repository {
         });
     }
     record(operation, result) {
-        const updated = {...operation, status: result.status, server_result: result, last_error: result.erro || ''};
+        if (!validReceipt(result, operation)) throw new Error('Confirmação do servidor inválida.');
+        const updated = {...operation, status: result.status, server_result: result,
+            last_error: result.status === 'confirmada' ? '' : result.erro || ''};
         return this.transaction(['operations', 'history'], true, tx => {
             tx.objectStore('operations').put(updated);
             tx.objectStore('history').put({...updated, synchronized_at: new Date().toISOString()});
@@ -192,10 +194,34 @@ export class Repository {
 export function validHealth(data, environment) {
     return data && data.ok === true && data.environment === environment && data.protocol_version === 1;
 }
-export function validReceipt(result, operation) {
-    return result && result.operation_id === operation.operation_id && result.hash === operation.payload_hash
-        && (result.status === 'conflito' || (result.status === 'confirmada' && Number.isSafeInteger(result.record_id)
-            && result.record_id > 0 && typeof result.completed_at === 'string' && Number.isFinite(Date.parse(result.completed_at))));
+export function validReceipt(result, operation, httpStatus) {
+    if (!operation || typeof operation.operation_id !== 'string' || !operation.operation_id
+        || typeof operation.payload_hash !== 'string' || !/^[0-9a-f]{64}$/.test(operation.payload_hash)
+        || !result || typeof result !== 'object' || result.operation_id !== operation.operation_id || result.hash !== operation.payload_hash) return false;
+    if (httpStatus !== undefined && !((httpStatus === 200 && result.status === 'confirmada') || (httpStatus === 409 && result.status === 'conflito'))) return false;
+    const completed = typeof result.completed_at === 'string' && Number.isFinite(Date.parse(result.completed_at));
+    if (operation.type === 'criar_venda' && (!completed || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(result.completed_at))) return false;
+    return result.status === 'conflito'
+        ? operation.type !== 'criar_venda' || (result.record_id === null && typeof result.erro === 'string' && !!result.erro.trim())
+        : result.status === 'confirmada' && Number.isSafeInteger(result.record_id) && result.record_id > 0 && completed;
+}
+
+export function saleOperationState(operation) {
+    const error = operation?.last_error || operation?.server_result?.erro || '';
+    if (operation?.status === 'confirmada' && validReceipt(operation.server_result, operation)) {
+        const recordId = operation.server_result.record_id;
+        return {status:'confirmada', label:`Venda #${recordId} sincronizada.`, recordId,
+            url:`/vendas/${recordId}/`, completedAt:operation.server_result.completed_at, error:''};
+    }
+    const labels = {
+        pendente:'Venda offline aguardando sincronização. Sem número oficial.',
+        enviando:'Enviando venda offline… Ainda sem confirmação.',
+        conflito:'Venda offline precisa de revisão.',
+        erro:'Não foi possível sincronizar a venda. Ainda sem confirmação.',
+        resultado_desconhecido:'Resultado da venda ainda não confirmado. Reenvie manualmente o mesmo comando após estabilidade.',
+    };
+    return {status:operation?.status || 'erro', label:labels[operation?.status] || 'Resultado local indisponível ou inválido. Venda ainda não confirmada.',
+        recordId:null, url:null, error};
 }
 
 // Both the detailed panel and the global indicator consume this projection.
