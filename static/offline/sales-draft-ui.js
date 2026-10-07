@@ -1,6 +1,6 @@
 import './sales.js';
 import {Repository, openDB} from './core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission} from './sales-drafts.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline} from './sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -18,17 +18,40 @@ let repo, scope, revision = 0, saved = '', blocked = false, suppress = true, ign
 let timer, pending = Promise.resolve(), submitted = null;
 let replaceConfirmed = false;
 let preparedSubmission = false;
+let localCompletion = null, finalizing = null;
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
 const observer = new MutationObserver(() => { if (!ignoreReset) schedule(0); });
 const meaningful = assembly => assembly.cliente || assembly.operador || assembly.tipo_venda || assembly.itens.length || assembly.lancamento;
 function announce() { channel?.postMessage({scope, revision}); }
 function showError(error) { message.textContent = error.message || 'Não foi possível salvar o rascunho local. Último rascunho preservado.'; }
+function offlineActions() {
+    if (!window.salesOffline.active && !localCompletion) return;
+    const button = document.getElementById('btnGravarVenda');
+    const label = localCompletion ? 'Venda offline pendente' : 'Salvar venda offline';
+    const disabled = !!localCompletion || !!finalizing || blocked || !scope || !bridge.eligible;
+    if (button.textContent !== label) button.textContent = label;
+    if (button.disabled !== disabled) button.disabled = disabled;
+    const confirm = document.getElementById('btnConfirmarFechamentoVenda');
+    if (confirm.disabled !== disabled) confirm.disabled = disabled;
+}
+function completed(marker) {
+    localCompletion = marker;
+    window.salesOffline.completed = true;
+    blocked = true; ignoreReset = true; clearTimeout(timer);
+    revision = marker.revision;
+    resetVisual(); discard.disabled = true;
+    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) field.disabled = true;
+    message.textContent = `Venda salva neste aparelho e aguardando sincronização. Sem número oficial. Referência ${marker.operation_id.slice(0,8)}. Será enviada manualmente quando a conexão estiver estável.`;
+    offlineActions();
+}
 function schedule(delay = 250) {
+    offlineActions();
     if (suppress || ignoreReset || blocked || !scope || !bridge.eligible) return;
     clearTimeout(timer);
     timer = setTimeout(() => { void flush(); }, delay);
 }
 function flush() {
+    offlineActions();
     clearTimeout(timer);
     if (suppress || ignoreReset || blocked || !scope || !bridge.eligible) return pending;
     const assembly = bridge.capture(), fingerprint = JSON.stringify(assembly);
@@ -44,13 +67,17 @@ function flush() {
             message.textContent = 'Rascunho local salvo. Dados de referência a revalidar.';
             announce();
         } catch (error) {
+            if (error.code === 'draft-finalized-offline') {
+                const result = await loadDraft(repo, scope);
+                if (result.finalization) { completed(result.finalization); return; }
+            }
             if (error.message.includes('outra aba')) blocked = true;
             if (error.message.includes('já enviada')) blocked = true;
             if (error.message.includes('mudou')) { blocked = true; resetVisual(); }
             showError(error);
             window.salesDraftUI.lastError = error.message;
         }
-    });
+    }).finally(offlineActions);
     return pending;
 }
 function resetVisual() {
@@ -69,6 +96,41 @@ async function checkIdentity() {
 }
 window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
+    get finalization() { return localCompletion; },
+    async finalizeOffline(origin) {
+        if (finalizing) return finalizing;
+        if (localCompletion) return {finalization:localCompletion, alreadyFinalized:true};
+        if (!bridge.eligible || !scope || !repo) { bridge.error('Identidade local indisponível ou contexto de edição/Pedido. Rascunho preservado.'); return; }
+        const editingControls = new Map(Array.from(document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button'), field => [field, field.disabled]));
+        finalizing = (async () => {
+            try {
+                await flush();
+                await checkIdentity();
+                if (blocked) throw new Error('Montagem bloqueada. Reabra a tela antes de concluir.');
+                const current = await loadDraft(repo, scope);
+                if (current.finalization) { completed(current.finalization); return {finalization:current.finalization, alreadyFinalized:true}; }
+                if (current.revision !== revision || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
+                    throw new Error('Não foi possível persistir a montagem atual. Rascunho anterior preservado.');
+                const result = await finalizeDraftOffline(repo, scope, {
+                    revision, draft_id:current.draft?.draft_id, origem_recebimento:origin,
+                });
+                completed(result.finalization);
+                channel?.postMessage({type:'draft-finalized-offline', scope, revision, operation_id:result.finalization.operation_id});
+                const queue = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
+                queue?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id}); queue?.close();
+                document.dispatchEvent(new Event('offline-operations-changed'));
+                return result;
+            } catch (error) { showError(error); bridge.error(error.message); window.salesDraftUI.lastError = error.message; }
+            finally {
+                finalizing = null;
+                if (!localCompletion) for (const [field, disabled] of editingControls) field.disabled = disabled;
+                offlineActions();
+            }
+        })();
+        for (const field of editingControls.keys()) field.disabled = true;
+        offlineActions();
+        return finalizing;
+    },
     async restoreReference(assembly) {
         try {
             await checkIdentity();
@@ -140,6 +202,7 @@ try {
         if (scope) {
             const result = await loadDraft(repo, scope);
             revision = result.revision;
+            if (result.finalization) completed(result.finalization);
             if (result.confirmation) {
                 replaceConfirmed = true;
                 message.textContent = result.confirmation.estado === 'concluido'
@@ -157,7 +220,10 @@ try {
 observer.observe(document.getElementById('tabelaProdutos'), {subtree:true, childList:true, attributes:true, characterData:true});
 suppress = false;
 window.salesDraftUI.ready = true;
+offlineActions();
 window.salesDraftResolve?.();
+document.addEventListener('sales-offline-active', offlineActions);
+new MutationObserver(offlineActions).observe(document.getElementById('btnGravarVenda'), {attributes:true, attributeFilter:['disabled'], childList:true});
 document.addEventListener('sales-draft-change', () => schedule(0));
 document.addEventListener('input', event => {
     if (['dataVenda', 'vencimentoVenda', 'operadorVenda', 'tipoVenda', 'clienteBusca', 'quantidade', 'preco', 'unidade'].includes(event.target.id)) {
@@ -180,6 +246,8 @@ if (identityChannel) identityChannel.onmessage = () => { void checkIdentity(); }
 if (channel) channel.onmessage = async event => {
     const update = event.data;
     if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.revision > revision) {
+        const current = await loadDraft(repo, scope);
+        if (current.finalization) { completed(current.finalization); return; }
         blocked = true; clearTimeout(timer);
         message.textContent = 'Rascunho atualizado em outra aba. Reabra a tela para carregar a versão salva.';
     }

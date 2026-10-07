@@ -15,6 +15,16 @@ export async function hash(command) {
     return [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, '0')).join('');
 }
 
+// May be used inside a transaction that ALSO persists the operation.
+export function reserveSequence(store, device) {
+    const value = device || {key:'device', id:crypto.randomUUID(), sequence:0};
+    if (!Number.isSafeInteger(value.sequence) || value.sequence < 0 || value.sequence >= Number.MAX_SAFE_INTEGER)
+        throw new Error('Sequência local inválida. Dados preservados.');
+    const next = {...value, sequence:value.sequence + 1};
+    store.put(next);
+    return next;
+}
+
 export class Stability {
     constructor(policy = POLICY) { this.policy = policy; this.reset(); }
     reset() { this.started = null; this.last = null; this.lastWall = null; this.connected = false; this.accumulated = 0; }
@@ -145,9 +155,8 @@ export class Repository {
         return this.transaction(['metadata'], true, (tx, done) => {
             const store = tx.objectStore('metadata');
             store.get('device').onsuccess = event => {
-                const value = event.target.result || {key: 'device', id: crypto.randomUUID(), sequence: 0};
-                value.sequence += 1;
-                store.put(value); done(value);
+                try { done(reserveSequence(store, event.target.result)); }
+                catch (_) { tx.abort(); }
             };
         });
     }

@@ -6738,7 +6738,16 @@ preco.addEventListener("input", atualizarCustoMargemVenda);
 async function gravarVendaAtual(dadosVendaConfirmados) {
     if (vendaGravacaoEmAndamento || vendaConfirmadaNestaMontagem) return;
     if (window.salesOffline.active || !navigator.onLine) {
-        mostrarErroGravacaoVenda('Venda offline ainda não pode ser concluída nesta etapa.');
+        await window.salesDraftReady;
+        if (!window.salesDraftBridge?.eligible) {
+            mostrarErroGravacaoVenda('Edição e Pedido não podem ser concluídos offline.');
+            return;
+        }
+        if (!dadosVendaConfirmados && pagamentoVendaAVista()) {
+            abrirFechamentoVenda(coletarDadosVenda());
+            return;
+        }
+        await window.salesDraftUI?.finalizeOffline(dadosVendaConfirmados?.origem_recebimento);
         return;
     }
     if (typeof operadorVendaObrigatorioOk === "function" && !operadorVendaObrigatorioOk()) return;

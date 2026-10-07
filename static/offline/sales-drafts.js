@@ -1,4 +1,5 @@
-// Local assembly only. Never reads/writes operations or reserves a sequence.
+import {hash, reserveSequence} from './core.js';
+// Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const id = value => typeof value === 'string' && /^[1-9]\d*$/.test(value);
@@ -94,10 +95,10 @@ export async function draftScope(repo, identity) {
 }
 
 // All identity checks and compare-and-swap happen in the SAME IDB transaction.
-async function access(repo, scope, write, action) {
+async function access(repo, scope, write, action, stores = ['metadata']) {
     const key = draftKey(scope), revisionKey = key + ':revision';
     let error;
-    return repo.transaction(['metadata'], write, (tx, done) => {
+    return repo.transaction(stores, write, (tx, done) => {
         const store = tx.objectStore('metadata');
         function safe(callback) { return event => { try { callback(event.target.result); } catch (caught) { error = caught; tx.abort(); } }; }
         store.get('device').onsuccess = safe(device => {
@@ -109,7 +110,7 @@ async function access(repo, scope, write, action) {
                     const revision = version?.revision || 0;
                     if (!Number.isSafeInteger(revision) || revision < 0 || revision >= Number.MAX_SAFE_INTEGER)
                         throw new Error('Revisão local inválida. O rascunho foi preservado.');
-                    store.get(key).onsuccess = safe(record => done(action({store, key, revisionKey, revision, record})));
+                    store.get(key).onsuccess = safe(record => done(action({tx, store, device, key, revisionKey, revision, record})));
                 });
             });
         });
@@ -127,8 +128,26 @@ function validateRecord(record, scope, revision) {
         environment_id:record.environment_id, actor_id:record.actor_id, device_id:record.device_id,
         revision, ...projectAssembly(record)};
 }
+function finalized(record, scope, revision) {
+    if (record?.tipo !== 'venda_concluida_offline') return null;
+    if (record.schema_version !== DRAFT_SCHEMA || !uuid(record.draft_id) || !uuid(record.operation_id)
+        || record.actor_id !== scope.actor_id || record.environment_id !== scope.environment_id
+        || record.device_id !== scope.device_id || record.revision !== revision)
+        throw new Error('Conclusão local incompatível. Operação preservada.');
+    return record;
+}
+function rejectFinalized(record, scope, revision) {
+    const marker = finalized(record, scope, revision);
+    if (marker) {
+        const error = new Error('Venda já concluída offline. Operação preservada: ' + marker.operation_id);
+        error.code = 'draft-finalized-offline'; error.operation_id = marker.operation_id;
+        throw error;
+    }
+}
 export function loadDraft(repo, scope) {
     return access(repo, scope, false, ({revision, record}) => {
+        const finalization = finalized(record, scope, revision);
+        if (finalization) return {revision, draft:null, finalization};
         const safe = validateRecord(record, scope, revision), confirmation = submissionMarker(scope, safe);
         return {revision, draft:confirmation?.estado === 'concluido' ? null : safe, confirmation};
     });
@@ -136,6 +155,7 @@ export function loadDraft(repo, scope) {
 export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfirmed = false) {
     const safe = projectAssembly(assembly);
     return access(repo, scope, true, ({store, key, revisionKey, revision, record}) => {
+        rejectFinalized(record, scope, revision);
         if (revision !== expectedRevision) throw new Error('Rascunho atualizado em outra aba. Reabra a tela para carregar a versão salva.');
         const existing = validateRecord(record, scope, revision);
         const confirmation = submissionMarker(scope, existing);
@@ -151,11 +171,82 @@ export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfir
     });
 }
 export function discardDraft(repo, scope, expectedRevision) {
-    return access(repo, scope, true, ({store, key, revisionKey, revision}) => {
+    return access(repo, scope, true, ({store, key, revisionKey, revision, record}) => {
+        rejectFinalized(record, scope, revision);
         if (revision !== expectedRevision) throw new Error('Rascunho atualizado em outra aba. Reabra a tela antes de descartar.');
         store.delete(key);
         // Keep the revision fence after deletion so an old tab cannot resurrect it.
         store.put({key:revisionKey, revision:revision + 1});
         return {revision:revision + 1, draft:null};
     });
+}
+
+function salePayload(record, origin) {
+    const draft = projectAssembly(record);
+    if (!draft.itens.length || draft.itens.length > 200 || !draft.data_venda || !draft.tipo_venda
+        || draft.operador.length > 120 || draft.lancamento)
+        throw new Error('Revise data, pagamento e itens. Adicione ou encerre a linha em montagem antes de concluir.');
+    const payload = {schema_version:1, cliente_id:draft.cliente?.id || null,
+        data_venda:draft.data_venda, data_vencimento:draft.data_vencimento,
+        tipo_pagamento:draft.tipo_venda, operador:draft.operador,
+        itens:draft.itens.map(item => {
+            if (!item.unidade || item.unidade.length > 40 || !Number.isFinite(Number(item.preco_unitario)) || Number(item.preco_unitario) <= 0)
+                throw new Error('Revise unidade e preço dos itens.');
+            return Object.fromEntries(['produto_id','quantidade','unidade','preco_unitario'].map(key => [key,item[key]]));
+        })};
+    if (origin !== undefined) {
+        if (!origin || Object.keys(origin).some(key => !['caixa','banco'].includes(key))
+            || Object.values(origin).some(value => typeof value !== 'string' || value.length > 80
+                || !/^(?:\d+(?:\.\d{1,6})?|\d+(?:\.\d{3})*,\d{1,2})$/.test(value))) throw new Error('Origem de recebimento inválida.');
+        payload.origem_recebimento = {...origin};
+    }
+    return payload;
+}
+
+export async function finalizeDraftOffline(repo, scope, {revision:expectedRevision, draft_id:draftId, origem_recebimento:origin}) {
+    // The draft already owns a randomUUID, persisted once at its creation.
+    // Promote it to operation identity so even an aborted local retry reuses it.
+    const operationId = draftId;
+    for (;;) {
+        const prepared = await access(repo, scope, false, ({revision, record, device}) => {
+            const marker = finalized(record, scope, revision);
+            if (marker) {
+                if (marker.draft_id !== draftId) throw new Error('A conclusão pertence a outra montagem.');
+                return {finalization:marker};
+            }
+            const draft = validateRecord(record, scope, revision);
+            if (!draft || draft.draft_id !== draftId || revision !== expectedRevision)
+                throw new Error('Rascunho atualizado em outra aba. Reabra a tela antes de concluir.');
+            if (submissionMarker(scope, draft)) throw new Error('Há envio online anterior. Confira seu resultado antes de concluir offline.');
+            if (!Number.isSafeInteger(device.sequence) || device.sequence < 0 || device.sequence >= Number.MAX_SAFE_INTEGER)
+                throw new Error('Sequência local inválida.');
+            return {revision, sequence:device.sequence, payload:salePayload(draft, origin)};
+        });
+        if (prepared.finalization) return {finalization:prepared.finalization, alreadyFinalized:true};
+        const command = {operation_id:operationId, device_id:scope.device_id, actor_id:scope.actor_id,
+            environment_id:scope.environment_id, type:'criar_venda', schema_version:1,
+            aggregate_id:operationId, payload:prepared.payload, created_at:new Date().toISOString(), sequence:prepared.sequence + 1};
+        const operation = {...command, payload_hash:await hash(command), status:'pendente', attempts:0, last_error:'', server_result:null};
+        if (new TextEncoder().encode(JSON.stringify(operation)).length > 20000) throw new Error('Venda local excede o limite do protocolo. Rascunho preservado.');
+        const result = await access(repo, scope, true, ({tx, store, device, key, revisionKey, revision, record}) => {
+            const marker = finalized(record, scope, revision);
+            if (marker) {
+                if (marker.draft_id !== draftId) throw new Error('A conclusão pertence a outra montagem.');
+                return {finalization:marker, alreadyFinalized:true};
+            }
+            const draft = validateRecord(record, scope, revision);
+            if (!draft || draft.draft_id !== draftId || revision !== prepared.revision)
+                throw new Error('Rascunho atualizado em outra aba. Reabra a tela antes de concluir.');
+            if (submissionMarker(scope, draft)) throw new Error('Há envio online anterior. Confira seu resultado antes de concluir offline.');
+            if (device.sequence !== prepared.sequence) return {retry:true};
+            const identity = reserveSequence(store, device);
+            if (identity.sequence !== command.sequence) throw new Error('Sequência mudou. Rascunho preservado.');
+            tx.objectStore('operations').add(operation);
+            const finalization = {key, tipo:'venda_concluida_offline', schema_version:DRAFT_SCHEMA,
+                ...scope, draft_id:draftId, revision:revision + 1, operation_id:operationId, finalized_at:command.created_at};
+            store.put(finalization); store.put({key:revisionKey, revision:revision + 1});
+            return {finalization, operation, alreadyFinalized:false};
+        }, ['metadata','operations']);
+        if (!result.retry) return result;
+    }
 }

@@ -129,7 +129,9 @@ async function render() {
     list.replaceChildren();
     for (const op of operations.sort((a, b) => b.sequence - a.sequence)) {
         const row = document.createElement('li');
-        row.textContent = `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
+        row.textContent = op.type === 'criar_venda'
+            ? `${op.status} · Venda offline · referência ${op.operation_id.slice(0,8)} · usuário ${op.actor_id}` + (op.server_result?.record_id ? ` · venda #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '')
+            : `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
         list.append(row);
     }
     document.getElementById('offline-diagnostic').textContent = snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · snapshot: ${snapshot.prepared_at} · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.';
@@ -458,3 +460,4 @@ async function start() {
     await render(); await probe(); await render();
 }
 export const initialized = start().catch(error => { if (badge) badge.textContent = 'Armazenamento offline indisponível'; message('Não foi possível abrir o armazenamento local: ' + error.message); });
+document.addEventListener('offline-operations-changed', () => { void initialized.then(() => render()); });

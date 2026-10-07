@@ -52,11 +52,11 @@ state.activate = async () => {
         options('operadorVenda', snapshot.operadores, o => o.nome, o => o.nome);
         options('tipoVenda', snapshot.formas_pagamento, f => f.valor, f => f.label);
         state.available = true;
-        banner.textContent = `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Estoque/preços serão revalidados na futura sincronização. Venda offline ainda não pode ser concluída nesta etapa.`;
+        banner.textContent = `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Estoque/preços serão revalidados na futura sincronização. A venda pode ser salva neste aparelho, sem envio ao servidor.`;
     } catch (_) {
         snapshot = null;
         for (const id of ['produto', 'operadorVenda', 'tipoVenda']) options(id, [], () => '', () => '');
-        banner.textContent = 'Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas. Venda offline ainda não pode ser concluída nesta etapa.';
+        banner.textContent = 'Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas. Rascunho válido já salvo pode ser concluído localmente; o servidor revalidará os dados no envio futuro.';
     }
     if (mountedDraft && scope) await window.salesDraftUI.restoreReference(mountedDraft);
     window.atualizarSelectsBonitosVenda?.();
@@ -99,9 +99,9 @@ window.addEventListener('online', () => {
     link.textContent = ' Reabrir online (a montagem salva será restaurada como rascunho local).';
     banner.append(link);
 });
-// A mounted local sale must never reach an official action, even via keyboard.
+// Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
-    if (state.active && event.target.closest('#btnGravarVenda, #btnConfirmarFechamentoVenda, #vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global')) {
+    if ((state.completed && event.target.closest('#layout-vendas')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);
