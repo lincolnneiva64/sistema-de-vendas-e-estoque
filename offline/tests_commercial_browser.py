@@ -29,8 +29,8 @@ class CommercialSnapshotBrowserTests(StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
                 tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
                 tab.wait('!!document.querySelector(".offline-commercial button")')
-                tab.evaluate("""window.core=await import('/offline/assets/2-8ab/core.js');
-                    window.commercial=await import('/offline/assets/2-8ab/commercial.js');
+                tab.evaluate("""window.core=await import('/offline/assets/2-8c/core.js');
+                    window.commercial=await import('/offline/assets/2-8c/commercial.js');
                     window.repo=new core.Repository(await core.openDB());
                     window.scope={actor_id:document.getElementById('offline-global').dataset.actor,
                         environment_id:document.getElementById('offline-global').dataset.environment};
@@ -113,8 +113,8 @@ class CommercialSnapshotBrowserTests(StaticLiveServerTestCase):
                 # Fresh document imports cached modules and reads IDB with the network off.
                 tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
                 tab.wait('!!document.getElementById("offline-pilot")')
-                self.assertEqual(tab.evaluate("""const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');
-                    const {obterProdutosSnapshot}=await import('/offline/assets/2-8ab/commercial.js');
+                self.assertEqual(tab.evaluate("""const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');
+                    const {obterProdutosSnapshot}=await import('/offline/assets/2-8c/commercial.js');
                     (await obterProdutosSnapshot(new Repository(await openDB()),{actor_id:""" + repr(str(user.pk)) + """,environment_id:'offline-isolated-tests'})).length"""), 2)
             finally:
                 chrome.stop()

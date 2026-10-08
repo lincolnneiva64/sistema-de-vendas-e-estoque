@@ -52,7 +52,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
         tab = self.open_sales(chrome)
         self.select_customer(tab, 'Cliente Comercial')
         self.add_product(tab, 'Produto Fracionado', quantity)
-        tab.evaluate('await (await import("/offline/assets/2-8ab/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+        tab.evaluate('await (await import("/offline/assets/2-8c/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
         tab.evaluate('tipoVenda.value='+json.dumps(payment)+';tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();window.fetch=(url,options)=>String(url)==="/api/offline/health/"?Promise.reject(TypeError("offline")):realFetch(url,options);await app.probe();offset+=5001;await app.probe();offset+=5001;await app.probe();await salesOffline.ready;await salesDraftUI.flush();window.snapshotsBefore=await repo.all("snapshots");true')
         origin = '{caixa:"10.00",banco:"38.00"}' if payment == 'À vista' else 'undefined'
         tab.evaluate('await salesDraftUI.finalizeOffline('+origin+');window.operation=(await repo.all("operations"))[0];true')
@@ -84,6 +84,10 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
             try:
                 tab = self.prepare(chrome)
                 other = self.open_sales(chrome)
+                for page in [tab, other]:
+                    page.wait('salesDraftUI.blocked && salesOffline.completed && clienteBusca.disabled')
+                    page.wait('document.getElementById("sales-draft-status").textContent.includes("Existe uma venda offline pendente de resolução")')
+                    self.assertIn('Cliente Comercial', page.evaluate('document.getElementById("sales-draft-status").textContent'))
                 tab.evaluate('window.dispatchEvent(new Event("online"));await app.probe();true')
                 self.assertEqual(tab.evaluate('sent.length'), 0)
                 self.assertTrue(tab.evaluate('document.getElementById("offline-global-sync").disabled'))
@@ -111,12 +115,20 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 self.assertTrue(Venda.objects.filter(pk=sale_id).exists())
                 tab.wait('document.getElementById("sales-official-sale-link").getAttribute("href")==="/vendas/'+str(sale_id)+'/"')
                 other.wait('document.getElementById("sales-draft-status").textContent.includes("Venda #'+str(sale_id)+' sincronizada")')
+                for page in [tab, other]:
+                    page.wait('!salesDraftUI.blocked && !salesDraftUI.finalization && !salesOffline.completed && !clienteBusca.disabled && !btnGravarVenda.disabled')
+                    self.assertNotEqual(page.evaluate('btnGravarVenda.textContent'), 'Venda sincronizada')
+                self.assertTrue(tab.evaluate('await drafts.releaseConfirmedDraft(repo,scope,operation.operation_id);!(await drafts.loadDraft(repo,scope)).finalization'))
+                self.assertTrue(other.evaluate('try{await drafts.saveDraft(repo,scope,{...salesDraftBridge.capture(),itens:[]},0);false}catch(e){e.message.includes("outra aba")}'))
                 self.assertEqual(tab.evaluate('document.getElementById("offline-pending-badge").textContent'), '0')
                 self.assertEqual(tab.evaluate('(await repo.all("history"))[0].server_result'), updated['server_result'])
+                self.assertEqual(updated['payload_hash'], operation['payload_hash'])
+                self.assertEqual(updated['operation_id'], operation['operation_id'])
                 self.assertTrue(tab.evaluate('JSON.stringify(await repo.all("snapshots"))===JSON.stringify(snapshotsBefore)'))
                 self.reload(tab); self.repository(tab)
                 tab.wait('document.getElementById("sales-draft-status").textContent.includes("Venda #'+str(sale_id)+' sincronizada")')
-                self.assertTrue(tab.evaluate('btnGravarVenda.disabled'))
+                tab.wait('!salesDraftUI.blocked && !salesOffline.completed && !clienteBusca.disabled && !btnGravarVenda.disabled')
+                self.assertTrue(tab.evaluate('!btnGravarVenda.disabled && !clienteBusca.disabled && !salesOffline.completed'))
                 self.assertIsNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
             finally:
                 chrome.stop()
@@ -125,6 +137,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 tab = self.open_sales(chrome)
                 tab.wait('document.getElementById("sales-draft-status").textContent.includes("Venda #'+str(sale_id)+' sincronizada")')
                 self.assertEqual(tab.evaluate('sent.length'), 0)
+                self.assertTrue(tab.evaluate('!btnGravarVenda.disabled && !clienteBusca.disabled && !salesDraftUI.blocked'))
             finally:
                 chrome.stop()
 
@@ -144,6 +157,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                     self.assertEqual(tab.evaluate('(await repo.get("operations",operation.operation_id)).status'), 'resultado_desconhecido')
                     self.assertEqual(OperacaoSincronizacao.objects.get(operation_id=operation['operation_id']).status, 'confirmada')
                     tab.wait('document.getElementById("sales-draft-status").textContent.includes("ainda não confirmado")')
+                    self.assertTrue(tab.evaluate('salesDraftUI.blocked && salesOffline.completed && clienteBusca.disabled'))
                     models = [Venda, ItemVenda, EventoVenda, ContaReceber, MovimentoFinanceiro, DespesaDiaria, Produto]
                     before = {model: list(model.objects.order_by('pk').values()) for model in models}
                     self.manual(tab)
@@ -394,7 +408,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('window.fetch=realFetch;await repo.put("operations",{...operation,status:"pendente"});true')
                 self.manual(tab)
                 official = OperacaoSincronizacao.objects.get()
-                tab.evaluate('await repo.put("operations",{...operation,status:"resultado_desconhecido"});window.core=await import("/offline/assets/2-8ab/core.js");window.recordBefore=core.Repository.prototype.record;core.Repository.prototype.record=()=>Promise.reject(Error("IndexedDB indisponível"));window.posts=0;window.fetch=(url,options)=>{if(String(url)==="/api/offline/observations/")posts++;return realFetch(url,options)};true')
+                tab.evaluate('await repo.put("operations",{...operation,status:"resultado_desconhecido"});window.core=await import("/offline/assets/2-8c/core.js");window.recordBefore=core.Repository.prototype.record;core.Repository.prototype.record=()=>Promise.reject(Error("IndexedDB indisponível"));window.posts=0;window.fetch=(url,options)=>{if(String(url)==="/api/offline/observations/")posts++;return realFetch(url,options)};true')
                 self.manual(tab)
                 self.assertEqual(tab.evaluate('posts'),0)
                 self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'resultado_desconhecido')
@@ -433,7 +447,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 operation = tab.evaluate('operation')
                 command = {key:operation[key] for key in COMMAND_KEYS}
                 process_operation(command, self.user)
-                tab.evaluate('window.core=await import("/offline/assets/2-8ab/core.js");operation.payload.itens[0].quantidade="3";operation.payload_hash=await core.hash(core.commandOf(operation));await repo.put("operations",operation);true')
+                tab.evaluate('window.core=await import("/offline/assets/2-8c/core.js");operation.payload.itens[0].quantidade="3";operation.payload_hash=await core.hash(core.commandOf(operation));await repo.put("operations",operation);true')
                 self.manual(tab)
                 self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].diagnostic_code'), 'uuid_comando_divergente')
                 self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'), 'resultado_desconhecido')
@@ -454,7 +468,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
             chrome = Chrome(CHROME, profile).start()
             try:
                 tab = self.prepare(chrome); self.stable(tab)
-                tab.evaluate('await repo.diagnose(operation,"Incerto");window.core=await import("/offline/assets/2-8ab/core.js");window.second={...core.commandOf(operation),operation_id:crypto.randomUUID(),sequence:operation.sequence+1};second.aggregate_id=second.operation_id;await repo.put("operations",{...second,payload_hash:await core.hash(second),status:"pendente",attempts:0});window.fetch=async(url,options)=>{if(String(url).includes("/api/offline/operations/"))return new Response("Falha",{status:503});if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
+                tab.evaluate('await repo.diagnose(operation,"Incerto");window.core=await import("/offline/assets/2-8c/core.js");window.second={...core.commandOf(operation),operation_id:crypto.randomUUID(),sequence:operation.sequence+1};second.aggregate_id=second.operation_id;await repo.put("operations",{...second,payload_hash:await core.hash(second),status:"pendente",attempts:0});window.fetch=async(url,options)=>{if(String(url).includes("/api/offline/operations/"))return new Response("Falha",{status:503});if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
                 self.manual(tab)
                 self.assertEqual(tab.evaluate('(await repo.get("operations",operation.operation_id)).status'),'resultado_desconhecido')
                 self.assertEqual(tab.evaluate('(await repo.get("operations",second.operation_id)).status'),'confirmada')
@@ -470,12 +484,12 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 tab = self.prepare(chrome)
                 tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
                 tab.wait('!!navigator.serviceWorker.controller')
-                tab.evaluate('window.cache=await caches.open("offline-pilot-shell-v24-2-8ab");await cache.put("/static/offline/core.js",new Response("throw Error(\\"Stale core\\")",{headers:{"Content-Type":"application/javascript"}}));true')
+                tab.evaluate('window.cache=await caches.open("offline-pilot-shell-v25-2-8c");await cache.put("/static/offline/core.js",new Response("throw Error(\\"Stale core\\")",{headers:{"Content-Type":"application/javascript"}}));true')
                 self.reload(tab)
-                tab.evaluate('window.core=await import("/offline/assets/2-8ab/core.js");window.repo=new core.Repository(await core.openDB());true')
+                tab.evaluate('window.core=await import("/offline/assets/2-8c/core.js");window.repo=new core.Repository(await core.openDB());true')
                 self.assertTrue(tab.evaluate('typeof core.Repository.prototype.diagnose==="function" && typeof core.Repository.prototype.updateAttempt==="function"'))
-                self.assertTrue(tab.evaluate('[...document.scripts].some(s=>s.src.includes("/offline/assets/2-8ab/app.js"))'))
-                self.assertTrue(tab.evaluate('performance.getEntriesByType("resource").some(e=>e.name.includes("/offline/assets/2-8ab/core.js"))'))
+                self.assertTrue(tab.evaluate('[...document.scripts].some(s=>s.src.includes("/offline/assets/2-8c/app.js"))'))
+                self.assertTrue(tab.evaluate('performance.getEntriesByType("resource").some(e=>e.name.includes("/offline/assets/2-8c/core.js"))'))
                 self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'pendente')
             finally:
                 chrome.stop()

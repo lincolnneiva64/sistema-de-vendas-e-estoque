@@ -1,9 +1,9 @@
-const CACHE = 'offline-pilot-shell-v24-2-8ab';
+const CACHE = 'offline-pilot-shell-v25-2-8c';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
-ASSETS.push('/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
+ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
 ASSETS.push(...['app.js', 'core.js', 'presentation.js', 'sales.js', 'sales-drafts.js',
-    'sales-draft-ui.js', 'operation-details.js', 'commercial.js', 'commercial-ui.js',
-    'checklist.js', 'checklist-restore.js'].map(file => '/offline/assets/2-8ab/' + file));
+    'sales-draft-ui.js', 'operation-details.js', 'sales-revisions.js', 'sales-revision-ui.js', 'commercial.js', 'commercial-ui.js',
+    'checklist.js', 'checklist-restore.js'].map(file => '/offline/assets/2-8c/' + file));
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);
@@ -24,6 +24,10 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
+    if (event.request.method === 'GET' && url.origin === self.location.origin && event.request.mode === 'navigate' && url.pathname === '/offline/revisao/') {
+        event.respondWith(fetch(event.request, {cache:'no-store'}).catch(() => caches.match('/offline/revisao/', {cacheName:CACHE})));
+        return;
+    }
     if (event.request.method === 'GET' && url.origin === self.location.origin
         && event.request.mode === 'navigate' && url.pathname === '/vendas/') {
         event.respondWith((async () => {

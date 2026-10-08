@@ -73,10 +73,10 @@ class OperationLookupTests(TestCase):
 
     def test_versioned_graph_is_public_and_whitelisted(self):
         self.client.logout()
-        response = self.client.get('/offline/assets/2-8ab/app.js')
+        response = self.client.get('/offline/assets/2-8c/app.js')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'/offline/assets/2-8ab/core.js', response.content)
-        self.assertEqual(self.client.get('/offline/assets/2-8ab/models.py').status_code, 404)
+        self.assertIn(b'/offline/assets/2-8c/core.js', response.content)
+        self.assertEqual(self.client.get('/offline/assets/2-8c/models.py').status_code, 404)
 
     def test_divergent_post_has_explicit_code_and_preserves_receipt(self):
         receipt, _ = process_operation(self.command, self.user)

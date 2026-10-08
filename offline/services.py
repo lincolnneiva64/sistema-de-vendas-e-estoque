@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_datetime
 
 from locacoes.models import EventoLocacao, Locacao, TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem, EventoVenda
-from .models import OperacaoSincronizacao
+from .models import OperacaoSincronizacao, RevisaoVendaOffline
 from .sale_commands import SALE_OPERATION_TYPE, execute_sale, validate_sale_payload
 from estoque.services.vendas import ErroGravarVenda
 
@@ -127,10 +127,37 @@ def process_operation(command, user):
 
 
 def _process_sale_creation(operation, command, user, digest):
+    revision = command["payload"].get("revisao")
+    revision_error = None
+    if revision:
+        original = OperacaoSincronizacao.objects.select_for_update().filter(
+            operation_id=revision["original_operation_id"]).first()
+        if (not original or original.pk == operation.pk or original.actor_id != user.pk
+                or original.environment_id != command["environment_id"]
+                or original.type != SALE_OPERATION_TYPE
+                or original.payload_hash != revision["original_hash"]
+                or command_hash(original.comando) != original.payload_hash):
+            revision_error = "Origem da revisao incompatível. Operacao original preservada."
+        elif not commercial_conflict(original):
+            revision_error = "Origem nao esta em conflito comercial. Consulte a venda oficial antes de prosseguir."
+        elif RevisaoVendaOffline.objects.filter(original=original).exists():
+            revision_error = "Esta operacao ja possui uma substituta. Consulte a revisao existente."
+        elif any(command["payload"].get(field) != original.payload.get(field)
+                 for field in ("data_venda", "operador")):
+            revision_error = "Data e operador originais nao podem ser alterados nesta revisao."
+        else:
+            RevisaoVendaOffline.objects.create(
+                original=original, substituta=operation, actor=user,
+                environment_id=command["environment_id"], original_hash=original.payload_hash,
+                motivo_original=original.resultado["erro"],
+                revisada_em=parse_datetime(revision["revisada_em"]),
+            )
     try:
         # Roll back all sale effects before persisting a definitive conflict.
         # The outer process_operation transaction also covers receipt completion.
         with transaction.atomic():
+            if revision_error:
+                raise ErroGravarVenda(revision_error)
             sale = execute_sale(command["payload"], user).venda
     except ErroGravarVenda as exc:
         sale = None
@@ -141,10 +168,57 @@ def _process_sale_creation(operation, command, user, digest):
               "record_id": sale.pk if sale else None, "completed_at": now.isoformat()}
     if sale is None:
         result["erro"] = error
+        if revision_error:
+            result["code"] = "revisao_origem_bloqueada"
+            result["conflict_kind"] = "tecnico"
         operation.erro = error
     operation.status, operation.resultado, operation.concluido_em = result["status"], result, now
     operation.save(update_fields=["status", "resultado", "concluido_em", "erro"])
     return result, 200 if sale else 409
+
+
+def commercial_conflict(operation):
+    receipt = operation.resultado
+    completed = parse_datetime(receipt.get("completed_at", "")) if isinstance(receipt, dict) and isinstance(receipt.get("completed_at"), str) else None
+    return (operation.type == SALE_OPERATION_TYPE and operation.status == "conflito"
+            and isinstance(receipt, dict) and receipt.get("status") == "conflito"
+            and receipt.get("operation_id") == str(operation.operation_id)
+            and receipt.get("hash") == operation.payload_hash and receipt.get("record_id") is None
+            and isinstance(receipt.get("erro"), str) and bool(receipt["erro"].strip())
+            and isinstance(receipt.get("completed_at"), str)
+            and completed is not None and timezone.is_aware(completed)
+            and receipt.get("conflict_kind", "comercial") == "comercial"
+            and not receipt.get("code"))
+
+
+def revision_chain(operation):
+    """Read-only lineage, scoped and hash-checked before returning receipts."""
+    chain, seen = [], {operation.pk}
+    while True:
+        relation = RevisaoVendaOffline.objects.select_related("substituta").filter(original=operation).first()
+        if not relation:
+            return chain
+        child = relation.substituta
+        if (child.pk in seen or child.actor_id != operation.actor_id
+                or relation.actor_id != operation.actor_id or relation.environment_id != operation.environment_id
+                or child.environment_id != operation.environment_id or child.type != SALE_OPERATION_TYPE
+                or relation.original_hash != operation.payload_hash
+                or command_hash(child.comando) != child.payload_hash
+                or not isinstance(child.resultado, dict)
+                or child.resultado.get("status") != child.status or child.status not in {"confirmada", "conflito"}
+                or child.resultado.get("operation_id") != str(child.operation_id)
+                or child.resultado.get("hash") != child.payload_hash):
+            raise ValidationError("Cadeia de revisao incompatível.")
+        chain.append({"original_operation_id": str(operation.operation_id),
+                      "replacement_operation_id": str(child.operation_id),
+                      "original_hash": relation.original_hash, "relacao": relation.relacao,
+                      "actor_id": str(relation.actor_id), "environment_id": relation.environment_id,
+                      "revisada_em": relation.revisada_em.isoformat(),
+                      "registrado_em": relation.registrado_em.isoformat(),
+                      "motivo_original": relation.motivo_original,
+                      "hash": child.payload_hash, "receipt": child.resultado})
+        seen.add(child.pk)
+        operation = child
 
 
 def _process_sale_note(operation, command, user, digest):

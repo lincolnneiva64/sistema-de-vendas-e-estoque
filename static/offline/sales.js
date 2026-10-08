@@ -1,5 +1,5 @@
-import {openDB, Repository} from '/offline/assets/2-8ab/core.js';
-import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8ab/commercial.js';
+import {openDB, Repository} from '/offline/assets/2-8c/core.js';
+import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8c/commercial.js';
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
@@ -146,6 +146,7 @@ function connectionChanged() {
 }
 document.addEventListener('offline-connectivity', connectionChanged);
 document.addEventListener('offline-operation-updated', connectionChanged);
+document.addEventListener('sales-completion-released', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {

@@ -12,7 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from locacoes.models import TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem
-from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command, command_hash
+from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command, command_hash, revision_chain
 from .models import OperacaoSincronizacao
 from .commercial import build_commercial_snapshot
 
@@ -23,7 +23,8 @@ def versioned_asset(request, filename):
     # A distinct path bypasses older workers that ignore static query versions.
     allowed = {"app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
-               "commercial-ui.js", "checklist.js", "checklist-restore.js"}
+               "commercial-ui.js", "checklist.js", "checklist-restore.js",
+               "sales-revisions.js", "sales-revision-ui.js"}
     if filename not in allowed:
         return HttpResponse(status=404)
     return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),
@@ -40,6 +41,16 @@ def sales_shell(request):
         'pedido_importado': None, 'venda_edicao': None,
     })
     return HttpResponse(html)
+
+
+@require_GET
+@never_cache
+def revision_shell(request):
+    # Shared shell contains no actor, token, operation or commercial data.
+    from django.template.loader import get_template
+    return HttpResponse(get_template('offline/sale_revision.html').render({
+        'offline_environment_id': environment_id(request),
+    }))
 
 
 def environment_id(request):
@@ -162,10 +173,14 @@ def operation_result(request, operation_id):
             or receipt.get("operation_id") != str(operation.operation_id)
             or receipt.get("hash") != operation.payload_hash):
         return JsonResponse({"lookup": "indeterminada", "erro": "Operação sem resultado definitivo."}, status=503)
+    try:
+        chain = revision_chain(operation)
+    except (DatabaseError, ValidationError):
+        return JsonResponse({"lookup": "indeterminada", "erro": "Vinculo de revisao indisponível."}, status=503)
     return JsonResponse({"lookup": "encontrada", "operation_id": str(operation.operation_id),
                          "hash": operation.payload_hash, "actor_id": str(operation.actor_id),
                          "environment_id": operation.environment_id, "type": operation.type,
-                         "device_id": str(operation.device_id), "receipt": receipt})
+                         "device_id": str(operation.device_id), "receipt": receipt, "revisions": chain})
 
 
 @require_GET

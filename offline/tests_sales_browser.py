@@ -42,8 +42,8 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const cache=await caches.open('offline-pilot-shell-v24-2-8ab');
-                    return keys.includes('offline-pilot-shell-v24-2-8ab')
+                    const cache=await caches.open('offline-pilot-shell-v25-2-8c');
+                    return keys.includes('offline-pilot-shell-v25-2-8c')
                         && !keys.includes('offline-pilot-shell-v21')
                         && !!(await cache.match('/offline/vendas-shell/'));
                 })()""")
@@ -157,21 +157,21 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.wait('!!document.getElementById("btn-confirmar-excluir")')
                 tab.evaluate('document.getElementById("btn-confirmar-excluir").click();true')
                 tab.wait('document.querySelectorAll("#tabelaProdutos tr").length===0')
-                tab.evaluate("window.repo=new (await import('/offline/assets/2-8ab/core.js')).Repository(await (await import('/offline/assets/2-8ab/core.js')).openDB());true")
+                tab.evaluate("window.repo=new (await import('/offline/assets/2-8c/core.js')).Repository(await (await import('/offline/assets/2-8c/core.js')).openDB());true")
                 self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
                 self.assertEqual(tab.evaluate('(await repo.get("metadata","device")).sequence'), 0)
                 tab.evaluate('window.oldCatalog=(await repo.all("snapshots")).find(s=>s.tipo==="comercial_vendas");oldCatalog.prepared_at="2000-01-01T12:00:00Z";await repo.put("snapshots",oldCatalog);true')
                 tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
                 tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("2000")')
                 self.assertTrue(tab.evaluate('salesOffline.available'))
-                tab.evaluate("window.repo=new (await import('/offline/assets/2-8ab/core.js')).Repository(await (await import('/offline/assets/2-8ab/core.js')).openDB());true")
+                tab.evaluate("window.repo=new (await import('/offline/assets/2-8c/core.js')).Repository(await (await import('/offline/assets/2-8c/core.js')).openDB());true")
                 # A fresh shell must never choose another actor/environment's catalog.
                 for replacement in ["{key:'sales-identity',actor_id:'99999',environment_id:'offline-isolated-tests'}", "{key:'sales-identity',actor_id:'" + str(user.pk) + "',environment_id:'other'}"]:
                     tab.evaluate('await repo.put("metadata",' + replacement + ');true')
                     tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
                     tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("não preparados")')
                     self.assertEqual(tab.evaluate('produto.options.length'), 1)
-                    tab.evaluate("window.repo=new (await import('/offline/assets/2-8ab/core.js')).Repository(await (await import('/offline/assets/2-8ab/core.js')).openDB());true")
+                    tab.evaluate("window.repo=new (await import('/offline/assets/2-8c/core.js')).Repository(await (await import('/offline/assets/2-8c/core.js')).openDB());true")
                 tab.evaluate("await repo.put('metadata',{key:'sales-identity',actor_id:'" + str(user.pk) + "',environment_id:'offline-isolated-tests'}); await repo.transaction(['snapshots'],true,(tx,done)=>{tx.objectStore('snapshots').clear();done(true)});true")
                 tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
                 tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("não preparados")')

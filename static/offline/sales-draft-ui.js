@@ -1,7 +1,8 @@
-import '/offline/assets/2-8ab/sales.js';
-import {operationDetails} from '/offline/assets/2-8ab/operation-details.js';
-import {Repository, openDB, saleOperationState} from '/offline/assets/2-8ab/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline} from '/offline/assets/2-8ab/sales-drafts.js';
+import '/offline/assets/2-8c/sales.js';
+import {operationDetails} from '/offline/assets/2-8c/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8c/sales-revisions.js';
+import {Repository, openDB, saleOperationState} from '/offline/assets/2-8c/core.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8c/sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -29,6 +30,8 @@ let preparedSubmission = false;
 let localCompletion = null, finalizing = null;
 let completionView = null;
 let completionGeneration = 0;
+let historicalCompletion = null;
+const completionControls = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
 const observer = new MutationObserver(() => { if (!ignoreReset) schedule(0); });
 const meaningful = assembly => assembly.cliente || assembly.operador || assembly.tipo_venda || assembly.itens.length || assembly.lancamento;
@@ -50,32 +53,62 @@ function completed(marker) {
     window.salesOffline.completed = true;
     blocked = true; ignoreReset = true; clearTimeout(timer);
     revision = marker.revision;
+    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+        if (!completionControls.has(field)) completionControls.set(field, field.disabled);
+        field.disabled = true;
+    }
     resetVisual(); discard.disabled = true;
-    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) field.disabled = true;
     message.textContent = `Venda salva neste aparelho e aguardando sincronização. Sem número oficial. Referência ${marker.operation_id.slice(0,8)}. Será enviada manualmente quando a conexão estiver estável.`;
     offlineActions();
     void refreshCompletion().catch(showError);
 }
 async function refreshCompletion() {
     const generation = ++completionGeneration;
-    if (!localCompletion || !repo || !scope || !await checkIdentity()) return;
-    const operation = await repo.get('operations', localCompletion.operation_id);
+    const marker = localCompletion || historicalCompletion;
+    if (!marker || !repo || !scope || !await checkIdentity()) return;
+    const operation = await repo.get('operations', marker.operation_id);
     if (generation !== completionGeneration) return;
     if (operation && (operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
         || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
         throw new Error('Identidade da operação local incompatível. Dados preservados.');
     completionView = saleOperationState(operation);
+    const revisionView = await revisionPresentation(repo, operation, scope);
+    if (generation !== completionGeneration) return;
+    if (revisionView?.recordId) completionView = {...completionView,recordId:revisionView.recordId,
+        url:`/vendas/${revisionView.recordId}/`,label:revisionView.originalConfirmed ? 'Original confirmada oficialmente.'
+            : `Conflito resolvido pela venda nº ${revisionView.recordId}. Venda corrigida confirmada. Se você enviou ao cliente informações da versão anterior, envie novamente a nota correta.`};
     const expanded = !!diagnostics.querySelector('details[open]');
     diagnostics.replaceChildren();
-    const detail = operationDetails(operation, scope);
+    const detail = operationDetails(operation, scope, revisionView);
     if (detail) { detail.open = expanded; diagnostics.append(detail); }
-    message.textContent = `${completionView.label} Referência ${localCompletion.operation_id.slice(0,8)}.`
+    message.textContent = `${completionView.label} Referência ${marker.operation_id.slice(0,8)}.`
         + (completionView.error ? ' ' + completionView.error : '');
+    if (localCompletion && !completionView.recordId) {
+        const payload = operation?.payload || {};
+        const total = (payload.itens || []).reduce((sum, item) => sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
+        message.textContent += ` Existe uma venda offline pendente de resolução. Antes de continuar, revise e resolva essa venda. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. Para sincronizar manualmente quando permitido, abra Status → Sincronizar agora.`;
+        message.setAttribute('role', 'alert');
+    } else message.setAttribute('role', 'status');
     officialLink.hidden = !completionView.recordId;
     if (completionView.recordId) {
         officialLink.href = completionView.url;
         officialLink.textContent = `Ver venda #${completionView.recordId}`;
     } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
+    if (localCompletion && saleOperationState(operation).recordId) {
+        const result = await releaseConfirmedDraft(repo, scope, marker.operation_id);
+        if (generation !== completionGeneration) return;
+        historicalCompletion = marker; localCompletion = null;
+        window.salesOffline.completed = false;
+        blocked = false; ignoreReset = false; saved = ''; revision = result.revision;
+        for (const [field, disabled] of completionControls) field.disabled = disabled;
+        completionControls.clear(); discard.disabled = true;
+        document.getElementById('btnGravarVenda').textContent = 'Gravar Venda';
+        document.getElementById('btnGravarVenda').disabled = false;
+        document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
+        window.atualizarSelectsBonitosVenda?.();
+        channel?.postMessage({type:'draft-confirmed', scope, revision, operation_id:marker.operation_id});
+        document.dispatchEvent(new Event('sales-completion-released'));
+    }
     offlineActions();
 }
 function schedule(delay = 250) {
@@ -153,6 +186,7 @@ window.salesDraftUI = {
         if (localCompletion) return {finalization:localCompletion, alreadyFinalized:true};
         if (!bridge.eligible || !scope || !repo) { bridge.error('Identidade local indisponível ou contexto de edição/Pedido. Rascunho preservado.'); return; }
         const editingControls = new Map(Array.from(document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button'), field => [field, field.disabled]));
+        for (const [field, disabled] of editingControls) if (!completionControls.has(field)) completionControls.set(field, disabled);
         finalizing = (async () => {
             try {
                 await flush();
@@ -260,7 +294,9 @@ try {
         if (scope) {
             const result = await loadDraft(repo, scope);
             revision = result.revision;
+            historicalCompletion = await lastConfirmedDraft(repo, scope);
             if (result.finalization) completed(result.finalization);
+            else if (historicalCompletion) await refreshCompletion();
             if (result.confirmation) {
                 replaceConfirmed = true;
                 message.textContent = result.confirmation.estado === 'concluido'
@@ -311,6 +347,9 @@ const identityChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sal
 if (identityChannel) identityChannel.onmessage = () => { void checkIdentity(); };
 if (channel) channel.onmessage = async event => {
     const update = event.data;
+    if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.type === 'draft-confirmed' && localCompletion?.operation_id === update.operation_id) {
+        void refreshCompletion().catch(showError); return;
+    }
     if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.revision > revision) {
         const current = await loadDraft(repo, scope);
         if (current.finalization) { completed(current.finalization); return; }

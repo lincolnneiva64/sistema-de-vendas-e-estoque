@@ -1,4 +1,4 @@
-import {hash, reserveSequence} from '/offline/assets/2-8ab/core.js';
+import {hash, reserveSequence, saleOperationState} from '/offline/assets/2-8c/core.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -151,6 +151,35 @@ export function loadDraft(repo, scope) {
         const safe = validateRecord(record, scope, revision), confirmation = submissionMarker(scope, safe);
         return {revision, draft:confirmation?.estado === 'concluido' ? null : safe, confirmation};
     });
+}
+// Only a validated official receipt releases the assembly. Queue/history are read-only.
+export function releaseConfirmedDraft(repo, scope, operationId) {
+    return access(repo, scope, true, ({tx, store, key, revisionKey, revision, record}) => {
+        const marker = finalized(record, scope, revision);
+        if (marker && marker.operation_id !== operationId || !marker && record)
+            throw new Error('Montagem atualizada em outra aba. Reabra a tela para carregar a versão salva.');
+        if (!marker) return {revision, released:false};
+        const request = tx.objectStore('operations').get(operationId);
+        request.onsuccess = () => {
+            try {
+                const operation = request.result;
+                if (operation?.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
+                    || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id
+                    || !saleOperationState(operation).recordId) throw new Error('Venda ainda não confirmada oficialmente.');
+                store.put({key:key + ':last-confirmed', operation_id:operationId});
+                store.delete(key);
+                store.put({key:revisionKey, revision:revision + 1});
+            } catch (_) { tx.abort(); }
+        };
+        return {revision:revision + 1, released:true};
+    }, ['metadata','operations']);
+}
+export function lastConfirmedDraft(repo, scope) {
+    return access(repo, scope, false, ({store, key}) => new Promise((resolve, reject) => {
+        const request = store.get(key + ':last-confirmed');
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error);
+    }));
 }
 export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfirmed = false) {
     const safe = projectAssembly(assembly);

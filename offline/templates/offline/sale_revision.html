@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revisão de venda offline</title>
+<link rel="stylesheet" href="/static/offline/indicator.css">
+<style>body{font:16px system-ui;margin:0;background:#f6f7f8;color:#17212b}main{max-width:900px;margin:auto;padding:20px}label{display:block;margin:12px 0}input,select,button{font:inherit;padding:8px;max-width:100%;box-sizing:border-box}input,select{width:100%}button{margin:6px 6px 6px 0;cursor:pointer}fieldset{margin:14px 0;border:1px solid #aaa}pre{white-space:pre-wrap;overflow-wrap:anywhere}.reference{color:#555}#revision-message{padding:12px;background:#fff4d6}#revision-origin{overflow-wrap:anywhere}button:disabled{cursor:default}</style>
+</head><body>
+<main><a href="/offline/">Voltar ao status offline</a>
+<span id="offline-global" data-actor="" data-environment="{{ offline_environment_id }}"></span>
+<button id="offline-global-sync" hidden>Sincronizar manualmente</button>
+<h1>Revisão de venda offline rejeitada</h1>
+<p>Esta montagem é separada da original. Concluir salva uma nova operação neste aparelho; a venda oficial depende da sincronização manual.</p>
+<p id="revision-origin"></p><p id="revision-message" role="status" aria-live="polite">Carregando revisão…</p>
+<a id="revision-official" hidden target="_blank" rel="noopener noreferrer">Ver venda oficial</a>
+<form id="revision-form" hidden>
+<fieldset id="revision-fields"><legend>Dados da revisão</legend>
+<p id="revision-fixed"></p>
+<label>Cliente (ID original; altere somente se necessário)<input id="revision-customer" inputmode="numeric"></label>
+<label>Escolher outro cliente — catálogo de referência<select id="revision-customer-reference"><option value="">Selecione para trocar explicitamente</option></select></label>
+<label>Pagamento<select id="revision-payment"><option value="À vista">À vista</option><option value="A prazo">A prazo</option><option value="consumo_proprio">Consumo próprio</option></select></label>
+<label>Vencimento<input id="revision-due" type="date"></label>
+<label>Recebimento em caixa<input id="revision-cash" inputmode="decimal"></label>
+<label>Recebimento em banco<input id="revision-bank" inputmode="decimal"></label>
+<p class="reference">Pagamento e origem não serão recalculados automaticamente. Confira os valores se alterar os itens ou o pagamento.</p>
+<p id="revision-catalog" class="reference"></p>
+<div id="revision-items"></div>
+<button id="revision-add" type="button">Adicionar item</button>
+<p id="revision-total"></p>
+<details><summary>Valores originais e motivo do conflito</summary><pre id="revision-original"></pre></details>
+</fieldset>
+<button id="revision-save" type="submit">Concluir revisão neste aparelho</button>
+<button id="revision-discard" type="button">Descartar somente esta revisão</button>
+</form></main>
+<script type="module" src="/offline/assets/2-8c/app.js"></script>
+<script type="module" src="/offline/assets/2-8c/sales-revision-ui.js"></script>
+</body></html>

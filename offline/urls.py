@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path("offline/assets/2-8ab/<str:filename>", views.versioned_asset),
+    path("offline/assets/2-8c/<str:filename>", views.versioned_asset),
+    path("offline/revisao/", views.revision_shell, name="offline_sale_revision"),
     path("offline/vendas-shell/", views.sales_shell, name="offline_sales_shell"),
     path("offline/login/", LoginView.as_view(template_name="offline/login.html", redirect_authenticated_user=True, next_page="offline_pilot"), name="offline_login"),
     path("offline/", views.shell, name="offline_pilot"),

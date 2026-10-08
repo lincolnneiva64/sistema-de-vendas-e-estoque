@@ -90,7 +90,7 @@ class OfflineAPITests(TestCase):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, f'data-checklist-task="{task.pk}"')
-            self.assertContains(response, '/offline/assets/2-8ab/checklist.js')
+            self.assertContains(response, '/offline/assets/2-8c/checklist.js')
         rental.status = 'entregue'
         rental._permitir_alterar_status = True
         rental.save(update_fields=['status'])

@@ -1,7 +1,11 @@
 """Protocolo de criação; regras comerciais pertencem ao serviço oficial."""
 from decimal import Decimal, InvalidOperation
+import re
+from uuid import UUID
 
 from django.core.exceptions import ValidationError
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone
 
 from estoque.models import Produto
 from estoque.services.vendas import ErroGravarVenda, criar_ou_atualizar_venda
@@ -9,7 +13,7 @@ from estoque.services.vendas import ErroGravarVenda, criar_ou_atualizar_venda
 SALE_OPERATION_TYPE = "criar_venda"
 CALCULATED_FIELDS = {"total", "subtotal", "estoque", "custo", "saldo", "valor_total"}
 SALE_REQUIRED = {"schema_version", "data_venda", "tipo_pagamento", "operador", "itens"}
-SALE_OPTIONAL = {"cliente_id", "data_vencimento", "origem_recebimento"}
+SALE_OPTIONAL = {"cliente_id", "data_vencimento", "origem_recebimento", "revisao"}
 ITEM_REQUIRED = {"produto_id", "quantidade", "unidade", "preco_unitario"}
 
 
@@ -56,6 +60,22 @@ def validate_sale_payload(payload):
         origin = payload["origem_recebimento"]
         if not isinstance(origin, dict) or origin.keys() - {"caixa", "banco"} or not all(_number_text(value) for value in origin.values()):
             raise ValidationError("Origem de recebimento invalida.")
+    if "revisao" in payload:
+        revision = payload["revisao"]
+        expected = {"original_operation_id", "original_hash", "relacao", "revisada_em"}
+        if not isinstance(revision, dict) or set(revision) != expected:
+            raise ValidationError("Vinculo de revisao invalido.")
+        try:
+            identifier = revision["original_operation_id"]
+            if not isinstance(identifier, str) or str(UUID(identifier)) != identifier:
+                raise ValueError
+            if not isinstance(revision["original_hash"], str) or not re.fullmatch(r"[0-9a-f]{64}", revision["original_hash"]):
+                raise ValueError
+            created = parse_datetime(revision["revisada_em"]) if isinstance(revision["revisada_em"], str) else None
+            if revision["relacao"] != "revisao_de_conflito" or created is None or timezone.is_naive(created):
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ValidationError("Vinculo de revisao invalido.")
 
 
 def execute_sale(payload, user):
@@ -68,7 +88,7 @@ def execute_sale(payload, user):
     }
     if ids != products.keys():
         raise ErroGravarVenda("Produto informado nao foi encontrado no estoque ativo.")
-    data = {field: payload[field] for field in (SALE_REQUIRED | SALE_OPTIONAL) - {"schema_version", "itens"} if field in payload}
+    data = {field: payload[field] for field in (SALE_REQUIRED | SALE_OPTIONAL) - {"schema_version", "itens", "revisao"} if field in payload}
     data["itens"] = [
         {**{field: item[field] for field in ITEM_REQUIRED},
          "produto_nome": products[int(item["produto_id"])].nome}

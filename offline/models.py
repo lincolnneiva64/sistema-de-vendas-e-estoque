@@ -22,3 +22,18 @@ class OperacaoSincronizacao(models.Model):
 
     class Meta:
         permissions = [("registrar_observacao", "Preparar e sincronizar observacoes offline")]
+
+
+class RevisaoVendaOffline(models.Model):
+    # Separate immutable lineage: never update the rejected command/receipt.
+    original = models.OneToOneField(OperacaoSincronizacao, on_delete=models.PROTECT,
+                                   related_name="substituicao")
+    substituta = models.OneToOneField(OperacaoSincronizacao, on_delete=models.PROTECT,
+                                     related_name="revisao_origem")
+    relacao = models.CharField(max_length=40, default="revisao_de_conflito")
+    original_hash = models.CharField(max_length=64)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    environment_id = models.CharField(max_length=160)
+    motivo_original = models.TextField()
+    revisada_em = models.DateTimeField()
+    registrado_em = models.DateTimeField(auto_now_add=True)

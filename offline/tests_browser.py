@@ -58,7 +58,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
                 tab.wait("!!document.getElementById('offline-global')")
                 tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;
-                    const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.r=new Repository(await openDB());
+                    const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.r=new Repository(await openDB());
                     window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};
                     window.baseFetch=fetch;window.healthCalls=0;window.healthFetch=(u,o)=>{if(u==='/api/offline/health/')healthCalls++;return baseFetch(u,o)};window.fetch=healthFetch;true""")
                 def value(): return tab.evaluate('await r.communication(scope)')
@@ -132,7 +132,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!document.getElementById('offline-global') && [...document.scripts].some(s=>s.src.includes('/app.js'))")
                 tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);
                     await app.initialized;await app.probe();
-                    const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());
+                    const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());
                     window.scope={actor_id:document.getElementById('offline-global').dataset.actor,
                         environment_id:document.getElementById('offline-global').dataset.environment};true""")
                 for legacy_events, future_cursor in ((False, False), (True, False), (True, True)):
@@ -145,7 +145,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                                 observed_until:seedAt""" + ('+86400000' if future_cursor else '-3500000') + """};
                             await testRepo.put('metadata',legacy);true""")
                         # Exercise successful HTTP health checks, including the old event shape.
-                        tab.evaluate("""window.core=await import('/offline/assets/2-8ab/core.js');
+                        tab.evaluate("""window.core=await import('/offline/assets/2-8c/core.js');
                             window.originalCommunication=core.Repository.prototype.communication;true""")
                         if legacy_events:
                             tab.evaluate("""core.Repository.prototype.communication=function(scope,event){
@@ -182,7 +182,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
             window.setInterval=(callback,delay)=>{const id=++timerSequence;monitorCallbacks.set(id,{callback,delay});return id};
             window.clearInterval=id=>monitorCallbacks.delete(id);"""
         setup = """window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;
-            const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());
+            const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());
             window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};true"""
         with TemporaryDirectory(prefix='offline-stable-reopen-') as profile:
             chrome = Chrome(CHROME, profile).start()
@@ -298,7 +298,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
             window.monitorCallbacks=new Map();let timerSequence=0;
             window.setInterval=(callback,delay)=>{const id=++timerSequence;monitorCallbacks.set(id,{callback,delay});return id};
             window.clearInterval=id=>monitorCallbacks.delete(id);"""
-        setup = """const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());
+        setup = """const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());
             window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;
             window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};
             window.realFetch=fetch;window.healthCalls=0;
@@ -388,7 +388,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
         EntregaRotaItem.objects.create(rota=route, venda=sale)
         client = Client(); client.force_login(user)
         clock = "const realWall=Date.now;Date.now=()=>realWall()+Number(localStorage.getItem('test-offset')||0);"
-        setup = """const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());
+        setup = """const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());
             window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;
             window.scope={actor_id:document.getElementById('offline-global').dataset.actor,environment_id:document.getElementById('offline-global').dataset.environment};true"""
         with TemporaryDirectory(prefix='offline-multi-stability-') as profile:
@@ -610,7 +610,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                         tab.wait("document.getElementById('offline-status').dataset.state==='waiting'", timeout=40)
                     except AssertionError:
                         self.fail(str(tab.evaluate("({path:location.pathname,status:document.getElementById('offline-status').outerHTML,online:navigator.onLine,indicator:document.getElementById('offline-global').dataset,health:await fetch('/api/offline/health/').then(r=>r.json()),session:await fetch('/api/offline/session/').then(r=>r.json())})")))
-                    tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                    tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
                     self.clock(tab); self.advance_to_ready(tab)
                     tab.evaluate("document.getElementById('offline-global-sync').click()")
                     tab.wait("(await testRepo.all('operations'))[0].status==='confirmada'")
@@ -683,7 +683,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': client.cookies['sessionid'].value, 'url': self.live_server_url})
                 tab.call('Page.navigate', {'url': self.live_server_url + path})
                 tab.wait("!!document.querySelector('[data-local-note]') && !!navigator.serviceWorker.controller")
-                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
                 tab.wait("document.getElementById('offline-status').dataset.state==='online'")
                 self.assertTrue(tab.evaluate("!!(await testRepo.get('snapshots','checklist:'+location.pathname+location.search))"))
                 self.network(tab, True)
@@ -723,7 +723,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Network.emulateNetworkConditions', {'offline': True, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
                 tab.call('Page.navigate', {'url': self.live_server_url + path})
                 tab.wait("document.body.dataset.localChecklist==='true' && !!document.querySelector('[data-local-note]')")
-                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations'))[0].operation_id"), original)
                 for width in (390, 320):
                     tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 844, 'deviceScaleFactor': 1, 'mobile': True})
@@ -766,8 +766,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v24-2-8ab') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v24-2-8ab');
+                    if(!keys.includes('offline-pilot-shell-v25-2-8c') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v25-2-8c');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js','commercial.js','commercial-ui.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     if(!(await cache.match('/offline/vendas-shell/')))return false;
@@ -780,7 +780,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     tab.call('Page.navigate', {'url': self.live_server_url + path})
                     tab.wait("!window.previousVisualDocument && !!document.getElementById('offline-status')?.dataset.presentation")
                     tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;return true})()")
-                    tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                    tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
                     # Restore only the isolated fixture between the two pages.
                     tab.evaluate("(async()=>{const op=(await testRepo.all('operations'))[0];await testRepo.put('operations',{...op,status:'pendente'});return true})()")
                     self.network(tab, True)
@@ -864,7 +864,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                         self.assertEqual(tab.evaluate('healthResponses[0]'), {
                             'status': 200, 'body': {'ok': True, 'environment': 'offline-isolated-tests', 'protocol_version': 1}})
                         self.assertEqual(tab.evaluate('sessionResponses[0]'), code)
-                        self.assertTrue(tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');const r=new Repository(await openDB());return !(await r.get('snapshots','pilot')) && !(await r.all('operations')).length;})()"))
+                        self.assertTrue(tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');const r=new Repository(await openDB());return !(await r.get('snapshots','pilot')) && !(await r.all('operations')).length;})()"))
                         states.append(tab.evaluate("document.getElementById('offline-status').textContent"))
                         if path == '/vendas/':
                             self.assertEqual(tab.evaluate("document.getElementById('offline-global').dataset.state"), 'auth')
@@ -962,7 +962,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Page.reload')
                 tab.wait("document.getElementById('offline-global')?.dataset.state === 'waiting'")
                 self.assertEqual(tab.evaluate('testErrors'), [])
-                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+                tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
                 self.assertEqual(tab.evaluate("(await testRepo.all('metadata')).find(v=>v.key.startsWith('communication:')).stable_since"), started)
                 self.network(tab, True)
                 tab.wait("document.getElementById('offline-global').dataset.state === 'offline'", timeout=25)
@@ -1002,7 +1002,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 def step(milliseconds=30000, drain=True):
                     # Await the complete probe instead of guessing a 100ms delay.
                     if drain:
-                        tab.evaluate("window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8ab/app.js');await app.initialized;await app.probe();true")
+                        tab.evaluate("window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8c/app.js');await app.initialized;await app.probe();true")
                     tab.evaluate(f"localStorage.setItem('test-offset',Number(localStorage.getItem('test-offset')||0)+{milliseconds});window.dispatchEvent(new Event('online'));await app.probe();true")
                     tab.wait("(await testRepo.all('metadata')).some(v=>v.key.startsWith('communication:') && v.last_success_at > Date.now()-2000)")
                 def minutes(target):
@@ -1115,7 +1115,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertTrue(tab.evaluate("!!(await navigator.serviceWorker.ready).active"))
                 # Core invariants with an injected clock, using production policy unchanged.
                 self.assertTrue(tab.evaluate("""(async()=>{
-                    const {Stability,validHealth,validReceipt}=await import('/offline/assets/2-8ab/core.js');
+                    const {Stability,validHealth,validReceipt}=await import('/offline/assets/2-8c/core.js');
                     const s=new Stability(); s.success(0,0);
                     for(let t=30000;t<=900000;t+=30000)s.success(t,t);
                     if(!s.ready(900000,900000))throw Error('not ready at 15 minutes');
@@ -1146,7 +1146,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 self.assertTrue(tab.evaluate("document.getElementById('offline-sync').disabled"))
                 # A failed IDB commit must not announce success.
                 self.assertTrue(tab.evaluate("""(async()=>{
-                    const {Repository}=await import('/offline/assets/2-8ab/core.js');
+                    const {Repository}=await import('/offline/assets/2-8c/core.js');
                     const broken=new Repository(testRepo.db);
                     broken.transaction=(stores,write,work)=>stores[0]==='operations'?Promise.reject(Error('quota simulation')):testRepo.transaction(stores,write,work);
                     const snap=await testRepo.get('snapshots','pilot');const before=(await testRepo.all('operations')).length;
@@ -1260,7 +1260,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                     tab.evaluate("document.getElementById('offline-toggle').click()")
                     self.assertFalse(tab.evaluate("document.querySelector('.offline-disclosure').open"))
                 self.assertTrue(tab.evaluate("""(async()=>{
-                    const {Stability,indicatorState}=await import('/offline/assets/2-8ab/core.js');
+                    const {Stability,indicatorState}=await import('/offline/assets/2-8c/core.js');
                     const s=new Stability(); const op={status:'pendente'};
                     const state=(ops=[op], extra={})=>indicatorState({operations:ops,stability:s,now:s.last||0,wall:s.lastWall||0,...extra});
                     if(state().kind!=='checking'||state().count!==1)throw Error('unverified count');
@@ -1370,7 +1370,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
     def ready(self, tab):
         tab.wait("!!document.getElementById('offline-device')?.textContent")
         tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;return true})()")
-        tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8ab/core.js');window.testRepo=new Repository(await openDB());return true})()")
+        tab.evaluate("(async()=>{const {Repository,openDB}=await import('/offline/assets/2-8c/core.js');window.testRepo=new Repository(await openDB());return true})()")
 
     def load(self, tab):
         tab.call('Page.navigate', {'url': self.live_server_url + '/offline/'})
@@ -1378,11 +1378,11 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
 
     def network(self, tab, offline):
         # A blank tab has no app yet; otherwise drain the complete probe first.
-        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8ab/app.js');await app.initialized;await app.probe()}return true})()")
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8c/app.js');await app.initialized;await app.probe()}return true})()")
         tab.call('Network.emulateNetworkConditions', {'offline': offline, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
         tab.evaluate("window.dispatchEvent(new Event('offline'))" if offline else "window.dispatchEvent(new Event('online'))")
         # Drain the probe triggered by native/emulated events, then verify the new conditions.
-        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8ab/app.js');await app.probe();await app.probe()}return true})()")
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8c/app.js');await app.probe();await app.probe()}return true})()")
 
     def save(self, tab, text):
         import json
@@ -1404,7 +1404,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
                 tab.wait("!!document.getElementById('offline-global')")
                 tab.evaluate("""window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js')).src);await app.initialized;await app.probe();
-                    const {Repository,openDB,Stability}=await import('/offline/assets/2-8ab/core.js');
+                    const {Repository,openDB,Stability}=await import('/offline/assets/2-8c/core.js');
                     window.r=new Repository(await openDB());window.other=new Repository(await openDB());
                     window.scope={actor_id:document.getElementById('offline-global').dataset.actor,
                         environment_id:document.getElementById('offline-global').dataset.environment};
@@ -1434,7 +1434,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 # Actual timer runs a confirmation about five seconds after the first failure.
                 tab.evaluate("window.calls=0;window.fetch=(u,o)=>u==='/api/offline/health/'?(++calls===1?Promise.reject(Error('transient')):baseFetch(u,o)):baseFetch(u,o);await app.probe();true")
                 tab.wait('(await r.communication(scope)).suspect_id')
-                self.assertFalse(tab.evaluate("const {Stability}=await import('/offline/assets/2-8ab/core.js');const gate=new Stability();gate.restore(await r.communication(scope),performance.now(),Date.now());gate.ready(performance.now(),Date.now())"))
+                self.assertFalse(tab.evaluate("const {Stability}=await import('/offline/assets/2-8c/core.js');const gate=new Stability();gate.restore(await r.communication(scope),performance.now(),Date.now());gate.ready(performance.now(),Date.now())"))
                 tab.wait('calls===2 && !(await r.communication(scope)).suspect_id', timeout=9)
                 self.assertGreaterEqual(tab.evaluate('(await r.communication(scope)).observed_ms'), 900000)
                 self.assertTrue(tab.evaluate("gate.restore(await r.communication(scope),performance.now(),Date.now());gate.ready(performance.now(),Date.now())"))
@@ -1453,7 +1453,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 chrome.stop()
 
     def clock(self, tab):
-        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8ab/app.js');await app.initialized;await app.probe();return true})()")
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8c/app.js');await app.initialized;await app.probe();return true})()")
         tab.evaluate("window.clockOffset=0;window.realNow=performance.now.bind(performance);window.realWall=Date.now;performance.now=()=>realNow()+clockOffset;Date.now=()=>realWall()+clockOffset;window.autoConfirmObserver?.disconnect();window.autoConfirmObserver=new MutationObserver(()=>{const b=document.getElementById('offline-modal-confirm');if(document.getElementById('offline-sync-modal')?.open&&!b.disabled&&!b.hidden)b.click()});autoConfirmObserver.observe(document.body,{subtree:true,attributes:true})")
 
     def advance_to_ready(self, tab):
@@ -1464,4 +1464,4 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
 
     def advance_probe(self, tab):
         # Advance only between completed probes, without replacing fetch or guessing delays.
-        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8ab/app.js');await app.probe();window.clockOffset+=30000;await app.probe();return true})()")
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8c/app.js');await app.probe();window.clockOffset+=30000;await app.probe();return true})()")
