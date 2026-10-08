@@ -2834,8 +2834,9 @@
     <button type="button" class="compras-btn compras-btn-primary" id="abrirContasPagarGeralCompra">Ver / pagar contas</button>
   </section>
 
-  <form method="post" id="formCompra"{% if compra %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
+  <form method="post" id="formCompra" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
     {% csrf_token %}
+    <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" hidden></p>
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
     <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
     <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
@@ -2968,6 +2969,10 @@
                       <label>Vencimento</label>
                       <input type="date" name="compra_parcela_vencimento_{{ parcela.numero }}" value="{{ parcela.vencimento }}">
                     </div>
+                    <div class="compras-field">
+                      <label>Observacao do boleto</label>
+                      <input type="text" name="compra_parcela_observacao_{{ parcela.numero }}" maxlength="120" value="{{ parcela.observacao }}">
+                    </div>
                   </div>
                 {% endfor %}
               {% else %}
@@ -2981,6 +2986,10 @@
                     <label>Vencimento</label>
                     <input type="date" name="compra_parcela_vencimento_1" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
                   </div>
+                    <div class="compras-field">
+                      <label>Observacao do boleto</label>
+                      <input type="text" name="compra_parcela_observacao_1" maxlength="120">
+                    </div>
                 </div>
               {% endif %}
             </div>
@@ -5930,7 +5939,69 @@
     }, 600);
   }
 
+  async function salvarAntesDaRevisaoPrecos(itens) {
+    if (formCompra.dataset.salvandoPreRevisao === "1") return;
+    formCompra.dataset.salvandoPreRevisao = "1";
+    const erro = document.getElementById("erroSalvarPreRevisaoCompra");
+    erro.hidden = true;
+    const botao = botaoEnvioAtual;
+    const texto = botao ? botao.textContent : "";
+    const controlador = new AbortController();
+    const limiteEspera = window.setTimeout(function() { controlador.abort(); }, 20000);
+    let camposDuranteSalvamento = [];
+    if (botao) {
+      botao.disabled = true;
+      botao.textContent = "Salvando dados da compra...";
+    }
+    try {
+      sincronizarTodosPrecosUnitarios();
+      const provisorios = Array.from(document.querySelectorAll(".linha-item[data-item-provisorio='1'] input, .linha-item[data-item-provisorio='1'] select, .linha-item[data-item-provisorio='1'] textarea"));
+      const estados = provisorios.map(function(campo) { return campo.disabled; });
+      desabilitarItensProvisoriosParaEnvio();
+      const payload = new FormData(formCompra);
+      provisorios.forEach(function(campo, indice) { campo.disabled = estados[indice]; });
+      camposDuranteSalvamento = Array.from(formCompra.querySelectorAll("input, select, textarea")).map(function(campo) {
+        const estado = { campo: campo, disabled: campo.disabled };
+        campo.disabled = true;
+        return estado;
+      });
+      const resposta = await fetch(formCompra.dataset.salvarPreRevisaoUrl, {
+        method: "POST",
+        body: payload,
+        headers: { "Accept": "application/json" },
+        credentials: "same-origin",
+        signal: controlador.signal
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok || !dados.ok) {
+        throw new Error(dados.erro || "Nao foi possivel salvar os dados da compra.");
+      }
+      // A compra nova passa a usar o mesmo rascunho nos proximos envios.
+      formCompra.dataset.salvarPreRevisaoUrl = dados.salvar_url;
+      formCompra.dataset.confirmarFinanceiroUrl = dados.finalizar_url;
+      formCompra.action = dados.editar_url;
+      window.history.replaceState(null, "", dados.editar_url);
+      if (compraMobile()) abrirEscolhaRevisaoPrecosMobile(itens);
+      else abrirConferenciaPrecosCompra(itens);
+    } catch (falha) {
+      const mensagem = falha.name === "AbortError" ? "O servidor demorou para responder." : (falha.message || "Falha de conexao.");
+      erro.textContent = "A revisao nao foi aberta. " + mensagem + " Seus dados continuam nesta tela; tente novamente.";
+      erro.hidden = false;
+      erro.scrollIntoView({ behavior: "smooth", block: "center" });
+      definirEnvioModalEmAndamento(false);
+    } finally {
+      window.clearTimeout(limiteEspera);
+      camposDuranteSalvamento.forEach(function(estado) { estado.campo.disabled = estado.disabled; });
+      delete formCompra.dataset.salvandoPreRevisao;
+      if (botao) {
+        botao.disabled = false;
+        botao.textContent = texto;
+      }
+    }
+  }
+
   function enviarCompraComAcao(acao, botao) {
+    if (formCompra.dataset.salvandoPreRevisao === "1") return;
     if (compraMobile()) {
       if (acao === "salvar_rascunho") {
         fecharEdicoesItensMobile();
@@ -6011,6 +6082,10 @@
     });
 
     formCompra.addEventListener("submit", function(event) {
+      if (formCompra.dataset.salvandoPreRevisao === "1") {
+        event.preventDefault();
+        return;
+      }
       if (formCompra.dataset.enviando === "1") {
         event.preventDefault();
         return;
@@ -6044,7 +6119,7 @@
           if (divergencias.length) {
             event.preventDefault();
             envioAcionadoPeloBotao = false;
-            abrirEscolhaRevisaoPrecosMobile(divergencias);
+            salvarAntesDaRevisaoPrecos(divergencias);
             return;
           }
           definirCustosSelecionadosParaEnvio(false);
@@ -6058,7 +6133,7 @@
         if (divergencias.length) {
           event.preventDefault();
           envioAcionadoPeloBotao = false;
-          abrirConferenciaPrecosCompra(divergencias);
+          salvarAntesDaRevisaoPrecos(divergencias);
           return;
         }
         definirCustosSelecionadosParaEnvio(false);
@@ -6696,10 +6771,12 @@
     return Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")).map(function(linha, indice) {
       const valor = linha.querySelector('[name^="compra_parcela_valor_"]');
       const vencimento = linha.querySelector('[name^="compra_parcela_vencimento_"]');
+      const observacao = linha.querySelector('[name^="compra_parcela_observacao_"]');
       return {
         valor: valor ? valor.value : "",
         automatico: valor ? valor.dataset.valorAutomatico === "1" : true,
         vencimento: vencimento ? vencimento.value : "",
+        observacao: observacao ? observacao.value : "",
         numero: indice + 1
       };
     });
@@ -6732,7 +6809,8 @@
       linha.innerHTML = [
         '<div class="compras-boleto-numero">Boleto ' + numero + '</div>',
         '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(valorLinha) + '" data-valor-automatico="' + valorAutomatico + '"></div>',
-        '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>'
+        '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>',
+        '<div class="compras-field"><label>Observacao do boleto</label><input type="text" name="compra_parcela_observacao_' + numero + '" maxlength="120" value="' + escapeHtmlCompraBoletos(atual.observacao || "") + '"></div>'
       ].join("");
       compraListaBoletos.appendChild(linha);
     }

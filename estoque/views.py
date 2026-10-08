@@ -11744,6 +11744,8 @@ def _dados_compra_post(request, exigir_itens=True):
 
 
 def _salvar_compra_e_itens(compra, dados, status):
+    if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+        raise ValueError("Compra ja finalizada. Recarregue a pagina para consultar o resultado.")
     snapshots = {item.produto_id: item.alteracoes_precos for item in compra.itens.all()}
     compra.fornecedor = dados["fornecedor"]
     compra.data_compra = dados["data_compra"]
@@ -11959,7 +11961,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
         compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
-        if compra.status == Compra.STATUS_FINALIZADA:
+        if compra.status == Compra.STATUS_FINALIZADA or compra.estoque_entrada_realizada:
             return
 
         for item in compra.itens.select_related("produto").all():
@@ -12085,6 +12087,39 @@ def compras_nova(request):
     )
 
 
+@require_POST
+def compra_salvar_pre_revisao(request, pk=None):
+    """Persistir o formulario antes do modal, sem executar estoque ou financeiro."""
+    try:
+        dados = _dados_compra_post(request, exigir_itens=True)
+        with transaction.atomic():
+            if pk is None:
+                token = (request.POST.get("fechamento_token") or "").strip()
+                if not token or len(token) > 32:
+                    raise ValueError("Identificacao do rascunho invalida. Recarregue a pagina.")
+                compra, _ = Compra.objects.get_or_create(
+                    fechamento_token=token,
+                    defaults={"data_compra": dados["data_compra"], "status": Compra.STATUS_RASCUNHO},
+                )
+                pk = compra.pk
+            compra = get_object_or_404(Compra.objects.select_for_update(), pk=pk)
+            if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                return JsonResponse({"ok": False, "erro": "Compra ja finalizada. Recarregue a pagina para consultar o resultado."}, status=409)
+            _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
+            _salvar_pagamento_nota_compra_lista(request, compra, dados)
+        return JsonResponse({
+            "ok": True,
+            "editar_url": reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
+            "finalizar_url": reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
+            "salvar_url": reverse("estoque:compra_salvar_pre_revisao", kwargs={"pk": compra.pk}),
+        })
+    except (ValueError, IndexError) as exc:
+        return JsonResponse({"ok": False, "erro": str(exc)}, status=400)
+    except Exception:
+        logger.exception("Falha ao persistir rascunho antes da revisao de precos")
+        return JsonResponse({"ok": False, "erro": "Nao foi possivel salvar o rascunho. Confira a conexao e tente novamente. Os dados continuam nesta tela."}, status=500)
+
+
 def compra_editar(request, pk):
     compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
     compra = get_object_or_404(compra_qs, pk=pk)
@@ -12097,8 +12132,12 @@ def compra_editar(request, pk):
         atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
         atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
-            compra.status = Compra.STATUS_RASCUNHO
-            compra.save(update_fields=["status", "atualizado_em"])
+            with transaction.atomic():
+                compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                compra.status = Compra.STATUS_RASCUNHO
+                compra.save(update_fields=["status", "atualizado_em"])
             messages.success(request, "Compra voltou para a edicao dos itens.")
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
         try:
@@ -12112,6 +12151,8 @@ def compra_editar(request, pk):
                 _validar_origem_compra_a_vista(valores_origem, dados["total"])
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                    return redirect("estoque:compras_detalhe", pk=compra.pk)
                 _salvar_compra_e_itens(compra, dados, status)
                 if acao in {"finalizar", "confirmar_financeiro"}:
                     _salvar_pagamento_nota_compra_lista(request, compra, dados)
@@ -12169,8 +12210,12 @@ def compra_finalizar(request, pk):
     if request.method == "POST":
         acao = request.POST.get("acao_compra")
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
-            compra.status = Compra.STATUS_RASCUNHO
-            compra.save(update_fields=["status", "atualizado_em"])
+            with transaction.atomic():
+                compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                compra.status = Compra.STATUS_RASCUNHO
+                compra.save(update_fields=["status", "atualizado_em"])
             messages.success(request, "Compra voltou para a edicao dos itens.")
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
 
@@ -12199,9 +12244,11 @@ def compra_finalizar(request, pk):
             try:
                 with transaction.atomic():
                     compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                    if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                        return redirect("estoque:compras_detalhe", pk=compra.pk)
                     _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
                     _salvar_pagamento_nota_compra_lista(request, compra, dados)
-                _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
@@ -12218,8 +12265,12 @@ def compra_finalizar(request, pk):
             return redirect("estoque:compras_lista")
 
     if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
-        compra.status = Compra.STATUS_RASCUNHO
-        compra.save(update_fields=["status", "atualizado_em"])
+        with transaction.atomic():
+            compra = Compra.objects.select_for_update().get(pk=compra.pk)
+            if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                return redirect("estoque:compras_detalhe", pk=compra.pk)
+            compra.status = Compra.STATUS_RASCUNHO
+            compra.save(update_fields=["status", "atualizado_em"])
     return render(
         request,
         "estoque/compras_nova.html",
