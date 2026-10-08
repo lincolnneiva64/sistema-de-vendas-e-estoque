@@ -31,7 +31,7 @@ class SaleFinalizationBrowserTests(StaticLiveServerTestCase):
         self.select_customer(tab, 'Cliente Comercial')
         self.add_product(tab, 'Produto Fracionado')
         self.repository(tab)
-        tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src);await app.initialized;window.before=await drafts.loadDraft(repo,scope);window.sequenceBefore=(await repo.get("metadata","device")).sequence;true')
+        tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/app.js")).src);await app.initialized;window.before=await drafts.loadDraft(repo,scope);window.sequenceBefore=(await repo.get("metadata","device")).sequence;true')
         return tab
 
     def finalize(self, tab, origin='undefined'):
@@ -93,7 +93,7 @@ class SaleFinalizationBrowserTests(StaticLiveServerTestCase):
                 other = self.open_sales(chrome)
                 self.repository(other)
                 other.evaluate('window.old=await drafts.loadDraft(repo,scope);true')
-                tab.evaluate('await salesOffline.activate();await salesDraftUI.flush();window.fetchCount=0;window.originalFetch=fetch;window.fetch=()=>{fetchCount++;throw Error("Nao enviar")};btnGravarVenda.click();btnGravarVenda.click();true')
+                tab.evaluate('document.getElementById("offline-global").dataset.connection="offline";await salesOffline.activate();await salesDraftUI.flush();window.fetchCount=0;window.originalFetch=fetch;window.fetch=()=>{fetchCount++;throw Error("Nao enviar")};btnGravarVenda.click();btnGravarVenda.click();true')
                 tab.wait('!!salesDraftUI.finalization')
                 other.wait('!!salesDraftUI.finalization')
                 self.assertEqual(tab.evaluate('fetchCount'), 0)
@@ -197,7 +197,7 @@ class SaleFinalizationBrowserTests(StaticLiveServerTestCase):
                 self.reload(tab)
                 self.repository(tab)
                 self.assertTrue(tab.evaluate('salesOffline.shell && salesOffline.active'))
-                tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src);await app.initialized;window.realFetch=fetch;window.localFetches=0;window.fetch=()=>{localFetches++;throw Error("Sem backend")};btnGravarVenda.click();true')
+                tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/app.js")).src);await app.initialized;window.realFetch=fetch;window.localFetches=0;window.fetch=()=>{localFetches++;throw Error("Sem backend")};btnGravarVenda.click();true')
                 tab.wait('document.getElementById("vendaFechamentoOverlay").classList.contains("visivel")')
                 tab.evaluate('document.getElementById("vendaOrigemCaixa").value="10,00";document.getElementById("vendaOrigemBanco").value="38,00";btnConfirmarFechamentoVenda.click();btnConfirmarFechamentoVenda.click();true')
                 tab.wait('!!salesDraftUI.finalization')

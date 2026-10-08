@@ -1,4 +1,4 @@
-import {hash, reserveSequence} from './core.js';
+import {hash, reserveSequence} from '/offline/assets/2-8ab/core.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -203,7 +203,7 @@ function salePayload(record, origin) {
     return payload;
 }
 
-export async function finalizeDraftOffline(repo, scope, {revision:expectedRevision, draft_id:draftId, origem_recebimento:origin}) {
+export async function finalizeDraftOffline(repo, scope, {revision:expectedRevision, draft_id:draftId, origem_recebimento:origin, reference_snapshot:referenceSnapshot = null}) {
     // The draft already owns a randomUUID, persisted once at its creation.
     // Promote it to operation identity so even an aborted local retry reuses it.
     const operationId = draftId;
@@ -220,14 +220,20 @@ export async function finalizeDraftOffline(repo, scope, {revision:expectedRevisi
             if (submissionMarker(scope, draft)) throw new Error('Há envio online anterior. Confira seu resultado antes de concluir offline.');
             if (!Number.isSafeInteger(device.sequence) || device.sequence < 0 || device.sequence >= Number.MAX_SAFE_INTEGER)
                 throw new Error('Sequência local inválida.');
-            return {revision, sequence:device.sequence, payload:salePayload(draft, origin)};
+            return {revision, sequence:device.sequence, payload:salePayload(draft, origin),
+                original_labels:{cliente:draft.cliente ? {id:draft.cliente.id, nome:draft.cliente.nome} : null,
+                    produtos:draft.itens.map(item => ({id:item.produto_id, nome:item.produto_nome}))}};
         });
         if (prepared.finalization) return {finalization:prepared.finalization, alreadyFinalized:true};
         const command = {operation_id:operationId, device_id:scope.device_id, actor_id:scope.actor_id,
             environment_id:scope.environment_id, type:'criar_venda', schema_version:1,
             aggregate_id:operationId, payload:prepared.payload, created_at:new Date().toISOString(), sequence:prepared.sequence + 1};
-        const operation = {...command, payload_hash:await hash(command), status:'pendente', attempts:0, last_error:'', server_result:null};
-        if (new TextEncoder().encode(JSON.stringify(operation)).length > 20000) throw new Error('Venda local excede o limite do protocolo. Rascunho preservado.');
+        const operation = {...command, payload_hash:await hash(command), status:'pendente', attempts:0, last_error:'', server_result:null,
+            original_labels:prepared.original_labels,
+            reference_snapshot:referenceSnapshot ? {snapshot_id:referenceSnapshot.snapshot_id, prepared_at:referenceSnapshot.prepared_at} : null};
+        // Diagnostic metadata is never sent and must not reduce the existing command limit.
+        const {reference_snapshot, original_labels, ...sizedOperation} = operation;
+        if (new TextEncoder().encode(JSON.stringify(sizedOperation)).length > 20000) throw new Error('Venda local excede o limite do protocolo. Rascunho preservado.');
         const result = await access(repo, scope, true, ({tx, store, device, key, revisionKey, revision, record}) => {
             const marker = finalized(record, scope, revision);
             if (marker) {

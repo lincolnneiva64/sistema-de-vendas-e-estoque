@@ -1,6 +1,7 @@
-import './sales.js';
-import {Repository, openDB, saleOperationState} from './core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline} from './sales-drafts.js';
+import '/offline/assets/2-8ab/sales.js';
+import {operationDetails} from '/offline/assets/2-8ab/operation-details.js';
+import {Repository, openDB, saleOperationState} from '/offline/assets/2-8ab/core.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline} from '/offline/assets/2-8ab/sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -16,6 +17,9 @@ const officialLink = document.createElement('a');
 officialLink.id = 'sales-official-sale-link'; officialLink.hidden = true;
 officialLink.target = '_blank'; officialLink.rel = 'noopener noreferrer';
 box.append(officialLink);
+const diagnostics = document.createElement('div');
+diagnostics.id = 'sales-operation-diagnostic'; diagnostics.style.width = '100%';
+box.append(diagnostics);
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
 let repo, scope, revision = 0, saved = '', blocked = false, suppress = true, ignoreReset = false;
@@ -61,6 +65,10 @@ async function refreshCompletion() {
         || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
         throw new Error('Identidade da operação local incompatível. Dados preservados.');
     completionView = saleOperationState(operation);
+    const expanded = !!diagnostics.querySelector('details[open]');
+    diagnostics.replaceChildren();
+    const detail = operationDetails(operation, scope);
+    if (detail) { detail.open = expanded; diagnostics.append(detail); }
     message.textContent = `${completionView.label} Referência ${localCompletion.operation_id.slice(0,8)}.`
         + (completionView.error ? ' ' + completionView.error : '');
     officialLink.hidden = !completionView.recordId;
@@ -120,6 +128,7 @@ async function checkIdentity() {
         message.textContent = 'Identidade mudou. Rascunho anterior preservado e montagem limpa.';
         discard.disabled = true;
         officialLink.hidden = true;
+        diagnostics.replaceChildren();
         return false;
     }
     return true;
@@ -155,6 +164,7 @@ window.salesDraftUI = {
                     throw new Error('Não foi possível persistir a montagem atual. Rascunho anterior preservado.');
                 const result = await finalizeDraftOffline(repo, scope, {
                     revision, draft_id:current.draft?.draft_id, origem_recebimento:origin,
+                    reference_snapshot:window.salesOffline.referenceSnapshot,
                 });
                 completed(result.finalization);
                 channel?.postMessage({type:'draft-finalized-offline', scope, revision, operation_id:result.finalization.operation_id});

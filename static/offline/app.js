@@ -1,5 +1,6 @@
-import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, validHealth, validReceipt, indicatorState, saleOperationState} from './core.js';
-import {renderIndicator} from './presentation.js';
+import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8ab/core.js';
+import {renderIndicator} from '/offline/assets/2-8ab/presentation.js';
+import {operationDetails} from '/offline/assets/2-8ab/operation-details.js';
 
 const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
@@ -38,7 +39,7 @@ modalConfirm.addEventListener('click', () => {
 function confirmSynchronization(count) {
     modal.querySelector('#offline-modal-title').textContent = 'Sincronizar operações?';
     modal.querySelector('#offline-modal-count').textContent = count + (count === 1 ? ' operação aguardando' : ' operações aguardando');
-    modalText.textContent = 'A conexão está estável. As operações pendentes serão enviadas agora para o servidor.';
+    modalText.textContent = 'A conexão está estável. Resultados desconhecidos serão consultados primeiro. Se não encontrados, o mesmo comando será reenviado nesta sincronização manual. As demais operações pendentes serão enviadas ao servidor.';
     modalConfirm.hidden = false; modalConfirm.disabled = false;
     modalCancel.disabled = false; modalCancel.textContent = 'Agora não';
     if (!modal.open) modal.showModal();
@@ -139,13 +140,16 @@ async function render() {
     prepareButton.disabled = syncing || preparing;
     busyButton(prepareButton, preparing, preparing ? 'Preparando...' : 'Preparar / atualizar dados online');
     const list = document.getElementById('offline-operations');
+    const expanded = new Set([...list.querySelectorAll('details[open]')].map(detail => detail.dataset.operationId));
     list.replaceChildren();
-    for (const op of operations.sort((a, b) => b.sequence - a.sequence)) {
+    for (const op of scoped.sort((a, b) => b.sequence - a.sequence)) {
         const row = document.createElement('li');
         const sale = op.type === 'criar_venda' ? saleOperationState(op) : null;
         row.textContent = sale
             ? `${sale.label} · referência ${op.operation_id.slice(0,8)} · usuário ${op.actor_id}` + (sale.error ? ' · ' + sale.error : '')
             : `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
+        const diagnostic = operationDetails(op, scope);
+        if (diagnostic) { diagnostic.open = expanded.has(op.operation_id); row.append(diagnostic); }
         list.append(row);
     }
     document.getElementById('offline-diagnostic').textContent = snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · snapshot: ${snapshot.prepared_at} · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.';
@@ -379,8 +383,25 @@ async function runSynchronization() {
             for (let index = 0; index < operations.length; index++) {
                 await refreshCommunication();
                 if (stopped || !stability.ready(performance.now(), Date.now())) { stopped = true; await probe(); break; }
-                const operation = {...operations[index], status: 'enviando', attempts: operations[index].attempts + 1};
-                await repo.put('operations', operation); progress = `${index + 1}/${operations.length}`; await changed();
+                const current = await repo.get('operations', operations[index].operation_id);
+                if (!current || ['confirmada', 'conflito'].includes(current.status)) continue;
+                if (current.status === 'resultado_desconhecido') {
+                    try {
+                        const lookup = await reconcile(current);
+                        if (lookup === 'encontrada') { await changed(); continue; }
+                        // Only this user-confirmed manual batch may retry an absent UUID.
+                        await refreshCommunication();
+                        if (stopped || !stability.ready(performance.now(), Date.now())) break;
+                    } catch (error) {
+                        await repo.diagnose(current, error.message, error.code, error.response);
+                        message(error.message); await changed();
+                        if (error.code === 'consulta_autenticacao') { stopped = true; break; }
+                        continue;
+                    }
+                }
+                const operation = await repo.updateAttempt(current, {status:'enviando', attempts:current.attempts + 1});
+                if (!operation) continue;
+                progress = `${index + 1}/${operations.length}`; await changed();
                 let receiptPersisted = false;
                 try {
                     const response = await fetchTimed('/api/offline/observations/', {method: 'POST', synchronize: true,
@@ -388,20 +409,25 @@ async function runSynchronization() {
                         body: JSON.stringify({...commandOf(operation), payload_hash: operation.payload_hash})});
                     if ([401, 403].includes(response.status)) {
                         requireAuthentication();
-                        await repo.put('operations', {...operation, status: 'erro', last_error: 'Sessão/permissão/CSRF: autentique-se novamente. Dados preservados.'});
+                        await repo.updateAttempt(operation, {status: 'erro', last_error: 'Sessão/permissão/CSRF: autentique-se novamente. Dados preservados.'});
                         stopped = true; message('Autenticação necessária. Fila preservada.'); break;
                     }
                     if ([400, 413].includes(response.status)) {
-                        await repo.put('operations', {...operation, status: 'erro', last_error: 'Servidor recusou o formato. Revisão técnica necessária.'});
+                        await repo.updateAttempt(operation, {status: 'erro', last_error: 'Servidor recusou o formato. Revisão técnica necessária.'});
                         stopped = true; message('Erro de validação. Dados preservados.'); break;
                     }
                     if (![200, 409].includes(response.status)) throw new Error('Servidor indisponível.');
                     const result = await response.json();
+                    if (response.status === 409 && result?.code === 'uuid_comando_divergente'
+                        && result.operation_id === operation.operation_id && result.hash === operation.payload_hash) {
+                        await repo.diagnose(operation, 'UUID já utilizado com outro comando. Resultado original precisa de reconciliação; revisão técnica necessária.', result.code, result);
+                        await changed(); continue;
+                    }
                     if (!validReceipt(result, operation, response.status)) throw new Error('Confirmação do servidor inválida.');
                     await repo.record(operation, result); receiptPersisted = true;
                     if (result.status === 'confirmada') confirmed++; await changed();
                 } catch (error) {
-                    if (!receiptPersisted) await repo.put('operations', {...operation, status: 'resultado_desconhecido', last_error: error.message + ' Reenviar o mesmo UUID após estabilidade.'});
+                    if (!receiptPersisted) await repo.diagnose(operation, error.message + ' Consulte o resultado pela sincronização manual antes de repetir.');
                     // Preserve the existing new stability window after an uncertain send,
                     // but let the health-check decide whether the server is offline.
                     stopped = true;
@@ -422,6 +448,30 @@ async function runSynchronization() {
             syncing = false; csrf = ''; await changed();
         }
     });
+}
+async function reconcile(operation) {
+    const fail = (message, code = 'consulta_indeterminada', response = null) => {
+        const error = new Error(message); error.code = code; error.response = response; throw error;
+    };
+    if (await hash(commandOf(operation)) !== operation.payload_hash)
+        fail('Comando local não corresponde ao hash preservado. Revisão técnica necessária.', 'comando_local_divergente');
+    const query = new URLSearchParams({actor_id:operation.actor_id, environment_id:operation.environment_id,
+        type:operation.type, device_id:operation.device_id, hash:operation.payload_hash});
+    const response = await fetchTimed(`/api/offline/operations/${operation.operation_id}/?${query}`);
+    if ([401,403].includes(response.status)) { requireAuthentication(); fail('Consulta recusada: autentique-se e confira permissão/CSRF.', 'consulta_autenticacao'); }
+    let result;
+    try { result = await response.json(); } catch { fail('Resposta da consulta inválida. Operação preservada.'); }
+    if (response.status === 409 && result?.lookup === 'incompativel')
+        fail('UUID encontrado com identidade ou comando incompatível. Revisão técnica necessária.', 'uuid_comando_divergente', result);
+    if (response.status !== 200 || result?.operation_id !== operation.operation_id || result.hash !== operation.payload_hash)
+        fail('Não foi possível determinar o resultado no servidor. Operação preservada.');
+    if (result.lookup === 'nao_encontrada') return result.lookup;
+    if (result.lookup !== 'encontrada' || result.actor_id !== operation.actor_id
+        || result.environment_id !== operation.environment_id || result.type !== operation.type
+        || result.device_id !== operation.device_id || !validReceipt(result.receipt, operation))
+        fail('Resultado da consulta incompatível ou receipt inválido. Operação preservada.');
+    await repo.record(operation, result.receipt);
+    return 'encontrada';
 }
 async function exportDiagnostic() {
     const data = {format: 'offline-pilot-diagnostic-v1', origin: location.origin, exported_at: new Date().toISOString(),

@@ -89,7 +89,7 @@ class CommercialSnapshotAPITests(TestCase):
         response = self.client.get('/vendas/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response.context['produtos'].values_list('pk', flat=True)), {self.product.pk, self.others[-1].pk})
-        self.assertContains(response, '/static/offline/commercial-ui.js')
+        self.assertContains(response, '/offline/assets/2-8ab/commercial-ui.js')
         self.assertContains(response, 'id="clienteBusca"')
         self.assertContains(response, 'id="tipoVenda"')
         self.assertContains(response, 'id="operadorVenda"')

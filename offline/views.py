@@ -12,8 +12,22 @@ from django.views.decorators.http import require_GET, require_POST
 
 from locacoes.models import TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem
-from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command
+from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command, command_hash
+from .models import OperacaoSincronizacao
 from .commercial import build_commercial_snapshot
+
+
+@require_GET
+@never_cache
+def versioned_asset(request, filename):
+    # A distinct path bypasses older workers that ignore static query versions.
+    allowed = {"app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
+               "sales-draft-ui.js", "operation-details.js", "commercial.js",
+               "commercial-ui.js", "checklist.js", "checklist-restore.js"}
+    if filename not in allowed:
+        return HttpResponse(status=404)
+    return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),
+                        content_type="application/javascript")
 
 
 @require_GET
@@ -113,6 +127,45 @@ def synchronize(request):
         return JsonResponse({"erro": "Operacao invalida: confira identidade, formato e hash."}, status=400)
     result, status = process_operation(command, request.user)
     return JsonResponse(result, status=status)
+
+
+@require_GET
+@authorized
+def operation_result(request, operation_id):
+    """Read only: absence is not permission to change the original command."""
+    expected = request.GET
+    if (expected.get("actor_id") != str(request.user.pk)
+            or expected.get("environment_id") != environment_id(request)):
+        return JsonResponse({"lookup": "incompativel", "code": "identidade_divergente",
+                             "erro": "Usuario/ambiente da consulta incompatível."}, status=409)
+    try:
+        operation = OperacaoSincronizacao.objects.filter(operation_id=operation_id).first()
+    except DatabaseError:
+        return JsonResponse({"lookup": "indeterminada", "erro": "Consulta temporariamente indisponível. Operação preservada."}, status=503)
+    if operation is None:
+        return JsonResponse({"lookup": "nao_encontrada", "operation_id": str(operation_id),
+                             "hash": expected.get("hash")})
+    compatible = (operation.actor_id == request.user.pk
+                  and operation.environment_id == environment_id(request)
+                  and operation.type == expected.get("type")
+                  and str(operation.device_id) == expected.get("device_id")
+                  and operation.payload_hash == expected.get("hash")
+                  and command_hash(operation.comando) == operation.payload_hash)
+    if not compatible:
+        # Do not expose another actor's receipt, sale ID or commercial contents.
+        return JsonResponse({"lookup": "incompativel", "code": "uuid_comando_divergente",
+                             "erro": "UUID encontrado com identidade ou comando divergente. Revisão técnica necessária."}, status=409)
+    receipt = operation.resultado
+    if (operation.status not in {"confirmada", "conflito"}
+            or not isinstance(receipt, dict)
+            or receipt.get("status") != operation.status
+            or receipt.get("operation_id") != str(operation.operation_id)
+            or receipt.get("hash") != operation.payload_hash):
+        return JsonResponse({"lookup": "indeterminada", "erro": "Operação sem resultado definitivo."}, status=503)
+    return JsonResponse({"lookup": "encontrada", "operation_id": str(operation.operation_id),
+                         "hash": operation.payload_hash, "actor_id": str(operation.actor_id),
+                         "environment_id": operation.environment_id, "type": operation.type,
+                         "device_id": str(operation.device_id), "receipt": receipt})
 
 
 @require_GET

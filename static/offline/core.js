@@ -214,9 +214,33 @@ export class Repository {
         const updated = {...operation, status: result.status, server_result: result,
             last_error: result.status === 'confirmada' ? '' : result.erro || ''};
         return this.transaction(['operations', 'history'], true, tx => {
-            tx.objectStore('operations').put(updated);
-            tx.objectStore('history').put({...updated, synchronized_at: new Date().toISOString()});
+            const store = tx.objectStore('operations');
+            store.get(operation.operation_id).onsuccess = event => {
+                const current = event.target.result;
+                if (!current || canonical(commandOf(current)) !== canonical(commandOf(operation))
+                    || current.payload_hash !== operation.payload_hash) { tx.abort(); return; }
+                // A stale tab/response must never overwrite an official confirmation.
+                if (current.status === 'confirmada') return;
+                store.put({...current, ...updated});
+                tx.objectStore('history').put({...current, ...updated, synchronized_at: new Date().toISOString()});
+            };
         });
+    }
+    updateAttempt(operation, changes) {
+        return this.transaction(['operations'], true, (tx, done) => {
+            const store = tx.objectStore('operations');
+            store.get(operation.operation_id).onsuccess = event => {
+                const current = event.target.result;
+                if (!current || ['confirmada', 'conflito'].includes(current.status)) { done(null); return; }
+                if (current.payload_hash !== operation.payload_hash || canonical(commandOf(current)) !== canonical(commandOf(operation))) { tx.abort(); return; }
+                const updated = {...current, ...changes};
+                store.put(updated); done(updated);
+            };
+        });
+    }
+    diagnose(operation, error, code = 'consulta_indeterminada', response = null) {
+        return this.updateAttempt(operation, {status:'resultado_desconhecido', last_error:error,
+            diagnostic_code:code, diagnostic_response:response});
     }
 }
 
@@ -247,7 +271,7 @@ export function saleOperationState(operation) {
         enviando:'Enviando venda offline… Ainda sem confirmação.',
         conflito:'Venda offline precisa de revisão.',
         erro:'Não foi possível sincronizar a venda. Ainda sem confirmação.',
-        resultado_desconhecido:'Resultado da venda ainda não confirmado. Reenvie manualmente o mesmo comando após estabilidade.',
+        resultado_desconhecido:'Resultado da venda ainda não confirmado. A sincronização manual consultará o servidor antes de qualquer retry.',
     };
     return {status:operation?.status || 'erro', label:labels[operation?.status] || 'Resultado local indisponível ou inválido. Venda ainda não confirmada.',
         recordId:null, url:null, error};

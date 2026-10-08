@@ -18,7 +18,7 @@ from locacoes.models import FaixaPrecoLocacao, Locacao, TarefaOperacionalLocacao
 from .models import OperacaoSincronizacao
 from .browser_support import Chrome
 from . import tests_sales_drafts_browser as draft_tests
-from .services import COMMAND_KEYS
+from .services import COMMAND_KEYS, process_operation
 
 CHROME = os.environ.get('OFFLINE_TEST_CHROME', r'C:\Program Files\Google\Chrome\Application\chrome.exe')
 
@@ -45,14 +45,14 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
         tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
         tab.wait('window.salesDraftUI?.ready')
         self.repository(tab)
-        tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src);await app.initialized;window.realFetch=fetch;window.sent=[];window.fetch=async(url,options)=>{if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
+        tab.evaluate('window.app=await import([...document.scripts].find(s=>s.src.includes("/app.js")).src);await app.initialized;window.realFetch=fetch;window.sent=[];window.fetch=async(url,options)=>{if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
         return tab
 
     def prepare(self, chrome, payment='A prazo', quantity='2'):
         tab = self.open_sales(chrome)
         self.select_customer(tab, 'Cliente Comercial')
         self.add_product(tab, 'Produto Fracionado', quantity)
-        tab.evaluate('await (await import("/static/offline/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+        tab.evaluate('await (await import("/offline/assets/2-8ab/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
         tab.evaluate('tipoVenda.value='+json.dumps(payment)+';tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();window.fetch=(url,options)=>String(url)==="/api/offline/health/"?Promise.reject(TypeError("offline")):realFetch(url,options);await app.probe();offset+=5001;await app.probe();offset+=5001;await app.probe();await salesOffline.ready;await salesDraftUI.flush();window.snapshotsBefore=await repo.all("snapshots");true')
         origin = '{caixa:"10.00",banco:"38.00"}' if payment == 'À vista' else 'undefined'
         tab.evaluate('await salesDraftUI.finalizeOffline('+origin+');window.operation=(await repo.all("operations"))[0];true')
@@ -149,10 +149,10 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                     self.manual(tab)
                     updated = tab.evaluate('await repo.get("operations",operation.operation_id)')
                     self.assertEqual(updated['status'], 'confirmada')
-                    self.assertEqual(updated['attempts'], 2)
+                    self.assertEqual(updated['attempts'], 1)
                     for sent in tab.evaluate('sent'):
                         self.assert_command(operation, sent)
-                    self.assertEqual(len(tab.evaluate('sent')), 2)
+                    self.assertEqual(len(tab.evaluate('sent')), 1)
                     self.assertEqual({model: list(model.objects.order_by('pk').values()) for model in models}, before)
                     official = OperacaoSincronizacao.objects.get(operation_id=operation['operation_id'])
                     self.assertEqual(updated['server_result'], official.resultado)
@@ -304,7 +304,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 for op in tab.evaluate('await repo.all("operations")'):
                     if op['operation_id'] in receipts:
                         self.assertEqual(op['server_result'], receipts[op['operation_id']])
-                        self.assertEqual(op['attempts'], 2)
+                        self.assertEqual(op['attempts'], 1)
                     else:
                         self.assertEqual(op['attempts'], 1)
                 self.assertEqual({model:list(model.objects.order_by('pk').values()) for model in effects},effects)
@@ -344,5 +344,138 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                     self.assertEqual(op['attempts'],0)
                     self.assertIsNone(op['server_result'])
                 self.assertFalse(Venda.objects.exists())
+            finally:
+                chrome.stop()
+
+    def test_lookup_absent_refresh_diagnostics_and_identical_manual_retry(self):
+        with TemporaryDirectory(prefix='sale-lookup-absent-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.prepare(chrome); self.stable(tab)
+                original = tab.evaluate('operation')
+                tab.evaluate('await repo.diagnose(operation,"Resposta perdida");await salesDraftUI.refreshCompletion();true')
+                tab.evaluate('document.querySelector("#sales-operation-diagnostic summary").click();true')
+                self.assertTrue(tab.evaluate('document.querySelector("#sales-operation-diagnostic details").open'))
+                self.assertEqual(tab.evaluate('sent.length'), 0)
+                self.assertIn(original['operation_id'], tab.evaluate('document.getElementById("sales-operation-diagnostic").textContent'))
+                self.assertIn(original['payload']['itens'][0]['preco_unitario'], tab.evaluate('document.getElementById("sales-operation-diagnostic").textContent'))
+                clock_offset = tab.evaluate('offset')
+                self.reload(tab); self.repository(tab)
+                tab.evaluate('offset='+str(clock_offset)+';window.app=await import([...document.scripts].find(s=>s.src.includes("/app.js")).src);await app.initialized;window.realFetch=fetch;window.calls=[];window.sent=[];window.fetch=async(url,options)=>{calls.push(String(url));if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'), 'resultado_desconhecido')
+                self.assertEqual(tab.evaluate('sent.length'), 0)
+                self.stable(tab); self.manual(tab)
+                calls = tab.evaluate('calls')
+                lookup = next(i for i,url in enumerate(calls) if '/api/offline/operations/' in url)
+                self.assertLess(lookup, calls.index('/api/offline/observations/'))
+                self.assert_command(original, tab.evaluate('sent[0]'))
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'), 'confirmada')
+            finally:
+                chrome.stop()
+
+    def test_lookup_failures_never_post_and_persistence_failure_preserves_unknown(self):
+        with TemporaryDirectory(prefix='sale-lookup-failures-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.prepare(chrome); self.stable(tab)
+                tab.evaluate('await repo.diagnose(operation,"Incerto");true')
+                cases = [(401,{}),(403,{}),(503,{}),(200,None),
+                         (409,{'lookup':'incompativel'}),
+                         (200,{'lookup':'encontrada','receipt':{}}),
+                         (200,{'lookup':'encontrada','actor_id':'999'}),
+                         (200,{'lookup':'encontrada','environment_id':'other'}),
+                         (200,{'lookup':'encontrada','type':'other'}),
+                         (200,{'lookup':'nao_encontrada','hash':'0'*64})]
+                for status, body in cases:
+                    tab.evaluate('window.lookupStatus='+str(status)+';window.lookupBody='+json.dumps(body)+';window.fetch=async(url,options)=>{if(String(url).includes("/api/offline/operations/"))return new Response(lookupBody===null?"invalid-json":JSON.stringify({operation_id:operation.operation_id,hash:operation.payload_hash,actor_id:operation.actor_id,environment_id:operation.environment_id,type:operation.type,device_id:operation.device_id,...lookupBody}),{status:lookupStatus});if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
+                    self.manual(tab)
+                    self.assertEqual(tab.evaluate('sent.length'),0)
+                    self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'resultado_desconhecido')
+                tab.evaluate('window.fetch=realFetch;await repo.put("operations",{...operation,status:"pendente"});true')
+                self.manual(tab)
+                official = OperacaoSincronizacao.objects.get()
+                tab.evaluate('await repo.put("operations",{...operation,status:"resultado_desconhecido"});window.core=await import("/offline/assets/2-8ab/core.js");window.recordBefore=core.Repository.prototype.record;core.Repository.prototype.record=()=>Promise.reject(Error("IndexedDB indisponível"));window.posts=0;window.fetch=(url,options)=>{if(String(url)==="/api/offline/observations/")posts++;return realFetch(url,options)};true')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('posts'),0)
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'resultado_desconhecido')
+                tab.evaluate('core.Repository.prototype.record=recordBefore;true')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].server_result'),official.resultado)
+                tab.evaluate('await repo.diagnose(operation,"Resposta antiga");await repo.record(operation,{operation_id:operation.operation_id,hash:operation.payload_hash,status:"conflito",record_id:null,completed_at:new Date().toISOString(),erro:"Antigo"});true')
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'confirmada')
+            finally:
+                chrome.stop()
+
+    def test_lookup_persisted_conflict_and_two_tabs_no_retry(self):
+        with TemporaryDirectory(prefix='sale-lookup-conflict-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab=self.prepare(chrome); self.stable(tab)
+                Produto.objects.filter(pk=self.product.pk).update(quantidade=0)
+                self.manual(tab)
+                receipt=OperacaoSincronizacao.objects.get().resultado
+                tab.evaluate('await repo.put("operations",{...operation,status:"resultado_desconhecido"});true')
+                other=self.open_sales(chrome)
+                self.manual(tab)
+                other.wait('document.getElementById("sales-draft-status").textContent.includes("precisa de revis")')
+                self.assertEqual(tab.evaluate('sent.length'),1)
+                self.assertEqual(other.evaluate('sent.length'),0)
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].server_result'),receipt)
+                self.assertFalse(Venda.objects.exists())
+            finally:
+                chrome.stop()
+
+    def test_uuid_divergent_post_and_lookup_are_explicit_and_never_duplicate(self):
+        with TemporaryDirectory(prefix='sale-lookup-divergent-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.prepare(chrome); self.stable(tab)
+                operation = tab.evaluate('operation')
+                command = {key:operation[key] for key in COMMAND_KEYS}
+                process_operation(command, self.user)
+                tab.evaluate('window.core=await import("/offline/assets/2-8ab/core.js");operation.payload.itens[0].quantidade="3";operation.payload_hash=await core.hash(core.commandOf(operation));await repo.put("operations",operation);true')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].diagnostic_code'), 'uuid_comando_divergente')
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'), 'resultado_desconhecido')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('sent.length'), 1)
+                self.assertEqual(Venda.objects.count(), 1)
+                self.assertTrue(tab.evaluate('document.getElementById("sales-operation-diagnostic").textContent.includes("uuid_comando_divergente")'))
+                tab.evaluate('operation.payload.itens[0].quantidade="4";await repo.put("operations",{...operation,status:"resultado_desconhecido"});window.lookups=0;window.lookupFetch=fetch;window.fetch=(url,options)=>{if(String(url).includes("/api/offline/operations/"))lookups++;return lookupFetch(url,options)};true')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('lookups'),0)
+                self.assertEqual(tab.evaluate('sent.length'),1)
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].diagnostic_code'),'comando_local_divergente')
+            finally:
+                chrome.stop()
+
+    def test_mixed_batch_lookup_failure_keeps_unknown_and_sends_other_operation(self):
+        with TemporaryDirectory(prefix='sale-lookup-mixed-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.prepare(chrome); self.stable(tab)
+                tab.evaluate('await repo.diagnose(operation,"Incerto");window.core=await import("/offline/assets/2-8ab/core.js");window.second={...core.commandOf(operation),operation_id:crypto.randomUUID(),sequence:operation.sequence+1};second.aggregate_id=second.operation_id;await repo.put("operations",{...second,payload_hash:await core.hash(second),status:"pendente",attempts:0});window.fetch=async(url,options)=>{if(String(url).includes("/api/offline/operations/"))return new Response("Falha",{status:503});if(String(url)==="/api/offline/observations/")sent.push(JSON.parse(options.body));return realFetch(url,options)};true')
+                self.manual(tab)
+                self.assertEqual(tab.evaluate('(await repo.get("operations",operation.operation_id)).status'),'resultado_desconhecido')
+                self.assertEqual(tab.evaluate('(await repo.get("operations",second.operation_id)).status'),'confirmada')
+                self.assertEqual(tab.evaluate('sent.map(op=>op.operation_id)'),[tab.evaluate('second.operation_id')])
+                self.assertEqual(Venda.objects.count(),1)
+            finally:
+                chrome.stop()
+
+    def test_versioned_modules_bypass_stale_unversioned_core_cache(self):
+        with TemporaryDirectory(prefix='sale-lookup-cache-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.prepare(chrome)
+                tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
+                tab.wait('!!navigator.serviceWorker.controller')
+                tab.evaluate('window.cache=await caches.open("offline-pilot-shell-v24-2-8ab");await cache.put("/static/offline/core.js",new Response("throw Error(\\"Stale core\\")",{headers:{"Content-Type":"application/javascript"}}));true')
+                self.reload(tab)
+                tab.evaluate('window.core=await import("/offline/assets/2-8ab/core.js");window.repo=new core.Repository(await core.openDB());true')
+                self.assertTrue(tab.evaluate('typeof core.Repository.prototype.diagnose==="function" && typeof core.Repository.prototype.updateAttempt==="function"'))
+                self.assertTrue(tab.evaluate('[...document.scripts].some(s=>s.src.includes("/offline/assets/2-8ab/app.js"))'))
+                self.assertTrue(tab.evaluate('performance.getEntriesByType("resource").some(e=>e.name.includes("/offline/assets/2-8ab/core.js"))'))
+                self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'pendente')
             finally:
                 chrome.stop()

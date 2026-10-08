@@ -89,7 +89,8 @@ def process_operation(command, user):
     if not created:
         operation = OperacaoSincronizacao.objects.select_for_update().get(pk=operation.pk)
         if operation.actor_id != user.pk or operation.payload_hash != digest or operation.comando != command:
-            return {"operation_id": command["operation_id"], "status": "conflito", "hash": digest, "erro": "UUID ja utilizado com outro conteudo."}, 409
+            return {"operation_id": command["operation_id"], "status": "conflito", "hash": digest,
+                    "code": "uuid_comando_divergente", "erro": "UUID ja utilizado com outro conteudo."}, 409
         return operation.resultado, 409 if operation.status == "conflito" else 200
 
     if command["type"] == SALE_OPERATION_TYPE:

@@ -1,5 +1,5 @@
-import {openDB, Repository} from './core.js';
-import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from './commercial.js';
+import {openDB, Repository} from '/offline/assets/2-8ab/core.js';
+import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8ab/commercial.js';
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
@@ -56,9 +56,11 @@ state.activate = async () => {
             options('operadorVenda', snapshot.operadores, o => o.nome, o => o.nome);
             options('tipoVenda', snapshot.formas_pagamento, f => f.valor, f => f.label);
             state.available = true;
+            state.referenceSnapshot = {snapshot_id:snapshot.snapshot_id, prepared_at:snapshot.prepared_at || snapshot.gerado_em};
             banner.textContent = `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Estoque/preços serão revalidados na futura sincronização. A venda pode ser salva neste aparelho, sem envio ao servidor.`;
         } catch (_) {
             snapshot = null;
+            state.referenceSnapshot = null;
             for (const id of ['produto', 'operadorVenda', 'tipoVenda']) options(id, [], () => '', () => '');
             banner.textContent = 'Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas. Rascunho válido já salvo pode ser concluído localmente; o servidor revalidará os dados no envio futuro.';
         }
@@ -147,7 +149,7 @@ document.addEventListener('offline-operation-updated', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
-    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
+    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link, #sales-operation-diagnostic')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);

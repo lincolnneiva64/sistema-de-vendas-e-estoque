@@ -50,7 +50,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                     raise
 
     def select_customer(self, tab, name):
-        tab.evaluate('await (await import([...document.scripts].find(s=>s.src.includes("/offline/app.js")).src)).initialized;await salesOffline.ready;true')
+        tab.evaluate('await (await import([...document.scripts].find(s=>s.src.includes("/app.js")).src)).initialized;await salesOffline.ready;true')
         tab.evaluate('clienteBusca.value=' + repr(name) + ';clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
         # Query and click in one browser task: an async autocomplete response can
         # replace the list between two separate CDP calls.
@@ -66,7 +66,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.wait('document.querySelector("#sales-draft-status [role=status]").textContent.includes("salvo")')
 
     def repository(self, tab):
-        tab.evaluate("window.core=await import('/static/offline/core.js');window.drafts=await import('/static/offline/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
+        tab.evaluate("window.core=await import('/offline/assets/2-8ab/core.js');window.drafts=await import('/offline/assets/2-8ab/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
 
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]
@@ -314,6 +314,11 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 # The draft remains usable even if the catalog was not prepared.
                 tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
                 tab.wait('!!navigator.serviceWorker.controller')
+                # Draft readiness does not await the connection monitor. Drain its
+                # initial online probe before cutting the network: otherwise the
+                # offline event can join that successful probe and the next check
+                # starts at 30 seconds, after this test's 25-second deadline.
+                tab.evaluate('const app=await import([...document.scripts].find(s=>s.src.includes("/app.js")).src);await app.initialized;await app.probe();true')
                 worker = chrome.worker(); worker.call('Network.enable')
                 worker.call('Network.emulateNetworkConditions', dict(offline=True,latency=0,downloadThroughput=0,uploadThroughput=0))
                 tab.call('Network.emulateNetworkConditions', dict(offline=True,latency=0,downloadThroughput=0,uploadThroughput=0))
