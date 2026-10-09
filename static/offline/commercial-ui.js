@@ -1,5 +1,5 @@
-import {openDB, Repository} from '/offline/assets/2-8c/core.js';
-import {carregarSnapshotComercial, atualizarSnapshotComercial} from '/offline/assets/2-8c/commercial.js';
+import {openDB, Repository} from '/offline/assets/2-8d/core.js';
+import {carregarSnapshotComercial, atualizarSnapshotComercial} from '/offline/assets/2-8d/commercial.js';
 
 const panel = document.querySelector('#offline-global .offline-panel');
 const indicator = document.getElementById('offline-global');

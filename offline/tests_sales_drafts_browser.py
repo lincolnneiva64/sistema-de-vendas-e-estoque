@@ -66,7 +66,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.wait('document.querySelector("#sales-draft-status [role=status]").textContent.includes("salvo")')
 
     def repository(self, tab):
-        tab.evaluate("window.core=await import('/offline/assets/2-8c/core.js');window.drafts=await import('/offline/assets/2-8c/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
+        tab.evaluate("window.core=await import('/offline/assets/2-8d/core.js');window.drafts=await import('/offline/assets/2-8d/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
 
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]
@@ -232,66 +232,12 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 chrome.stop()
 
     def test_online_failure_and_confirmed_success_cleanup(self):
-        with TemporaryDirectory(prefix='sales-drafts-submit-') as profile:
-            chrome = Chrome(CHROME, profile).start()
-            try:
-                tab = self.open_sales(chrome)
-                self.select_customer(tab, 'Cliente Comercial')
-                self.add_product(tab, 'Produto Fracionado', '1')
-                self.repository(tab)
-                # Hold the response: the draft must remain while official save is pending.
-                tab.evaluate('window.realFetch=fetch;window.fetch=(url,options)=>String(url).includes("/vendas/gravar/") ? new Promise(resolve=>window.releaseSale=resolve) : realFetch(url,options);btnGravarVenda.click();true')
-                tab.wait('typeof window.releaseSale === "function"')
-                self.assertIsNotNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
-                tab.evaluate('releaseSale(new Response(JSON.stringify({sucesso:false,mensagem:"Erro controlado"}),{status:400,headers:{"Content-Type":"application/json"}}));true')
-                tab.wait('!btnGravarVenda.disabled')
-                self.assertIsNotNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
-                tab.evaluate('document.getElementById("btnVendaErroOk").click();window.fetch=realFetch;btnGravarVenda.click();true')
-                tab.wait('document.querySelectorAll("#tabelaProdutos tr").length===0')
-                self.assertIsNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
-                self.assertEqual(Venda.objects.count(), 1)
-                self.assertEqual(ItemVenda.objects.count(), 1)
-                self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
-                self.assertEqual(tab.evaluate('(await repo.get("metadata","device")).sequence'), 0)
-            finally:
-                chrome.stop()
+        from .tests_online_sales_browser import check_loss
+        check_loss(self)
 
     def test_confirmed_sale_survives_idb_cleanup_failure_without_resubmit(self):
-        with TemporaryDirectory(prefix='sales-drafts-confirmed-failure-') as profile:
-            chrome = Chrome(CHROME, profile).start()
-            try:
-                tab = self.open_sales(chrome)
-                self.select_customer(tab, 'Cliente Comercial')
-                self.add_product(tab, 'Produto Fracionado', '1')
-                self.repository(tab)
-                tab.evaluate('window.savedDraft=(await drafts.loadDraft(repo,scope)).draft;window.sequenceBefore=(await repo.get("metadata","device")).sequence;window.realFetch=fetch;window.posts=0;window.originalTransaction=core.Repository.prototype.transaction;window.originalSuccess=salesDraftUI.confirmedSuccess;salesDraftUI.confirmedSuccess=async()=>{await originalSuccess();throw new Error("Falha local inesperada após confirmação")};window.fetch=async(url,options)=>{const response=await realFetch(url,options);if(String(url).includes("/vendas/gravar/")){posts++;core.Repository.prototype.transaction=function(stores,write,work){if(write&&stores.length===1&&stores[0]==="metadata")return Promise.reject(new DOMException("Falha IndexedDB na limpeza","QuotaExceededError"));return originalTransaction.call(this,stores,write,work)}}return response};btnGravarVenda.click();true')
-                tab.wait('posts===1 && document.querySelectorAll("#tabelaProdutos tr").length===0')
-                self.assertEqual(Venda.objects.count(), 1)
-                self.assertEqual(ItemVenda.objects.count(), 1)
-                self.assertTrue(tab.evaluate('btnGravarVenda.disabled'))
-                self.assertFalse(tab.evaluate('document.getElementById("vendaErroOverlay").classList.contains("visivel")'))
-                self.assertIn('confirmada', tab.evaluate('document.getElementById("sales-draft-status").textContent'))
-                self.assertTrue(tab.evaluate('!!document.getElementById("vendaGravadaBloco").textContent'))
-                # Residual bytes remain in IDB, but are fenced by the independent confirmation marker.
-                self.assertIsNotNone(tab.evaluate('await repo.get("metadata",drafts.draftKey(scope))'))
-                self.assertIsNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
-                self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).confirmation.estado'), 'concluido')
-                self.assertTrue(tab.evaluate('try{await drafts.saveDraft(repo,scope,savedDraft,savedDraft.revision);false}catch(e){true}'))
-                tab.evaluate('btnGravarVenda.click();document.getElementById("btnConfirmarFechamentoVenda").click();true')
-                self.assertEqual(tab.evaluate('posts'), 1)
-                self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
-                self.assertEqual(tab.evaluate('(await repo.get("metadata","device")).sequence'), tab.evaluate('sequenceBefore'))
-                self.reload(tab)
-                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
-                self.assertEqual(tab.evaluate('clienteId.value'), '')
-                self.repository(tab)
-                self.assertIsNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
-                self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
-                self.assertEqual(tab.evaluate('(await repo.get("metadata","device")).sequence'), 0)
-                self.assertEqual(Venda.objects.count(), 1)
-                self.assertEqual(ItemVenda.objects.count(), 1)
-            finally:
-                chrome.stop()
+        from .tests_online_sales_browser import check_cleanup_failure
+        check_cleanup_failure(self)
 
     def test_pending_editor_and_immediate_reload(self):
         with TemporaryDirectory(prefix='sales-drafts-editor-') as profile:

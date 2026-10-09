@@ -1,8 +1,8 @@
-import '/offline/assets/2-8c/sales.js';
-import {operationDetails} from '/offline/assets/2-8c/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8c/sales-revisions.js';
-import {Repository, openDB, saleOperationState} from '/offline/assets/2-8c/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8c/sales-drafts.js';
+import '/offline/assets/2-8d/sales.js';
+import {operationDetails} from '/offline/assets/2-8d/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8d/sales-revisions.js';
+import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8d/core.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8d/sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -21,6 +21,10 @@ box.append(officialLink);
 const diagnostics = document.createElement('div');
 diagnostics.id = 'sales-operation-diagnostic'; diagnostics.style.width = '100%';
 box.append(diagnostics);
+const recover = document.createElement('button');
+recover.type = 'button'; recover.id = 'sales-online-recover'; recover.hidden = true;
+recover.textContent = 'Consultar resultado da venda'; box.append(recover);
+recover.addEventListener('click', () => { void window.salesDraftUI.recoverOnline(); });
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
 let repo, scope, revision = 0, saved = '', blocked = false, suppress = true, ignoreReset = false;
@@ -30,6 +34,8 @@ let preparedSubmission = false;
 let localCompletion = null, finalizing = null;
 let completionView = null;
 let completionGeneration = 0;
+let recoveringOnline = false;
+let queriedConfirmationId = null;
 let historicalCompletion = null;
 const completionControls = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
@@ -72,6 +78,10 @@ async function refreshCompletion() {
         || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
         throw new Error('Identidade da operação local incompatível. Dados preservados.');
     completionView = saleOperationState(operation);
+    if (operation?.transport === 'online' && operation.status === 'enviando')
+        completionView = {...completionView, label:'Enviando venda online. Confirmacao oficial ainda nao recebida.'};
+    recover.hidden = !localCompletion || !operation || ['confirmada', 'conflito'].includes(operation.status);
+    recover.disabled = recoveringOnline;
     const revisionView = await revisionPresentation(repo, operation, scope);
     if (generation !== completionGeneration) return;
     if (revisionView?.recordId) completionView = {...completionView,recordId:revisionView.recordId,
@@ -86,7 +96,8 @@ async function refreshCompletion() {
     if (localCompletion && !completionView.recordId) {
         const payload = operation?.payload || {};
         const total = (payload.itens || []).reduce((sum, item) => sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
-        message.textContent += ` Existe uma venda offline pendente de resolução. Antes de continuar, revise e resolva essa venda. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. Para sincronizar manualmente quando permitido, abra Status → Sincronizar agora.`;
+        const transport = operation?.transport === 'online' ? 'online' : 'offline';
+        message.textContent += ` Existe uma venda ${transport} pendente de resolução. Antes de continuar, revise e resolva essa venda. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. Consulte o resultado pelo botão abaixo. Para reenviar manualmente quando permitido, abra Status → Sincronizar agora.`;
         message.setAttribute('role', 'alert');
     } else message.setAttribute('role', 'status');
     officialLink.hidden = !completionView.recordId;
@@ -170,6 +181,99 @@ window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
     get finalization() { return localCompletion; },
     refreshCompletion,
+    async recoverOnline() {
+        if (recoveringOnline || !localCompletion || !await checkIdentity()) return;
+        recoveringOnline = true;
+        recover.disabled = true;
+        let confirmedId = null;
+        try {
+            const operation = await repo.get('operations', localCompletion.operation_id);
+            if (!operation || await hash(commandOf(operation)) !== operation.payload_hash)
+                throw new Error('Comando local divergente. Operacao preservada; revisao tecnica necessaria.');
+            const query = new URLSearchParams({actor_id:operation.actor_id, environment_id:operation.environment_id,
+                type:operation.type, device_id:operation.device_id, hash:operation.payload_hash});
+            const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
+            let response, result;
+            try { response = await fetch(`/api/vendas/online/${operation.operation_id}/?${query}`,
+                {credentials:'same-origin', cache:'no-store', signal:controller.signal});
+                result = await response.json(); }
+            finally { clearTimeout(timer); }
+            if (!response.ok || result.operation_id !== operation.operation_id || result.hash !== operation.payload_hash)
+                throw new Error('Consulta indisponivel ou incompatível. Venda preservada; autentique-se e consulte novamente.');
+            if (result.lookup === 'nao_encontrada') {
+                message.textContent = 'Operacao ainda nao encontrada. O envio anterior pode estar em andamento. Identidade preservada; consulte novamente ou use Status → Sincronizar agora quando permitido.';
+                return;
+            }
+            if (result.lookup !== 'encontrada' || result.actor_id !== scope.actor_id || result.environment_id !== scope.environment_id
+                || result.device_id !== operation.device_id || result.type !== operation.type || !validReceipt(result.receipt, operation))
+                throw new Error('Resultado da consulta invalido. Venda preservada.');
+            await repo.record(operation, result.receipt);
+            if (result.receipt.status === 'confirmada') {
+                confirmedId = result.receipt.record_id;
+                queriedConfirmationId = operation.operation_id;
+            }
+            await refreshCompletion();
+            document.dispatchEvent(new Event('offline-operations-changed'));
+            operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
+        } catch (error) {
+            message.textContent = confirmedId
+                ? `Venda #${confirmedId} confirmada oficialmente. Falha local; reabra a tela. Nao repita a venda.`
+                : 'Resultado da venda ainda desconhecido. ' + error.message + ' Consulte novamente; nao repita a venda.';
+        } finally { recoveringOnline = false; recover.disabled = false; }
+    },
+    async submitOnline(origin, csrf) {
+        if (!scope || !repo || !bridge.eligible || blocked || localCompletion || !navigator.locks)
+            throw new Error('Gravacao protegida indisponivel. Reabra a tela em navegador compativel; montagem preservada.');
+        return navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
+            if (!lock) throw new Error('Outra aba esta enviando. Aguarde e consulte o resultado.');
+            await flush();
+            if (!await checkIdentity() || blocked) throw new Error('Identidade ou montagem mudou. Dados preservados.');
+            const current = await loadDraft(repo, scope);
+            if (!current.draft || current.revision !== revision
+                || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
+                throw new Error('Montagem nao persistida ou atualizada em outra aba. Reabra a tela.');
+            const result = await finalizeDraftOffline(repo, scope, {revision, draft_id:current.draft.draft_id,
+                origem_recebimento:origin, reference_snapshot:window.salesOffline.referenceSnapshot});
+            completed(result.finalization);
+            submitted = null;
+            channel?.postMessage({type:'draft-finalized-offline', scope, revision, operation_id:result.finalization.operation_id});
+            if (result.alreadyFinalized) return null;
+            const operation = await repo.updateAttempt(result.operation, {status:'enviando', attempts:1, transport:'online'});
+            if (!operation) return null;
+            await refreshCompletion();
+            let persisted = false, officialData = null;
+            try {
+                const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
+                let response, data;
+                try { response = await fetch('/api/vendas/online/', {method:'POST', credentials:'same-origin', cache:'no-store',
+                    signal:controller.signal, headers:{'Content-Type':'application/json', 'X-CSRFToken':csrf},
+                    body:JSON.stringify({...commandOf(operation), payload_hash:operation.payload_hash})});
+                    data = await response.json(); }
+                finally { clearTimeout(timer); }
+                if (!validReceipt(data.receipt, operation, response.status)) throw new Error('Resposta do envio indisponivel ou invalida.');
+                await repo.record(operation, data.receipt); persisted = true; officialData = data;
+                await refreshCompletion();
+                document.dispatchEvent(new Event('offline-operations-changed'));
+                operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
+                // A query may already have released this assembly while the POST
+                // response was in flight. Do not clear a newly edited assembly.
+                if (queriedConfirmationId === operation.operation_id) return null;
+                return data.sucesso && data.receipt.status === 'confirmada' ? data : null;
+            } catch (error) {
+                if (persisted) {
+                    message.textContent = officialData.receipt.status === 'confirmada'
+                        ? `Venda #${officialData.receipt.record_id} confirmada oficialmente. Falha ao liberar a montagem local; reabra a tela. Nao repita a venda.`
+                        : 'Conflito oficial preservado. Reabra a tela para revisar a venda.';
+                    return officialData.sucesso ? officialData : null;
+                }
+                if (!persisted) await repo.diagnose(operation, 'Resultado online desconhecido. ' + error.message);
+                await refreshCompletion();
+                if (saleOperationState(await repo.get('operations', operation.operation_id)).recordId) return null;
+                if (!persisted) message.textContent = 'Resultado da venda desconhecido. Nao repita a venda. Use Consultar resultado da venda; reenvio somente por Status → Sincronizar agora quando permitido.';
+                return null;
+            }
+        });
+    },
     async canRecoverOnline() {
         if (!this.ready || !bridge.eligible || blocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset) return false;
         if (!await checkIdentity()) return false;
@@ -298,7 +402,8 @@ try {
             if (result.finalization) completed(result.finalization);
             else if (historicalCompletion) await refreshCompletion();
             if (result.confirmation) {
-                replaceConfirmed = true;
+                replaceConfirmed = result.confirmation.estado === 'concluido';
+                if (!replaceConfirmed) blocked = true;
                 message.textContent = result.confirmation.estado === 'concluido'
                     ? 'Venda online confirmada. Rascunho residual não restaurado.'
                     : 'Rascunho de envio anterior não restaurado. Confira a venda online antes de repetir.';

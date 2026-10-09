@@ -1,4 +1,4 @@
-import {commercialConflict} from '/offline/assets/2-8c/sales-revisions.js';
+import {commercialConflict} from '/offline/assets/2-8d/sales-revisions.js';
 // Opening details remains read-only. Review is an explicit separate navigation.
 export function operationDetails(operation, scope, revisionView = null) {
     if (!operation || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id

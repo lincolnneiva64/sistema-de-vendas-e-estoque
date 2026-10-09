@@ -1,5 +1,5 @@
-import {openDB, Repository} from '/offline/assets/2-8c/core.js';
-import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8c/commercial.js';
+import {openDB, Repository} from '/offline/assets/2-8d/core.js';
+import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8d/commercial.js';
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
@@ -150,7 +150,7 @@ document.addEventListener('sales-completion-released', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
-    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link, #sales-operation-diagnostic')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
+    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link, #sales-operation-diagnostic, #sales-online-recover')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);

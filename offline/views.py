@@ -143,6 +143,51 @@ def synchronize(request):
 @require_GET
 @authorized
 def operation_result(request, operation_id):
+    return _operation_result(request, operation_id)
+
+
+@require_GET
+@never_cache
+def online_sale_result(request, operation_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({"erro": "Autentique-se para consultar a venda."}, status=401)
+    if request.GET.get("type") != "criar_venda":
+        return JsonResponse({"erro": "Consulta exclusiva de vendas."}, status=400)
+    return _operation_result(request, operation_id)
+
+
+@require_POST
+@never_cache
+def online_sale(request):
+    # Same authenticated actor as the ordinary sale; no pilot permission added.
+    if not request.user.is_authenticated:
+        return JsonResponse({"erro": "Autentique-se para gravar a venda."}, status=401)
+    if len(request.body) > 20000:
+        return JsonResponse({"erro": "Operacao muito grande."}, status=413)
+    try:
+        command = validate_command(json.loads(request.body), request.user, environment_id(request))
+        if command["type"] != "criar_venda" or "revisao" in command["payload"]:
+            raise ValidationError("Somente nova venda comum.")
+    except (ValueError, TypeError, ValidationError, OverflowError, UnicodeError):
+        return JsonResponse({"erro": "Comando de venda invalido."}, status=400)
+    receipt, status = process_operation(command, request.user)
+    result = {"receipt": receipt, "sucesso": receipt.get("status") == "confirmada"}
+    if result["sucesso"]:
+        from django.urls import reverse
+        from estoque.models import Venda
+        from estoque.views import _separacao_venda_payload, _produtos_estoque_atualizados_payload
+        sale = Venda.objects.get(pk=receipt["record_id"])
+        result.update(venda_id=sale.pk, visualizar_url=reverse("estoque:venda_detalhe", args=[sale.pk]),
+                      mensagem=f"Venda #{sale.pk} gravada com sucesso.",
+                      separacao=_separacao_venda_payload(sale, request),
+                      produtos_estoque_atualizados=_produtos_estoque_atualizados_payload(
+                          [int(item["produto_id"]) for item in command["payload"]["itens"]]))
+    else:
+        result["mensagem"] = receipt.get("erro", "Venda nao confirmada.")
+    return JsonResponse(result, status=status)
+
+
+def _operation_result(request, operation_id):
     """Read only: absence is not permission to change the original command."""
     expected = request.GET
     if (expected.get("actor_id") != str(request.user.pk)

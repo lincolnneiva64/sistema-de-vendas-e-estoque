@@ -6794,27 +6794,34 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     btnGravarVenda.disabled = true;
     btnGravarVenda.textContent = "Gravando...";
 
+    const envioProtegido = window.salesDraftBridge?.eligible === true;
     try {
-        window.salesDraftUI?.prepareSubmission();
-        const resposta = await fetch(gravarVendaUrl, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": obterCookie("csrftoken"),
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            body: JSON.stringify(dadosVenda),
-        });
+        let retorno;
+        if (envioProtegido) {
+            retorno = await window.salesDraftUI.submitOnline(dadosVenda.origem_recebimento, obterCookie("csrftoken"));
+            if (!retorno) return;
+        } else {
+            window.salesDraftUI?.prepareSubmission();
+            const resposta = await fetch(gravarVendaUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": obterCookie("csrftoken"),
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify(dadosVenda),
+            });
 
-        const retorno = await resposta.json();
+            retorno = await resposta.json();
 
-        const vendaIdValido = /^[1-9]\d*$/.test(String(retorno.venda_id)) && Number.isSafeInteger(Number(retorno.venda_id));
-        if (!resposta.ok || retorno.sucesso !== true || !vendaIdValido) {
-            window.salesDraftUI?.failedSubmission();
-            mostrarErroGravacaoVenda(
-                retorno.mensagem || "Não foi possível gravar a venda."
-            );
-            return;
+            const vendaIdValido = /^[1-9]\d*$/.test(String(retorno.venda_id)) && Number.isSafeInteger(Number(retorno.venda_id));
+            if (!resposta.ok || retorno.sucesso !== true || !vendaIdValido) {
+                window.salesDraftUI?.failedSubmission();
+                mostrarErroGravacaoVenda(
+                    retorno.mensagem || "Não foi possível gravar a venda."
+                );
+                return;
+            }
         }
 
         vendaGravadaId = retorno.venda_id;
@@ -6822,8 +6829,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         vendaSalvaComSucesso = true;
         vendaConfirmadaNestaMontagem = !vendaEdicaoVenda?.id;
         try {
-            window.salesDraftUI?.confirmSubmission(retorno.venda_id);
-            await window.salesDraftUI?.confirmedSuccess();
+            if (!envioProtegido) {
+                window.salesDraftUI?.confirmSubmission(retorno.venda_id);
+                await window.salesDraftUI?.confirmedSuccess();
+            }
         } catch (erroLocal) {
             const aviso = document.querySelector('#sales-draft-status [role="status"]');
             if (aviso) aviso.textContent = 'Venda #' + vendaGravadaId + ' confirmada. Limpeza local não concluída; o rascunho não será restaurado como pendente.';
@@ -6846,12 +6855,14 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
         if (vendaSalvaComSucesso) {
             mostrarToastVenda('Venda #' + vendaGravadaId + ' confirmada. Não repita a gravação; houve falha na atualização local da tela.');
         } else {
-            try { window.salesDraftUI?.failedSubmission(); } catch (_) { /* Keep the safety marker if local storage fails. */ }
+            if (!envioProtegido) {
+                try { window.salesDraftUI?.failedSubmission(); } catch (_) { /* Keep the safety marker if local storage fails. */ }
+            }
             mostrarErroGravacaoVenda(erro?.message || "Falha de comunicação ao gravar a venda.");
         }
     } finally {
         vendaGravacaoEmAndamento = false;
-        if (!vendaSalvaComSucesso) {
+        if (!vendaSalvaComSucesso && !window.salesDraftUI?.finalization) {
             btnGravarVenda.disabled = false;
             btnGravarVenda.textContent = textoBotaoPadrao;
         }
@@ -9160,9 +9171,9 @@ const operador = buscarCampoOperadorVenda();
 
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
-<script type="module" src="/offline/assets/2-8c/app.js"></script>
-<script type="module" src="/offline/assets/2-8c/sales.js"></script>
-<script type="module" src="/offline/assets/2-8c/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/2-8d/app.js"></script>
+<script type="module" src="/offline/assets/2-8d/sales.js"></script>
+<script type="module" src="/offline/assets/2-8d/sales-draft-ui.js"></script>
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }
@@ -9170,7 +9181,7 @@ const operador = buscarCampoOperadorVenda();
     .offline-commercial p { margin:6px 0; }
     .offline-commercial small { display:block; }
 </style>
-<script type="module" src="/offline/assets/2-8c/commercial-ui.js"></script>
+<script type="module" src="/offline/assets/2-8d/commercial-ui.js"></script>
 {% endif %}
 </body>
 </html>

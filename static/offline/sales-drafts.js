@@ -1,4 +1,4 @@
-import {hash, reserveSequence, saleOperationState} from '/offline/assets/2-8c/core.js';
+import {hash, reserveSequence, saleOperationState} from '/offline/assets/2-8d/core.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
