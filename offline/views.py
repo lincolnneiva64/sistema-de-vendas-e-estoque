@@ -285,7 +285,11 @@ def commercial_snapshot(request):
 @require_GET
 @never_cache
 def shell(request):
-    return HttpResponse((settings.BASE_DIR / "static/offline/pilot.html").read_bytes(), content_type="text/html; charset=utf-8")
+    from django.template import engines
+    # Resolve navigation routes without request/context processors or user data
+    # in this shared offline shell.
+    template = engines['django'].from_string((settings.BASE_DIR / "static/offline/pilot.html").read_text(encoding='utf-8'))
+    return HttpResponse(template.render({}), content_type="text/html; charset=utf-8")
 
 
 @require_GET

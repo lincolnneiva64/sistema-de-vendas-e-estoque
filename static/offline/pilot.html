@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb"><title>Piloto offline · Observações</title><link rel="stylesheet" href="/static/offline/pilot.css?v=7"><link rel="stylesheet" href="/static/offline/indicator.css?v=7"></head>
 <body><main id="offline-pilot">
-<nav><a href="/">Voltar ao sistema</a> <a id="offline-login" href="/offline/login/?next=/offline/">Autenticar online</a></nav>
+<nav aria-label="Navegação do piloto"><a id="offline-return-sales" href="{% url 'estoque:vendas' %}" style="display:inline-flex;align-items:center;box-sizing:border-box;min-height:44px;padding:8px 12px;border-radius:6px;background:#1d4ed8;color:white;font-weight:600;text-decoration:none">Voltar para Vendas</a> <a id="offline-return-home" href="{% url 'estoque:home' %}">Painel Central</a> <a id="offline-login" href="/offline/login/?next=/offline/">Autenticar online</a></nav>
 <p id="offline-session" role="status" aria-live="polite">Verificando autenticação online…</p>
 <h1>Observação operacional</h1>
 <p>Registre uma observação em uma tarefa preparada. Este piloto não confirma entregas ou recolhimentos.</p>
