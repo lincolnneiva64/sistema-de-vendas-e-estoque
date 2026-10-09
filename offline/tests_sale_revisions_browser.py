@@ -28,7 +28,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
 
     def seed(self,chrome):
         tab=self.open_sales(chrome);self.select_customer(tab,'Cliente Comercial');self.add_product(tab,'Produto Fracionado')
-        tab.evaluate('await (await import("/offline/assets/2-8e/commercial.js")).atualizarSnapshotComercial(repo,scope);window.normalBefore=await drafts.loadDraft(repo,scope);true')
+        tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);window.normalBefore=await drafts.loadDraft(repo,scope);true')
         normal=tab.evaluate('normalBefore.draft');scope=tab.evaluate('scope');identifier=str(uuid4())
         command={'operation_id':identifier,'aggregate_id':identifier,**scope,'type':'criar_venda','schema_version':1,
                  'created_at':timezone.now().isoformat(),'sequence':1,
@@ -54,7 +54,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
         tab.call('Page.navigate',{'url':self.live_server_url+'/offline/revisao/?operation_id='+(identifier or self.command['operation_id'])})
         tab.wait('window.salesRevisionUI?.ready')
         self.assertTrue(tab.evaluate('!!salesRevisionUI.record'),tab.evaluate('document.getElementById("revision-message").textContent'))
-        tab.evaluate('window.core=await import("/offline/assets/2-8e/core.js");window.revisions=await import("/offline/assets/2-8e/sales-revisions.js");window.drafts=await import("/offline/assets/2-8e/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.app=await import("/offline/assets/2-8e/app.js");await app.initialized;window.original=await repo.get("operations",'+json.dumps(identifier or self.command['operation_id'])+');true')
+        tab.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.drafts=await import("/offline/assets/2-8f/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.app=await import("/offline/assets/2-8f/app.js");await app.initialized;window.original=await repo.get("operations",'+json.dumps(identifier or self.command['operation_id'])+');true')
         return tab
 
     def quantity(self,tab,value):
@@ -76,7 +76,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
             chrome=Chrome(sync.CHROME,profile).start()
             try:
                 normal=self.seed(chrome)
-                normal.evaluate('const commercial=await import("/offline/assets/2-8e/commercial.js");const snapshot=await commercial.carregarSnapshotComercial(repo,scope);snapshot.produtos[0].preco_venda="99.00";snapshot.produtos[0].fator_conversao="99.00";snapshot.clientes[0].prazo_padrao_dias=99;await repo.put("snapshots",snapshot);true')
+                normal.evaluate('const commercial=await import("/offline/assets/2-8f/commercial.js");const snapshot=await commercial.carregarSnapshotComercial(repo,scope);snapshot.produtos[0].preco_venda="99.00";snapshot.produtos[0].fator_conversao="99.00";snapshot.clientes[0].prazo_padrao_dias=99;await repo.put("snapshots",snapshot);true')
                 tab=self.revision_tab(chrome)
                 self.assertEqual(tab.evaluate('salesRevisionUI.record.payload'),self.command['payload'])
                 self.assertGreaterEqual(tab.evaluate('requests.filter(r=>r.url.includes("/api/offline/operations/")).length'),1)
@@ -116,7 +116,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
                 old_revision=second.evaluate('salesRevisionUI.record.revision');self.quantity(first,'2')
                 second.wait('salesRevisionUI.blocked')
                 self.assertTrue(second.evaluate('try{await revisions.saveRevision(repo,scope,original.operation_id,original.payload,'+str(old_revision)+');false}catch(e){true}'))
-                second.call('Page.reload');second.wait('window.salesRevisionUI?.ready && !salesRevisionUI.blocked');second.evaluate('window.core=await import("/offline/assets/2-8e/core.js");window.revisions=await import("/offline/assets/2-8e/sales-revisions.js");window.drafts=await import("/offline/assets/2-8e/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.original=await repo.get("operations",'+json.dumps(self.command['operation_id'])+');true')
+                second.call('Page.reload');second.wait('window.salesRevisionUI?.ready && !salesRevisionUI.blocked');second.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.drafts=await import("/offline/assets/2-8f/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.original=await repo.get("operations",'+json.dumps(self.command['operation_id'])+');true')
                 for tab in (first,second):tab.evaluate('window.finalResult=revisions.finalizeRevision(repo,scope,original.operation_id,salesRevisionUI.record.revision);true')
                 a=first.evaluate('await finalResult');b=second.evaluate('await finalResult')
                 self.assertEqual(a['replacement_operation_id'],b['replacement_operation_id'])
@@ -130,7 +130,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
             chrome=Chrome(sync.CHROME,profile).start()
             try:
                 tab=self.seed(chrome)
-                tab.evaluate('window.revisions=await import("/offline/assets/2-8e/sales-revisions.js");window.baseFetch=fetch;window.lookups=0;window.fetch=(u,o)=>{if(String(u).includes("/api/offline/operations/"))lookups++;return baseFetch(u,o)};true')
+                tab.evaluate('window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.baseFetch=fetch;window.lookups=0;window.fetch=(u,o)=>{if(String(u).includes("/api/offline/operations/"))lookups++;return baseFetch(u,o)};true')
                 for status in ('resultado_desconhecido','pendente','erro','confirmada'):
                     self.assertTrue(tab.evaluate('try{await revisions.beginRevision(repo,scope,{...original,status:'+json.dumps(status)+'});false}catch(e){true}'))
                 self.assertTrue(tab.evaluate('try{await revisions.beginRevision(repo,scope,{...original,diagnostic_code:"uuid_comando_divergente"});false}catch(e){true}'))
@@ -193,7 +193,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
             chrome=Chrome(sync.CHROME,profile).start()
             try:
                 tab=self.seed(chrome)
-                tab.evaluate('window.revisions=await import("/offline/assets/2-8e/sales-revisions.js");window.baseFetch=fetch;window.lookup={lookup:"encontrada",operation_id:original.operation_id,hash:original.payload_hash,actor_id:scope.actor_id,environment_id:scope.environment_id,device_id:scope.device_id,type:"criar_venda",receipt:original.server_result,revisions:[]};window.confirmed={...lookup,receipt:{...lookup.receipt,status:"confirmada",record_id:123}};window.fetch=async()=>new Response(JSON.stringify(confirmed),{status:200});true')
+                tab.evaluate('window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.baseFetch=fetch;window.lookup={lookup:"encontrada",operation_id:original.operation_id,hash:original.payload_hash,actor_id:scope.actor_id,environment_id:scope.environment_id,device_id:scope.device_id,type:"criar_venda",receipt:original.server_result,revisions:[]};window.confirmed={...lookup,receipt:{...lookup.receipt,status:"confirmada",record_id:123}};window.fetch=async()=>new Response(JSON.stringify(confirmed),{status:200});true')
                 self.assertTrue(tab.evaluate('try{await revisions.beginRevision(repo,scope,original);false}catch(e){e.recordId===123}'))
                 tab.evaluate('window.fetch=async()=>new Response(JSON.stringify(lookup),{status:200});true')
                 self.assertTrue(tab.evaluate('try{await revisions.beginRevision(repo,scope,original);false}catch(e){e.recordId===123}'))
@@ -246,7 +246,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
             chrome=Chrome(sync.CHROME,profile).start()
             try:
                 seed=self.seed(chrome)
-                seed.evaluate('const commercial=await import("/offline/assets/2-8e/commercial.js");const snapshot=await commercial.carregarSnapshotComercial(repo,scope);snapshot.produtos=[];snapshot.contagens.produtos=0;await repo.put("snapshots",snapshot);true')
+                seed.evaluate('const commercial=await import("/offline/assets/2-8f/commercial.js");const snapshot=await commercial.carregarSnapshotComercial(repo,scope);snapshot.produtos=[];snapshot.contagens.produtos=0;await repo.put("snapshots",snapshot);true')
                 tab=self.revision_tab(chrome)
                 self.assertIn('Produto ausente',tab.evaluate('document.getElementById("revision-items").textContent'))
                 self.assertEqual(tab.evaluate('salesRevisionUI.record.payload'),self.command['payload'])

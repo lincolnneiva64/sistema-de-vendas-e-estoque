@@ -35,7 +35,7 @@ class SalesConnectivityBrowserTests(StaticLiveServerTestCase):
                 tab = self.open_sales(chrome)
                 self.select_customer(tab, 'Cliente Comercial')
                 self.add_product(tab, 'Produto Fracionado')
-                tab.evaluate('await (await import("/offline/assets/2-8e/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+                tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
                 assembly = tab.evaluate('salesDraftBridge.capture()')
                 # Native event and transient navigator flag are hints, never authority.
                 tab.evaluate("Object.defineProperty(navigator,'onLine',{value:false,configurable:true});window.dispatchEvent(new Event('offline'));await app.probe();true")
@@ -122,7 +122,7 @@ class SalesConnectivityBrowserTests(StaticLiveServerTestCase):
                 tab = self.open_sales(chrome)
                 self.select_customer(tab, 'Cliente Comercial')
                 self.add_product(tab, 'Produto Fracionado')
-                tab.evaluate('await (await import("/offline/assets/2-8e/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+                tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
                 self.confirm_offline(tab)
                 tab.evaluate('await salesDraftUI.finalizeOffline();true')
                 tab.wait('!!salesDraftUI.finalization')

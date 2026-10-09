@@ -150,7 +150,7 @@ class SaleReleaseBrowserTests(StaticLiveServerTestCase):
                 tab = self.revision_tab(chrome); self.quantity(tab,'1'); child = self.conclude(tab)
                 normal.call('Page.close')
                 self.stable(tab); self.manual(tab); self.assert_official()
-                tab.evaluate('window.revisions=await import("/offline/assets/2-8e/sales-revisions.js");await revisions.lookupOriginal(repo,original,scope);window.good=await repo.get("operations",salesRevisionUI.record.replacement_operation_id);window.observationKey=revisions.resolutionObservationKey(scope,original.operation_id);window.observed=await repo.get("metadata",observationKey);true')
+                tab.evaluate('window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");await revisions.lookupOriginal(repo,original,scope);window.good=await repo.get("operations",salesRevisionUI.record.replacement_operation_id);window.observationKey=revisions.resolutionObservationKey(scope,original.operation_id);window.observed=await repo.get("metadata",observationKey);true')
                 mutations = [
                     'bad.server_result.record_id=0',
                     'bad.server_result.hash="0".repeat(64)',

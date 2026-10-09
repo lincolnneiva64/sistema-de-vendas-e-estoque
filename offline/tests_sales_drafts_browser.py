@@ -66,7 +66,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.wait('document.querySelector("#sales-draft-status [role=status]").textContent.includes("salvo")')
 
     def repository(self, tab):
-        tab.evaluate("window.core=await import('/offline/assets/2-8e/core.js');window.drafts=await import('/offline/assets/2-8e/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
+        tab.evaluate("window.core=await import('/offline/assets/2-8f/core.js');window.drafts=await import('/offline/assets/2-8f/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
 
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]
@@ -197,7 +197,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 self.select_customer(tab, 'Cliente Comercial')
                 self.add_product(tab, 'Produto Fracionado')
                 self.repository(tab)
-                tab.evaluate('window.previous=(await drafts.loadDraft(repo,scope));window.deviceBefore=await repo.get("metadata","device");window.savedKey=drafts.draftKey(scope);window.transactionBefore=core.Repository.prototype.transaction;core.Repository.prototype.transaction=function(stores,write,work){if(write && stores.length===1 && stores[0]==="metadata")return Promise.reject(new DOMException("Quota simulada","QuotaExceededError"));return transactionBefore.call(this,stores,write,work)};document.querySelector("#tabelaProdutos tr").click();quantidade.value="1";document.getElementById("btnAdicionarItemVenda").click();await salesDraftUI.flush();true')
+                tab.evaluate('window.previous=(await drafts.loadDraft(repo,scope));window.deviceBefore=await repo.get("metadata","device");window.savedKey=drafts.draftKey(scope);window.transactionBefore=core.Repository.prototype.transaction;core.Repository.prototype.transaction=function(stores,write,work){if(write && stores.includes("metadata"))return Promise.reject(new DOMException("Quota simulada","QuotaExceededError"));return transactionBefore.call(this,stores,write,work)};document.querySelector("#tabelaProdutos tr").click();quantidade.value="1";document.getElementById("btnAdicionarItemVenda").click();await salesDraftUI.flush();true')
                 self.assertIn('Quota simulada', tab.evaluate('document.getElementById("sales-draft-status").textContent'))
                 self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft.itens[0].quantidade'), '2')
                 # F5 restores the last valid committed assembly after the failed write.

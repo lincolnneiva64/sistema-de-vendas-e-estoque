@@ -1,8 +1,8 @@
-import '/offline/assets/2-8e/sales.js';
-import {operationDetails} from '/offline/assets/2-8e/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8e/sales-revisions.js';
-import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8e/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8e/sales-drafts.js';
+import '/offline/assets/2-8f/sales.js';
+import {operationDetails} from '/offline/assets/2-8f/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8f/sales-revisions.js';
+import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales} from '/offline/assets/2-8f/sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -25,6 +25,11 @@ const recover = document.createElement('button');
 recover.type = 'button'; recover.id = 'sales-online-recover'; recover.hidden = true;
 recover.textContent = 'Consultar resultado da venda'; box.append(recover);
 recover.addEventListener('click', () => { void window.salesDraftUI.recoverOnline(); });
+const nextSale = document.createElement('button');
+nextSale.type = 'button'; nextSale.id = 'sales-new-offline-sale'; nextSale.textContent = 'Nova venda'; nextSale.hidden = true;
+const queueCount = document.createElement('span'); queueCount.id = 'sales-pending-count';
+box.append(nextSale,queueCount);
+nextSale.addEventListener('click', () => { void window.salesDraftUI.startNextSale(); });
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
 let repo, scope, revision = 0, saved = '', blocked = false, suppress = true, ignoreReset = false;
@@ -37,6 +42,8 @@ let completionGeneration = 0;
 let recoveringOnline = false;
 let queriedConfirmationId = null;
 let historicalCompletion = null;
+let queueBlocked = false, startingNext = false;
+const ambiguityControls = new Map();
 const completionControls = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
 const observer = new MutationObserver(() => { if (!ignoreReset) schedule(0); });
@@ -44,11 +51,12 @@ const meaningful = assembly => assembly.cliente || assembly.operador || assembly
 function announce() { channel?.postMessage({scope, revision}); }
 function showError(error) { message.textContent = error.message || 'Não foi possível salvar o rascunho local. Último rascunho preservado.'; }
 function offlineActions() {
-    if (!window.salesOffline.active && !localCompletion) return;
+    if (!nextSale.hidden) nextSale.disabled = startingNext || !!finalizing;
+    if (!window.salesOffline.active && !localCompletion && !queueBlocked) return;
     const button = document.getElementById('btnGravarVenda');
     const label = localCompletion ? completionView?.recordId ? 'Venda sincronizada'
         : completionView?.status === 'conflito' ? 'Venda offline em revisão' : 'Venda offline pendente' : 'Salvar venda offline';
-    const disabled = !!localCompletion || !!finalizing || blocked || !scope || !bridge.eligible;
+    const disabled = !!localCompletion || !!finalizing || blocked || queueBlocked || !scope || !bridge.eligible;
     if (button.textContent !== label) button.textContent = label;
     if (button.disabled !== disabled) button.disabled = disabled;
     const confirm = document.getElementById('btnConfirmarFechamentoVenda');
@@ -71,7 +79,31 @@ function completed(marker) {
 async function refreshCompletion() {
     const generation = ++completionGeneration;
     const marker = localCompletion || historicalCompletion;
-    if (!marker || !repo || !scope || !await checkIdentity()) return;
+    if (!repo || !scope || !await checkIdentity()) return;
+    const operations = await repo.all('operations');
+    if (generation !== completionGeneration) return;
+    const sales = operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
+    queueCount.textContent = `${sales.filter(op => op.status !== 'confirmada').length} venda(s) aguardando sincronização ou resolução.`;
+    queueBlocked = ambiguousSales(operations,scope).length > 0;
+    nextSale.hidden = true;
+    if (!localCompletion) {
+        if (queueBlocked) {
+            for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+                if (!ambiguityControls.has(field)) ambiguityControls.set(field,field.disabled);
+                field.disabled = true;
+            }
+            message.textContent = 'Há venda com resultado desconhecido ou envio em andamento. Montagem preservada. Abra Status para consultar ou sincronizar manualmente quando permitido.';
+            message.setAttribute('role','alert');
+        } else if (ambiguityControls.size) {
+            for (const [field,disabled] of ambiguityControls) field.disabled = disabled;
+            ambiguityControls.clear();
+            message.textContent = 'Resultado anterior resolvido. Montagem preservada; você pode continuar.';
+            message.setAttribute('role','status');
+        }
+        offlineActions();
+        if (queueBlocked) return;
+    }
+    if (!marker) return;
     const operation = await repo.get('operations', marker.operation_id);
     if (generation !== completionGeneration) return;
     if (operation && (operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
@@ -100,12 +132,20 @@ async function refreshCompletion() {
         message.textContent += ` Existe uma venda ${transport} pendente de resolução. Antes de continuar, revise e resolva essa venda. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. Consulte o resultado pelo botão abaixo. Para reenviar manualmente quando permitido, abra Status → Sincronizar agora.`;
         message.setAttribute('role', 'alert');
     } else message.setAttribute('role', 'status');
+    const canStartNext = localCompletion?.conclusion_mode === 'offline' && operation?.transport === 'offline'
+        && operation.status === 'pendente' && operation.attempts === 0 && !operation.server_result && !queueBlocked;
+    if (canStartNext) {
+        message.textContent = `Venda salva neste dispositivo. Aguardando sincronização. Sem número oficial. Ainda não existe oficialmente no servidor. Identificação local: ${marker.operation_id}.`;
+        message.setAttribute('role','status');
+        nextSale.hidden = false; nextSale.disabled = startingNext || !!finalizing;
+        recover.hidden = true;
+    }
     officialLink.hidden = !completionView.recordId;
     if (completionView.recordId) {
         officialLink.href = completionView.url;
         officialLink.textContent = `Ver venda #${completionView.recordId}`;
     } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
-    if (localCompletion && completionView.recordId) {
+    if (localCompletion && completionView.recordId && !queueBlocked) {
         const result = await releaseConfirmedDraft(repo, scope, marker.operation_id);
         if (generation !== completionGeneration) return;
         historicalCompletion = marker; localCompletion = null;
@@ -124,14 +164,14 @@ async function refreshCompletion() {
 }
 function schedule(delay = 250) {
     offlineActions();
-    if (suppress || ignoreReset || blocked || !scope || !bridge.eligible) return;
+    if (suppress || ignoreReset || blocked || queueBlocked || !scope || !bridge.eligible) return;
     clearTimeout(timer);
     timer = setTimeout(() => { void flush(); }, delay);
 }
 function flush() {
     offlineActions();
     clearTimeout(timer);
-    if (suppress || ignoreReset || blocked || !scope || !bridge.eligible) return pending;
+    if (suppress || ignoreReset || blocked || queueBlocked || !scope || !bridge.eligible) return pending;
     const assembly = bridge.capture(), fingerprint = JSON.stringify(assembly);
     if (fingerprint === saved || (!saved && !meaningful(assembly))) return pending;
     message.textContent = 'Salvando rascunho local…';
@@ -181,6 +221,31 @@ window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
     get finalization() { return localCompletion; },
     refreshCompletion,
+    async startNextSale() {
+        if (startingNext || finalizing || !localCompletion || !await checkIdentity()) return;
+        startingNext = true; nextSale.disabled = true;
+        const marker = localCompletion;
+        try {
+            await pending;
+            const result = await startNextOfflineDraft(repo,scope,marker.operation_id,revision);
+            completionGeneration++;
+            historicalCompletion = marker; localCompletion = null;
+            submitted = null;
+            window.salesOffline.completed = false;
+            revision = result.revision; blocked = false; ignoreReset = false; saved = '';
+            resetVisual();
+            for (const [field,disabled] of completionControls) field.disabled = disabled;
+            completionControls.clear(); discard.disabled = true; nextSale.hidden = true;
+            document.getElementById('btnGravarVenda').disabled = false;
+            document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
+            document.getElementById('btnGravarVenda').textContent = 'Gravar Venda';
+            window.atualizarSelectsBonitosVenda?.();
+            channel?.postMessage({type:'draft-next-offline',scope,revision,operation_id:marker.operation_id});
+            await refreshCompletion();
+            document.dispatchEvent(new Event('sales-completion-released'));
+        } catch (error) { showError(error); }
+        finally { startingNext = false; offlineActions(); }
+    },
     async recoverOnline() {
         if (recoveringOnline || !localCompletion || !await checkIdentity()) return;
         recoveringOnline = true;
@@ -222,7 +287,7 @@ window.salesDraftUI = {
         } finally { recoveringOnline = false; recover.disabled = false; }
     },
     async submitOnline(origin, csrf) {
-        if (!scope || !repo || !bridge.eligible || blocked || localCompletion || !navigator.locks)
+        if (!scope || !repo || !bridge.eligible || blocked || queueBlocked || localCompletion || !navigator.locks)
             throw new Error('Gravacao protegida indisponivel. Reabra a tela em navegador compativel; montagem preservada.');
         return navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
             if (!lock) throw new Error('Outra aba esta enviando. Aguarde e consulte o resultado.');
@@ -233,7 +298,7 @@ window.salesDraftUI = {
                 || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
                 throw new Error('Montagem nao persistida ou atualizada em outra aba. Reabra a tela.');
             const result = await finalizeDraftOffline(repo, scope, {revision, draft_id:current.draft.draft_id,
-                origem_recebimento:origin, reference_snapshot:window.salesOffline.referenceSnapshot});
+                origem_recebimento:origin, reference_snapshot:window.salesOffline.referenceSnapshot, transport:'online'});
             completed(result.finalization);
             submitted = null;
             channel?.postMessage({type:'draft-finalized-offline', scope, revision, operation_id:result.finalization.operation_id});
@@ -275,7 +340,7 @@ window.salesDraftUI = {
         });
     },
     async canRecoverOnline() {
-        if (!this.ready || !bridge.eligible || blocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset) return false;
+        if (!this.ready || !bridge.eligible || blocked || queueBlocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset) return false;
         if (!await checkIdentity()) return false;
         await flush();
         const current = await loadDraft(repo, scope);
@@ -298,7 +363,7 @@ window.salesDraftUI = {
             try {
                 await flush();
                 await checkIdentity();
-                if (blocked) throw new Error('Montagem bloqueada. Reabra a tela antes de concluir.');
+                if (blocked || queueBlocked) throw new Error('Montagem bloqueada. Consulte o resultado anterior antes de concluir.');
                 const current = await loadDraft(repo, scope);
                 if (current.finalization) { completed(current.finalization); return {finalization:current.finalization, alreadyFinalized:true}; }
                 if (current.revision !== revision || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
@@ -401,7 +466,11 @@ try {
         if (scope) {
             const result = await loadDraft(repo, scope);
             revision = result.revision;
-            historicalCompletion = await lastConfirmedDraft(repo, scope);
+            const previousLocal = await lastLocalDraft(repo, scope), previousOfficial = await lastConfirmedDraft(repo, scope);
+            const previousLocalOperation = previousLocal && await repo.get('operations',previousLocal.operation_id);
+            const previousOfficialOperation = previousOfficial && await repo.get('operations',previousOfficial.operation_id);
+            historicalCompletion = previousLocal && (!previousOfficial || previousLocalOperation?.sequence > previousOfficialOperation?.sequence)
+                ? previousLocal : previousOfficial;
             if (result.finalization) completed(result.finalization);
             else if (historicalCompletion) await refreshCompletion();
             if (result.confirmation) {
@@ -422,6 +491,7 @@ try {
 observer.observe(document.getElementById('tabelaProdutos'), {subtree:true, childList:true, attributes:true, characterData:true});
 suppress = false;
 window.salesDraftUI.ready = true;
+await refreshCompletion().catch(showError);
 offlineActions();
 window.salesDraftResolve?.();
 document.addEventListener('sales-offline-active', offlineActions);
@@ -457,6 +527,20 @@ if (channel) channel.onmessage = async event => {
     const update = event.data;
     if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.type === 'draft-confirmed' && localCompletion?.operation_id === update.operation_id) {
         void refreshCompletion().catch(showError); return;
+    }
+    if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.type === 'draft-next-offline' && localCompletion?.operation_id === update.operation_id) {
+        // Adopt only an empty marker. A new draft belongs to whichever tab saved it.
+        const current = await loadDraft(repo,scope);
+        if (!current.draft && !current.finalization && current.revision === update.revision) {
+            completionGeneration++; historicalCompletion = localCompletion; localCompletion = null;
+            window.salesOffline.completed = false; revision = current.revision;
+            blocked = false; ignoreReset = false; saved = ''; resetVisual();
+            for (const [field,disabled] of completionControls) field.disabled = disabled;
+            completionControls.clear(); discard.disabled = true;
+            document.getElementById('btnGravarVenda').disabled = false;
+            document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
+            await refreshCompletion(); offlineActions(); return;
+        }
     }
     if (scope && JSON.stringify(update?.scope) === JSON.stringify(scope) && update.revision > revision) {
         const current = await loadDraft(repo, scope);

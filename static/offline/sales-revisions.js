@@ -1,4 +1,4 @@
-import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8e/core.js';
+import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8f/core.js';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export function commercialConflict(operation) {
