@@ -1,5 +1,6 @@
 // Stage 2.1: catalog only. No sale commands, queue entries, or stock mutations.
 export const COMMERCIAL_SCHEMA = 1;
+import {validReceipt} from '/offline/assets/2-8f/core.js';
 export const COMMERCIAL_TYPE = 'comercial_vendas';
 const clientFields = ['id', 'nome', 'ativo', 'apelido_nome_conhecido', 'telefone', 'prazo_padrao_dias'];
 const productFields = ['id', 'nome', 'codigo', 'ativo', 'unidade_base', 'unidade_venda_1', 'unidade_venda_2',
@@ -68,13 +69,13 @@ function validated(data, scope) {
     };
 }
 
-export async function salvarSnapshotComercial(repo, scope, data) {
+export async function salvarSnapshotComercial(repo, scope, data, incorporated = []) {
     const safe = validated(data, scope);
     const device = await deviceOf(repo);
     if (safe.device_id !== device.id) throw new Error('Snapshot de outro dispositivo.');
     const next = {...safe, key: chaveSnapshotComercial(scope), prepared_at: new Date().toISOString()};
     // One commit replaces the complete catalog; abort/quota errors leave the old one intact.
-    return repo.transaction(['snapshots'], true, (tx, done) => {
+    return repo.transaction(['snapshots','metadata'], true, (tx, done) => {
         const store = tx.objectStore('snapshots');
         store.get(next.key).onsuccess = event => {
             const previous = event.target.result;
@@ -85,7 +86,10 @@ export async function salvarSnapshotComercial(repo, scope, data) {
             if (previousValid && Date.parse(previous.gerado_em) > Date.parse(next.gerado_em)) {
                 done(previous); return;
             }
-            store.put(next); done(next);
+            store.put(next);
+            tx.objectStore('metadata').put({key:'sales-stock-baseline:' + next.snapshot_id,
+                snapshot_id:next.snapshot_id,incorporated:[...incorporated]});
+            done(next);
         };
     });
 }
@@ -110,6 +114,10 @@ export async function atualizarSnapshotComercial(repo, scope) {
     chaveSnapshotComercial(scope);
     if (!navigator.onLine) throw new Error('Conecte-se para atualizar. Dados locais preservados.');
     const device = await deviceOf(repo);
+    // Only receipts known BEFORE the stock query are guaranteed incorporated.
+    const incorporated = (await repo.all('operations')).filter(op => op.type === 'criar_venda'
+        && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id
+        && op.status === 'confirmada' && validReceipt(op.server_result,op)).map(op => op.operation_id);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
@@ -117,6 +125,6 @@ export async function atualizarSnapshotComercial(repo, scope) {
             {credentials: 'same-origin', cache: 'no-store', signal: controller.signal});
         if (!response.ok || response.redirected || !response.headers.get('Content-Type')?.includes('application/json'))
             throw new Error('Não foi possível atualizar o catálogo. Confira a conexão e a permissão; dados locais preservados.');
-        return await salvarSnapshotComercial(repo, scope, await response.json());
+        return await salvarSnapshotComercial(repo, scope, await response.json(),incorporated);
     } finally { clearTimeout(timer); }
 }

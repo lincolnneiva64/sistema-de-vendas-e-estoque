@@ -3403,6 +3403,8 @@ function scrollLinhaDentroDaLista(linha, behavior = "smooth") {
   const tipoVenda = document.getElementById("tipoVenda");
 const pagamentoPadraoVenda = "A prazo";
 const dataVenda = document.getElementById("dataVenda");
+let dataVendaEscolhidaExplicitamente = false;
+for (const event of ['input','change']) dataVenda.addEventListener(event, () => { dataVendaEscolhidaExplicitamente = true; });
 const operadorVenda = document.getElementById("operadorVenda");
 const produtoBusca = document.getElementById("produtoBusca");
 const sugestoesBox = document.getElementById("produtoSugestoes");
@@ -6224,7 +6226,15 @@ function mensagemEstoqueInsuficienteVenda(produtoOption, quantidadeSolicitada, u
 }
 
 function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
-    if (window.salesOffline.active) return true;
+    if (window.salesOffline.active) {
+        const opt = obterProdutoOptionVenda((produto.value || produtoBusca.value || '').trim());
+        const q = normalizarNumeroVenda(quantidade.value);
+        if (!opt || !Number.isFinite(Number(q)) || Number(q) <= 0 || !unidade.value) return true;
+        return window.salesDraftUI?.validateStockInclusion({produto_id:opt.dataset.produtoId,produto_nome:opt.value,
+            quantidade:q,unidade:unidade.value,unidade1:opt.dataset.unidade1 || opt.dataset.unidade || '',
+            unidade2:opt.dataset.unidade2 || '',fator:normalizarNumeroVenda(opt.dataset.fator) || '0',
+            fracionado:opt.dataset.fracionado === 'true'}) === true;
+    }
     const produtoNome = (produto.value || produtoBusca.value || "").trim();
     const produtoOption = obterProdutoOptionVenda(produtoNome);
     const qtdNumero = parseFloat(normalizarNumeroVenda(quantidade.value));
@@ -8282,6 +8292,12 @@ atualizarTotalGeral();
 
 // A narrow bridge reuses the existing renderer without persisting HTML or finance.
 window.salesDraftBridge = {
+    ensureNewDate() {
+        if (dataVendaEscolhidaExplicitamente || dataVenda.value === dataLocalHojeInput()) return;
+        const vencimentoAutomatico = vencimentoVenda.value === calcularVencimentoCliente();
+        dataVenda.value = dataLocalHojeInput();
+        if (tipoVenda.value === 'A prazo' && vencimentoAutomatico) vencimentoVenda.value = calcularVencimentoCliente();
+    },
     eligible: !vendaEdicaoVenda?.id && !pedidoImportadoVenda?.id && !clienteInicialVenda?.id
         && !['editar', 'pedido_id', 'cliente_id'].some(key => new URL(location.href).searchParams.has(key)),
     capture() {
@@ -8356,7 +8372,7 @@ window.salesDraftBridge = {
         }
         window.atualizarSelectsBonitosVenda?.();
     },
-    clear() { limparItensVenda(); limparCabecalhoVenda(true); atualizarTotalGeral(); },
+    clear() { limparItensVenda(); limparCabecalhoVenda(true); dataVendaEscolhidaExplicitamente = false; atualizarTotalGeral(); },
     confirmDiscard() { return confirmarAcaoVenda('Descartar o rascunho local e limpar a montagem?'); },
     error(message) { mostrarErroGravacaoVenda(message); },
 };
@@ -9005,7 +9021,7 @@ const operador = buscarCampoOperadorVenda();
         }
 
         setTimeout(function () {
-            if (campoOperador) {
+            if (campoOperador && !campoOperador.disabled) {
                 campoOperador.focus();
                 if (typeof campoOperador.click === 'function') {
                     campoOperador.click();
@@ -9172,8 +9188,8 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="/offline/assets/2-8f/app.js"></script>
-<script type="module" src="/offline/assets/2-8f/sales.js"></script>
-<script type="module" src="/offline/assets/2-8f/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/2-8f-fix/sales.js"></script>
+<script type="module" src="/offline/assets/2-8f-fix/sales-draft-ui.js"></script>
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }
@@ -9181,7 +9197,7 @@ const operador = buscarCampoOperadorVenda();
     .offline-commercial p { margin:6px 0; }
     .offline-commercial small { display:block; }
 </style>
-<script type="module" src="/offline/assets/2-8f/commercial-ui.js"></script>
+<script type="module" src="/offline/assets/2-8f-fix/commercial-ui.js"></script>
 {% endif %}
 </body>
 </html>

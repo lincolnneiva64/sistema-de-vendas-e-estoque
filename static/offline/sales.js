@@ -1,5 +1,5 @@
 import {openDB, Repository} from '/offline/assets/2-8f/core.js';
-import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8f/commercial.js';
+import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8f-fix/commercial.js';
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
@@ -65,6 +65,7 @@ state.activate = async () => {
             banner.textContent = 'Dados de vendas não preparados neste dispositivo. Conecte-se e use Status → Preparar dados de vendas. Rascunho válido já salvo pode ser concluído localmente; o servidor revalidará os dados no envio futuro.';
         }
         if (mountedDraft && scope) await window.salesDraftUI.restoreReference(mountedDraft);
+        await window.salesDraftUI?.refreshCompletion();
         window.atualizarSelectsBonitosVenda?.();
         document.dispatchEvent(new Event('sales-offline-active'));
     } finally { state.activating = false; }
@@ -150,7 +151,9 @@ document.addEventListener('sales-completion-released', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
-    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-official-sale-link, #sales-operation-diagnostic, #sales-online-recover, #sales-new-offline-sale')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
+    // Read-only navigation and closing a warning do not release the assembly.
+    if (event.target.closest('#btnConsultarVendas, #btnFilaDepositoVendaGravada, #atalhosVenda a[href], #modal-operador-obrigatorio')) return;
+    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-draft-status, #btnConsultarVendas, #btnAtalhosVenda, #atalhosVenda, #modal-operador-obrigatorio')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);

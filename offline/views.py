@@ -24,7 +24,7 @@ def versioned_asset(request, filename):
     allowed = {"app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
-               "sales-revisions.js", "sales-revision-ui.js"}
+               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js"}
     if filename not in allowed:
         return HttpResponse(status=404)
     return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),

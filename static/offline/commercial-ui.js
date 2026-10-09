@@ -1,5 +1,5 @@
 import {openDB, Repository} from '/offline/assets/2-8f/core.js';
-import {carregarSnapshotComercial, atualizarSnapshotComercial} from '/offline/assets/2-8f/commercial.js';
+import {carregarSnapshotComercial, atualizarSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
 
 const panel = document.querySelector('#offline-global .offline-panel');
 const indicator = document.getElementById('offline-global');
@@ -7,7 +7,7 @@ if (panel && indicator.dataset.actor) {
     const scope = {actor_id: indicator.dataset.actor, environment_id: indicator.dataset.environment};
     const box = document.createElement('div');
     box.className = 'offline-commercial';
-    box.innerHTML = '<button type="button">Preparar dados de vendas</button><p role="status" aria-live="polite"></p><small>Referência local para montagem. Conclusão offline ainda não disponível.</small>';
+    box.innerHTML = '<button type="button">Preparar dados de vendas</button><p role="status" aria-live="polite"></p><small>Catálogo local de referência. Vendas offline são salvas neste dispositivo e revalidadas na sincronização manual.</small>';
     panel.append(box);
     const button = box.querySelector('button'), status = box.querySelector('[role="status"]');
     let repo, busy = false;

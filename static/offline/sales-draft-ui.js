@@ -1,8 +1,9 @@
-import '/offline/assets/2-8f/sales.js';
+import '/offline/assets/2-8f-fix/sales.js';
 import {operationDetails} from '/offline/assets/2-8f/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8f/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales} from '/offline/assets/2-8f/sales-drafts.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales} from '/offline/assets/2-8f-fix/sales-drafts.js';
+import {readStock,validateStock} from '/offline/assets/2-8f-fix/sales-stock.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -28,7 +29,8 @@ recover.addEventListener('click', () => { void window.salesDraftUI.recoverOnline
 const nextSale = document.createElement('button');
 nextSale.type = 'button'; nextSale.id = 'sales-new-offline-sale'; nextSale.textContent = 'Nova venda'; nextSale.hidden = true;
 const queueCount = document.createElement('span'); queueCount.id = 'sales-pending-count';
-box.append(nextSale,queueCount);
+const dateNote = document.createElement('span'); dateNote.id = 'sales-draft-date-note'; dateNote.hidden = true;
+box.append(nextSale,queueCount,dateNote);
 nextSale.addEventListener('click', () => { void window.salesDraftUI.startNextSale(); });
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
@@ -43,6 +45,10 @@ let recoveringOnline = false;
 let queriedConfirmationId = null;
 let historicalCompletion = null;
 let queueBlocked = false, startingNext = false;
+let stockView = null;
+const navigation = '#btnConsultarVendas, #btnAtalhosVenda, #atalhosVenda, #sales-draft-status, #modal-operador-obrigatorio';
+const editingFields = () => [...document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')]
+    .filter(field => !field.closest(navigation));
 const ambiguityControls = new Map();
 const completionControls = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
@@ -67,7 +73,7 @@ function completed(marker) {
     window.salesOffline.completed = true;
     blocked = true; ignoreReset = true; clearTimeout(timer);
     revision = marker.revision;
-    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+    for (const field of editingFields()) {
         if (!completionControls.has(field)) completionControls.set(field, field.disabled);
         field.disabled = true;
     }
@@ -81,14 +87,16 @@ async function refreshCompletion() {
     const marker = localCompletion || historicalCompletion;
     if (!repo || !scope || !await checkIdentity()) return;
     const operations = await repo.all('operations');
+    const nextStock = await readStock(repo,scope);
     if (generation !== completionGeneration) return;
+    stockView = nextStock;
     const sales = operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
     queueCount.textContent = `${sales.filter(op => op.status !== 'confirmada').length} venda(s) aguardando sincronização ou resolução.`;
     queueBlocked = ambiguousSales(operations,scope).length > 0;
     nextSale.hidden = true;
     if (!localCompletion) {
         if (queueBlocked) {
-            for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+            for (const field of editingFields()) {
                 if (!ambiguityControls.has(field)) ambiguityControls.set(field,field.disabled);
                 field.disabled = true;
             }
@@ -129,7 +137,9 @@ async function refreshCompletion() {
         const payload = operation?.payload || {};
         const total = (payload.itens || []).reduce((sum, item) => sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
         const transport = operation?.transport === 'online' ? 'online' : 'offline';
-        message.textContent += ` Existe uma venda ${transport} pendente de resolução. Antes de continuar, revise e resolva essa venda. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. Consulte o resultado pelo botão abaixo. Para reenviar manualmente quando permitido, abra Status → Sincronizar agora.`;
+        message.textContent += ` Existe uma venda de origem ${transport} pendente de resolução. A conexão atual é indicada em Status. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. `
+            + (completionView.status === 'conflito' ? 'Use Revisar venda no diagnóstico abaixo. Consultar Vendas e navegação continuam disponíveis; a montagem permanece protegida até a resolução.'
+                : 'Consulte o resultado pelo botão abaixo. Para reenviar manualmente quando permitido, abra Status → Sincronizar agora.');
         message.setAttribute('role', 'alert');
     } else message.setAttribute('role', 'status');
     const canStartNext = localCompletion?.conclusion_mode === 'offline' && operation?.transport === 'offline'
@@ -172,6 +182,10 @@ function flush() {
     offlineActions();
     clearTimeout(timer);
     if (suppress || ignoreReset || blocked || queueBlocked || !scope || !bridge.eligible) return pending;
+    if (!saved && meaningful(bridge.capture())) {
+        bridge.ensureNewDate?.();
+        dateNote.textContent = 'Data da nova montagem: ' + bridge.capture().data_venda + '.'; dateNote.hidden = false;
+    }
     const assembly = bridge.capture(), fingerprint = JSON.stringify(assembly);
     if (fingerprint === saved || (!saved && !meaningful(assembly))) return pending;
     message.textContent = 'Salvando rascunho local…';
@@ -199,6 +213,7 @@ function flush() {
     return pending;
 }
 function resetVisual() {
+    dateNote.hidden = true;
     suppress = true;
     bridge.clear(); observer.takeRecords();
     suppress = false;
@@ -221,6 +236,15 @@ window.salesDraftUI = {
     ready:false, flush, get revision() { return revision; }, get blocked() { return blocked; },
     get finalization() { return localCompletion; },
     refreshCompletion,
+    validateStockInclusion(item) {
+        if (!window.salesOffline.active) return true;
+        try {
+            const assembly = bridge.capture();
+            const items = assembly.itens.filter((_,index) => index !== assembly.lancamento?.indice_edicao);
+            validateStock(stockView,scope,[...items,item],[...assembly.itens,item]);
+            return true;
+        } catch (error) { showError(error); bridge.error(error.message); return false; }
+    },
     async startNextSale() {
         if (startingNext || finalizing || !localCompletion || !await checkIdentity()) return;
         startingNext = true; nextSale.disabled = true;
@@ -357,7 +381,7 @@ window.salesDraftUI = {
         if (finalizing) return finalizing;
         if (localCompletion) return {finalization:localCompletion, alreadyFinalized:true};
         if (!bridge.eligible || !scope || !repo) { bridge.error('Identidade local indisponível ou contexto de edição/Pedido. Rascunho preservado.'); return; }
-        const editingControls = new Map(Array.from(document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button'), field => [field, field.disabled]));
+        const editingControls = new Map(editingFields().map(field => [field, field.disabled]));
         for (const [field, disabled] of editingControls) if (!completionControls.has(field)) completionControls.set(field, disabled);
         finalizing = (async () => {
             try {
@@ -377,6 +401,7 @@ window.salesDraftUI = {
                 const queue = 'BroadcastChannel' in window ? new BroadcastChannel('offline-pilot') : null;
                 queue?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id}); queue?.close();
                 document.dispatchEvent(new Event('offline-operations-changed'));
+                await refreshCompletion();
                 return result;
             } catch (error) { showError(error); bridge.error(error.message); window.salesDraftUI.lastError = error.message; }
             finally {
@@ -482,8 +507,10 @@ try {
             }
             if (result.draft && !result.confirmation) {
                 bridge.restore(result.draft);
+                dateNote.textContent = 'Rascunho restaurado. Data preservada: ' + result.draft.data_venda + '.';
+                dateNote.hidden = false;
                 saved = JSON.stringify(bridge.capture()); discard.disabled = false;
-                message.textContent = `Rascunho local restaurado. Última alteração: ${new Date(result.draft.atualizado_em).toLocaleString('pt-BR')}. Dados de referência a revalidar.`;
+                message.textContent = `Rascunho local restaurado. Data da venda preservada: ${result.draft.data_venda}. Última alteração: ${new Date(result.draft.atualizado_em).toLocaleString('pt-BR')}. Dados de referência a revalidar. Para outra venda, use Descartar rascunho; operações concluídas não são descartadas.`;
             }
         } else message.textContent = 'Autentique-se online para salvar rascunhos locais.';
     }
@@ -498,11 +525,17 @@ document.addEventListener('sales-offline-active', offlineActions);
 new MutationObserver(offlineActions).observe(document.getElementById('btnGravarVenda'), {attributes:true, attributeFilter:['disabled'], childList:true});
 document.addEventListener('sales-draft-change', () => schedule(0));
 document.addEventListener('input', event => {
+    if (event.target.id === 'dataVenda' && !localCompletion) {
+        dateNote.textContent = 'Data informada para esta montagem: ' + event.target.value + '.'; dateNote.hidden = false;
+    }
     if (['dataVenda', 'vencimentoVenda', 'operadorVenda', 'tipoVenda', 'clienteBusca', 'quantidade', 'preco', 'unidade'].includes(event.target.id)) {
         ignoreReset = false; schedule();
     }
 });
 document.addEventListener('change', event => {
+    if (event.target.id === 'dataVenda' && !localCompletion) {
+        dateNote.textContent = 'Data informada para esta montagem: ' + event.target.value + '.'; dateNote.hidden = false;
+    }
     if (['dataVenda', 'vencimentoVenda', 'operadorVenda', 'tipoVenda', 'produto', 'unidade'].includes(event.target.id)) {
         ignoreReset = false; schedule(0);
     }

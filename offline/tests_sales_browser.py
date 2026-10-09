@@ -42,8 +42,8 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const cache=await caches.open('offline-pilot-shell-v28-2-8f');
-                    return keys.includes('offline-pilot-shell-v28-2-8f')
+                    const cache=await caches.open('offline-pilot-shell-v29-2-8f-fix');
+                    return keys.includes('offline-pilot-shell-v29-2-8f-fix')
                         && !keys.includes('offline-pilot-shell-v21')
                         && !!(await cache.match('/offline/vendas-shell/'));
                 })()""")
@@ -88,7 +88,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
 
     def test_offline_assembly_safe_shell_and_no_mutations(self):
         user, customer, product, operator, *_ = commercial_fixtures()
-        product.quantidade = 0
+        product.quantidade = 10
         product.save(update_fields=['quantidade'])
         client = Client()
         client.force_login(user)
@@ -143,6 +143,9 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('unidade.value="UN";unidade.dispatchEvent(new Event("change",{bubbles:true}));true')
                 self.assertEqual(tab.evaluate('Number(preco.value)'), 3)
                 tab.evaluate('unidade.value="CX";unidade.dispatchEvent(new Event("change",{bubbles:true}));true')
+                tab.evaluate('quantidade.value="11";document.getElementById("btnAdicionarItemVenda").click();true')
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'),0)
+                self.assertIn('Estoque local insuficiente',tab.evaluate('document.getElementById("sales-draft-status").textContent'))
                 tab.evaluate('quantidade.value="10";document.getElementById("btnAdicionarItemVenda").click();true')
                 tab.wait('document.querySelectorAll("#tabelaProdutos tr").length===1')
                 self.assertIn('240', tab.evaluate('totalGeral.textContent'))

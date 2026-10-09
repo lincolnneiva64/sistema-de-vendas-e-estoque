@@ -484,7 +484,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 tab = self.prepare(chrome)
                 tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
                 tab.wait('!!navigator.serviceWorker.controller')
-                tab.evaluate('window.cache=await caches.open("offline-pilot-shell-v28-2-8f");await cache.put("/static/offline/core.js",new Response("throw Error(\\"Stale core\\")",{headers:{"Content-Type":"application/javascript"}}));true')
+                tab.evaluate('window.cache=await caches.open("offline-pilot-shell-v29-2-8f-fix");await cache.put("/static/offline/core.js",new Response("throw Error(\\"Stale core\\")",{headers:{"Content-Type":"application/javascript"}}));true')
                 self.reload(tab)
                 tab.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.repo=new core.Repository(await core.openDB());true')
                 self.assertTrue(tab.evaluate('typeof core.Repository.prototype.diagnose==="function" && typeof core.Repository.prototype.updateAttempt==="function"'))

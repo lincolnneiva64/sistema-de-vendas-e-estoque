@@ -766,8 +766,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v28-2-8f') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v28-2-8f');
+                    if(!keys.includes('offline-pilot-shell-v29-2-8f-fix') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v29-2-8f-fix');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js','commercial.js','commercial-ui.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     if(!(await cache.match('/offline/vendas-shell/')))return false;
