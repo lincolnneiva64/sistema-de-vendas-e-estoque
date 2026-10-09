@@ -1,5 +1,5 @@
-import {openDB, Repository} from '/offline/assets/2-8d/core.js';
-import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8d/commercial.js';
+import {openDB, Repository} from '/offline/assets/2-8e/core.js';
+import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8e/commercial.js';
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');

@@ -66,7 +66,7 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.wait('document.querySelector("#sales-draft-status [role=status]").textContent.includes("salvo")')
 
     def repository(self, tab):
-        tab.evaluate("window.core=await import('/offline/assets/2-8d/core.js');window.drafts=await import('/offline/assets/2-8d/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
+        tab.evaluate("window.core=await import('/offline/assets/2-8e/core.js');window.drafts=await import('/offline/assets/2-8e/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
 
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]

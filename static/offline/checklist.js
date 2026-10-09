@@ -1,4 +1,4 @@
-import {Repository, openDB} from '/offline/assets/2-8d/core.js';
+import {Repository, openDB} from '/offline/assets/2-8e/core.js';
 const indicator = document.getElementById('offline-global');
 const scope = {actor: indicator.dataset.actor, environment: indicator.dataset.environment};
 const local = document.body.dataset.localChecklist === 'true';

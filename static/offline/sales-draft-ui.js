@@ -1,8 +1,8 @@
-import '/offline/assets/2-8d/sales.js';
-import {operationDetails} from '/offline/assets/2-8d/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8d/sales-revisions.js';
-import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8d/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8d/sales-drafts.js';
+import '/offline/assets/2-8e/sales.js';
+import {operationDetails} from '/offline/assets/2-8e/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8e/sales-revisions.js';
+import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8e/core.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft} from '/offline/assets/2-8e/sales-drafts.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -84,7 +84,7 @@ async function refreshCompletion() {
     recover.disabled = recoveringOnline;
     const revisionView = await revisionPresentation(repo, operation, scope);
     if (generation !== completionGeneration) return;
-    if (revisionView?.recordId) completionView = {...completionView,recordId:revisionView.recordId,
+    if (revisionView?.recordId && !completionView.recordId) completionView = {...completionView,recordId:revisionView.recordId,error:'',
         url:`/vendas/${revisionView.recordId}/`,label:revisionView.originalConfirmed ? 'Original confirmada oficialmente.'
             : `Conflito resolvido pela venda nº ${revisionView.recordId}. Venda corrigida confirmada. Se você enviou ao cliente informações da versão anterior, envie novamente a nota correta.`};
     const expanded = !!diagnostics.querySelector('details[open]');
@@ -105,7 +105,7 @@ async function refreshCompletion() {
         officialLink.href = completionView.url;
         officialLink.textContent = `Ver venda #${completionView.recordId}`;
     } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
-    if (localCompletion && saleOperationState(operation).recordId) {
+    if (localCompletion && completionView.recordId) {
         const result = await releaseConfirmedDraft(repo, scope, marker.operation_id);
         if (generation !== completionGeneration) return;
         historicalCompletion = marker; localCompletion = null;
@@ -281,8 +281,11 @@ window.salesDraftUI = {
         const current = await loadDraft(repo, scope);
         if (blocked || localCompletion || finalizing || current.finalization || current.confirmation || current.revision !== revision) return false;
         const operations = await repo.all('operations');
-        return !operations.some(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
-            && op.environment_id === scope.environment_id && op.status !== 'confirmada');
+        for (const op of operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
+            && op.environment_id === scope.environment_id && op.status !== 'confirmada')) {
+            if (!(await revisionPresentation(repo,op,scope))?.recordId) return false;
+        }
+        return true;
     },
     async finalizeOffline(origin) {
         if (window.salesOffline.recovering || !window.salesOffline.active) return;

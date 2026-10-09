@@ -1,7 +1,7 @@
-import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8d/core.js';
-import {renderIndicator} from '/offline/assets/2-8d/presentation.js';
-import {operationDetails} from '/offline/assets/2-8d/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8d/sales-revisions.js';
+import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8e/core.js';
+import {renderIndicator} from '/offline/assets/2-8e/presentation.js';
+import {operationDetails} from '/offline/assets/2-8e/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8e/sales-revisions.js';
 
 const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');

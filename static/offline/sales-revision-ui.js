@@ -1,7 +1,7 @@
-import {openDB, Repository, validReceipt} from '/offline/assets/2-8d/core.js';
-import {draftScope} from '/offline/assets/2-8d/sales-drafts.js';
-import {carregarSnapshotComercial} from '/offline/assets/2-8d/commercial.js';
-import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/2-8d/sales-revisions.js';
+import {openDB, Repository, validReceipt} from '/offline/assets/2-8e/core.js';
+import {draftScope} from '/offline/assets/2-8e/sales-drafts.js';
+import {carregarSnapshotComercial} from '/offline/assets/2-8e/commercial.js';
+import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/2-8e/sales-revisions.js';
 
 const element = id => document.getElementById(id);
 const form=element('revision-form'), message=element('revision-message'), fields=element('revision-fields');

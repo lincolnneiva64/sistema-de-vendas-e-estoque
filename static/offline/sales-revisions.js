@@ -1,9 +1,10 @@
-import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8d/core.js';
+import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8e/core.js';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export function commercialConflict(operation) {
     return operation?.type === 'criar_venda' && operation.status === 'conflito'
         && validReceipt(operation.server_result, operation)
+        && operation.server_result.status === 'conflito'
         && !operation.server_result.code && operation.diagnostic_code !== 'uuid_comando_divergente'
         && (operation.server_result.conflict_kind || 'comercial') === 'comercial';
 }
@@ -218,21 +219,87 @@ export async function finalizeRevision(repo, scope, originalId, expectedRevision
         if (!result.retry) return result;
     }
 }
-export async function revisionPresentation(repo, operation, scope) {
-    if (!operation || operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id) return null;
-    const observed = await repo.get('metadata',observationKey(operation));
-    if (observed?.original_hash === operation.payload_hash && observed.receipt?.status === 'confirmada'
-        && validReceipt(observed.receipt,operation)) return {recordId:observed.receipt.record_id,originalConfirmed:true};
-    const observedLast = observed?.original_hash === operation.payload_hash ? observed.revisions?.at(-1) : null;
-    if (observedLast?.receipt?.status === 'confirmada') return {recordId:observedLast.receipt.record_id,replacementId:observedLast.replacement_operation_id};
-    const operations = (await repo.all('operations')).filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
-    let current = operation, replacementId = null; const seen = new Set([current.operation_id]);
-    for (;;) {
-        const children = operations.filter(op => op.payload?.revisao?.original_operation_id === current.operation_id
-            && op.payload.revisao.original_hash === current.payload_hash);
-        if (children.length !== 1 || seen.has(children[0].operation_id)) break;
-        current = children[0];replacementId=current.operation_id;seen.add(replacementId);
-        if (current.status === 'confirmada' && validReceipt(current.server_result,current)) return {recordId:current.server_result.record_id,replacementId};
+export function resolutionObservationKey(scope, operationId) {
+    return observationKey({...scope, operation_id:operationId});
+}
+
+// Shared by presentation and the atomic release. A revision link alone is never a receipt.
+export function resolutionFromSnapshot(snapshot, operationId, scope) {
+    const operation = snapshot.operations.find(op => op.operation_id === operationId);
+    if (!operation || operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
+        || operation.environment_id !== scope.environment_id || !uuid(operation.operation_id)) return null;
+    if (operation.status === 'confirmada' && operation.server_result?.status === 'confirmada' && validReceipt(operation.server_result,operation))
+        return {view:{recordId:operation.server_result.record_id,originalConfirmed:true}, nodes:[operation]};
+    if (!commercialConflict(operation)) return null;
+    const observed = snapshot.observed;
+    if (observed?.original_hash === operation.payload_hash && validReceipt(observed.receipt,operation)) {
+        if (observed.receipt.status === 'confirmada')
+            return {view:{recordId:observed.receipt.record_id,originalConfirmed:true}, nodes:[operation]};
+        let parent = operation.operation_id, parentHash = operation.payload_hash, receipt = observed.receipt;
+        const seen = new Set([parent]);
+        const observedNodes = [operation];
+        const links = observed.revisions;
+        let valid = Array.isArray(links) && links.length > 0;
+        for (const link of Array.isArray(links) ? links : []) {
+            if (receipt.status !== 'conflito' || receipt.code || (receipt.conflict_kind || 'comercial') !== 'comercial'
+                || link.original_operation_id !== parent || link.original_hash !== parentHash
+                || !uuid(link.replacement_operation_id) || seen.has(link.replacement_operation_id)
+                || link.actor_id !== scope.actor_id || link.environment_id !== scope.environment_id
+                || link.relacao !== 'revisao_de_conflito'
+                || !validReceipt(link.receipt,{type:'criar_venda',operation_id:link.replacement_operation_id,payload_hash:link.hash})) {
+                valid = false; break;
+            }
+            const localChild = snapshot.operations.find(op => op.operation_id === link.replacement_operation_id);
+            if (localChild) {
+                if (localChild.type !== 'criar_venda' || localChild.actor_id !== scope.actor_id
+                    || localChild.environment_id !== scope.environment_id || localChild.payload_hash !== link.hash
+                    || localChild.payload?.revisao?.original_operation_id !== parent
+                    || localChild.payload.revisao.original_hash !== parentHash
+                    || localChild.payload.revisao.relacao !== 'revisao_de_conflito'
+                    || localChild.status !== link.receipt.status || !validReceipt(localChild.server_result,localChild)
+                    || (link.receipt.status === 'confirmada' && localChild.server_result.record_id !== link.receipt.record_id)
+                    || (link.receipt.status === 'conflito' && !commercialConflict(localChild))) { valid = false; break; }
+                observedNodes.push(localChild);
+            }
+            seen.add(link.replacement_operation_id); parent = link.replacement_operation_id;
+            parentHash = link.hash; receipt = link.receipt;
+        }
+        if (valid && receipt.status === 'confirmada')
+            return {view:{recordId:receipt.record_id,replacementId:parent}, nodes:observedNodes};
     }
-    return replacementId ? {replacementId} : null;
+    let current = operation, replacementId = null; const seen = new Set([current.operation_id]), nodes = [operation];
+    for (;;) {
+        if (!commercialConflict(current)) break;
+        const children = snapshot.operations.filter(op => op.payload?.revisao?.original_operation_id === current.operation_id);
+        if (children.length !== 1 || seen.has(children[0].operation_id)) break;
+        const child = children[0];
+        if (child.type !== 'criar_venda' || child.actor_id !== scope.actor_id || child.environment_id !== scope.environment_id
+            || !uuid(child.operation_id) || child.payload.revisao.original_hash !== current.payload_hash
+            || child.payload.revisao.relacao !== 'revisao_de_conflito') break;
+        current = child; replacementId = child.operation_id; seen.add(replacementId); nodes.push(child);
+        if (current.status === 'confirmada' && current.server_result?.status === 'confirmada' && validReceipt(current.server_result,current))
+            return {view:{recordId:current.server_result.record_id,replacementId}, nodes};
+    }
+    return replacementId ? {view:{replacementId}, nodes} : null;
+}
+
+export async function prepareRevisionResolution(repo, scope, operationId) {
+    const snapshot = await repo.transaction(['metadata','operations'],false,(tx,done) => {
+        tx.objectStore('operations').getAll().onsuccess = event => {
+            const operations = event.target.result;
+            tx.objectStore('metadata').get(resolutionObservationKey(scope,operationId)).onsuccess = observed =>
+                done({operations,observed:observed.target.result || null});
+        };
+    });
+    const resolved = resolutionFromSnapshot(snapshot,operationId,scope);
+    if (!resolved) return {view:null, signature:canonical(snapshot)};
+    for (const node of resolved.nodes) {
+        if (await hash(commandOf(node)) !== node.payload_hash) return {view:null, signature:canonical(snapshot)};
+    }
+    return {view:resolved.view,signature:canonical(snapshot)};
+}
+
+export async function revisionPresentation(repo, operation, scope) {
+    if (!operation) return null;
+    return (await prepareRevisionResolution(repo,scope,operation.operation_id)).view;
 }
