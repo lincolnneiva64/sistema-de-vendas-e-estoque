@@ -31,6 +31,7 @@ from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import GrupoProdutoVinculado
+from .services.precos_vinculados import serializar_grupos, bloquear_catalogo, bloquear_produtos_precos, salvar_formulario_produto, proteger_precos_http, exigir_operador_precos
 from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoFaturaCartao, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
 from .services.fornecedor_contatos import (
@@ -1692,8 +1693,17 @@ def home(request):
             form = ProdutoForm(request.POST)
 
         if form.is_valid():
-            produto = form.save()
-            return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
+            try:
+                if form.instance.pk and set(form.changed_data).intersection(("preco_vista", "preco_prazo", "preco_vista_fracionado", "preco_prazo_fracionado")):
+                    exigir_operador_precos(request.user)
+                produto = form.save()
+                return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
+            except ValidationError as exc:
+                form.add_error(None, exc)
+                messages.error(request, ' '.join(exc.messages))
+        if form.grupo_precos:
+            messages.error(request, 'Alteração isolada de preços bloqueada. Abra o cadastro do produto para editar o grupo; grupos pendentes exigem regularização em Gerenciar grupos vinculados.')
+            return redirect(reverse('estoque:produto_editar', args=[produto_edicao.pk]))
 
     # GET: carregar formulário de edição
     editar_id = request.GET.get("edit")
@@ -11357,9 +11367,10 @@ def compras_lista(request):
         },
     )
 
+@proteger_precos_http()
 def compras_nova(request):
     fornecedores = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
-    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).select_related("vinculo_grupo__grupo").order_by("nome")
 
     if request.method == "POST":
         fechamento_token = (request.POST.get("fechamento_token") or "").strip() or uuid4().hex
@@ -11544,7 +11555,7 @@ def compras_nova(request):
 
 
 def _produto_opcoes_compra():
-    return Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
+    return Produto.objects.filter(excluido=False, ativo=True).select_related("vinculo_grupo__grupo").order_by("nome")
 
 
 def _linha_item_compra_vazia():
@@ -11743,10 +11754,18 @@ def _dados_compra_post(request, exigir_itens=True):
     }
 
 
+@serializar_grupos
 def _salvar_compra_e_itens(compra, dados, status):
-    if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+    atual=Compra.objects.select_for_update().get(pk=compra.pk) if compra.pk else compra
+    if not _compra_editavel_ou_redireciona(atual) or atual.estoque_entrada_realizada:
         raise ValueError("Compra ja finalizada. Recarregue a pagina para consultar o resultado.")
+    ids=[item['produto'].pk for item in dados['itens']]
+    if compra.pk:ids.extend(compra.itens.values_list('produto_id',flat=True))
+    bloquear_produtos_precos([pk for pk in ids if pk])
+    if compra.pk:
+        compra.alteracoes_precos_vinculados=Compra.objects.values_list('alteracoes_precos_vinculados',flat=True).get(pk=compra.pk)
     snapshots = {item.produto_id: item.alteracoes_precos for item in compra.itens.all()}
+    snapshots_vinculados = {item.produto_id:item.alteracoes_precos_vinculados for item in compra.itens.all()}
     compra.fornecedor = dados["fornecedor"]
     compra.data_compra = dados["data_compra"]
     compra.data_vencimento = dados["data_vencimento"]
@@ -11764,6 +11783,7 @@ def _salvar_compra_e_itens(compra, dados, status):
         ItemCompra(
             compra=compra,
             produto=item["produto"],
+            alteracoes_precos_vinculados=snapshots_vinculados.get(item['produto'].pk,[]),
             quantidade=item["quantidade"],
             unidade=item["unidade"],
             preco_unitario=item["preco_unitario"],
@@ -11792,8 +11812,21 @@ def _produtos_custo_atualizar_post(request):
     return ids
 
 
+class _PrecosCompraRevisao(dict):
+    pass
+
+
 def _produtos_preco_venda_atualizar_post(request):
-    precos = {}
+    precos = _PrecosCompraRevisao()
+    precos.operador = request.user if getattr(request.user, 'is_authenticated', False) else None
+    precos.versoes_grupos = {}
+    for chave in request.POST:
+        match = re.fullmatch(r'versao_grupo_produto_(\d+)', chave)
+        if match:
+            try:
+                precos.versoes_grupos[int(match[1])] = int(request.POST[chave])
+            except (ValueError, TypeError):
+                raise ValueError('Versao de grupo invalida. Reabra a revisao.')
     campos_permitidos = {
         "preco_vista",
         "preco_prazo",
@@ -11840,9 +11873,12 @@ def _produtos_preco_venda_atualizar_post(request):
             continue
         if preco >= 0:
             precos[(produto_id_int, campo)] = preco
+    if precos:
+        exigir_operador_precos(precos.operador)
     return precos
 
 
+@serializar_grupos
 def _atualizar_custos_produtos_compra(itens, produto_ids, compra=None):
     from .services.precos_compra import aplicar_precos_compra
     produto_ids = set(produto_ids or [])
@@ -11867,24 +11903,48 @@ def _atualizar_custos_produtos_compra(itens, produto_ids, compra=None):
             Produto.objects.filter(pk=produto.pk).update(**atualizacoes, atualizado_em=timezone.now())
 
 
+@serializar_grupos
 def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
     from .services.precos_compra import aplicar_precos_compra
     if not precos_por_produto:
         return
 
-    agora = timezone.now()
-    for chave, novo_preco in precos_por_produto.items():
-        produto_id, campo = chave
-        atualizacoes = {
-            campo: novo_preco,
-        }
-        if campo == "preco_vista":
-            atualizacoes["preco_venda"] = novo_preco
+    from .models import MembroGrupoProduto
+    por_produto = {}
+    for (produto_id, campo), valor in precos_por_produto.items():
+        por_produto.setdefault(produto_id, {})[campo] = valor
+    produtos = Produto.objects.filter(pk__in=por_produto).in_bulk()
+    vinculos = dict(MembroGrupoProduto.objects.filter(produto_id__in=por_produto).values_list('produto_id','grupo_id'))
+    versoes = getattr(precos_por_produto, 'versoes_grupos', {})
+    por_grupo = {}
+    independentes = {}
+    for produto_id, valores in por_produto.items():
+        if produto_id not in vinculos:
+            independentes[produto_id] = valores
+            continue
+        registro = por_grupo.setdefault(vinculos[produto_id], {'produto_id': produto_id, 'valores': {}, 'versao': versoes.get(produto_id)})
+        if registro['versao'] != versoes.get(produto_id):
+            raise ValueError('Versoes divergentes para o mesmo grupo. Reabra a revisao.')
+        for campo, valor in valores.items():
+            if getattr(produtos[produto_id], campo) == valor:
+                continue
+            if campo in registro['valores'] and registro['valores'][campo] != valor:
+                raise ValueError('A compra prop?e precos diferentes para o mesmo grupo. Escolha valores unicos.')
+            registro['valores'][campo] = valor
+    trabalhos = [(pid, valores, None) for pid, valores in independentes.items()]
+    trabalhos += [(r['produto_id'],r['valores'],r['versao']) for r in por_grupo.values() if r['valores']]
+    for produto_id, atualizacoes, versao in trabalhos:
+        if 'preco_vista' in atualizacoes:
+            atualizacoes = {**atualizacoes, 'preco_venda': atualizacoes['preco_vista']}
         item_compra = compra.itens.filter(produto_id=produto_id).first() if compra else None
         if item_compra:
-            aplicar_precos_compra(item_compra, atualizacoes)
+            aplicar_precos_compra(item_compra, atualizacoes,
+                operador=getattr(precos_por_produto,'operador',None), versao_esperada=versao)
         else:
-            Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes, atualizado_em=agora)
+            try:
+                Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes, atualizado_em=timezone.now())
+            except ValidationError as exc:
+                raise ValueError(' '.join(exc.messages)) from exc
 
 
 def _parcelas_financeiras_compra(compra):
@@ -11956,6 +12016,7 @@ def _criar_contas_pagar_compra(compra):
         )
 
 
+@serializar_grupos
 def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None, revisao_precos_pendente=False):
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
@@ -11963,7 +12024,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
         compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
         if compra.status == Compra.STATUS_FINALIZADA or compra.estoque_entrada_realizada:
             return
-
+        bloquear_produtos_precos(compra.itens.exclude(produto_id=None).values_list('produto_id',flat=True))
         for item in compra.itens.select_related("produto").all():
             if not item.produto_id:
                 continue
@@ -12015,6 +12076,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             _registrar_movimentos_compra_a_vista(compra, valores_origem)
 
 
+@proteger_precos_http()
 def compras_nova(request):
     if request.method == "POST":
         fechamento_token = (request.POST.get("fechamento_token") or "").strip() or uuid4().hex
@@ -12057,6 +12119,9 @@ def compras_nova(request):
                         _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
                 if acao == "confirmar_financeiro":
                     _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+        except (ValueError, ValidationError) as exc:
+            messages.error(request, ' '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc))
+            return redirect("estoque:compras_nova")
         except Exception:
             logger.exception("Falha ao salvar compra")
             messages.error(request, "Nao foi possivel salvar a compra.")
@@ -12088,11 +12153,12 @@ def compras_nova(request):
 
 
 @require_POST
+@proteger_precos_http()
 def compra_salvar_pre_revisao(request, pk=None):
     """Persistir o formulario antes do modal, sem executar estoque ou financeiro."""
     try:
         dados = _dados_compra_post(request, exigir_itens=True)
-        with transaction.atomic():
+        with transaction.atomic(), bloquear_catalogo():
             if pk is None:
                 token = (request.POST.get("fechamento_token") or "").strip()
                 if not token or len(token) > 32:
@@ -12120,6 +12186,7 @@ def compra_salvar_pre_revisao(request, pk=None):
         return JsonResponse({"ok": False, "erro": "Nao foi possivel salvar o rascunho. Confira a conexao e tente novamente. Os dados continuam nesta tela."}, status=500)
 
 
+@proteger_precos_http()
 def compra_editar(request, pk):
     compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
     compra = get_object_or_404(compra_qs, pk=pk)
@@ -12129,10 +12196,14 @@ def compra_editar(request, pk):
 
     if request.method == "POST":
         acao = request.POST.get("acao_compra") or "salvar_rascunho"
-        atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
-        atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
+        try:
+            atualizar_custo_produto_ids = _produtos_custo_atualizar_post(request)
+            atualizar_preco_venda_produtos = _produtos_preco_venda_atualizar_post(request)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect("estoque:compra_editar", pk=compra.pk)
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
-            with transaction.atomic():
+            with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -12149,7 +12220,7 @@ def compra_editar(request, pk):
                 if _compra_post_mobile(request):
                     _validar_origem_compra_mobile(valores_origem)
                 _validar_origem_compra_a_vista(valores_origem, dados["total"])
-            with transaction.atomic():
+            with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -12202,6 +12273,7 @@ def compra_editar(request, pk):
     )
 
 
+@proteger_precos_http()
 def compra_finalizar(request, pk):
     compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
     if not _compra_editavel_ou_redireciona(compra):
@@ -12210,7 +12282,7 @@ def compra_finalizar(request, pk):
     if request.method == "POST":
         acao = request.POST.get("acao_compra")
         if acao in {"voltar_rascunho", "voltar_itens", "continuar_editando"}:
-            with transaction.atomic():
+            with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -12242,7 +12314,7 @@ def compra_finalizar(request, pk):
                 messages.error(request, _mensagem_vencimento_compra(dados["tipo_pagamento"]))
                 return redirect("estoque:compra_editar", pk=compra.pk)
             try:
-                with transaction.atomic():
+                with transaction.atomic(), bloquear_catalogo():
                     compra = Compra.objects.select_for_update().get(pk=compra.pk)
                     if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                         return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -12265,7 +12337,7 @@ def compra_finalizar(request, pk):
             return redirect("estoque:compras_lista")
 
     if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
-        with transaction.atomic():
+        with transaction.atomic(), bloquear_catalogo():
             compra = Compra.objects.select_for_update().get(pk=compra.pk)
             if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                 return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -13605,8 +13677,9 @@ def compra_corrigir_origem_pagamento(request, pk):
 
 
 
-def compra_excluir(request, pk):
-    from .services.precos_compra import restaurar_precos_compra
+@serializar_grupos
+def _compra_excluir_transacional(request, pk):
+    from .services.precos_compra import restaurar_precos_compra, restaurar_precos_da_compra
     if request.method != "POST":
         return redirect("estoque:compras_detalhe", pk=pk)
 
@@ -13642,12 +13715,17 @@ def compra_excluir(request, pk):
             return redirect("estoque:compras_detalhe", pk=compra.pk)
 
         itens = list(compra.itens.all())
-        produtos = {
-            produto.pk: produto
-            for produto in Produto.objects.select_for_update()
-            .filter(pk__in=[item.produto_id for item in itens if item.produto_id])
-            .order_by("pk")
-        }
+        if compra.alteracoes_precos_vinculados or any(
+            set(item.alteracoes_precos or {}).intersection({'preco_vista', 'preco_prazo', 'preco_vista_fracionado', 'preco_prazo_fracionado', 'preco_venda'})
+            for item in itens
+        ):
+            exigir_operador_precos(request.user)
+        from .models import AlteracaoPrecoVinculado
+        ids={item.produto_id for item in itens if item.produto_id}
+        eventos=[*compra.alteracoes_precos_vinculados,*[op for item in itens for op in item.alteracoes_precos_vinculados]]
+        for evento in AlteracaoPrecoVinculado.objects.filter(operation_id__in=eventos):
+            ids.update(evento.evidencia.get('integrantes',[]))
+        produtos = bloquear_produtos_precos(ids)
         if compra.estoque_entrada_realizada:
             for item in itens:
                 produto = produtos.get(item.produto_id)
@@ -13668,7 +13746,8 @@ def compra_excluir(request, pk):
             for item in itens:
                 produto = produtos.get(item.produto_id)
                 if produto:
-                    restaurar_precos_compra(item, produto)
+                    restaurar_precos_compra(item, produto, operador=request.user if request.user.is_authenticated else None,restaurar_grupo=False)
+        restaurar_precos_da_compra(compra,operador=request.user if request.user.is_authenticated else None)
 
         movimentos_ids = list(
             MovimentoFinanceiro.objects.select_for_update()
@@ -13683,6 +13762,14 @@ def compra_excluir(request, pk):
 
     messages.success(request, f"Compra #{numero_compra} excluida e efeitos de estoque e financeiro desfeitos com sucesso.")
     return redirect("estoque:compras_lista")
+
+def compra_excluir(request, pk):
+    try:
+        return _compra_excluir_transacional(request, pk)
+    except (ValueError, ValidationError) as exc:
+        messages.error(request, 'Exclusao interrompida; nenhum efeito foi aplicado. '+str(exc))
+        return redirect('estoque:compras_detalhe', pk=pk)
+
 
 def fornecedores(request):
     termo = request.GET.get("q", "").strip()
@@ -15145,6 +15232,7 @@ def _decimal_preco_conferencia(valor, campo):
 
 
 @require_POST
+@proteger_precos_http(sempre=True)
 def conferencia_precos_antigo_salvar(request):
     campos_aceitos = {"csrfmiddlewaretoken", "produto_id", "preco_compra", "preco_vista", "preco_prazo"}
     campos_recebidos = set(request.POST.keys())
@@ -15356,6 +15444,7 @@ def conferencia_precos_antigo_confirmar_correspondencia(request):
     )
 
 
+@proteger_precos_http(sempre=True)
 def produto_editar(request, pk):
     produto = get_object_or_404(Produto, pk=pk)
     retorno_url = request.GET.get("next") or request.POST.get("next") or ""
@@ -15363,20 +15452,16 @@ def produto_editar(request, pk):
         retorno_url = ""
 
     if request.method == "POST":
-        form = ProdutoForm(request.POST, instance=produto)
+        form = ProdutoForm(request.POST, instance=produto, integrar_precos_vinculados=True)
         if form.is_valid():
-            produto = form.save(commit=False)
-            produto.cadastro_incompleto = False
-            produto.save()
-            if hasattr(form, "save_m2m"):
-                form.save_m2m()
-            form.salvar_fornecedores(produto)
-            return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
-        else:
-            print("ERROS DO FORM EDITAR:", form.errors)
-            print("DADOS RECEBIDOS EDITAR:", request.POST)
+            try:
+                produto = salvar_formulario_produto(form, operador=request.user if request.user.is_authenticated else None)
+                messages.success(request, 'Cadastro salvo. Os preços alterados foram compartilhados com os integrantes do grupo.' if form.grupo_precos and form.grupo_precos.precos_regularizados else 'Cadastro salvo.')
+                return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
+            except ValidationError as exc:
+                form.add_error(None, exc)
     else:
-        form = ProdutoForm(instance=produto)
+        form = ProdutoForm(instance=produto, integrar_precos_vinculados=True)
 
     return render(request, "estoque/cadastrar_produto.html", {"form": form, "retorno_url": retorno_url})
 
@@ -15879,9 +15964,10 @@ def revisao_precos_posterior_pendentes(request):
         "preco_prazo_fracionado", "preco_venda", "preco_compra_fracionado",
         "fator_conversao",
     )
-    for item in _itens_revisao_precos_posterior().select_related("produto").order_by("compra_id", "id"):
+    for item in _itens_revisao_precos_posterior().select_related("produto", "produto__vinculo_grupo__grupo").order_by("compra_id", "id"):
         produto = item.produto
         dados = {campo: str(getattr(produto, campo) or 0) for campo in campos} if produto else {}
+        vinculo = getattr(produto, 'vinculo_grupo', None) if produto else None
         if produto and produto.fator_conversao and produto.fator_conversao > 0:
             # O cadastro ja contem o custo novo; reconstruir o anterior pelo item.
             dados["preco_compra_fracionado"] = str(
@@ -15897,11 +15983,14 @@ def revisao_precos_posterior_pendentes(request):
             "custo_novo": str(item.preco_unitario),
             "vende_fracionado": bool(produto and produto.vende_fracionado),
             "produto": dados,
+            "grupo_precos": {'id': vinculo.grupo_id, 'nome': vinculo.grupo.nome,
+                'versao': vinculo.grupo.versao_precos, 'regularizado': vinculo.grupo.precos_regularizados} if vinculo else None,
         })
     return JsonResponse({"itens": itens, "produtos": len(itens), "compras": len({i["compra_id"] for i in itens})})
 
 
 @require_POST
+@proteger_precos_http(sempre=True)
 def revisao_precos_posterior_salvar(request):
     campos_permitidos = {
         "preco_vista", "preco_prazo", "preco_vista_fracionado", "preco_prazo_fracionado",
@@ -15914,7 +16003,7 @@ def revisao_precos_posterior_salvar(request):
         return JsonResponse({"erro": "Compra, item ou produto invalido."}, status=400)
 
     try:
-        with transaction.atomic():
+        with transaction.atomic(), bloquear_catalogo():
             compra = Compra.objects.select_for_update().filter(pk=compra_id).first()
             if not compra:
                 return JsonResponse({"erro": "Compra nao encontrada."}, status=404)
@@ -15927,6 +16016,7 @@ def revisao_precos_posterior_salvar(request):
                 return JsonResponse({"erro": "Item sem revisao pendente."}, status=409)
             if item.produto_id != produto_id:
                 raise ValueError("Produto nao corresponde ao item da compra.")
+            bloquear_produtos_precos([produto_id])
             produto = Produto.objects.select_for_update().filter(pk=produto_id, excluido=False).first()
             if not produto:
                 raise ValueError("Produto indisponivel para revisao.")
@@ -15965,8 +16055,10 @@ def revisao_precos_posterior_salvar(request):
             if not compra.itens.filter(preco_compra_anterior__isnull=False, revisao_preco_concluida=False).exists():
                 compra.revisao_precos_pendente = False
                 compra.save(update_fields=["revisao_precos_pendente"])
-    except (ValueError, TypeError, InvalidOperation, OverflowError):
-        return JsonResponse({"erro": "Dados de preco invalidos. Confira o produto, os campos e os valores."}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'erro': str(exc)}, status=400)
+    except (ValidationError, TypeError, InvalidOperation, OverflowError) as exc:
+        return JsonResponse({'erro': ' '.join(exc.messages) if isinstance(exc, ValidationError) else 'Dados de preço inválidos. Confira o produto, os campos e os valores.'}, status=400)
     pendentes = _itens_revisao_precos_posterior()
     return JsonResponse({
         "ok": True,
@@ -27372,7 +27464,7 @@ def pedido_criar(request):
             return JsonResponse({"sucesso": False, "mensagem": "Erro ao criar pedido."}, status=500)
 
     # GET: mostrar formulário de criação
-    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).select_related("vinculo_grupo__grupo").order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     operadores_pedido = list(_operadores_pedido_queryset())
     cliente_preselecionado = None
@@ -27491,7 +27583,7 @@ def pedido_editar(request, pk):
             "redirect_url": _url_detalhe_pedido_fluxo(pedido.id, next_url=pedido_next_url, pedido_editado=1),
         })
 
-    produtos = Produto.objects.filter(excluido=False, ativo=True).order_by("nome")
+    produtos = Produto.objects.filter(excluido=False, ativo=True).select_related("vinculo_grupo__grupo").order_by("nome")
     clientes = Cliente.objects.filter(ativo=True).order_by("nome")
     operadores_pedido = list(_operadores_pedido_queryset())
     operador_atual_habilitado = bool(

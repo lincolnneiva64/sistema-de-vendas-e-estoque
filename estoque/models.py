@@ -17,6 +17,9 @@ PRECOS_PRODUTO_CONTROLADOS = frozenset({
 
 class GrupoProdutoVinculado(models.Model):
     nome = models.CharField(max_length=120)
+    precos_regularizados = models.BooleanField(default=False, editable=False)
+    versao_precos = models.PositiveBigIntegerField(default=0, editable=False)
+    ultima_alteracao_precos = models.UUIDField(null=True, editable=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
     produtos = models.ManyToManyField(
@@ -32,16 +35,42 @@ class MembroGrupoProduto(models.Model):
     produto = models.OneToOneField("Produto", on_delete=models.CASCADE, related_name="vinculo_grupo")
 
 
+class ControlePrecosVinculados(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+
+
+class AlteracaoPrecoVinculado(models.Model):
+    operation_id = models.UUIDField(default=uuid4, unique=True)
+    grupo_id_snapshot = models.PositiveBigIntegerField()
+    grupo_nome_snapshot = models.CharField(max_length=120)
+    operador = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    origem = models.CharField(max_length=80)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    versao_antes = models.PositiveBigIntegerField()
+    versao_depois = models.PositiveBigIntegerField()
+    evento_anterior = models.UUIDField(null=True)
+    reverte = models.UUIDField(null=True, unique=True)
+    evidencia = models.JSONField()
+
+
 class ProdutoQuerySet(models.QuerySet):
+    def delete(self):
+        from .services.precos_vinculados import bloquear_catalogo
+        with bloquear_catalogo(self.db):
+            return super().delete()
+
     def update(self, **kwargs):
         campos = PRECOS_PRODUTO_CONTROLADOS.intersection(kwargs)
-        if not campos:
+        estrutura = set(kwargs).intersection({'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2'})
+        if not campos and not estrutura:
             return super().update(**kwargs)
         # Inclui bulk_update e expressoes: invalidar conservadoramente a autoria.
         with transaction.atomic(using=self.db):
             registros = list(self.select_for_update().order_by("pk").values("pk", "autoria_precos"))
             total = 0
             for registro in registros:
+                from .services.precos_vinculados import impedir_escrita_direta
+                impedir_escrita_direta(registro['pk'], kwargs, using=self.db)
                 autoria = dict(registro["autoria_precos"] or {})
                 autoria.update({campo: uuid4().hex for campo in campos})
                 atualizacoes = {**kwargs, "autoria_precos": autoria}
@@ -52,6 +81,11 @@ class ProdutoQuerySet(models.QuerySet):
 class Produto(models.Model):
     objects = ProdutoQuerySet.as_manager()
     autoria_precos = models.JSONField(default=dict, blank=True, editable=False)
+
+    def delete(self, *args, **kwargs):
+        from .services.precos_vinculados import bloquear_catalogo
+        with bloquear_catalogo(kwargs.get('using') or self._state.db or 'default'):
+            return super().delete(*args, **kwargs)
 
     nome = models.CharField(max_length=120)
     codigo = models.CharField(max_length=50, blank=True, null=True)
@@ -173,6 +207,10 @@ class Produto(models.Model):
                 .filter(pk=self.pk).values(*PRECOS_PRODUTO_CONTROLADOS, "autoria_precos").first()
                 if not self._state.adding else None
             )
+            if anterior:
+                from .services.precos_vinculados import impedir_escrita_direta
+                impedir_escrita_direta(self.pk, {campo: getattr(self, campo) for campo in PRECOS_PRODUTO_CONTROLADOS | {'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2'}
+                    if kwargs.get('update_fields') is None or campo in kwargs['update_fields']}, using=using)
             autoria = dict(anterior["autoria_precos"] or {}) if anterior else {}
             campos_salvos = kwargs.get("update_fields")
             campos = PRECOS_PRODUTO_CONTROLADOS if campos_salvos is None else PRECOS_PRODUTO_CONTROLADOS.intersection(campos_salvos)
@@ -1992,6 +2030,7 @@ class ProdutoFornecedor(models.Model):
 
 
 class Compra(models.Model):
+    alteracoes_precos_vinculados = models.JSONField(default=list, blank=True, editable=False)
     STATUS_ABERTA = "aberta"
     STATUS_RASCUNHO = "rascunho"
     STATUS_FINALIZACAO_INICIADA = "finalizacao_iniciada"
@@ -2103,6 +2142,7 @@ class ItemCompra(models.Model):
     )
     revisao_preco_concluida = models.BooleanField(default=False)
     alteracoes_precos = models.JSONField(default=dict, blank=True, editable=False)
+    alteracoes_precos_vinculados = models.JSONField(default=list, blank=True, editable=False)
     valor_total = models.DecimalField(max_digits=12, decimal_places=2)
     observacao = models.TextField(blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)

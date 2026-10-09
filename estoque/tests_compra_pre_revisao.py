@@ -16,6 +16,7 @@ from django.urls import reverse
 
 from offline.browser_support import Chrome
 from . import views
+from .tests_precos_vinculados import autorizar_operador
 from .models import (
     CartaoCredito, Compra, ContaFinanceira, ContaPagar, Fornecedor, ItemCompra,
     LancamentoCartao, ListaCompraFornecedor, MovimentoFinanceiro, Produto,
@@ -24,7 +25,7 @@ from .models import (
 
 class CompraPreRevisaoFixture:
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="teste-pre-revisao")
+        self.user = autorizar_operador(get_user_model().objects.create_user(username="teste-pre-revisao"))
         self.client.force_login(self.user)
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor teste")
         self.produto = Produto.objects.create(
@@ -305,8 +306,9 @@ class CompraPreRevisaoBrowserTests(CompraPreRevisaoFixture, LiveServerTestCase):
                 tab.wait("document.getElementById('modalConferenciaPrecosCompra').classList.contains('visivel')")
                 self.assertEqual(self.lista.parcelas_nota.count(), 3)
                 self.assert_sem_efeitos()
+                previous_document = tab.evaluate('performance.timeOrigin')
                 tab.call("Page.reload")
-                tab.wait("!!document.querySelector('[name=compra_parcela_observacao_3]')")
+                tab.wait("performance.timeOrigin !== "+str(previous_document)+" && document.readyState === 'complete' && !!document.querySelector('[name=compra_parcela_observacao_3]')")
                 self.assertEqual(tab.evaluate("document.querySelector('[name=compra_parcela_observacao_3]').value"), "Documento 3")
                 self.assertEqual(tab.evaluate("document.querySelector('[name=compra_parcela_vencimento_3]').value"), "2026-11-28")
                 tab.evaluate("document.getElementById('btnSalvarCompra').click();true")

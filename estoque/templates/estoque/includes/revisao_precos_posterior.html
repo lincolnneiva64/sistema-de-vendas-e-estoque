@@ -377,7 +377,7 @@
     const concluido = concluidos.has(item.item_id);
     listaConferenciaPrecosCompra.innerHTML =
       '<article class="rp-compras-preco-card"><div class="rp-compras-preco-card-topo"><div>' +
-      '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' +
+      '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' + (item.grupo_precos ? '<p>'+escapeHtml(item.grupo_precos.nome)+(item.grupo_precos.regularizado?' — preços compartilhados com todos os integrantes.':' — regularize o grupo antes de alterar preços.')+'</p>' : '') +
       '<span class="rp-compras-preco-progresso">Produto ' + (revisaoPrecosIndice+1) + ' de ' + revisaoPrecosItens.length +
       ' · Compra #' + item.compra_id + (concluido ? ' · Revisão salva' : '') + '</span></div></div>' +
       '<div class="rp-compras-preco-blocos">' + renderizarCustosProdutoCompacto(item) +
@@ -417,6 +417,7 @@
       if (!concluidos.has(item.item_id)) {
         salvarDecisaoProdutoAtual();
         const dados = new URLSearchParams({compra_id:item.compra_id, item_id:item.item_id, produto_id:item.produtoId});
+        if(item.grupo_precos)dados.set('versao_grupo_produto_'+item.produtoId,item.grupo_precos.versao);
         Object.entries(decisaoProduto(item).precos).forEach(([campo, preco]) => {
           if (!preco.atualizar) return;
           dados.append("atualizar_preco_venda_produto_ids[]", item.produtoId);

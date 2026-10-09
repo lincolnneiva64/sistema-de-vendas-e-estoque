@@ -215,6 +215,9 @@ class ExclusaoCompraFinanceiroTests(TestCase):
 
 class ReversaoPrecosCompraTests(TestCase):
     def setUp(self):
+        from estoque.tests_precos_vinculados import criar_operador_precos
+        self.operador=criar_operador_precos('undo-authorized-test')
+        self.client.force_login(self.operador)
         self.produto = Produto.objects.create(
             nome="Produto Snapshot", quantidade=Decimal("5.000"),
             preco_compra=Decimal("8.00"), preco_vista=Decimal("10.00"),

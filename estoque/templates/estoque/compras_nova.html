@@ -3123,7 +3123,7 @@
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>
                     {% for produto in produtos %}
-                      <option value="{{ produto.id }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-preco-compra-fracionado="{{ produto.preco_compra_fracionado|default:0|floatformat:2 }}" data-preco-venda="{{ produto.preco_venda|default:produto.preco_vista|default:0|floatformat:2 }}" data-preco-vista="{{ produto.preco_vista|default:produto.preco_venda|default:0|floatformat:2 }}" data-preco-prazo="{{ produto.preco_prazo|default:0|floatformat:2 }}" data-preco-vista-fracionado="{{ produto.preco_vista_fracionado|default:0|floatformat:2 }}" data-preco-prazo-fracionado="{{ produto.preco_prazo_fracionado|default:0|floatformat:2 }}" data-vende-fracionado="{% if produto.vende_fracionado %}1{% else %}0{% endif %}" data-fator-conversao="{{ produto.fator_conversao|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
+                      <option value="{{ produto.id }}" data-grupo-precos="{{ produto.vinculo_grupo.grupo.nome }}" data-grupo-regularizado="{% if produto.vinculo_grupo.grupo.precos_regularizados %}1{% else %}0{% endif %}" data-versao-grupo="{{ produto.vinculo_grupo.grupo.versao_precos }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-preco-compra-fracionado="{{ produto.preco_compra_fracionado|default:0|floatformat:2 }}" data-preco-venda="{{ produto.preco_venda|default:produto.preco_vista|default:0|floatformat:2 }}" data-preco-vista="{{ produto.preco_vista|default:produto.preco_venda|default:0|floatformat:2 }}" data-preco-prazo="{{ produto.preco_prazo|default:0|floatformat:2 }}" data-preco-vista-fracionado="{{ produto.preco_vista_fracionado|default:0|floatformat:2 }}" data-preco-prazo-fracionado="{{ produto.preco_prazo_fracionado|default:0|floatformat:2 }}" data-vende-fracionado="{% if produto.vende_fracionado %}1{% else %}0{% endif %}" data-fator-conversao="{{ produto.fator_conversao|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
                     {% endfor %}
                   </select>
                   <div class="produto-sugestoes"></div>
@@ -5379,6 +5379,9 @@
       itens.push({
         chave: chave,
         produtoId: produtoId,
+        versaoGrupo: opt.dataset.versaoGrupo,
+        grupoPrecosNome: opt.dataset.grupoPrecos,
+        grupoRegularizado: opt.dataset.grupoRegularizado === "1",
         nome: opt.textContent.trim(),
         custoAtual: custoAtual,
         custoCompra: custoCompra,
@@ -5571,7 +5574,7 @@
 
     if (compraMobile() && resumoCustoFixoCompra) {
       resumoCustoFixoCompra.innerHTML =
-        '<strong>' + escapeHtml(item.nome) + '</strong>' +
+        '<strong>' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — preços compartilhados com todo o grupo.':' — regularização pendente; alteração de preços bloqueada.')+'</small>' : '') + '</strong>' +
         '<span>Custo anterior: ' + escapeHtml(moeda(item.custoAtual)) + '</span>' +
         '<span>Novo custo: ' + escapeHtml(moeda(item.custoCompra)) + '</span>' +
         (item.temFracionado
@@ -5592,7 +5595,7 @@
       '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
         '<div class="compras-preco-card-topo">' +
           '<div>' +
-            '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' +
+            '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — preços compartilhados com todo o grupo.':' — regularização pendente; alteração de preços bloqueada.')+'</small>' : '') + '</h3>' +
             '<span class="compras-preco-progresso">Produto ' + escapeHtml(String(revisaoPrecosIndice + 1)) + ' de ' + escapeHtml(String(revisaoPrecosItens.length)) + '</span>' +
           '</div>' +
           '<span class="compras-preco-status">' + escapeHtml(status) + '</span>' +
@@ -5809,6 +5812,12 @@
 
         const produtoId = item.produtoId;
         const valorNovoPreco = precoCampo(numero(dadosPreco.novoPreco));
+        if(item.grupoPrecosNome){
+          if(!item.grupoRegularizado)throw new Error('Grupo pendente: regularize os preços antes de revisar este produto.');
+          const versao=document.createElement('input');versao.type='hidden';
+          versao.name='versao_grupo_produto_'+produtoId;versao.value=item.versaoGrupo;
+          camposAtualizarCustoCompra.appendChild(versao);
+        }
 
         const idInput = document.createElement("input");
         idInput.type = "hidden";
@@ -5846,7 +5855,19 @@
   function continuarAposConferenciaPrecos(atualizarSelecionados) {
     sincronizarTodosPrecosUnitarios();
     salvarDecisaoProdutoAtual();
-    definirCustosSelecionadosParaEnvio(atualizarSelecionados);
+    try {
+      definirCustosSelecionadosParaEnvio(atualizarSelecionados);
+    } catch (erro) {
+      camposAtualizarCustoCompra.replaceChildren();
+      let aviso = document.getElementById('erroPrecosVinculadosCompra');
+      if (!aviso) {
+        aviso = document.createElement('p'); aviso.id = 'erroPrecosVinculadosCompra';
+        aviso.setAttribute('role', 'alert'); aviso.style.color = '#b42318';
+        listaConferenciaPrecosCompra.prepend(aviso);
+      }
+      aviso.textContent = erro.message;
+      return;
+    }
     if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
     conferenciaPrecosConfirmada = true;
     modalConferenciaPrecosCompra.classList.remove("visivel");

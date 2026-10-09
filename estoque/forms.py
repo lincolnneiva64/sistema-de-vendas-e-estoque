@@ -1,14 +1,19 @@
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+from django.core.exceptions import ValidationError
 
 from django.utils import timezone
 
 from .models import Categoria, Cliente, Fornecedor, FornecedorContato, Funcionario, MeioPagamento, PixRecebido, Produto, ProdutoFornecedor, Unidade
 from .utils import normalize_category_name, normalize_product_name
+from .services.precos_vinculados import serializar_grupos
 
 
 class ProdutoForm(forms.ModelForm):
+    grupo_precos_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    versao_precos_grupo = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    versao_cadastro_precos = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
     fornecedores = forms.ModelMultipleChoiceField(
         queryset=Fornecedor.objects.none(),
         required=False,
@@ -204,8 +209,26 @@ class ProdutoForm(forms.ModelForm):
             ),
         }
 
+    @serializar_grupos
     def __init__(self, *args, **kwargs):
+        self.integrar_precos_vinculados = kwargs.pop('integrar_precos_vinculados', False)
+        instance = kwargs.get('instance')
+        if instance and instance.pk and not (args and args[0] is not None) and kwargs.get('data') is None:
+            instance.refresh_from_db()
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            from .services.precos_vinculados import versao_cadastro_produto
+            self.initial['versao_cadastro_precos'] = versao_cadastro_produto(self.instance)
+        self.grupo_precos = None
+        self.integrantes_precos = []
+        if self.instance.pk:
+            from .models import MembroGrupoProduto
+            vinculo = MembroGrupoProduto.objects.select_related('grupo').filter(produto_id=self.instance.pk).first()
+            if vinculo:
+                self.grupo_precos = vinculo.grupo
+                self.integrantes_precos = list(vinculo.grupo.produtos.exclude(pk=self.instance.pk).order_by('nome'))
+                self.initial['grupo_precos_id'] = vinculo.grupo_id
+                self.initial['versao_precos_grupo'] = vinculo.grupo.versao_precos
 
         self.fields["fornecedores"].queryset = Fornecedor.objects.filter(ativo=True).order_by("nome", "id")
         if self.instance and self.instance.pk:
@@ -308,6 +331,13 @@ class ProdutoForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        if self.instance.pk and not (self.integrar_precos_vinculados and self.grupo_precos and self.grupo_precos.precos_regularizados):
+            from .services.precos_vinculados import impedir_escrita_direta
+            try:
+                impedir_escrita_direta(self.instance.pk, {campo:cleaned_data[campo] for campo in
+                    ('preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado') if campo in cleaned_data})
+            except ValidationError as exc:
+                raise forms.ValidationError(exc.messages) from exc
 
         unidade_compra_valor = cleaned_data.get("unidade_compra") or ""
         unidade_compra_valor = str(unidade_compra_valor).strip()

@@ -1002,6 +1002,19 @@ select.campo-obrigatorio-piscando:focus,
 
 <form method="post" class="row g-1" id="form-produto">
   {% csrf_token %}
+  {{ form.grupo_precos_id }}{{ form.versao_precos_grupo }}{{ form.versao_cadastro_precos }}
+  {% if form.grupo_precos %}
+  <div class="col-12 alert alert-info" role="status">
+    <strong>{{ form.grupo_precos.nome }}</strong>
+    {% if form.grupo_precos.precos_regularizados %}
+    — Preços de venda compartilhados. Alterar um preço atualiza os demais integrantes;
+    custos, estoque e identificação permanecem individuais.
+    {% else %}
+    — Grupo pendente: regularize em Gerenciar grupos vinculados antes de alterar preços de venda.
+    {% endif %}
+    <div>Demais integrantes: {% for integrante in form.integrantes_precos %}{{ integrante.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}.</div>
+  </div>
+  {% endif %}
   {% if retorno_url %}
   <input type="hidden" name="next" value="{{ retorno_url }}">
   {% endif %}
@@ -1897,6 +1910,8 @@ const response = await fetch("{% url 'estoque:verificar_produto' %}?nome=" + enc
     }
 
     function atualizarPrecoFinalAoAlterarCompra(baseCampo, percentualCampo, precoCampo) {
+        // Costs remain individual; do not silently submit group price changes.
+        if ({% if form.instance.vinculo_grupo %}true{% else %}false{% endif %}) return;
         if (!baseCampo || !percentualCampo || !precoCampo) return;
 
         const base = numero(baseCampo.value);

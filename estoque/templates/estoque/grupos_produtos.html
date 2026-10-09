@@ -44,6 +44,16 @@
     <input type="text" id="grupoProdutoNome" maxlength="120" required>
     <p id="grupoProdutoQuantidade"></p>
     <div id="grupoProdutoMembros"></div>
+    <section id="grupoProdutoPrecos" hidden aria-label="Diagnóstico de preços vinculados">
+      <h3>Preços vinculados — diagnóstico e prévia</h3>
+      <p>Confira apresentações e preços. A aplicação exige confirmação explícita e altera todos os integrantes na mesma transação.</p>
+      <p id="grupoProdutoPrecosEstado" role="status"></p>
+      <label for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
+      <select id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
+      <div id="grupoProdutoPrecosTabela" style="overflow-x:auto"></div>
+      <label class="grupo-produtos-opcao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade física e os preços da prévia para todos os integrantes.</label>
+      <button type="button" id="grupoProdutoRegularizar" disabled>Aplicar preços e ativar vinculação</button>
+    </section>
     <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções de membros são salvas ao confirmar cada ação.</p>
     <div class="grupo-produtos-acoes">
       <button type="button" id="grupoProdutoAdicionar" hidden>Adicionar produtos</button>
@@ -56,6 +66,7 @@
       <div id="grupoProdutoElegiveis"></div>
       <div class="grupo-produtos-acoes">
         <button type="button" id="grupoProdutoConfirmarAdicao" disabled>Confirmar adição</button>
+        <button type="button" id="grupoProdutoAplicarAdicao" hidden>Aplicar prévia e adicionar</button>
         <button type="button" id="grupoProdutoCancelarAdicao">Cancelar</button>
       </div>
     </section>
@@ -91,6 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const gerenciarModal = el('grupoProdutoGerenciarModal');
   const urlCriar = "{% url 'estoque:grupos_produtos_criar' %}";
   const urlLista = "{% url 'estoque:grupos_produtos_lista' %}";
+  let diagnosticoAtual = null, adicaoPrevia = null;
   let modo = false, grupoUrl = null, selecionados = [], alterado = false, ocupado = false, excluido = false;
   const boxes = Array.from(document.querySelectorAll('.grupo-produto-checkbox'));
   function quantidade(total) { return total + (total === 1 ? ' produto' : ' produtos'); }
@@ -138,9 +150,66 @@ document.addEventListener('DOMContentLoaded', function () {
     return resultado;
   }
   function payload(acao) { const dados = new FormData(); dados.set('acao', acao); return dados; }
+  function mostrarPrecos(diagnostico) {
+    const secao=el('grupoProdutoPrecos'), seletor=el('grupoProdutoPrecosReferencia');
+    diagnosticoAtual=diagnostico;
+    el("grupoProdutoPrecosConfirmacao").checked=false;
+    el("grupoProdutoRegularizar").hidden=!grupoUrl || !!(diagnostico && diagnostico.regularizado);
+    el("grupoProdutoRegularizar").disabled=true;
+    secao.hidden=!diagnostico;
+    if(!diagnostico)return;
+    el('grupoProdutoPrecosEstado').textContent=diagnostico.status+' · '+diagnostico.aviso+
+      (diagnostico.divergentes.length?' Diferenças: '+diagnostico.divergentes.join(', ')+'.':'')+
+      (diagnostico.bloqueios.length?' '+diagnostico.bloqueios.map(b=>(b.produto_id?'Produto '+b.produto_id+': ':'')+b.motivo).join(' '):'');
+    seletor.replaceChildren(new Option('Selecione o produto de referência',''));
+    diagnostico.produtos.forEach(p=>seletor.add(new Option(p.nome+(p.ativo?'':' (inativo)'),p.id)));
+    seletor.value=diagnostico.referencia_id==null?'':String(diagnostico.referencia_id);
+    const tabela=document.createElement('table');tabela.style.cssText='width:100%;font-size:13px;border-spacing:8px';
+    const cabecalho=tabela.insertRow();
+    ['Produto','Apresentação','Vista','Prazo','Vista fracionado','Prazo fracionado'].forEach(texto=>{
+      const th=document.createElement('th');th.textContent=texto;cabecalho.append(th);
+    });
+    diagnostico.produtos.forEach(p=>{
+      const proposta=diagnostico.previa.find(item=>item.produto_id===p.id);
+      const valores=[p.nome,p.unidade_principal+(p.vende_fracionado?' / '+p.fator+' '+p.unidade_fracionada:'')];
+      ['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'].forEach(campo=>{
+        valores.push(!diagnostico.campos.includes(campo)?'Não aplicável':
+          p.precos[campo]+(proposta?' → '+proposta.novos[campo]:''));
+      });
+      const linha=tabela.insertRow();valores.forEach(texto=>{linha.insertCell().textContent=texto;});
+    });
+    el('grupoProdutoPrecosTabela').replaceChildren(tabela);
+  }
+  el('grupoProdutoPrecosReferencia').addEventListener('change',async function(){
+    if(ocupado)return;
+    ocupado=true;this.disabled=true;
+    try{
+      let grupo;
+      if(grupoUrl){
+        const url=new URL(grupoUrl,location.origin);
+        if(this.value)url.searchParams.set('referencia',this.value);
+        grupo=await requisitar(url);
+      }else{
+        const dados=payload('previa');selecionados.forEach(id=>dados.append('produto_ids',id));
+        dados.set('referencia',this.value);grupo=await requisitar(urlCriar,dados);
+      }
+      mostrarPrecos(grupo.precos_vinculados);
+    }catch(e){mostrarPrecos(null);erro.textContent=e.message;}
+    finally{ocupado=false;this.disabled=false;}
+  });
+  el('grupoProdutoPrecosConfirmacao').addEventListener('change',function(){
+    el('grupoProdutoRegularizar').disabled=!this.checked || !diagnosticoAtual || !diagnosticoAtual.referencia_id || diagnosticoAtual.bloqueios.length>0;
+  });
+  el('grupoProdutoRegularizar').addEventListener('click',async()=>{
+    if(!diagnosticoAtual || !el('grupoProdutoPrecosConfirmacao').checked)return;
+    const dados=payload('regularizar');dados.set('referencia',diagnosticoAtual.referencia_id);
+    dados.set('versao_observada',diagnosticoAtual.versao_observada);dados.set('confirmar','1');
+    await executarAcao(dados);
+  });
   function abrir(titulo) {
     erro.textContent = ''; sucesso.textContent = ''; membros.replaceChildren();
-    painelAdicao.hidden = true; painelExclusao.hidden = true; excluido = false;
+    mostrarPrecos(null);
+    painelAdicao.hidden = true; painelExclusao.hidden = true; excluido = false; adicaoPrevia=null; el("grupoProdutoAplicarAdicao").hidden=true;
     el('grupoProdutoTitulo').textContent = titulo;
     salvar.textContent = grupoUrl ? 'Salvar alterações' : 'Salvar grupo';
     salvar.hidden = false; nome.disabled = false;
@@ -148,6 +217,7 @@ document.addEventListener('DOMContentLoaded', function () {
     modal.showModal(); nome.focus();
   }
   function grupoEncerrado(mensagem) {
+    mostrarPrecos(null);
     excluido = true; alterado = true;
     membros.replaceChildren(); el('grupoProdutoQuantidade').textContent = quantidade(0);
     nome.disabled = true; salvar.hidden = true;
@@ -159,19 +229,21 @@ document.addEventListener('DOMContentLoaded', function () {
     if (ocupado || excluido) return;
     ocupado = true; erro.textContent = ''; sucesso.textContent = '';
     // Impedir envios repetidos e fechamento durante uma operação.
-    const controles = Array.from(form.querySelectorAll('button, input')).map(no => [no, no.disabled]);
+    const controles = Array.from(form.querySelectorAll('button, input, select')).map(no => [no, no.disabled]);
     controles.forEach(([no]) => { no.disabled = true; });
     try {
       const resultado = await requisitar(grupoUrl, dados);
       alterado = true;
       if (resultado.excluido) grupoEncerrado(resultado.mensagem);
-      else { mostrarMembros(resultado.grupo.produtos); sucesso.textContent = resultado.mensagem; }
+      else { mostrarMembros(resultado.grupo.produtos); mostrarPrecos(resultado.grupo.precos_vinculados); sucesso.textContent = resultado.mensagem; }
       if (apos) apos(resultado);
     } catch (e) { erro.textContent = e.message; }
     finally {
       controles.forEach(([no, disabled]) => { no.disabled = disabled; });
       if (excluido) nome.disabled = true;
       ocupado = false;
+      el('grupoProdutoAdicionar').disabled=!(diagnosticoAtual && diagnosticoAtual.regularizado);
+      el('grupoProdutoRegularizar').disabled=true;
       if (excluido) el('grupoProdutoFechar').focus();
     }
   }
@@ -193,6 +265,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const resultado = await requisitar(urlCriar, dados);
       grupoUrl = null; alterado = false; nome.value = resultado.nome; abrir('Criar grupo');
       el('grupoProdutoQuantidade').textContent = quantidade(selecionados.length) + ' selecionados';
+      const previa=payload('previa');selecionados.forEach(id=>previa.append('produto_ids',id));
+      mostrarPrecos((await requisitar(urlCriar,previa)).precos_vinculados);
     } catch (e) { el('grupoProdutoContagem').textContent = e.message; }
     finally { ocupado = false; criar.disabled = selecionados.length < 2; }
   });
@@ -217,7 +291,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const grupo = await requisitar(url);
       grupoUrl = url; alterado = false;
       gerenciarModal.close(); nome.value = grupo.nome;
-      abrir('Editar grupo vinculado'); mostrarMembros(grupo.produtos);
+      abrir('Editar grupo vinculado'); mostrarMembros(grupo.produtos); mostrarPrecos(grupo.precos_vinculados);
     } catch (e) {
       if (gerenciarModal.open) el('grupoProdutoGerenciarErro').textContent = e.message;
       else el('grupoProdutoContagem').textContent = e.message;
@@ -244,6 +318,7 @@ document.addEventListener('DOMContentLoaded', function () {
     finally { ocupado = false; }
   });
   function atualizarElegiveis() {
+    adicaoPrevia=null;el('grupoProdutoAplicarAdicao').hidden=true;
     const busca = el('grupoProdutoBusca').value.trim().toLocaleLowerCase();
     const opcoes = Array.from(el('grupoProdutoElegiveis').querySelectorAll('label'));
     opcoes.forEach(opcao => { opcao.hidden = !opcao.textContent.toLocaleLowerCase().includes(busca); });
@@ -271,10 +346,25 @@ document.addEventListener('DOMContentLoaded', function () {
   el('grupoProdutoBusca').addEventListener('input', atualizarElegiveis);
   el('grupoProdutoBusca').addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
   el('grupoProdutoCancelarAdicao').addEventListener('click', () => { if (!ocupado) { painelAdicao.hidden = true; el('grupoProdutoAdicionar').focus(); } });
-  el('grupoProdutoConfirmarAdicao').addEventListener('click', () => {
-    const dados = payload('adicionar');
-    el('grupoProdutoElegiveis').querySelectorAll('input:checked').forEach(input => dados.append('produto_ids', input.value));
-    executarAcao(dados, () => { painelAdicao.hidden = true; el('grupoProdutoAdicionar').focus(); });
+  el('grupoProdutoConfirmarAdicao').addEventListener('click', async () => {
+    if(ocupado)return;
+    const dados=payload('previa_adicao');
+    el('grupoProdutoElegiveis').querySelectorAll('input:checked').forEach(input=>dados.append('produto_ids',input.value));
+    ocupado=true;erro.textContent='';
+    try{
+      const previa=(await requisitar(grupoUrl,dados)).precos_vinculados;
+      mostrarPrecos(previa);
+      el('grupoProdutoRegularizar').hidden=true;
+      if(previa.bloqueios.length)throw new Error('Entrada bloqueada. Confira os problemas apresentados na prévia.');
+      adicaoPrevia=dados;adicaoPrevia.set('acao','adicionar');
+      adicaoPrevia.set('versao_observada',previa.versao_observada);adicaoPrevia.set('confirmar','1');
+      el('grupoProdutoAplicarAdicao').hidden=false;
+    }catch(e){erro.textContent=e.message;adicaoPrevia=null;}
+    finally{ocupado=false;}
+  });
+  el('grupoProdutoAplicarAdicao').addEventListener('click',async()=>{
+    if(!adicaoPrevia || !el('grupoProdutoPrecosConfirmacao').checked){erro.textContent='Confirme explicitamente a prévia de entrada.';return;}
+    await executarAcao(adicaoPrevia,()=>{painelAdicao.hidden=true;adicaoPrevia=null;el('grupoProdutoAplicarAdicao').hidden=true;});
   });
   el('grupoProdutoExcluir').addEventListener('click', () => {
     if (ocupado) return;
@@ -293,7 +383,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     ocupado = true; salvar.disabled = true; erro.textContent = '';
     try {
+      if(!diagnosticoAtual || !diagnosticoAtual.referencia_id || diagnosticoAtual.bloqueios.length || !el('grupoProdutoPrecosConfirmacao').checked)throw new Error('Escolha a referência, confira a prévia e marque a confirmação dos preços.');
       const dados = payload('criar'); dados.set('nome', nome.value); selecionados.forEach(id => dados.append('produto_ids', id));
+      dados.set('referencia',diagnosticoAtual.referencia_id);dados.set('versao_observada',diagnosticoAtual.versao_observada);dados.set('confirmar','1');
       const resultado = await requisitar(urlCriar, dados);
       try { sessionStorage.setItem('grupoProdutosMensagem', resultado.mensagem); } catch (_) {}
       try {

@@ -11,6 +11,9 @@ from estoque.models import Compra, ContaPagar, ItemCompra, MovimentoFinanceiro, 
 @override_settings(SECURE_SSL_REDIRECT=False, ALLOWED_HOSTS=["testserver"])
 class RevisaoPrecosPosteriorTests(TestCase):
     def setUp(self):
+        from estoque.tests_precos_vinculados import criar_operador_precos
+        self.operador=criar_operador_precos('posterior-authorized-test')
+        self.client.force_login(self.operador)
         self.produto = Produto.objects.create(
             nome="Produto de teste", preco_compra=Decimal("9.00"),
             preco_vista=Decimal("12.00"), preco_venda=Decimal("12.00"),

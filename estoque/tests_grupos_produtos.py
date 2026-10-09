@@ -4,25 +4,35 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.contrib.auth import get_user_model
 
 from .grupos_produtos import criar_grupo, sugerir_nome
 from .models import GrupoProdutoVinculado, MembroGrupoProduto, Produto
+from .services.precos_vinculados import diagnosticar_grupo, regularizar_grupo
+from .tests_precos_vinculados import criar_operador_precos
 
 
 @override_settings(SECURE_SSL_REDIRECT=False, ALLOWED_HOSTS=['testserver'])
 class GruposProdutosTests(TestCase):
     def setUp(self):
+        self.operador=criar_operador_precos('grupos-test')
+        self.client.force_login(self.operador)
         self.produtos = [Produto.objects.create(
             nome=nome, preco_compra=Decimal('2'), preco_vista=Decimal('3'),
-            preco_prazo=Decimal('4'), quantidade=Decimal('10'),
+            preco_prazo=Decimal('4'), quantidade=Decimal('10'), unidade_compra='UN',
         ) for nome in ['Micos Cola 6/2,5L', 'Micos Guaraná 6/2,5L', 'Micos Laranja 6/2,5L']]
         self.url = reverse('estoque:grupos_produtos_criar')
 
     def criar(self):
-        resposta = self.client.post(self.url, {'nome': 'Micos 6/2,5L', 'produto_ids': [p.pk for p in self.produtos]})
+        resposta = self.client.post(self.url, self.criacao_confirmada('Micos 6/2,5L'))
         self.assertEqual(resposta.status_code, 201)
         grupo = GrupoProdutoVinculado.objects.get(pk=resposta.json()['id'])
         return grupo, reverse('estoque:grupos_produtos_detalhe', args=[grupo.pk])
+
+    def criacao_confirmada(self, nome):
+        dados = {'acao': 'previa', 'produto_ids': [p.pk for p in self.produtos], 'referencia': self.produtos[0].pk}
+        previa = self.client.post(self.url, dados).json()['precos_vinculados']
+        return {**dados, 'acao': 'criar', 'nome': nome, 'confirmar': '1', 'versao_observada': previa['versao_observada']}
 
     def test_criar_grupo_com_varios_produtos_e_visualizar(self):
         grupo, url = self.criar()
@@ -78,7 +88,7 @@ class GruposProdutosTests(TestCase):
         resposta = self.client.post(self.url, {'acao': 'sugerir', 'produto_ids': ids})
         self.assertEqual(resposta.json()['nome'].casefold(), 'micos 6/2,5l')
         self.assertFalse(GrupoProdutoVinculado.objects.exists())
-        resposta = self.client.post(self.url, {'nome': 'Nome escolhido pelo usuário', 'produto_ids': ids})
+        resposta = self.client.post(self.url, self.criacao_confirmada('Nome escolhido pelo usuário'))
         self.assertEqual(resposta.status_code, 201)
         self.assertEqual(GrupoProdutoVinculado.objects.get().nome, 'Nome escolhido pelo usuário')
 
@@ -123,11 +133,13 @@ class GruposProdutosTests(TestCase):
 
     def test_adicionar_varios_membros_sem_alterar_produtos(self):
         grupo = criar_grupo([p.pk for p in self.produtos[:2]], 'Micos')
-        novo = Produto.objects.create(nome='Micos Uva 6/2,5L', preco_compra=2, preco_vista=3, preco_prazo=4)
+        novo = Produto.objects.create(nome='Micos Uva 6/2,5L', preco_compra=2, preco_vista=3, preco_prazo=4, unidade_compra='UN')
         ids = [self.produtos[2].pk, novo.pk]
         antes = list(Produto.objects.order_by('pk').values())
         url = reverse('estoque:grupos_produtos_detalhe', args=[grupo.pk])
-        resposta = self.client.post(url, {'acao': 'adicionar', 'produto_ids': ids})
+        regularizar_grupo(grupo.pk, diagnosticar_grupo(list(grupo.produtos.all()))['versao_observada'], confirmar=True, operador=self.operador)
+        previa = self.client.post(url, {'acao': 'previa_adicao', 'produto_ids': ids}).json()['precos_vinculados']
+        resposta = self.client.post(url, {'acao': 'adicionar', 'produto_ids': ids, 'confirmar': '1', 'versao_observada': previa['versao_observada']})
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(resposta.json()['grupo']['quantidade'], 4)
         self.assertEqual(resposta.json()['mensagem'], 'Produtos adicionados ao grupo.')
@@ -163,7 +175,7 @@ class GruposProdutosTests(TestCase):
 
     def test_adicao_repetida_nao_duplica_membros(self):
         grupo, url = self.criar()
-        resposta = self.client.post(url, {'acao': 'adicionar', 'produto_ids': [self.produtos[0].pk] * 2})
+        resposta = self.client.post(url, {'acao': 'adicionar', 'produto_ids': [self.produtos[0].pk] * 2, 'confirmar': '1'})
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(grupo.produtos.count(), 3)
 

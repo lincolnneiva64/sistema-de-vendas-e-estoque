@@ -2335,11 +2335,19 @@
                 unidades: [
                     {
                         nome: "{{ produto.unidade_venda_1|default:produto.unidade_compra|default:''|escapejs }}",
+                        {% if produto.vinculo_grupo.grupo.precos_regularizados %}
+                        preco: Number("{{ produto.preco_vista|default:0 }}".replace(",", ".")) || 0
+                        {% else %}
                         preco: Number("{{ produto.preco_venda_1|default:produto.preco_venda|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_venda|default:0 }}".replace(",", ".")) || 0
-                    }{% if produto.unidade_venda_2 %},
+                        {% endif %}
+                    }{% if produto.unidade_venda_2 and produto.vende_fracionado or produto.unidade_venda_2 and not produto.vinculo_grupo.grupo.precos_regularizados %},
                     {
                         nome: "{{ produto.unidade_venda_2|escapejs }}",
+                        {% if produto.vinculo_grupo.grupo.precos_regularizados %}
+                        preco: Number("{{ produto.preco_vista_fracionado|default:0 }}".replace(",", ".")) || 0
+                        {% else %}
                         preco: Number("{{ produto.preco_venda_2|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_vista_fracionado|default:0 }}".replace(",", ".")) || Number("{{ produto.preco_prazo_fracionado|default:0 }}".replace(",", ".")) || 0
+                        {% endif %}
                     }{% endif %}
                 ].filter((unidade, index, lista) => unidade.nome && lista.findIndex((item) => item.nome === unidade.nome) === index)
             }{% if not forloop.last %},{% endif %}

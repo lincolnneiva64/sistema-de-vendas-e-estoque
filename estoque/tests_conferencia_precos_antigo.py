@@ -53,6 +53,9 @@ def _registro_antigo(
 @override_settings(SECURE_SSL_REDIRECT=False, ALLOWED_HOSTS=["testserver"])
 class ConferenciaPrecosAntigoSnapshotTests(TestCase):
     def setUp(self):
+        from estoque.tests_precos_vinculados import criar_operador_precos
+        self.operador=criar_operador_precos('conference-authorized-test')
+        self.client.force_login(self.operador)
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
         self.snapshot_path = Path(self.tmpdir.name) / "precos.json"
