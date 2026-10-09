@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_datetime
 
 from locacoes.models import EventoLocacao, Locacao, TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem, EventoVenda
-from .models import OperacaoSincronizacao, RevisaoVendaOffline
+from .models import OperacaoSincronizacao, RevisaoVendaOffline, EncerramentoVendaOffline
 from .sale_commands import SALE_OPERATION_TYPE, execute_sale, validate_sale_payload
 from estoque.services.vendas import ErroGravarVenda
 
@@ -138,6 +138,8 @@ def _process_sale_creation(operation, command, user, digest):
                 or original.payload_hash != revision["original_hash"]
                 or command_hash(original.comando) != original.payload_hash):
             revision_error = "Origem da revisao incompatível. Operacao original preservada."
+        elif EncerramentoVendaOffline.objects.filter(original=original).exists():
+            revision_error = "Original encerrada administrativamente sem venda. Nova revisao bloqueada."
         elif not commercial_conflict(original):
             revision_error = "Origem nao esta em conflito comercial. Consulte a venda oficial antes de prosseguir."
         elif RevisaoVendaOffline.objects.filter(original=original).exists():

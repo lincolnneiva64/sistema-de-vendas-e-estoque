@@ -766,8 +766,8 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.wait("!!navigator.serviceWorker.controller")
                 self.assertTrue(tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    if(!keys.includes('offline-pilot-shell-v29-2-8f-fix') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
-                    const cache=await caches.open('offline-pilot-shell-v29-2-8f-fix');
+                    if(!keys.includes('offline-pilot-shell-v30-admin-close') || keys.includes('offline-pilot-shell-v21') || keys.includes('offline-pilot-shell-v20') || keys.includes('offline-pilot-shell-v19') || keys.includes('offline-pilot-shell-v18'))return false;
+                    const cache=await caches.open('offline-pilot-shell-v30-admin-close');
                     for(const asset of ['app.js','indicator.css','pilot.css','presentation.js','commercial.js','commercial-ui.js'])
                         if(!(await cache.match('/static/offline/'+asset)))return false;
                     if(!(await cache.match('/offline/vendas-shell/')))return false;
@@ -1002,7 +1002,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 def step(milliseconds=30000, drain=True):
                     # Await the complete probe instead of guessing a 100ms delay.
                     if drain:
-                        tab.evaluate("window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8f/app.js');await app.initialized;await app.probe();true")
+                        tab.evaluate("window.app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8g-close/app.js');await app.initialized;await app.probe();true")
                     tab.evaluate(f"localStorage.setItem('test-offset',Number(localStorage.getItem('test-offset')||0)+{milliseconds});window.dispatchEvent(new Event('online'));await app.probe();true")
                     tab.wait("(await testRepo.all('metadata')).some(v=>v.key.startsWith('communication:') && v.last_success_at > Date.now()-2000)")
                 def minutes(target):
@@ -1378,11 +1378,11 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
 
     def network(self, tab, offline):
         # A blank tab has no app yet; otherwise drain the complete probe first.
-        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8f/app.js');await app.initialized;await app.probe()}return true})()")
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8g-close/app.js');await app.initialized;await app.probe()}return true})()")
         tab.call('Network.emulateNetworkConditions', {'offline': offline, 'latency': 0, 'downloadThroughput': -1, 'uploadThroughput': -1})
         tab.evaluate("window.dispatchEvent(new Event('offline'))" if offline else "window.dispatchEvent(new Event('online'))")
         # Drain the probe triggered by native/emulated events, then verify the new conditions.
-        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8f/app.js');await app.probe();await app.probe()}return true})()")
+        tab.evaluate("(async()=>{if(document.getElementById('offline-status')){const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8g-close/app.js');await app.probe();await app.probe()}return true})()")
 
     def save(self, tab, text):
         import json
@@ -1453,7 +1453,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 chrome.stop()
 
     def clock(self, tab):
-        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8f/app.js');await app.initialized;await app.probe();return true})()")
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8g-close/app.js');await app.initialized;await app.probe();return true})()")
         tab.evaluate("window.clockOffset=0;window.realNow=performance.now.bind(performance);window.realWall=Date.now;performance.now=()=>realNow()+clockOffset;Date.now=()=>realWall()+clockOffset;window.autoConfirmObserver?.disconnect();window.autoConfirmObserver=new MutationObserver(()=>{const b=document.getElementById('offline-modal-confirm');if(document.getElementById('offline-sync-modal')?.open&&!b.disabled&&!b.hidden)b.click()});autoConfirmObserver.observe(document.body,{subtree:true,attributes:true})")
 
     def advance_to_ready(self, tab):
@@ -1464,4 +1464,4 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
 
     def advance_probe(self, tab):
         # Advance only between completed probes, without replacing fetch or guessing delays.
-        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8f/app.js');await app.probe();window.clockOffset+=30000;await app.probe();return true})()")
+        tab.evaluate("(async()=>{const app=await import([...document.scripts].find(s=>s.src.includes('/app.js'))?.src || '/offline/assets/2-8g-close/app.js');await app.probe();window.clockOffset+=30000;await app.probe();return true})()")

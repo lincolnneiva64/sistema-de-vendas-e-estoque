@@ -1,7 +1,8 @@
 import {openDB, Repository, validReceipt} from '/offline/assets/2-8f/core.js';
-import {draftScope} from '/offline/assets/2-8f/sales-drafts.js';
+import {draftScope} from '/offline/assets/2-8g-close/sales-drafts.js';
 import {carregarSnapshotComercial} from '/offline/assets/2-8f/commercial.js';
-import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/2-8f/sales-revisions.js';
+import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/2-8g-close/sales-revisions.js';
+import {closureKey,validClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 const element = id => document.getElementById(id);
 const form=element('revision-form'), message=element('revision-message'), fields=element('revision-fields');
@@ -79,6 +80,11 @@ async function refreshResult(){
     const identity=await repo.get('metadata','sales-identity'),device=await repo.get('metadata','device');
     if(generation!==resultGeneration)return;
     if(identity?.actor_id!==scope.actor_id||identity?.environment_id!==scope.environment_id||device?.id!==scope.device_id){blocked=true;form.hidden=true;fields.disabled=true;element('revision-save').disabled=true;element('revision-discard').disabled=true;element('revision-official').hidden=true;element('revision-origin').textContent='Revisão preservada para a identidade original.';message.textContent='Identidade mudou. Revisão preservada e bloqueada.';return;}
+    const closure=await repo.get('metadata',closureKey(original));
+    if(validClosure(closure?.receipt,original)){
+        blocked=true;fields.disabled=true;element('revision-save').disabled=true;element('revision-discard').disabled=true;
+        element('revision-official').hidden=true;message.textContent='Original encerrada administrativamente — nenhuma venda gerada. Revisão bloqueada; histórico preservado.';return;
+    }
     if(record?.status==='concluida'){
         const child=await repo.get('operations',record.replacement_operation_id);
         if(child?.server_result?.code==='revisao_origem_bloqueada'){

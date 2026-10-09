@@ -37,3 +37,17 @@ class RevisaoVendaOffline(models.Model):
     motivo_original = models.TextField()
     revisada_em = models.DateTimeField()
     registrado_em = models.DateTimeField(auto_now_add=True)
+
+
+class EncerramentoVendaOffline(models.Model):
+    """Administrative decision; the original commercial receipt stays immutable."""
+    original = models.OneToOneField(OperacaoSincronizacao, on_delete=models.PROTECT,
+                                   related_name="encerramento_administrativo")
+    closure_id = models.UUIDField(unique=True)
+    original_hash = models.CharField(max_length=64)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    environment_id = models.CharField(max_length=160)
+    device_id = models.UUIDField()
+    motivo = models.TextField()
+    evidencia = models.JSONField()
+    encerrado_em = models.DateTimeField(auto_now_add=True)

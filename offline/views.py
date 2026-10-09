@@ -15,6 +15,8 @@ from estoque.models import EntregaRotaItem
 from .services import ACTIVE_STATUSES, PROTOCOL_VERSION, process_operation, validate_command, command_hash, revision_chain
 from .models import OperacaoSincronizacao
 from .commercial import build_commercial_snapshot
+from .closures import close_conflict, checked_original, closure_result
+from .models import EncerramentoVendaOffline
 
 
 @require_GET
@@ -24,7 +26,7 @@ def versioned_asset(request, filename):
     allowed = {"app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
-               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js"}
+               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js"}
     if filename not in allowed:
         return HttpResponse(status=404)
     return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),
@@ -146,6 +148,39 @@ def operation_result(request, operation_id):
     return _operation_result(request, operation_id)
 
 
+@require_POST
+@never_cache
+@authorized
+def close_sale_conflict(request, operation_id):
+    if len(request.body) > 12000:
+        return JsonResponse({'erro':'Solicitação muito grande.'},status=413)
+    try:
+        data = json.loads(request.body)
+        result = close_conflict(operation_id,data,request.user,environment_id(request))
+    except (ValueError,TypeError,ValidationError,OverflowError,UnicodeError) as exc:
+        return JsonResponse({'code':'encerramento_recusado','operation_id':str(operation_id),
+                             'erro':str(exc)},status=409)
+    except DatabaseError:
+        return JsonResponse({'erro':'Resultado do encerramento indeterminado. Consulte o servidor.'},status=503)
+    return JsonResponse({'lookup':'encontrada','closure':result})
+
+
+@require_GET
+@never_cache
+@authorized
+def sale_closure_result(request, operation_id):
+    try:
+        op = checked_original(operation_id,request.GET,request.user,environment_id(request))
+        closure = EncerramentoVendaOffline.objects.select_related('original').filter(original=op).first()
+        return JsonResponse({'lookup':'encontrada' if closure else 'nao_encontrada',
+                             'operation_id':str(op.operation_id),'hash':op.payload_hash,
+                             'closure':closure_result(closure) if closure else None})
+    except (ValueError,TypeError,ValidationError):
+        return JsonResponse({'erro':'Consulta de encerramento incompatível.'},status=409)
+    except DatabaseError:
+        return JsonResponse({'erro':'Consulta indisponível. Estado preservado.'},status=503)
+
+
 @require_GET
 @never_cache
 def online_sale_result(request, operation_id):
@@ -220,12 +255,14 @@ def _operation_result(request, operation_id):
         return JsonResponse({"lookup": "indeterminada", "erro": "Operação sem resultado definitivo."}, status=503)
     try:
         chain = revision_chain(operation)
+        closure = EncerramentoVendaOffline.objects.select_related('original').filter(original=operation).first()
     except (DatabaseError, ValidationError):
         return JsonResponse({"lookup": "indeterminada", "erro": "Vinculo de revisao indisponível."}, status=503)
     return JsonResponse({"lookup": "encontrada", "operation_id": str(operation.operation_id),
                          "hash": operation.payload_hash, "actor_id": str(operation.actor_id),
                          "environment_id": operation.environment_id, "type": operation.type,
-                         "device_id": str(operation.device_id), "receipt": receipt, "revisions": chain})
+                         "device_id": str(operation.device_id), "receipt": receipt, "revisions": chain,
+                         "closure": closure_result(closure) if closure else None})
 
 
 @require_GET

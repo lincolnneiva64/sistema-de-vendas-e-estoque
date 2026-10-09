@@ -1,9 +1,10 @@
 import '/offline/assets/2-8f-fix/sales.js';
-import {operationDetails} from '/offline/assets/2-8f/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8f/sales-revisions.js';
+import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales} from '/offline/assets/2-8f-fix/sales-drafts.js';
-import {readStock,validateStock} from '/offline/assets/2-8f-fix/sales-stock.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales} from '/offline/assets/2-8g-close/sales-drafts.js';
+import {readStock,validateStock} from '/offline/assets/2-8g-close/sales-stock.js';
+import {closedLocally,closureKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -91,7 +92,7 @@ async function refreshCompletion() {
     if (generation !== completionGeneration) return;
     stockView = nextStock;
     const sales = operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
-    queueCount.textContent = `${sales.filter(op => op.status !== 'confirmada').length} venda(s) aguardando sincronização ou resolução.`;
+    queueCount.textContent = `${sales.filter(op => op.status !== 'confirmada' && !closedLocally(nextStock.closures,op)).length} venda(s) aguardando sincronização ou resolução.`;
     queueBlocked = ambiguousSales(operations,scope).length > 0;
     nextSale.hidden = true;
     if (!localCompletion) {
@@ -118,6 +119,9 @@ async function refreshCompletion() {
         || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
         throw new Error('Identidade da operação local incompatível. Dados preservados.');
     completionView = saleOperationState(operation);
+    const closure=nextStock.closures?.find(row=>row.key===closureKey(operation))?.receipt;
+    const closed=closedLocally(nextStock.closures,operation);
+    if(closed)completionView={status:'encerrada_sem_venda',recordId:null,url:null,error:'',label:'Encerrada administrativamente — nenhuma venda gerada. Histórico preservado.'};
     if (operation?.transport === 'online' && operation.status === 'enviando')
         completionView = {...completionView, label:'Enviando venda online. Confirmacao oficial ainda nao recebida.'};
     recover.hidden = !localCompletion || !operation || ['confirmada', 'conflito'].includes(operation.status);
@@ -129,11 +133,11 @@ async function refreshCompletion() {
             : `Conflito resolvido pela venda nº ${revisionView.recordId}. Venda corrigida confirmada. Se você enviou ao cliente informações da versão anterior, envie novamente a nota correta.`};
     const expanded = !!diagnostics.querySelector('details[open]');
     diagnostics.replaceChildren();
-    const detail = operationDetails(operation, scope, revisionView);
+    const detail = operationDetails(operation, scope, revisionView,closure);
     if (detail) { detail.open = expanded; diagnostics.append(detail); }
     message.textContent = `${completionView.label} Referência ${marker.operation_id.slice(0,8)}.`
         + (completionView.error ? ' ' + completionView.error : '');
-    if (localCompletion && !completionView.recordId) {
+    if (localCompletion && !completionView.recordId && !closed) {
         const payload = operation?.payload || {};
         const total = (payload.itens || []).reduce((sum, item) => sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
         const transport = operation?.transport === 'online' ? 'online' : 'offline';
@@ -155,6 +159,21 @@ async function refreshCompletion() {
         officialLink.href = completionView.url;
         officialLink.textContent = `Ver venda #${completionView.recordId}`;
     } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
+    if(localCompletion && closed && !queueBlocked){
+        const result=await mirrorClosure(repo,scope,operation,closure);
+        const current=await loadDraft(repo,scope);
+        if(generation!==completionGeneration)return;
+        if(result.released || !current.draft && !current.finalization && !current.confirmation){
+            historicalCompletion=marker;localCompletion=null;window.salesOffline.completed=false;
+            blocked=false;ignoreReset=false;saved='';revision=current.revision;
+            for(const [field,disabled] of completionControls)field.disabled=disabled;
+            completionControls.clear();discard.disabled=true;
+            document.getElementById('btnGravarVenda').textContent='Gravar Venda';
+            document.getElementById('btnGravarVenda').disabled=false;document.getElementById('btnConfirmarFechamentoVenda').disabled=false;
+            channel?.postMessage({type:'draft-confirmed',scope,revision,operation_id:marker.operation_id});
+            document.dispatchEvent(new Event('sales-completion-released'));
+        }else message.textContent+=' Montagem posterior ou revisão local preservada; reabra a tela para conferir.';
+    }
     if (localCompletion && completionView.recordId && !queueBlocked) {
         const result = await releaseConfirmedDraft(repo, scope, marker.operation_id);
         if (generation !== completionGeneration) return;
@@ -372,6 +391,7 @@ window.salesDraftUI = {
         const operations = await repo.all('operations');
         for (const op of operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
             && op.environment_id === scope.environment_id && op.status !== 'confirmada')) {
+            if(closedLocally(await repo.all('metadata'),op))continue;
             if (!(await revisionPresentation(repo,op,scope))?.recordId) return false;
         }
         return true;
@@ -496,6 +516,9 @@ try {
             const previousOfficialOperation = previousOfficial && await repo.get('operations',previousOfficial.operation_id);
             historicalCompletion = previousLocal && (!previousOfficial || previousLocalOperation?.sequence > previousOfficialOperation?.sequence)
                 ? previousLocal : previousOfficial;
+            const previousClosure=await repo.get('metadata','rascunho_venda:'+JSON.stringify([scope.environment_id,scope.actor_id,scope.device_id])+':last-closure');
+            if(previousClosure){const closedOp=await repo.get('operations',previousClosure.operation_id),recent=historicalCompletion&&await repo.get('operations',historicalCompletion.operation_id);
+                if(!recent || closedOp?.sequence>recent.sequence)historicalCompletion=previousClosure;}
             if (result.finalization) completed(result.finalization);
             else if (historicalCompletion) await refreshCompletion();
             if (result.confirmation) {

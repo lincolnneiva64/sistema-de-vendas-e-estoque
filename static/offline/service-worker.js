@@ -1,9 +1,10 @@
-const CACHE = 'offline-pilot-shell-v29-2-8f-fix';
+const CACHE = 'offline-pilot-shell-v30-admin-close';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
 ASSETS.push(...['app.js', 'core.js', 'presentation.js', 'sales.js', 'sales-drafts.js',
     'sales-draft-ui.js', 'operation-details.js', 'sales-revisions.js', 'sales-revision-ui.js', 'commercial.js', 'commercial-ui.js',
     'checklist.js', 'checklist-restore.js'].map(file => '/offline/assets/2-8f/' + file));
+ASSETS.push(...['app.js', 'operation-details.js', 'sales-draft-ui.js', 'sales-drafts.js', 'sales-revision-ui.js', 'sales-revisions.js', 'sales-stock.js', 'sales-closures.js'].map(file => '/offline/assets/2-8g-close/' + file));
 ASSETS.push(...['sales.js','sales-drafts.js','sales-draft-ui.js','sales-stock.js','commercial.js','commercial-ui.js']
     .map(file => '/offline/assets/2-8f-fix/' + file));
 self.addEventListener('install', event => {

@@ -3,6 +3,7 @@ from django.contrib.auth.views import LoginView
 from . import views
 
 urlpatterns = [
+    path("offline/assets/2-8g-close/<str:filename>", views.versioned_asset),
     path("offline/assets/2-8f-fix/<str:filename>", views.versioned_asset),
     path("offline/assets/2-8f/<str:filename>", views.versioned_asset),
     path("offline/assets/2-8e/<str:filename>", views.versioned_asset),
@@ -22,4 +23,6 @@ urlpatterns = [
     path("api/offline/snapshot/comercial/", views.commercial_snapshot, name="offline_commercial_snapshot"),
     path("api/offline/observations/", views.synchronize),
     path("api/offline/operations/<uuid:operation_id>/", views.operation_result),
+    path("api/offline/operations/<uuid:operation_id>/close/", views.close_sale_conflict),
+    path("api/offline/operations/<uuid:operation_id>/closure/", views.sale_closure_result),
 ]

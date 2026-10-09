@@ -1,6 +1,7 @@
-import {commercialConflict} from '/offline/assets/2-8f/sales-revisions.js';
+import {commercialConflict} from '/offline/assets/2-8g-close/sales-revisions.js';
+import {validClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 // Opening details remains read-only. Review is an explicit separate navigation.
-export function operationDetails(operation, scope, revisionView = null) {
+export function operationDetails(operation, scope, revisionView = null,closure = null) {
     if (!operation || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
         || !['pendente', 'enviando', 'conflito', 'resultado_desconhecido', 'erro'].includes(operation.status)) return null;
     const details = document.createElement('details');
@@ -36,7 +37,9 @@ export function operationDetails(operation, scope, revisionView = null) {
         origin.textContent = 'Revisão da operação: ' + operation.payload.revisao.original_operation_id;
         details.append(origin);
     }
-    if (revisionView?.recordId) {
+    if(validClosure(closure,operation)){
+        const text=document.createElement('p');text.textContent='Encerrada administrativamente — nenhuma venda gerada. Motivo: '+closure.motivo+' · '+closure.closed_at;details.append(text);
+    } else if (revisionView?.recordId) {
         const text = document.createElement('p'), link = document.createElement('a');
         text.textContent = revisionView.originalConfirmed ? 'Original confirmada oficialmente. Revisão bloqueada.'
             : `Conflito resolvido pela venda nº ${revisionView.recordId}. Venda corrigida confirmada. Se você enviou ao cliente informações da versão anterior, envie novamente a nota correta.`;
@@ -48,6 +51,8 @@ export function operationDetails(operation, scope, revisionView = null) {
     } else if (commercialConflict(operation)) {
         const link = document.createElement('a');link.href = '/offline/revisao/?operation_id=' + encodeURIComponent(operation.operation_id);
         link.textContent = 'Revisar venda';link.dataset.reviewSale = operation.operation_id;details.append(link);
+        const close=document.createElement('button');close.type='button';close.textContent='Encerrar sem gerar venda';close.dataset.closeOperation=operation.operation_id;
+        close.addEventListener('click',()=>document.dispatchEvent(new CustomEvent('sales-close-operation',{detail:{operation_id:operation.operation_id}})));details.append(close);
     }
     const items = document.createElement('ol');
     for (const [index, item] of (payload.itens || []).entries()) {

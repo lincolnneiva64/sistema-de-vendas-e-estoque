@@ -1,7 +1,8 @@
 import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8f/core.js';
 import {renderIndicator} from '/offline/assets/2-8f/presentation.js';
-import {operationDetails} from '/offline/assets/2-8f/operation-details.js';
-import {revisionPresentation} from '/offline/assets/2-8f/sales-revisions.js';
+import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
+import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
+import {closedLocally,closureKey,installClosureUI,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
@@ -104,10 +105,11 @@ async function render() {
     const operations = await repo.all('operations');
     const scope = communicationScope();
     const scoped = operations.filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
+    const closureMetadata=await repo.all('metadata');
     const revisions = new Map();
     for (const op of scoped.filter(op => op.status === 'conflito')) revisions.set(op.operation_id, await revisionPresentation(repo,op,scope));
     // Resolution is a presentation only: preserve historical conflict bytes.
-    const unresolved = scoped.filter(op => !revisions.get(op.operation_id)?.recordId);
+    const unresolved = scoped.filter(op => !revisions.get(op.operation_id)?.recordId && !closedLocally(closureMetadata,op));
     const pending = unresolved.filter(op => op.status !== 'confirmada');
     const state = indicatorState({operations: unresolved, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
@@ -155,7 +157,9 @@ async function render() {
             : `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
         const revisionView = revisions.get(op.operation_id);
         if (revisionView?.recordId) row.textContent = `Conflito resolvido pela venda nº ${revisionView.recordId} · original ${op.operation_id}`;
-        const diagnostic = operationDetails(op, scope, revisionView);
+        const closure=closureMetadata.find(row=>row.key===closureKey(op))?.receipt;
+        if(closedLocally(closureMetadata,op))row.textContent=`Encerrada administrativamente — nenhuma venda gerada · original ${op.operation_id}`;
+        const diagnostic = operationDetails(op, scope, revisionView,closure);
         if (diagnostic) { diagnostic.open = expanded.has(op.operation_id); row.append(diagnostic); }
         list.append(row);
     }
@@ -375,7 +379,8 @@ async function runSynchronization() {
         if (!stability.ready(performance.now(), Date.now())) return;
         const scoped = (await repo.all('operations')).filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
         if (!preparedSyncScope(scope, scoped)) return;
-        const operations = scoped.filter(op => ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
+        const closureMetadata=await repo.all('metadata');
+        const operations = scoped.filter(op => !closedLocally(closureMetadata,op) && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
         if (!operations.length || !await confirmSynchronization(operations.length)) return;
         syncing = true; stopped = false; notice = null; progress = '0/' + operations.length; await changed();
         let confirmed = 0;
@@ -445,11 +450,13 @@ async function runSynchronization() {
         } catch (error) { message(error.message); }
         finally {
             const results = await repo.all('operations');
+            const closures = await repo.all('metadata');
             let conflict = false;
             for (const op of results.filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id && op.status === 'conflito')) {
+                if (closedLocally(closures,op)) continue;
                 if (!(await revisionPresentation(repo,op,scope))?.recordId) conflict = true;
             }
-            const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id) && op.status !== 'confirmada');
+            const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id) && op.status !== 'confirmada' && !closedLocally(closures,op));
             const text = conflict ? 'Conflito de sincronização — revisão necessária' : stopped || remaining ? 'Sincronização interrompida — operações preservadas' : 'Sincronização concluída';
             finishModal(text);
             const feedback = document.getElementById('offline-message');
@@ -481,6 +488,10 @@ async function reconcile(operation) {
         || result.device_id !== operation.device_id || !validReceipt(result.receipt, operation))
         fail('Resultado da consulta incompatível ou receipt inválido. Operação preservada.');
     await repo.record(operation, result.receipt);
+    if (result.closure) {
+        const device=await repo.get('metadata','device');
+        await mirrorClosure(repo,{...communicationScope(),device_id:device?.id},await repo.get('operations',operation.operation_id),result.closure);
+    }
     return 'encontrada';
 }
 async function exportDiagnostic() {
@@ -492,6 +503,11 @@ async function exportDiagnostic() {
 }
 async function start() {
     repo = new Repository(await openDB());
+    installClosureUI(async()=>{
+        const identity=await repo.get('metadata','sales-identity'),device=await repo.get('metadata','device');
+        if(!identity?.actor_id || !device?.id)throw new Error('Identidade local indisponível.');
+        return {repo,scope:{...identity,device_id:device.id}};
+    });
     if (globalIndicator && !window.salesOffline?.shell && !document.getElementById('revision-form')) {
         await repo.put('metadata', {key: 'sales-identity', actor_id: globalIndicator.dataset.actor,
             environment_id: globalIndicator.dataset.environment});

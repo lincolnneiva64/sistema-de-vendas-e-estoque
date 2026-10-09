@@ -1,6 +1,6 @@
 import {hash, reserveSequence, saleOperationState, canonical, commandOf} from '/offline/assets/2-8f/core.js';
-import {prepareRevisionResolution, resolutionFromSnapshot, resolutionObservationKey} from '/offline/assets/2-8f/sales-revisions.js';
-import {readStock,validateStock,stockSignature,stockBaselineKey} from '/offline/assets/2-8f-fix/sales-stock.js';
+import {prepareRevisionResolution, resolutionFromSnapshot, resolutionObservationKey} from '/offline/assets/2-8g-close/sales-revisions.js';
+import {readStock,validateStock,stockSignature,stockBaselineKey} from '/offline/assets/2-8g-close/sales-stock.js';
 import {chaveSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
@@ -118,8 +118,9 @@ async function access(repo, scope, write, action, stores = ['metadata']) {
                             const invoke = stock => done(action({tx, store, device, key, revisionKey, revision, record, operations,stock}));
                             if (!stores.includes('snapshots')) { invoke(null); return; }
                             tx.objectStore('snapshots').get(chaveSnapshotComercial(scope)).onsuccess = safe(snapshot => {
-                                if (!snapshot) { invoke({snapshot:null,baseline:null,operations}); return; }
-                                store.get(stockBaselineKey(snapshot.snapshot_id)).onsuccess = safe(baseline => invoke({snapshot,baseline:baseline || null,operations}));
+                                store.getAll().onsuccess = safe(meta => invoke({snapshot:snapshot || null,
+                                    baseline:snapshot ? meta.find(row=>row.key===stockBaselineKey(snapshot.snapshot_id)) || null : null,
+                                    operations,closures:meta.filter(row=>row.key.startsWith('sales-closure:') && row.receipt)}));
                             });
                         };
                         if (stores.includes('operations')) tx.objectStore('operations').getAll().onsuccess = safe(run);

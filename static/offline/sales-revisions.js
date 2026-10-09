@@ -1,4 +1,5 @@
 import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8f/core.js';
+import {closureKey,intentKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export function commercialConflict(operation) {
@@ -50,6 +51,7 @@ export async function lookupOriginal(repo, operation, scope) {
         seen.add(link.replacement_operation_id); parent = link.replacement_operation_id; parentHash = link.hash;
     }
     // Store authoritative observations separately. Original bytes never change.
+    if(data.closure){await mirrorClosure(repo,scope,operation,data.closure);throw new Error('Original encerrada administrativamente sem venda. Revisão bloqueada.');}
     const next = {key:observationKey(operation), original_hash:operation.payload_hash,
         checked_at:new Date().toISOString(), receipt:data.receipt, revisions:data.revisions};
     let observationError;
@@ -138,7 +140,14 @@ async function access(repo, scope, originalId, work, write = true) {
                             if (record && (record.original_hash !== original.payload_hash || record.revision !== revision
                                 || !scoped(record, scope) || record.original_operation_id !== originalId || !uuid(record.draft_id)))
                                 throw new Error('Rascunho de revisão incompatível.');
-                            done(work({tx,store,key,original,record,revision,device}));
+                            if (!write) { done(work({tx,store,key,original,record,revision,device})); return; }
+                            store.get(closureKey(original)).onsuccess = safe(closure => {
+                                if(closure)throw new Error('Original encerrada administrativamente. Revisão bloqueada.');
+                                store.get(intentKey(original)).onsuccess = safe(intent => {
+                                    if(intent && intent.state!=='recusada')throw new Error('Encerramento com resultado desconhecido. Consulte antes de revisar.');
+                                    done(work({tx,store,key,original,record,revision,device}));
+                                });
+                            });
                         });
                     });
                 });

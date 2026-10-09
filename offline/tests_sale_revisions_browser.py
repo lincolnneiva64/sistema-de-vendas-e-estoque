@@ -54,7 +54,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
         tab.call('Page.navigate',{'url':self.live_server_url+'/offline/revisao/?operation_id='+(identifier or self.command['operation_id'])})
         tab.wait('window.salesRevisionUI?.ready')
         self.assertTrue(tab.evaluate('!!salesRevisionUI.record'),tab.evaluate('document.getElementById("revision-message").textContent'))
-        tab.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.drafts=await import("/offline/assets/2-8f/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.app=await import("/offline/assets/2-8f/app.js");await app.initialized;window.original=await repo.get("operations",'+json.dumps(identifier or self.command['operation_id'])+');true')
+        tab.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");window.drafts=await import("/offline/assets/2-8f/sales-drafts.js");window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.app=await import("/offline/assets/2-8g-close/app.js");await app.initialized;window.original=await repo.get("operations",'+json.dumps(identifier or self.command['operation_id'])+');true')
         return tab
 
     def quantity(self,tab,value):

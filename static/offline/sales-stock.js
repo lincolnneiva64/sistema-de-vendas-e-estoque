@@ -1,5 +1,6 @@
 import {canonical, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
 import {chaveSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
+import {closedLocally} from '/offline/assets/2-8g-close/sales-closures.js';
 
 // Decimal arithmetic at the server's 0.001 precision, including half-even rounding.
 function ratio(value) {
@@ -40,7 +41,7 @@ function baseQuantity(product,item) {
     return converted;
 }
 export const stockBaselineKey = snapshotId => 'sales-stock-baseline:' + snapshotId;
-export function stockSignature(state) { return canonical({snapshot:state.snapshot,baseline:state.baseline,operations:state.operations}); }
+export function stockSignature(state) { return canonical({snapshot:state.snapshot,baseline:state.baseline,operations:state.operations,closures:state.closures || []}); }
 export async function readStock(repo,scope) {
     const key = chaveSnapshotComercial(scope);
     const state = await repo.transaction(['snapshots','metadata','operations'],false,(tx,done) => {
@@ -48,9 +49,11 @@ export async function readStock(repo,scope) {
             const snapshot = event.target.result || null;
             tx.objectStore('operations').getAll().onsuccess = result => {
                 const operations = result.target.result;
-                if (!snapshot) { done({snapshot:null,baseline:null,operations}); return; }
-                tx.objectStore('metadata').get(stockBaselineKey(snapshot.snapshot_id)).onsuccess = result =>
-                    done({snapshot,baseline:result.target.result || null,operations});
+                tx.objectStore('metadata').getAll().onsuccess = result => {
+                    const meta=result.target.result;
+                    done({snapshot,baseline:snapshot ? meta.find(row=>row.key===stockBaselineKey(snapshot.snapshot_id)) || null : null,
+                        operations,closures:meta.filter(row=>row.key.startsWith('sales-closure:') && row.receipt)});
+                };
             };
         };
     });
@@ -68,6 +71,7 @@ export function validateStock(state,scope,items,fallback = []) {
     const sales = state.operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
     const replaced = new Set();
     for (const op of sales) {
+        if (closedLocally(state.closures,op)) continue;
         const link = op.payload?.revisao;
         const parent = link && sales.find(p => p.operation_id === link.original_operation_id && p.payload_hash === link.original_hash);
         if (parent && link.relacao === 'revisao_de_conflito') replaced.add(parent.operation_id);
@@ -86,6 +90,7 @@ export function validateStock(state,scope,items,fallback = []) {
     }
     for (const op of sales) {
         if (replaced.has(op.operation_id)) continue;
+        if (closedLocally(state.closures,op)) continue;
         if (incorporated.has(op.operation_id) && op.status === 'confirmada' && validReceipt(op.server_result,op)) continue;
         if (state.snapshot && !hasBaseline && op.status === 'confirmada'
             && op.reference_snapshot?.snapshot_id !== state.snapshot.snapshot_id)
