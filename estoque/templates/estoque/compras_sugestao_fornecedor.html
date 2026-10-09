@@ -2734,6 +2734,57 @@
 
 <script>
 (function () {
+  // Cards added to the mobile list are intentionally hidden. They remain the
+  // source of the payload; visibility must never decide whether they count.
+  function arredondarPar(n, divisor) {
+    const sinal = n < 0n ? -1n : 1n;
+    n = n < 0n ? -n : n;
+    const inteiro = n / divisor, resto = n % divisor;
+    return sinal * (inteiro + (resto * 2n > divisor || resto * 2n === divisor && inteiro % 2n ? 1n : 0n));
+  }
+
+  function decimalEscalado(valor, casas) {
+    let texto = String(valor || "0").trim().replace(/[^\d,.-]/g, "");
+    if (texto.includes(",")) texto = texto.replace(/\./g, "").replace(",", ".");
+    texto = texto.replace(/^(-?)\./, (_, sinal) => sinal + "0.");
+    if (!/^-?\d+(?:\.\d*)?$/.test(texto)) return 0n;
+    const [inteiro, fracao = ""] = texto.split(".");
+    const sinal = inteiro.startsWith("-") ? -1n : 1n;
+    const numero = sinal * BigInt(inteiro.replace("-", "") + fracao);
+    return arredondarPar(numero * 10n ** BigInt(casas), 10n ** BigInt(fracao.length));
+  }
+
+  function centavosTexto(centavos) {
+    const sinal = centavos < 0n ? "-" : "";
+    centavos = centavos < 0n ? -centavos : centavos;
+    return sinal + (centavos / 100n).toLocaleString("pt-BR") + "," + String(centavos % 100n).padStart(2, "0");
+  }
+
+  window.atualizarTotalListaPedidoMobile = function () {
+    if (!window.matchMedia("(max-width: 860px)").matches) return false;
+    const mobile = document.getElementById("mobileSugestaoProdutos");
+    if (!mobile) return false;
+    const itens = Array.from(document.querySelectorAll("#itensListaMobileLista .sugestao-item-lista-mobile[data-produto-id]"));
+    let total = 0n;
+    mobile.querySelectorAll(".sugestao-mobile-card[data-na-lista='1']").forEach((card) => {
+      // Same precision and half-even rounding as the backend's Decimal fields.
+      const quantidade = decimalEscalado(card.querySelector(".sugestao-qtd-input")?.value, 3);
+      const preco = decimalEscalado(card.querySelector(".sugestao-preco-input")?.value, 2);
+      const subtotal = arredondarPar(quantidade * preco, 1000n);
+      const texto = centavosTexto(subtotal);
+      const campo = card.querySelector(".sugestao-total-input");
+      if (campo) campo.value = texto;
+      const item = itens.find((item) => item.dataset.produtoId === card.dataset.produtoId);
+      const subtotalItem = item?.querySelector(".sugestao-item-lista-mobile-total span");
+      if (subtotalItem) subtotalItem.textContent = texto;
+      total += subtotal;
+    });
+    document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
+      el.textContent = "R$ " + centavosTexto(total);
+    });
+    return true;
+  };
+
   function paraNumero(valor) {
     let texto = String(valor || "").trim();
     if (!texto) return 0;
@@ -2801,6 +2852,7 @@
   }
 
   function atualizarTotalGeral() {
+    if (window.atualizarTotalListaPedidoMobile()) return;
     const listaMobileVisivel = visivel(document.getElementById("mobileSugestaoProdutos"));
     const seletorTotais = listaMobileVisivel
       ? "#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1'] .sugestao-total-input"
@@ -3442,6 +3494,7 @@
   }
 
   function atualizarResumoDepoisDeAdicionar() {
+    const totalMobileAtualizado = window.atualizarTotalListaPedidoMobile();
     const listaMobileVisivel = !!(mobile && (mobile.offsetWidth || mobile.offsetHeight || mobile.getClientRects().length));
     const seletorTotais = listaMobileVisivel
       ? "#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1'] .sugestao-total-input"
@@ -3455,9 +3508,11 @@
         return soma + (Number.isFinite(n) ? n : 0);
       }, 0);
 
-    document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
-      el.textContent = "R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    });
+    if (!totalMobileAtualizado) {
+      document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
+        el.textContent = "R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      });
+    }
 
     const totalProdutos = listaMobileVisivel
       ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
@@ -4168,6 +4223,7 @@
     if (qtd) qtd.value = item.dataset.qtdAnterior || item.dataset.qtdConfirmada || "";
     if (preco) preco.value = item.dataset.precoAnterior || item.dataset.precoConfirmado || "";
     if (totalItem) totalItem.textContent = item.dataset.totalAnterior || item.dataset.totalConfirmado || "";
+    sincronizarItemComCard(item);
     limparErro(item);
     setModoEdicao(item, false);
     if (itemEmEdicao === item) itemEmEdicao = null;
@@ -4355,6 +4411,7 @@
     if (!item) return;
     if (item.dataset.editando !== "1") return;
     limparErro(item);
+    sincronizarItemComCard(item);
   });
 
   lista.addEventListener("blur", function(event) {
@@ -4364,6 +4421,7 @@
     if (!item || item.dataset.editando !== "1") return;
     const validado = numeroValidoObrigatorio(campo.value);
     if (validado.ok) campo.value = decimal(validado.valor, campo.classList.contains("sugestao-item-lista-qtd-input") ? 3 : 2);
+    sincronizarItemComCard(item);
   }, true);
 
   function fecharHistoricosComprasListaMobile(exceto) {
