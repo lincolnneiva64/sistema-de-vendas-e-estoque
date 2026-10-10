@@ -70,7 +70,7 @@ class PreviaPrecosVinculadosTests(TestCase):
             original=getattr(self.produtos[0],field)
             atualizar_fixture(Produto.objects.filter(pk=self.produtos[0].pk),**{field:original+Decimal('1')})
             before=self.snapshot();d=self.client.get(self.url).json()['precos_vinculados']
-            self.assertIn(field,d['divergentes']);self.assertEqual(d['status'],'referencia_necessaria')
+            self.assertIn(field,d['divergentes']);self.assertEqual(d['status'],'precos_individuais')
             for p in self.produtos:
                 response=self.client.get(self.url,{'referencia':p.pk});self.assertEqual(response.status_code,200)
                 data=response.json()['precos_vinculados'];p.refresh_from_db()
@@ -135,12 +135,37 @@ class PreviaPrecosBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('document.querySelector(".grupo-produto-vinculo").click();true')
                 tab.wait('document.getElementById("grupoProdutoModal").open && !document.getElementById("grupoProdutoPrecos").hidden')
                 self.assertEqual(tab.evaluate('document.getElementById("grupoProdutoPrecosReferencia").value'),'')
-                self.assertIn('referencia_necessaria',tab.evaluate('document.getElementById("grupoProdutoPrecosEstado").textContent'))
+                self.assertIn('precos_individuais',tab.evaluate('document.getElementById("grupoProdutoPrecosEstado").textContent'))
                 tab.evaluate('document.getElementById("grupoProdutoPrecosReferencia").value="'+str(self.produtos[0].pk)+'";document.getElementById("grupoProdutoPrecosReferencia").dispatchEvent(new Event("change"));true')
-                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("37.00 → 36.00")')
+                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("37.00")')
                 self.assertTrue(tab.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                 self.assertEqual(self.snapshot(),before)
             finally:chrome.stop()
 
     def test_desktop_preview_no_price_writes(self):self.preview(1280)
     def test_mobile_preview_no_price_writes(self):self.preview(390)
+
+
+def confirmacao_todos_fixture(produto_id):
+    """Explicit all-peer consent for tests that exercise all-peer transactions."""
+    from .models import MembroGrupoProduto
+    grupo=MembroGrupoProduto.objects.select_related('grupo').get(produto_id=produto_id).grupo
+    produtos=list(grupo.produtos.order_by('pk'))
+    return dict(selecionados=[p.pk for p in produtos],confirmar=True,
+        assinatura_esperada=diagnosticar_grupo(produtos,validar_precos=False)['assinatura_precos'])
+
+
+def alterar_todos_precos_fixture(produto_id, atualizacoes, **kwargs):
+    from .services.precos_vinculados import alterar_precos_grupo
+    return alterar_precos_grupo(produto_id,atualizacoes,**{**confirmacao_todos_fixture(produto_id),**kwargs})
+
+
+def aplicar_todos_precos_compra_fixture(item, atualizacoes, **kwargs):
+    from .services.precos_compra import aplicar_precos_compra
+    return aplicar_precos_compra(item,atualizacoes,**{**confirmacao_todos_fixture(item.produto_id),**kwargs})
+
+
+def payload_todos_fixture(produto_id):
+    comando=confirmacao_todos_fixture(produto_id);pk=str(produto_id)
+    return {'confirmar_precos_produto_'+pk:'1','destinatarios_precos_produto_'+pk:comando['selecionados'],
+            'assinatura_precos_produto_'+pk:comando['assinatura_esperada']}

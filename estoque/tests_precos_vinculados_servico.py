@@ -17,6 +17,9 @@ from .services.precos_vinculados import (regularizar_grupo, alterar_precos_grupo
 from .services.precos_compra import aplicar_precos_compra, restaurar_precos_compra
 from .grupos_produtos import remover_membro
 
+from .tests_precos_vinculados import (alterar_todos_precos_fixture as alterar_precos_grupo,
+    aplicar_todos_precos_compra_fixture as aplicar_precos_compra, confirmacao_todos_fixture, payload_todos_fixture)
+
 
 class ServicoPrecosVinculadosTests(TestCase):
     def setUp(self):
@@ -54,21 +57,20 @@ class ServicoPrecosVinculadosTests(TestCase):
                     self.assertEqual(p.preco_venda,p.preco_vista)
         self.assertEqual([(p.pk,p.quantidade,p.preco_compra,p.codigo) for p in Produto.objects.order_by('pk')],individual)
 
-    def test_pending_and_direct_writers_blocked_without_partial_effect(self):
+    def test_first_pending_command_allowed_but_alternate_writers_blocked(self):
         before=self.snapshot()
-        with self.assertRaises(ValidationError):self.alterar(preco_vista=37)
-        with self.assertRaises(ValidationError),transaction_for_test():Produto.objects.filter(pk=self.produtos[0].pk).update(preco_vista=37)
-        p=Produto.objects.get(pk=self.produtos[0].pk);p.preco_vista=37
+        self.alterar(preco_vista=37);before=self.snapshot()
+        with self.assertRaises(ValidationError),transaction_for_test():Produto.objects.filter(pk=self.produtos[0].pk).update(preco_vista=38)
+        p=Produto.objects.get(pk=self.produtos[0].pk);p.preco_vista=38
         with self.assertRaises(ValidationError),transaction_for_test():p.save()
         self.assertEqual(self.snapshot(),before)
 
-    def test_divergent_requires_explicit_reference_and_no_migration_normalization(self):
+    def test_divergent_activation_preserves_prices_without_reference(self):
         models.QuerySet.update(Produto.objects.filter(pk=self.produtos[1].pk),preco_vista=38,preco_venda=38)
         before=self.snapshot();self.assertFalse(self.grupo.precos_regularizados)
-        with self.assertRaises(ValidationError):self.ativar()
+        self.ativar()
         self.assertEqual(self.snapshot(),before)
-        self.ativar(self.produtos[1].pk)
-        self.assertEqual(set(Produto.objects.values_list('preco_vista',flat=True)),{Decimal(38)})
+        self.assertEqual(set(Produto.objects.values_list('preco_vista',flat=True)),{Decimal(36),Decimal(38)})
 
     def test_inactive_member_and_loss_block_whole_group(self):
         self.ativar();Produto.objects.filter(pk=self.produtos[1].pk).update(ativo=False)
@@ -134,9 +136,9 @@ class ServicoPrecosVinculadosTests(TestCase):
         self.ativar();new=Produto.objects.create(nome='Novo teste',preco_compra=10,preco_vista=50,preco_prazo=51,unidade_compra='PCT',unidade_venda_2='UN',vende_fracionado=True,fator_conversao=6,preco_vista_fracionado=8,preco_prazo_fracionado=9)
         token=diagnosticar_grupo([*self.grupo.produtos.all(),new])['versao_observada']
         adicionar_produtos_regularizados(self.grupo.pk,[new.pk],token,confirmar=True,operador=self.operador)
-        new.refresh_from_db();self.assertEqual(new.preco_vista,36)
+        new.refresh_from_db();self.assertEqual(new.preco_vista,50)
         remover_membro(self.grupo.pk,new.pk);self.alterar(preco_vista=37)
-        new.refresh_from_db();self.assertEqual(new.preco_vista,36)
+        new.refresh_from_db();self.assertEqual(new.preco_vista,50)
 
     def test_real_revision_endpoint_and_purchase_exclusion(self):
         self.ativar();compra,item=self.compra();compra.revisao_precos_pendente=True;compra.save()
@@ -144,6 +146,7 @@ class ServicoPrecosVinculadosTests(TestCase):
         payload={'compra_id':compra.pk,'item_id':item.pk,'produto_id':item.produto_id,
             'atualizar_preco_venda_produto_ids[]':[str(item.produto_id)],'atualizar_preco_venda_nomes[]':['preco_vista'],
             'atualizar_preco_venda_valores[]':['37.00'],'versao_grupo_produto_'+str(item.produto_id):str(self.grupo.versao_precos)}
+        payload.update(payload_todos_fixture(item.produto_id))
         response=self.client.post(reverse('estoque:revisao_precos_posterior_salvar'),payload)
         self.assertEqual(response.status_code,200,response.content)
         self.assertEqual(set(Produto.objects.values_list('preco_vista',flat=True)),{Decimal(37)})
@@ -233,6 +236,7 @@ class ServicoPrecosVinculadosTests(TestCase):
         self.ativar();compra,item=self.compra();self.grupo.refresh_from_db()
         ItemCompra.objects.create(compra=compra,produto=self.produtos[1],quantidade=1,preco_unitario=11,valor_total=11)
         values=views._PrecosCompraRevisao({(self.produtos[0].pk,'preco_vista'):Decimal(37),(self.produtos[1].pk,'preco_prazo'):Decimal(40)})
+        values.selecionados={self.produtos[0].pk:[p.pk for p in self.produtos]};values.confirmados={self.produtos[0].pk};values.assinaturas={self.produtos[0].pk:confirmacao_todos_fixture(self.produtos[0].pk)['assinatura_esperada']}
         values.versoes_grupos={p.pk:self.grupo.versao_precos for p in self.produtos};values.operador=self.operador
         views._atualizar_precos_venda_produtos_compra(values,compra)
         compra.refresh_from_db();self.assertEqual(len(compra.alteracoes_precos_vinculados),1)

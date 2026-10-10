@@ -1,3 +1,4 @@
+{% load l10n %}
 
 <!doctype html>
 <html lang="pt-br">
@@ -1006,14 +1007,36 @@ select.campo-obrigatorio-piscando:focus,
   {% if form.grupo_precos %}
   <div class="col-12 alert alert-info" role="status">
     <strong>{{ form.grupo_precos.nome }}</strong>
-    {% if form.grupo_precos.precos_regularizados %}
-    — Preços de venda compartilhados. Alterar um preço atualiza os demais integrantes;
-    custos, estoque e identificação permanecem individuais.
-    {% else %}
-    — Grupo pendente: regularize em Gerenciar grupos vinculados antes de alterar preços de venda.
-    {% endif %}
+    <p>Atualizacao seletiva: ao reajustar, confirme os integrantes destinatarios. Os demais preservam seus precos e a origem utilizada nos pedidos. Custos e estoque permanecem individuais.</p>
+    {{ form.assinatura_precos_seletivos }}{{ form.destinatarios_precos }}{{ form.confirmar_precos_seletivos }}
     <div>Demais integrantes: {% for integrante in form.integrantes_precos %}{{ integrante.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}.</div>
   </div>
+  {% endif %}
+  {% include 'estoque/includes/precos_seletivos.html' %}
+  {% if form.grupo_precos %}
+  <script>
+  document.getElementById('form-produto').addEventListener('submit',async function(event){
+    const form=this;
+    const campos=['preco_vista','preco_prazo'{% if form.instance.vende_fracionado %},'preco_vista_fracionado','preco_prazo_fracionado'{% endif %}];
+    const numero=v=>{let t=String(v).replace(/\s/g,'').replace(/[^\d,.-]/g,'');if(t.includes(','))t=t.replace(/\./g,'').replace(',','.');return Number(t);};
+    const anteriores={preco_vista:'{{ form.precos_observados.preco_vista|unlocalize }}',preco_prazo:'{{ form.precos_observados.preco_prazo|unlocalize }}',preco_vista_fracionado:'{{ form.precos_observados.preco_vista_fracionado|unlocalize }}',preco_prazo_fracionado:'{{ form.precos_observados.preco_prazo_fracionado|unlocalize }}'};
+    const novos={};campos.forEach(c=>{const valor=numero(form.elements[c].value);if(valor!==numero(anteriores[c]))novos[c]=valor;});
+    if(!Object.keys(novos).length)return;
+    if(form.dataset.precoConsentido==='1'){delete form.dataset.precoConsentido;return;}
+    event.preventDefault();
+    if(form.dataset.confirmandoPreco==='1')return;
+    form.dataset.confirmandoPreco='1';
+    try{
+      const alvo=await confirmarPrecosSeletivos("{% url 'estoque:grupos_produtos_detalhe' form.grupo_precos.pk %}",'{{ form.instance.pk }}',novos);
+      if(Number(form.elements.versao_precos_grupo.value)!==alvo.versao)throw new Error('Precos alterados. Reabra o cadastro.');
+      form.querySelectorAll('[name="destinatarios_precos"]').forEach(n=>n.remove());
+      alvo.ids.filter(id=>id!=='{{ form.instance.pk }}').forEach(id=>{const input=document.createElement('input');input.type='hidden';input.name='destinatarios_precos';input.value=id;form.append(input);});
+      form.elements.assinatura_precos_seletivos.value=alvo.assinatura;form.elements.confirmar_precos_seletivos.value='True';form.dataset.precoConsentido='1';
+      delete form.dataset.enviando;form.requestSubmit();
+    }catch(e){alert(e.message);delete form.dataset.enviando;}
+    finally{delete form.dataset.confirmandoPreco;}
+  });
+  </script>
   {% endif %}
   {% if retorno_url %}
   <input type="hidden" name="next" value="{{ retorno_url }}">

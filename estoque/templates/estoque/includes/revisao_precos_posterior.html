@@ -288,6 +288,7 @@
     <div hidden>{% csrf_token %}</div>
   </div>
 </section>
+{% include 'estoque/includes/precos_seletivos.html' %}
 <script>
 (function() {
   "use strict";
@@ -377,7 +378,7 @@
     const concluido = concluidos.has(item.item_id);
     listaConferenciaPrecosCompra.innerHTML =
       '<article class="rp-compras-preco-card"><div class="rp-compras-preco-card-topo"><div>' +
-      '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' + (item.grupo_precos ? '<p>'+escapeHtml(item.grupo_precos.nome)+(item.grupo_precos.regularizado?' — preços compartilhados com todos os integrantes.':' — regularize o grupo antes de alterar preços.')+'</p>' : '') +
+      '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' + (item.grupo_precos ? '<p>'+escapeHtml(item.grupo_precos.nome)+(item.grupo_precos.regularizado?' — reajuste seletivo; confirme os destinatarios.':' — primeira revisao seletiva; confirme os destinatarios.')+'</p>' : '') +
       '<span class="rp-compras-preco-progresso">Produto ' + (revisaoPrecosIndice+1) + ' de ' + revisaoPrecosItens.length +
       ' · Compra #' + item.compra_id + (concluido ? ' · Revisão salva' : '') + '</span></div></div>' +
       '<div class="rp-compras-preco-blocos">' + renderizarCustosProdutoCompacto(item) +
@@ -424,6 +425,15 @@
           dados.append("atualizar_preco_venda_nomes[]", campo);
           dados.append("atualizar_preco_venda_valores[]", preco.novoPreco);
         });
+        if(item.grupo_precos){
+          const novos={};Object.entries(decisaoProduto(item).precos).forEach(([campo,p])=>{if(p.atualizar && numero(p.novoPreco)!==numero(item.produto[campo]))novos[campo]=numero(p.novoPreco);});
+          if(Object.keys(novos).length){
+            const alvos=await confirmarPrecosSeletivos(item.grupo_precos.url,item.produtoId,novos,item.grupo_precos.comprados);
+            if(alvos.versao!==item.grupo_precos.versao)throw new Error('Precos alterados. Reabra a revisao.');
+            dados.set('confirmar_precos_produto_'+item.produtoId,'1');dados.set('assinatura_precos_produto_'+item.produtoId,alvos.assinatura);
+            alvos.ids.forEach(id=>dados.append('destinatarios_precos_produto_'+item.produtoId,id));
+          }
+        }
         const resposta = await fetch(modal.dataset.salvar, {method:"POST", credentials:"same-origin", body:dados,
           headers:{"X-CSRFToken":modal.querySelector('[name="csrfmiddlewaretoken"]').value}});
         const resultado = await resposta.json();

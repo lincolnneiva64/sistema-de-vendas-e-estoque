@@ -1,6 +1,7 @@
 {% extends 'estoque/base.html' %}
 {% block title %}Nova Compra{% endblock %}
 {% block content %}
+{% include 'estoque/includes/precos_seletivos.html' %}
 <script>
 (function() {
   const abrir = document.getElementById("abrirContasPagarGeralCompra");
@@ -3123,7 +3124,7 @@
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>
                     {% for produto in produtos %}
-                      <option value="{{ produto.id }}" data-grupo-precos="{{ produto.vinculo_grupo.grupo.nome }}" data-grupo-regularizado="{% if produto.vinculo_grupo.grupo.precos_regularizados %}1{% else %}0{% endif %}" data-versao-grupo="{{ produto.vinculo_grupo.grupo.versao_precos }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-preco-compra-fracionado="{{ produto.preco_compra_fracionado|default:0|floatformat:2 }}" data-preco-venda="{{ produto.preco_venda|default:produto.preco_vista|default:0|floatformat:2 }}" data-preco-vista="{{ produto.preco_vista|default:produto.preco_venda|default:0|floatformat:2 }}" data-preco-prazo="{{ produto.preco_prazo|default:0|floatformat:2 }}" data-preco-vista-fracionado="{{ produto.preco_vista_fracionado|default:0|floatformat:2 }}" data-preco-prazo-fracionado="{{ produto.preco_prazo_fracionado|default:0|floatformat:2 }}" data-vende-fracionado="{% if produto.vende_fracionado %}1{% else %}0{% endif %}" data-fator-conversao="{{ produto.fator_conversao|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
+                      <option value="{{ produto.id }}" data-grupo-id="{{ produto.vinculo_grupo.grupo_id }}" data-grupo-url="{% if produto.vinculo_grupo %}{% url 'estoque:grupos_produtos_detalhe' produto.vinculo_grupo.grupo_id %}{% endif %}" data-grupo-precos="{{ produto.vinculo_grupo.grupo.nome }}" data-grupo-regularizado="{% if produto.vinculo_grupo.grupo.precos_regularizados %}1{% else %}0{% endif %}" data-versao-grupo="{{ produto.vinculo_grupo.grupo.versao_precos }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-preco-compra-fracionado="{{ produto.preco_compra_fracionado|default:0|floatformat:2 }}" data-preco-venda="{{ produto.preco_venda|default:produto.preco_vista|default:0|floatformat:2 }}" data-preco-vista="{{ produto.preco_vista|default:produto.preco_venda|default:0|floatformat:2 }}" data-preco-prazo="{{ produto.preco_prazo|default:0|floatformat:2 }}" data-preco-vista-fracionado="{{ produto.preco_vista_fracionado|default:0|floatformat:2 }}" data-preco-prazo-fracionado="{{ produto.preco_prazo_fracionado|default:0|floatformat:2 }}" data-vende-fracionado="{% if produto.vende_fracionado %}1{% else %}0{% endif %}" data-fator-conversao="{{ produto.fator_conversao|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
                     {% endfor %}
                   </select>
                   <div class="produto-sugestoes"></div>
@@ -5379,6 +5380,7 @@
       itens.push({
         chave: chave,
         produtoId: produtoId,
+        grupoId:opt.dataset.grupoId,grupoUrl:opt.dataset.grupoUrl,
         versaoGrupo: opt.dataset.versaoGrupo,
         grupoPrecosNome: opt.dataset.grupoPrecos,
         grupoRegularizado: opt.dataset.grupoRegularizado === "1",
@@ -5394,7 +5396,10 @@
       });
     });
 
-    return itens;
+    const grupos=new Map();
+    itens.forEach(item=>{if(item.grupoId){if(!grupos.has(item.grupoId))grupos.set(item.grupoId,item);const primeiro=grupos.get(item.grupoId);if(primeiro!==item){(primeiro.companheiros ||= []).push(item);item.revisaoAgrupada=true;}}});
+    return itens.filter(item=>!item.revisaoAgrupada);
+
   }
 
   function decisaoPadraoPreco(preco) {
@@ -5574,7 +5579,7 @@
 
     if (compraMobile() && resumoCustoFixoCompra) {
       resumoCustoFixoCompra.innerHTML =
-        '<strong>' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — preços compartilhados com todo o grupo.':' — regularização pendente; alteração de preços bloqueada.')+'</small>' : '') + '</strong>' +
+        '<strong>' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — reajuste seletivo; confirme os destinatarios.':' — primeira revisao seletiva; confirme os destinatarios.')+'</small>' : '') + '</strong>' +
         '<span>Custo anterior: ' + escapeHtml(moeda(item.custoAtual)) + '</span>' +
         '<span>Novo custo: ' + escapeHtml(moeda(item.custoCompra)) + '</span>' +
         (item.temFracionado
@@ -5595,7 +5600,7 @@
       '<article class="compras-preco-card ' + (subiu ? "subiu" : "caiu") + '">' +
         '<div class="compras-preco-card-topo">' +
           '<div>' +
-            '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — preços compartilhados com todo o grupo.':' — regularização pendente; alteração de preços bloqueada.')+'</small>' : '') + '</h3>' +
+            '<h3 class="compras-preco-produto">' + escapeHtml(item.nome) + (item.grupoPrecosNome ? '<small style="display:block">'+escapeHtml(item.grupoPrecosNome)+(item.grupoRegularizado?' — reajuste seletivo; confirme os destinatarios.':' — primeira revisao seletiva; confirme os destinatarios.')+'</small>' : '') + '</h3>' +
             '<span class="compras-preco-progresso">Produto ' + escapeHtml(String(revisaoPrecosIndice + 1)) + ' de ' + escapeHtml(String(revisaoPrecosItens.length)) + '</span>' +
           '</div>' +
           '<span class="compras-preco-status">' + escapeHtml(status) + '</span>' +
@@ -5772,7 +5777,7 @@
 
     const ids = new Set();
     revisaoPrecosItens.forEach(function(item) {
-      if (item && item.produtoId) ids.add(item.produtoId);
+      if (item && item.produtoId) {ids.add(item.produtoId);(item.companheiros || []).forEach(p=>ids.add(p.produtoId));}
     });
 
     ids.forEach(function(produtoId) {
@@ -5791,7 +5796,7 @@
     const ids = new Set();
     revisaoPrecosItens.forEach(function(item) {
       const decisao = revisaoPrecosDecisoes[item.chave || item.produtoId];
-      if (decisao && decisao.atualizarCusto) ids.add(item.produtoId);
+      if (decisao && decisao.atualizarCusto) {ids.add(item.produtoId);(item.companheiros || []).forEach(p=>ids.add(p.produtoId));}
     });
 
     ids.forEach(function(produtoId) {
@@ -5813,7 +5818,7 @@
         const produtoId = item.produtoId;
         const valorNovoPreco = precoCampo(numero(dadosPreco.novoPreco));
         if(item.grupoPrecosNome){
-          if(!item.grupoRegularizado)throw new Error('Grupo pendente: regularize os preços antes de revisar este produto.');
+          if(!item.selecaoConfirmada)throw new Error('Confirme os destinatarios do reajuste.');
           const versao=document.createElement('input');versao.type='hidden';
           versao.name='versao_grupo_produto_'+produtoId;versao.value=item.versaoGrupo;
           camposAtualizarCustoCompra.appendChild(versao);
@@ -5852,12 +5857,35 @@
     });
   }
 
-  function continuarAposConferenciaPrecos(atualizarSelecionados) {
+  async function continuarAposConferenciaPrecos(atualizarSelecionados) {
+    if(formCompra.dataset.confirmandoGrupo==='1')return;
+    formCompra.dataset.confirmandoGrupo='1';
     sincronizarTodosPrecosUnitarios();
     salvarDecisaoProdutoAtual();
     try {
+      const gruposConfirmados=[];
+      if(atualizarSelecionados){
+        for(const item of revisaoPrecosItens){
+          if(!item.grupoId)continue;
+          const decisao=decisaoProduto(item), novos={};
+          const opt=Array.from(tabela.querySelectorAll('select[name="produto_id[]"]')).find(n=>n.value===item.produtoId)?.selectedOptions[0];
+          const mapa={preco_vista:'precoVista',preco_prazo:'precoPrazo',preco_vista_fracionado:'precoVistaFracionado',preco_prazo_fracionado:'precoPrazoFracionado'};
+          Object.entries(decisao.precos).forEach(([campo,d])=>{if(d.atualizar && numero(d.novoPreco)!==numero(opt?.dataset[mapa[campo]]))novos[campo]=numero(d.novoPreco);});
+          if(!Object.keys(novos).length){item.selecaoConfirmada=true;continue;}
+          const comprados=Array.from(tabela.querySelectorAll('select[name="produto_id[]"]')).filter(n=>n.selectedOptions[0]?.dataset.grupoId===item.grupoId).map(n=>n.value);
+          const alvos=await confirmarPrecosSeletivos(item.grupoUrl,item.produtoId,novos,comprados);
+          if(Number(item.versaoGrupo)!==alvos.versao)throw new Error('Precos alterados. Reabra a revisao.');
+          item.selecaoConfirmada=true;gruposConfirmados.push([item,alvos]);
+        }
+      }
       definirCustosSelecionadosParaEnvio(atualizarSelecionados);
+      gruposConfirmados.forEach(([item,alvos])=>{
+        const adicionar=(nome,valor)=>{const n=document.createElement('input');n.type='hidden';n.name=nome;n.value=valor;camposAtualizarCustoCompra.append(n);};
+        adicionar('confirmar_precos_produto_'+item.produtoId,'1');adicionar('assinatura_precos_produto_'+item.produtoId,alvos.assinatura);
+        alvos.ids.forEach(id=>adicionar('destinatarios_precos_produto_'+item.produtoId,id));
+      });
     } catch (erro) {
+      delete formCompra.dataset.confirmandoGrupo;
       camposAtualizarCustoCompra.replaceChildren();
       let aviso = document.getElementById('erroPrecosVinculadosCompra');
       if (!aviso) {
@@ -5868,6 +5896,7 @@
       aviso.textContent = erro.message;
       return;
     }
+    delete formCompra.dataset.confirmandoGrupo;
     if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
     conferenciaPrecosConfirmada = true;
     modalConferenciaPrecosCompra.classList.remove("visivel");

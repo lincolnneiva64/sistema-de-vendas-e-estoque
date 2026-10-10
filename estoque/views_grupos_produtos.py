@@ -15,10 +15,10 @@ from .services.precos_vinculados import (diagnosticar_grupo, bloquear_catalogo,
 def dados_grupo(grupo, referencia_id=None):
     integrantes = list(grupo.produtos.order_by("nome", "pk"))
     produtos = [{"id": p.pk, "nome": p.nome} for p in integrantes]
-    diagnostico=diagnosticar_grupo(integrantes, referencia_id)
+    diagnostico=diagnosticar_grupo(integrantes, referencia_id, validar_precos=referencia_id is not None)
     diagnostico.update(regularizado=grupo.precos_regularizados,versao_grupo=grupo.versao_precos,
         propagacao_disponivel=True,
-        aviso='Preços compartilhados ativos.' if grupo.precos_regularizados else 'Escolha a referência, confira a prévia e confirme a ativação.')
+        aviso='Atualizacao seletiva. Ativar ou adicionar membros nao modifica seus precos nem sua adocao.')
     return {"id": grupo.pk, "nome": grupo.nome, "quantidade": len(produtos), "produtos": produtos,
             "precos_vinculados": diagnostico}
 
@@ -48,16 +48,16 @@ def grupos_criar(request):
             if len(ids) < 2 or len(produtos) != len(ids) or MembroGrupoProduto.objects.filter(produto_id__in=ids).exists():
                 raise ValidationError('Selecione pelo menos dois produtos disponíveis e sem vínculo.')
             referencia = int(request.POST['referencia']) if request.POST.get('referencia') else None
-            return JsonResponse({'precos_vinculados': diagnosticar_grupo(produtos, referencia)})
+            return JsonResponse({'precos_vinculados': diagnosticar_grupo(produtos, validar_precos=False)})
         erro = recusa_operador_precos(request.user)
         if erro is not None:
             return erro
-        if request.POST.get('confirmar') != '1' or not request.POST.get('referencia'):
-            raise ValidationError('Escolha uma referência e confirme explicitamente a prévia dos preços.')
+        if request.POST.get('confirmar') != '1':
+            raise ValidationError('Confira os integrantes e confirme a ativação sem reajuste de preços.')
         with bloquear_catalogo():
             grupo = criar_grupo(ids, request.POST.get("nome"))
             regularizar_grupo(grupo.pk, request.POST.get('versao_observada'),
-                referencia_id=int(request.POST['referencia']), confirmar=True, operador=request.user)
+                confirmar=True, operador=request.user)
             grupo.refresh_from_db()
         return JsonResponse({**dados_grupo(grupo), "mensagem": f"{grupo.produtos.count()} produtos vinculados com sucesso."}, status=201)
     except (ValueError, TypeError):
@@ -91,16 +91,14 @@ def grupos_detalhe(request, grupo_id):
             novos = list(Produto.objects.filter(pk__in=ids, excluido=False, ativo=True, vinculo_grupo__isnull=True).order_by('pk'))
             if not ids or len(novos) != len(ids):
                 raise ValidationError('Selecione produtos ativos disponíveis e sem vínculo.')
-            return JsonResponse({'precos_vinculados': diagnosticar_grupo([*atuais, *novos], atuais[0].pk if grupo.precos_regularizados else None)})
+            return JsonResponse({'precos_vinculados': diagnosticar_grupo([*atuais, *novos], validar_precos=False)})
         erro = recusa_operador_precos(request.user)
         if erro is not None:
             return erro
         if request.POST.get('acao') == 'regularizar':
-            if not request.POST.get('referencia'):
-                raise ValidationError('Escolha explicitamente o produto de referência.')
             regularizar_grupo(grupo_id, request.POST.get('versao_observada'),
-                referencia_id=int(request.POST['referencia']), confirmar=request.POST.get('confirmar') == '1', operador=request.user)
-            mensagem = 'Preços aplicados integralmente. Vinculação de preços ativada.'
+                confirmar=request.POST.get('confirmar') == '1', operador=request.user)
+            mensagem = 'Grupo ativado sem alterar precos ou adocao dos integrantes.'
         elif request.POST.get("acao") == "renomear":
             renomear_grupo(grupo_id, request.POST.get("nome"))
             mensagem = "Grupo atualizado."
@@ -110,16 +108,13 @@ def grupos_detalhe(request, grupo_id):
                 ids = [int(v) for v in request.POST.getlist('produto_ids')]
                 if MembroGrupoProduto.objects.filter(produto_id__in=ids).exclude(grupo_id=grupo_id).exists():
                     raise ValidationError('Um produto pertence a outro grupo. Remova o vínculo atual antes de continuar.')
-                if grupo.precos_regularizados:
-                    if not ids:
-                        raise ValidationError('Selecione pelo menos um produto para adicionar.')
-                    if Produto.objects.filter(pk__in=set(ids), ativo=True, excluido=False).count() != len(set(ids)):
-                        raise ValidationError('Selecione produtos ativos disponíveis.')
-                    evento = adicionar_produtos_regularizados(grupo_id, ids,
-                        request.POST.get('versao_observada'), confirmar=request.POST.get('confirmar') == '1', operador=request.user)
-                    total = bool(evento)
-                else:
-                    raise ValidationError('Regularize o grupo antes de adicionar integrantes pela tela.')
+                if not ids:
+                    raise ValidationError('Selecione pelo menos um produto para adicionar.')
+                if Produto.objects.filter(pk__in=set(ids), ativo=True, excluido=False).count() != len(set(ids)):
+                    raise ValidationError('Selecione produtos ativos disponíveis.')
+                evento = adicionar_produtos_regularizados(grupo_id, ids,
+                    request.POST.get('versao_observada'), confirmar=request.POST.get('confirmar') == '1', operador=request.user)
+                total = bool(evento)
             mensagem = "Produtos adicionados ao grupo." if total else "Os produtos selecionados já pertencem ao grupo."
         elif request.POST.get("acao") == "remover":
             remover_membro(grupo_id, int(request.POST.get("produto_id", "")))

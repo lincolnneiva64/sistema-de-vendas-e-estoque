@@ -61,7 +61,7 @@ class ProdutoQuerySet(models.QuerySet):
 
     def update(self, **kwargs):
         campos = PRECOS_PRODUTO_CONTROLADOS.intersection(kwargs)
-        estrutura = set(kwargs).intersection({'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2'})
+        estrutura = set(kwargs).intersection({'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2','precos_canonicos_adotados'})
         if not campos and not estrutura:
             return super().update(**kwargs)
         # Inclui bulk_update e expressoes: invalidar conservadoramente a autoria.
@@ -81,6 +81,7 @@ class ProdutoQuerySet(models.QuerySet):
 class Produto(models.Model):
     objects = ProdutoQuerySet.as_manager()
     autoria_precos = models.JSONField(default=dict, blank=True, editable=False)
+    precos_canonicos_adotados = models.BooleanField(default=False, editable=False)
 
     def delete(self, *args, **kwargs):
         from .services.precos_vinculados import bloquear_catalogo
@@ -209,7 +210,7 @@ class Produto(models.Model):
             )
             if anterior:
                 from .services.precos_vinculados import impedir_escrita_direta
-                impedir_escrita_direta(self.pk, {campo: getattr(self, campo) for campo in PRECOS_PRODUTO_CONTROLADOS | {'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2'}
+                impedir_escrita_direta(self.pk, {campo: getattr(self, campo) for campo in PRECOS_PRODUTO_CONTROLADOS | {'unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado','preco_venda_1','preco_venda_2','precos_canonicos_adotados'}
                     if kwargs.get('update_fields') is None or campo in kwargs['update_fields']}, using=using)
             autoria = dict(anterior["autoria_precos"] or {}) if anterior else {}
             campos_salvos = kwargs.get("update_fields")

@@ -16,6 +16,9 @@ from .admin import ProdutoAdminForm
 from .models import Produto, Compra, ItemCompra, GrupoProdutoVinculado, AlteracaoPrecoVinculado, Pedido, ItemPedido
 from .services.precos_vinculados import alterar_precos_grupo
 
+from .tests_precos_vinculados import (alterar_todos_precos_fixture as alterar_precos_grupo,
+    aplicar_todos_precos_compra_fixture as aplicar_precos_compra, confirmacao_todos_fixture, payload_todos_fixture)
+
 
 class BloqueiosPrecosTests(TestCase):
     setUp = core.ServicoPrecosVinculadosTests.setUp
@@ -34,6 +37,7 @@ class BloqueiosPrecosTests(TestCase):
             'versao_grupo_produto_'+str(item.produto_id): self.grupo.versao_precos,
             'atualizar_preco_venda_produto_ids[]': [item.produto_id],
             'atualizar_preco_venda_nomes[]': ['preco_vista'], 'atualizar_preco_venda_valores[]': ['40']}
+        dados.update(payload_todos_fixture(item.produto_id))
         return compra, dados
 
     def test_legacy_save_update_bulk_and_admin_refused_without_partial_write(self):

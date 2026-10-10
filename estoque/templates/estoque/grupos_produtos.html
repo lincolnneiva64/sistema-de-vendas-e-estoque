@@ -46,13 +46,13 @@
     <div id="grupoProdutoMembros"></div>
     <section id="grupoProdutoPrecos" hidden aria-label="Diagnóstico de preços vinculados">
       <h3>Preços vinculados — diagnóstico e prévia</h3>
-      <p>Confira apresentações e preços. A aplicação exige confirmação explícita e altera todos os integrantes na mesma transação.</p>
+      <p>Confira apresentações e preços. A ativacao e a entrada de integrantes preservam todos os precos e a origem utilizada nos pedidos. Os reajustes sao seletivos no cadastro ou na revisao de compra.</p>
       <p id="grupoProdutoPrecosEstado" role="status"></p>
-      <label for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
-      <select id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
+      <label hidden for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
+      <select hidden id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
       <div id="grupoProdutoPrecosTabela" style="overflow-x:auto"></div>
-      <label class="grupo-produtos-opcao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade física e os preços da prévia para todos os integrantes.</label>
-      <button type="button" id="grupoProdutoRegularizar" disabled>Aplicar preços e ativar vinculação</button>
+      <label class="grupo-produtos-opcao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade dos integrantes. Nenhum preco sera aplicado por esta acao.</label>
+      <button type="button" id="grupoProdutoRegularizar" disabled>Ativar grupo sem alterar precos</button>
     </section>
     <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções de membros são salvas ao confirmar cada ação.</p>
     <div class="grupo-produtos-acoes">
@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const th=document.createElement('th');th.textContent=texto;cabecalho.append(th);
     });
     diagnostico.produtos.forEach(p=>{
-      const proposta=diagnostico.previa.find(item=>item.produto_id===p.id);
+      const proposta=null;
       const valores=[p.nome,p.unidade_principal+(p.vende_fracionado?' / '+p.fator+' '+p.unidade_fracionada:'')];
       ['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'].forEach(campo=>{
         valores.push(!diagnostico.campos.includes(campo)?'Não aplicável':
@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', function () {
     finally{ocupado=false;this.disabled=false;}
   });
   el('grupoProdutoPrecosConfirmacao').addEventListener('change',function(){
-    el('grupoProdutoRegularizar').disabled=!this.checked || !diagnosticoAtual || !diagnosticoAtual.referencia_id || diagnosticoAtual.bloqueios.length>0;
+    el('grupoProdutoRegularizar').disabled=!this.checked || !diagnosticoAtual || diagnosticoAtual.bloqueios.length>0;
   });
   el('grupoProdutoRegularizar').addEventListener('click',async()=>{
     if(!diagnosticoAtual || !el('grupoProdutoPrecosConfirmacao').checked)return;
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', function () {
       controles.forEach(([no, disabled]) => { no.disabled = disabled; });
       if (excluido) nome.disabled = true;
       ocupado = false;
-      el('grupoProdutoAdicionar').disabled=!(diagnosticoAtual && diagnosticoAtual.regularizado);
+      el('grupoProdutoAdicionar').disabled=!diagnosticoAtual;
       el('grupoProdutoRegularizar').disabled=true;
       if (excluido) el('grupoProdutoFechar').focus();
     }
@@ -383,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     ocupado = true; salvar.disabled = true; erro.textContent = '';
     try {
-      if(!diagnosticoAtual || !diagnosticoAtual.referencia_id || diagnosticoAtual.bloqueios.length || !el('grupoProdutoPrecosConfirmacao').checked)throw new Error('Escolha a referência, confira a prévia e marque a confirmação dos preços.');
+      if(!diagnosticoAtual || diagnosticoAtual.bloqueios.length || !el('grupoProdutoPrecosConfirmacao').checked)throw new Error('Confira os integrantes e confirme a ativacao sem reajuste.');
       const dados = payload('criar'); dados.set('nome', nome.value); selecionados.forEach(id => dados.append('produto_ids', id));
       dados.set('referencia',diagnosticoAtual.referencia_id);dados.set('versao_observada',diagnosticoAtual.versao_observada);dados.set('confirmar','1');
       const resultado = await requisitar(urlCriar, dados);

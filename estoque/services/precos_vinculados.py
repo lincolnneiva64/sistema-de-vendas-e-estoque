@@ -82,13 +82,16 @@ def serializar_grupos(func):
 
 def impedir_escrita_direta(produto_id, atualizacoes, using='default'):
     from estoque.models import MembroGrupoProduto, Produto
-    vinculo=MembroGrupoProduto.objects.using(using).select_related('grupo').filter(produto_id=produto_id).first()
-    if not vinculo:
-        return
     produto=Produto.objects.using(using).get(pk=produto_id)
-    if vinculo.grupo.precos_regularizados:
+    if 'precos_canonicos_adotados' in atualizacoes and produto.precos_canonicos_adotados != atualizacoes['precos_canonicos_adotados']:
+        raise ValidationError('Adocao exige o servico transacional e confirmacao explicita.')
+    if produto.precos_canonicos_adotados and any(c in atualizacoes and getattr(produto,c)!=atualizacoes[c] for c in PRECOS_LEGADOS):
+        raise ValidationError('Produto ja adotou precos canonicos; campos legados bloqueados.')
+    vinculo=MembroGrupoProduto.objects.using(using).select_related('grupo').filter(produto_id=produto_id).first()
+    if not vinculo:return
+    if produto.precos_canonicos_adotados or vinculo.grupo.precos_regularizados:
         if any(c in atualizacoes and getattr(produto, c) != atualizacoes[c] for c in PRECOS_LEGADOS):
-            raise ValidationError('Grupo ativo: preços legados não podem ser alterados individualmente. Use os preços compartilhados no cadastro principal.')
+            raise ValidationError('Grupo ativo: preços legados não podem ser alterados individualmente. Use a atualização seletiva no cadastro principal.')
         for campo in ('unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado'):
             if campo in ('unidade_venda_2','fator_conversao') and not produto.vende_fracionado and not atualizacoes.get('vende_fracionado'):
                 continue
@@ -101,7 +104,7 @@ def impedir_escrita_direta(produto_id, atualizacoes, using='default'):
     if not campos:return
     atual=Produto.objects.using(using).values(*campos).get(pk=produto_id)
     if any(atual[campo] != atualizacoes[campo] for campo in campos):
-        raise ValidationError('Produto vinculado: alteração isolada de preço bloqueada. Edite pelo cadastro do produto; se o grupo estiver pendente, regularize em Gerenciar grupos vinculados.')
+        raise ValidationError('Produto vinculado: alteração isolada de preço bloqueada. Abra o cadastro principal ou a revisão de compra e confirme os destinatários do reajuste.')
 
 
 def _integrantes(grupo, using):
@@ -138,14 +141,13 @@ def _validar(produtos):
     diagnostico=diagnosticar_grupo(produtos)
     if diagnostico['bloqueios']:
         raise ValidationError([f"Produto {b['produto_id']}: {b['motivo']}" for b in diagnostico['bloqueios']])
-    if diagnostico['divergentes'] or diagnostico['derivados_divergentes']:
-        raise ValidationError('Grupo com precos divergentes; regularizacao necessaria.')
 
 
 def _gravar(grupo, produtos, propostas, operador, origem, operation_id=None, evidencia_extra=None, reverte=None, evento_anterior=None, autoria_final=None, using='default'):
     exigir_operador_precos(operador)
     from estoque.models import Produto, AlteracaoPrecoVinculado
     evidencia={**(evidencia_extra or {}), 'integrantes':[p.pk for p in produtos], 'alteracoes':{},
+               'adocao': {str(p.pk): {'anterior': p.precos_canonicos_adotados, 'novo': propostas[p.pk].precos_canonicos_adotados, 'autoria_anterior': (p.autoria_precos or {}).get('_adocao')} for p in produtos},
                'operador_snapshot': {'id': operador.pk if operador else None,
                                     'nome': operador.get_username() if operador else 'sistema'}}
     evidencia['estados']={str(p.pk):{'nome':p.nome,
@@ -164,6 +166,13 @@ def _gravar(grupo, produtos, propostas, operador, origem, operation_id=None, evi
                               'autoria_anterior':anterior_token,'autoria_nova':novo_token}
             if novo_token is None:autoria.pop(campo,None)
             else:autoria[campo]=novo_token
+        adocao = evidencia['adocao'][str(p.pk)]
+        if adocao['anterior'] != adocao['novo']:
+            token = (autoria_final or {}).get(p.pk, {}).get('_adocao', str(op_id))
+            if token is None: autoria.pop('_adocao', None)
+            else: autoria['_adocao'] = token
+            adocao['autoria_nova'] = token
+            novos['precos_canonicos_adotados'] = candidato.precos_canonicos_adotados
         if novos:
             # Derived percentages remain individual, based on each own cost.
             for campo, percentual in [('preco_vista_fracionado','percentual_vista_fracionado'),('preco_prazo_fracionado','percentual_prazo_fracionado')]:
@@ -193,34 +202,36 @@ def regularizar_grupo(grupo_id, versao_observada, *, referencia_id=None, confirm
     diagnostico=diagnosticar_grupo(produtos,referencia_id)
     if diagnostico['versao_observada']!=versao_observada:
         raise ValidationError('Previa desatualizada. Consulte novamente.')
-    if referencia_id is None and (diagnostico['divergentes'] or diagnostico['derivados_divergentes']):
-        raise ValidationError('Escolha explicitamente o produto de referencia.')
-    referencia=next((p for p in produtos if p.pk==referencia_id),None)
+    # Activation authorizes coordinated commands; it never adopts or reprices peers.
     propostas={p.pk:copy.copy(p) for p in produtos}
-    for p in produtos:
-        if referencia:
-            for campo in diagnostico['campos']:setattr(propostas[p.pk],campo,getattr(referencia,campo))
-        propostas[p.pk].preco_venda=propostas[p.pk].preco_vista
-    _validar(list(propostas.values()))
-    if grupo.precos_regularizados and all(getattr(p,c)==getattr(propostas[p.pk],c) for p in produtos for c in (*PRECOS_VINCULADOS,'preco_venda')):
-        return None
+    estrutural=diagnosticar_grupo(produtos, validar_precos=False)
+    if estrutural['bloqueios']:
+        raise ValidationError([b['motivo'] for b in estrutural['bloqueios']])
+    if grupo.precos_regularizados:return None
     return _gravar(grupo,produtos,propostas,operador,'regularizacao',using=using)
 
 
 @serializar_grupos
-def alterar_precos_grupo(produto_id, atualizacoes, *, versao_esperada, operador=None, origem='edicao', evidencia_extra=None, using='default'):
+def alterar_precos_grupo(produto_id, atualizacoes, *, versao_esperada, operador=None, origem='edicao', evidencia_extra=None, selecionados=None, confirmar=False, assinatura_esperada=None, using='default'):
     from estoque.models import GrupoProdutoVinculado,MembroGrupoProduto
+    exigir_operador_precos(operador)
     if not set(atualizacoes).issubset(PRECOS_VINCULADOS):
         raise ValidationError('Somente os quatro precos de venda podem ser compartilhados.')
     vinculo=MembroGrupoProduto.objects.using(using).get(produto_id=produto_id)
     grupo=GrupoProdutoVinculado.objects.using(using).select_for_update().get(pk=vinculo.grupo_id)
-    if not grupo.precos_regularizados:
-        raise ValidationError('Grupo ainda nao regularizado. Nenhum preco foi alterado.')
     if grupo.versao_precos!=versao_esperada:
         raise ValidationError('Versao de precos desatualizada. Reabra a revisao.')
     produtos=_integrantes(grupo,using);fonte=next(p for p in produtos if p.pk==produto_id)
-    if diagnosticar_grupo(produtos)['divergentes'] or diagnosticar_grupo(produtos)['derivados_divergentes']:
-        raise ValidationError('Grupo divergente; regularizacao necessaria.')
+    if assinatura_esperada != diagnosticar_grupo(produtos,validar_precos=False)['assinatura_precos']:
+        raise ValidationError('Previa de precos/adocao desatualizada. Consulte novamente.')
+    if confirmar is not True or selecionados is None:
+        raise ValidationError('Confirme os produtos e precos da atualizacao seletiva.')
+    try: ids={int(pk) for pk in selecionados}
+    except (ValueError,TypeError):raise ValidationError('Selecao de produtos invalida.')
+    if produto_id not in ids or not ids.issubset({p.pk for p in produtos}):
+        raise ValidationError('Selecao deve incluir o produto iniciador e somente integrantes do grupo.')
+    estrutural=diagnosticar_grupo(produtos, validar_precos=False)
+    if estrutural['bloqueios']:raise ValidationError([b['motivo'] for b in estrutural['bloqueios']])
     valores={campo:Decimal(str(value)) for campo,value in atualizacoes.items()}
     alterados={campo:value for campo,value in valores.items() if getattr(fonte,campo)!=value}
     if not alterados:return None
@@ -229,10 +240,13 @@ def alterar_precos_grupo(produto_id, atualizacoes, *, versao_esperada, operador=
     if any(not value.is_finite() or value<0 or value>Decimal('99999999.99') or value!=value.quantize(Decimal('0.01')) for value in alterados.values()):
         raise ValidationError('Preco monetario invalido.')
     propostas={p.pk:copy.copy(p) for p in produtos}
-    for candidato in propostas.values():
+    for pk in ids:
+        candidato=propostas[pk]
         for campo,value in alterados.items():setattr(candidato,campo,value)
         candidato.preco_venda=candidato.preco_vista
-    _validar(list(propostas.values()))
+        candidato.precos_canonicos_adotados=True
+    _validar([propostas[pk] for pk in ids])
+    evidencia_extra={**(evidencia_extra or {}),'selecionados':sorted(ids),'campos':sorted(alterados),'formato':2}
     return _gravar(grupo,produtos,propostas,operador,origem,evidencia_extra=evidencia_extra,using=using)
 
 
@@ -253,9 +267,19 @@ def restaurar_evento_grupo(operation_id, *, operador=None, using='default'):
             if campo not in (*PRECOS_VINCULADOS,'preco_venda') or getattr(p,campo)!=Decimal(registro['novo']) or (p.autoria_precos or {}).get(campo)!=registro['autoria_nova']:
                 raise ValidationError('Evidencia divergente. Restauracao exige revisao manual.')
             setattr(propostas[p.pk],campo,Decimal(registro['anterior']))
-    _validar(list(propostas.values()))
+        adocao=evento.evidencia.get('adocao',{}).get(str(p.pk))
+        if adocao and adocao['anterior'] != adocao['novo']:
+            if p.precos_canonicos_adotados != adocao['novo'] or (p.autoria_precos or {}).get('_adocao') != adocao.get('autoria_nova'):
+                raise ValidationError('Adocao alterada posteriormente; revisao manual necessaria.')
+            propostas[p.pk].precos_canonicos_adotados=adocao['anterior']
+    afetados=[propostas[p.pk] for p in produtos if evento.evidencia['alteracoes'].get(str(p.pk))]
+    if afetados:_validar(afetados)
     autorias={p.pk:{campo:registro['autoria_anterior'] for campo,registro in
         evento.evidencia['alteracoes'].get(str(p.pk),{}).items()} for p in produtos}
+    for p in produtos:
+        adocao=evento.evidencia.get('adocao',{}).get(str(p.pk))
+        if adocao and adocao['anterior'] != adocao['novo']:
+            autorias[p.pk]['_adocao']=adocao['autoria_anterior']
     return _gravar(grupo,produtos,propostas,operador,'restauracao_compra',reverte=evento.operation_id,
         evento_anterior=evento.evento_anterior,autoria_final=autorias,using=using)
 
@@ -265,7 +289,6 @@ def adicionar_produtos_regularizados(grupo_id, produto_ids, versao_observada, *,
     from estoque.models import GrupoProdutoVinculado, MembroGrupoProduto, Produto
     if confirmar is not True:raise ValidationError('Confirme a previa dos novos integrantes.')
     grupo=GrupoProdutoVinculado.objects.using(using).select_for_update().get(pk=grupo_id)
-    if not grupo.precos_regularizados:raise ValidationError('Regularize o grupo antes de adicionar com precos compartilhados.')
     bloquear_produtos_precos([*grupo.produtos.values_list('pk',flat=True),*produto_ids],using)
     atuais=_integrantes(grupo,using);ids=set(produto_ids)-{p.pk for p in atuais}
     if not ids:return None
@@ -275,12 +298,8 @@ def adicionar_produtos_regularizados(grupo_id, produto_ids, versao_observada, *,
     todos=sorted([*atuais,*novos],key=lambda p:p.pk)
     if diagnosticar_grupo(todos)['versao_observada']!=versao_observada:raise ValidationError('Previa de entrada desatualizada.')
     propostas={p.pk:copy.copy(p) for p in todos}
-    _validar(atuais)
-    for p in novos:
-        for campo in (PRECOS_VINCULADOS if atuais[0].vende_fracionado else PRECOS_VINCULADOS[:2]):
-            setattr(propostas[p.pk],campo,getattr(atuais[0],campo))
-        propostas[p.pk].preco_venda=propostas[p.pk].preco_vista
-    _validar(list(propostas.values()))
+    estrutural=diagnosticar_grupo(todos, validar_precos=False)
+    if estrutural['bloqueios']:raise ValidationError([b['motivo'] for b in estrutural['bloqueios']])
     MembroGrupoProduto.objects.using(using).bulk_create([MembroGrupoProduto(grupo=grupo,produto=p) for p in novos])
     return _gravar(grupo,todos,propostas,operador,'entrada_integrantes',using=using)
 
@@ -301,7 +320,7 @@ def salvar_formulario_produto(form, *, operador=None):
         observado = form.cleaned_data.get('grupo_precos_id')
         if observado != (vinculo.grupo_id if vinculo else None):
             raise ValidationError('O vínculo mudou. Reabra o cadastro antes de salvar.')
-        if vinculo and vinculo.grupo.precos_regularizados:
+        if vinculo:
             exigir_operador_precos(operador)
             if form.cleaned_data.get('versao_precos_grupo') != vinculo.grupo.versao_precos:
                 raise ValidationError('Preços alterados por outra operação. Reabra o cadastro; nada foi gravado.')
@@ -314,16 +333,22 @@ def salvar_formulario_produto(form, *, operador=None):
                 # a later rejection rolls back this write too.
                 produto.save(update_fields=custos)
             campos = PRECOS_VINCULADOS if atual.vende_fracionado else PRECOS_VINCULADOS[:2]
-            alterar_precos_grupo(produto.pk, {c: getattr(produto, c) for c in campos},
-                versao_esperada=vinculo.grupo.versao_precos, operador=operador, origem='edicao_produto')
+            mudancas={c:getattr(produto,c) for c in campos if getattr(produto,c)!=getattr(atual,c)}
+            if mudancas:
+                alterar_precos_grupo(produto.pk, mudancas,
+                versao_esperada=vinculo.grupo.versao_precos, operador=operador, origem='edicao_produto',
+                selecionados=[produto.pk, *form.cleaned_data.get('destinatarios_precos', [])],
+                confirmar=form.cleaned_data.get('confirmar_precos_seletivos', False),
+                assinatura_esperada=form.cleaned_data.get('assinatura_precos_seletivos'))
             atual.refresh_from_db()
             produto.autoria_precos = atual.autoria_precos
+            produto.precos_canonicos_adotados = atual.precos_canonicos_adotados
             produto.preco_venda = produto.preco_vista
     produto.cadastro_incompleto = False
     produto.save()
     if produto.pk and MembroGrupoProduto.objects.filter(produto_id=produto.pk, grupo__precos_regularizados=True).exists():
         vinculo = MembroGrupoProduto.objects.get(produto_id=produto.pk)
-        _validar(list(Produto.objects.filter(vinculo_grupo__grupo_id=vinculo.grupo_id).order_by('pk')))
+        _validar([produto])
     form.save_m2m()
     form.salvar_fornecedores(produto)
     return produto
@@ -337,7 +362,7 @@ def _dinheiro(value):
     return None if value is None else format(value, '.2f')
 
 
-def diagnosticar_grupo(produtos, referencia_id=None):
+def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
     """One observed set, including inactive members; no implicit reference."""
     produtos = sorted(produtos, key=lambda p: p.pk)
     signatures = []
@@ -363,6 +388,8 @@ def diagnosticar_grupo(produtos, referencia_id=None):
                        'custo': _dinheiro(p.preco_compra),
                        'custo_fracionado': _dinheiro(p.preco_compra_fracionado),
                        'autoria_precos': p.autoria_precos or {},
+                       'adotado':p.precos_canonicos_adotados,
+                       'legados':{campo:_dinheiro(getattr(p,campo)) for campo in PRECOS_LEGADOS},
                        'permitir_prejuizo': p.permitir_prejuizo, 'motivo_prejuizo': p.motivo_prejuizo or ''})
     if not produtos:
         bloqueios.append({'produto_id': None, 'motivo': 'Grupo sem integrantes.'})
@@ -385,6 +412,7 @@ def diagnosticar_grupo(produtos, referencia_id=None):
                 setattr(candidato, campo, value)
             candidato.preco_venda = candidato.preco_vista
             try:
+                if not validar_precos:continue
                 if candidato.preco_compra is None:
                     raise ValidationError('Custo individual ausente; conferir cadastro.')
                 if any(value is None or not value.is_finite() or value < 0 for value in novos.values()):
@@ -406,7 +434,8 @@ def diagnosticar_grupo(produtos, referencia_id=None):
                               'preco_venda_anterior': _dinheiro(p.preco_venda),
                               'preco_venda_novo': _dinheiro(referencia.preco_vista)})
     version = hashlib.sha256(json.dumps(atuais, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
-    return {'status': 'bloqueado' if bloqueios else 'referencia_necessaria' if divergentes or derivados else 'precos_iguais',
+    assinatura=hashlib.sha256(json.dumps([{k:p[k] for k in ('id','precos','preco_venda','legados','adotado')} for p in atuais],sort_keys=True).encode()).hexdigest()
+    return {'assinatura_precos':assinatura,'status': 'bloqueado' if bloqueios else 'precos_individuais' if divergentes or derivados else 'precos_iguais',
             'campos': list(campos), 'divergentes': divergentes,
             'derivados_divergentes': derivados, 'bloqueios': bloqueios,
             'produtos': atuais, 'referencia_id': referencia_id, 'previa': propostas,

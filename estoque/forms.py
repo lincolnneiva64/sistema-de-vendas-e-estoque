@@ -11,6 +11,9 @@ from .services.precos_vinculados import serializar_grupos
 
 
 class ProdutoForm(forms.ModelForm):
+    assinatura_precos_seletivos = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
+    destinatarios_precos = forms.MultipleChoiceField(required=False, widget=forms.MultipleHiddenInput)
+    confirmar_precos_seletivos = forms.BooleanField(required=False, widget=forms.HiddenInput)
     grupo_precos_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
     versao_precos_grupo = forms.IntegerField(required=False, widget=forms.HiddenInput)
     versao_cadastro_precos = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
@@ -216,6 +219,11 @@ class ProdutoForm(forms.ModelForm):
         if instance and instance.pk and not (args and args[0] is not None) and kwargs.get('data') is None:
             instance.refresh_from_db()
         super().__init__(*args, **kwargs)
+        # ModelForm validation mutates instance. Keep the persisted observation
+        # for the confirmation dialog when an invalid bound form is rendered.
+        self.precos_observados = {campo: getattr(self.instance, campo) for campo in (
+            'preco_vista', 'preco_prazo', 'preco_vista_fracionado', 'preco_prazo_fracionado',
+        )}
         if self.instance.pk:
             from .services.precos_vinculados import versao_cadastro_produto
             self.initial['versao_cadastro_precos'] = versao_cadastro_produto(self.instance)
@@ -227,6 +235,7 @@ class ProdutoForm(forms.ModelForm):
             if vinculo:
                 self.grupo_precos = vinculo.grupo
                 self.integrantes_precos = list(vinculo.grupo.produtos.exclude(pk=self.instance.pk).order_by('nome'))
+                self.fields['destinatarios_precos'].choices=[(p.pk,p.nome) for p in self.integrantes_precos]
                 self.initial['grupo_precos_id'] = vinculo.grupo_id
                 self.initial['versao_precos_grupo'] = vinculo.grupo.versao_precos
 
@@ -331,7 +340,7 @@ class ProdutoForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if self.instance.pk and not (self.integrar_precos_vinculados and self.grupo_precos and self.grupo_precos.precos_regularizados):
+        if self.instance.pk and not (self.integrar_precos_vinculados and self.grupo_precos):
             from .services.precos_vinculados import impedir_escrita_direta
             try:
                 impedir_escrita_direta(self.instance.pk, {campo:cleaned_data[campo] for campo in

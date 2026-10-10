@@ -15,7 +15,7 @@ def _valor_json(valor):
 
 
 @serializar_grupos
-def aplicar_precos_compra(item, atualizacoes, operador=None, versao_esperada=None):
+def aplicar_precos_compra(item, atualizacoes, operador=None, versao_esperada=None, selecionados=None, confirmar=False, assinatura_esperada=None):
     using = item._state.db or "default"
     with transaction.atomic(using=using):
         compra=Compra.objects.using(using).select_for_update().get(pk=item.compra_id)
@@ -31,6 +31,12 @@ def aplicar_precos_compra(item, atualizacoes, operador=None, versao_esperada=Non
             # never silently use the latest version after a competing update.
             if versao_esperada is None:
                 raise ValueError('Revisao de produto vinculado exige versao do grupo. Reabra a revisao; nenhuma alteracao foi salva.')
+            from estoque.models import MembroGrupoProduto
+            obrigatorios=set(MembroGrupoProduto.objects.using(using).filter(
+                grupo_id=vinculo.grupo_id,produto_id__in=compra.itens.values_list('produto_id',flat=True)
+            ).values_list('produto_id',flat=True))
+            if selecionados is None or not obrigatorios.issubset({int(pk) for pk in selecionados}):
+                raise ValueError('Confirme todos os integrantes que participaram da mesma compra.')
             custos={campo:value for campo,value in atualizacoes.items() if campo in ('preco_compra','preco_compra_fracionado')}
             if custos:
                 # Validate shared sale prices against the final individual cost,
@@ -39,7 +45,7 @@ def aplicar_precos_compra(item, atualizacoes, operador=None, versao_esperada=Non
                 produto.refresh_from_db();item.refresh_from_db()
             try:
                 evento=alterar_precos_grupo(produto.pk,compartilhados,versao_esperada=versao_esperada,
-                    operador=operador,origem='compra',evidencia_extra={'compra_id':item.compra_id,'item_id':item.pk,'produto_id':item.produto_id},using=using)
+                    operador=operador,origem='compra',selecionados=selecionados,confirmar=confirmar,assinatura_esperada=assinatura_esperada,evidencia_extra={'compra_id':item.compra_id,'item_id':item.pk,'produto_id':item.produto_id},using=using)
             except ValidationError as exc:
                 raise ValueError(' '.join(exc.messages)) from exc
             if evento:

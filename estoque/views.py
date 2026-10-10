@@ -1702,7 +1702,7 @@ def home(request):
                 form.add_error(None, exc)
                 messages.error(request, ' '.join(exc.messages))
         if form.grupo_precos:
-            messages.error(request, 'Alteração isolada de preços bloqueada. Abra o cadastro do produto para editar o grupo; grupos pendentes exigem regularização em Gerenciar grupos vinculados.')
+            messages.error(request, 'Alteração isolada de preços bloqueada. Abra o cadastro do produto e confirme os destinatários do reajuste seletivo.')
             return redirect(reverse('estoque:produto_editar', args=[produto_edicao.pk]))
 
     # GET: carregar formulário de edição
@@ -11820,6 +11820,18 @@ def _produtos_preco_venda_atualizar_post(request):
     precos = _PrecosCompraRevisao()
     precos.operador = request.user if getattr(request.user, 'is_authenticated', False) else None
     precos.versoes_grupos = {}
+    precos.selecionados = {}
+    precos.confirmados = set()
+    precos.assinaturas = {}
+    for chave in request.POST:
+        match=re.fullmatch(r'assinatura_precos_produto_(\d+)',chave)
+        if match:precos.assinaturas[int(match[1])]=request.POST[chave]
+        match=re.fullmatch(r'destinatarios_precos_produto_(\d+)',chave)
+        if match:
+            try:precos.selecionados[int(match[1])]={int(pk) for pk in request.POST.getlist(chave)}
+            except (ValueError,TypeError):raise ValueError('Destinatarios invalidos.')
+        match=re.fullmatch(r'confirmar_precos_produto_(\d+)',chave)
+        if match and request.POST[chave]=='1':precos.confirmados.add(int(match[1]))
     for chave in request.POST:
         match = re.fullmatch(r'versao_grupo_produto_(\d+)', chave)
         if match:
@@ -11922,6 +11934,9 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
         if produto_id not in vinculos:
             independentes[produto_id] = valores
             continue
+        valores = {campo: valor for campo, valor in valores.items() if getattr(produtos[produto_id], campo) != valor}
+        if not valores:
+            continue
         registro = por_grupo.setdefault(vinculos[produto_id], {'produto_id': produto_id, 'valores': {}, 'versao': versoes.get(produto_id)})
         if registro['versao'] != versoes.get(produto_id):
             raise ValueError('Versoes divergentes para o mesmo grupo. Reabra a revisao.')
@@ -11932,6 +11947,9 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
                 raise ValueError('A compra prop?e precos diferentes para o mesmo grupo. Escolha valores unicos.')
             registro['valores'][campo] = valor
     trabalhos = [(pid, valores, None) for pid, valores in independentes.items()]
+    for registro in por_grupo.values():
+        if any(getattr(produtos[registro['produto_id']], campo) == valor for campo, valor in registro['valores'].items()):
+            raise ValueError('Revisao ambigua com iniciadores diferentes. Reabra uma unica revisao do grupo; nenhum preco foi salvo.')
     trabalhos += [(r['produto_id'],r['valores'],r['versao']) for r in por_grupo.values() if r['valores']]
     for produto_id, atualizacoes, versao in trabalhos:
         if 'preco_vista' in atualizacoes:
@@ -11939,7 +11957,10 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
         item_compra = compra.itens.filter(produto_id=produto_id).first() if compra else None
         if item_compra:
             aplicar_precos_compra(item_compra, atualizacoes,
-                operador=getattr(precos_por_produto,'operador',None), versao_esperada=versao)
+                operador=getattr(precos_por_produto,'operador',None), versao_esperada=versao,
+                selecionados=getattr(precos_por_produto,'selecionados',{}).get(produto_id),
+                confirmar=produto_id in getattr(precos_por_produto,'confirmados',set()),
+                assinatura_esperada=getattr(precos_por_produto,'assinaturas',{}).get(produto_id))
         else:
             try:
                 Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes, atualizado_em=timezone.now())
@@ -15456,7 +15477,7 @@ def produto_editar(request, pk):
         if form.is_valid():
             try:
                 produto = salvar_formulario_produto(form, operador=request.user if request.user.is_authenticated else None)
-                messages.success(request, 'Cadastro salvo. Os preços alterados foram compartilhados com os integrantes do grupo.' if form.grupo_precos and form.grupo_precos.precos_regularizados else 'Cadastro salvo.')
+                messages.success(request, 'Cadastro salvo. Reajustes aplicados somente aos integrantes confirmados.' if form.grupo_precos else 'Cadastro salvo.')
                 return redirect(f"{reverse('estoque:home')}?produto_destacado={produto.id}")
             except ValidationError as exc:
                 form.add_error(None, exc)
@@ -15964,10 +15985,15 @@ def revisao_precos_posterior_pendentes(request):
         "preco_prazo_fracionado", "preco_venda", "preco_compra_fracionado",
         "fator_conversao",
     )
+    grupos_vistos=set()
     for item in _itens_revisao_precos_posterior().select_related("produto", "produto__vinculo_grupo__grupo").order_by("compra_id", "id"):
         produto = item.produto
         dados = {campo: str(getattr(produto, campo) or 0) for campo in campos} if produto else {}
         vinculo = getattr(produto, 'vinculo_grupo', None) if produto else None
+        if vinculo:
+            chave=(item.compra_id,vinculo.grupo_id)
+            if chave in grupos_vistos:continue
+            grupos_vistos.add(chave)
         if produto and produto.fator_conversao and produto.fator_conversao > 0:
             # O cadastro ja contem o custo novo; reconstruir o anterior pelo item.
             dados["preco_compra_fracionado"] = str(
@@ -15984,7 +16010,9 @@ def revisao_precos_posterior_pendentes(request):
             "vende_fracionado": bool(produto and produto.vende_fracionado),
             "produto": dados,
             "grupo_precos": {'id': vinculo.grupo_id, 'nome': vinculo.grupo.nome,
-                'versao': vinculo.grupo.versao_precos, 'regularizado': vinculo.grupo.precos_regularizados} if vinculo else None,
+                'versao': vinculo.grupo.versao_precos, 'regularizado': vinculo.grupo.precos_regularizados,
+                'url':reverse('estoque:grupos_produtos_detalhe',args=[vinculo.grupo_id]),
+                'comprados':list(item.compra.itens.filter(produto__vinculo_grupo__grupo_id=vinculo.grupo_id).values_list('produto_id',flat=True))} if vinculo else None,
         })
     return JsonResponse({"itens": itens, "produtos": len(itens), "compras": len({i["compra_id"] for i in itens})})
 
@@ -16050,6 +16078,9 @@ def revisao_precos_posterior_salvar(request):
             if set(precos) != {(produto_id, campo) for _, campo, _ in enviados}:
                 raise ValueError("Preco invalido.")
             _atualizar_precos_venda_produtos_compra(precos, compra=compra)
+            vinculo=getattr(produto,'vinculo_grupo',None)
+            if vinculo:
+                compra.itens.filter(produto__vinculo_grupo__grupo_id=vinculo.grupo_id).update(revisao_preco_concluida=True)
             item.revisao_preco_concluida = True
             item.save(update_fields=["revisao_preco_concluida"])
             if not compra.itens.filter(preco_compra_anterior__isnull=False, revisao_preco_concluida=False).exists():

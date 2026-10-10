@@ -1,0 +1,50 @@
+<script>
+/* One confirmation for an explicit price command, never an automatic propagation. */
+window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
+  const resposta = await fetch(url, {credentials:'same-origin', cache:'no-store'});
+  const dados = await resposta.json();
+  if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível consultar o grupo.');
+  const grupo = dados.precos_vinculados;
+  const revisaoCompra = Array.isArray(comprados);
+  const obrigatorios = new Set((comprados || [fonte]).map(String));
+  const dialog = document.createElement('dialog');
+  dialog.style.cssText='width:min(94vw,760px);max-height:85vh;overflow:auto;border:1px solid #bbb;border-radius:12px;padding:18px;box-sizing:border-box';
+  dialog.setAttribute('aria-label','Confirmar atualização seletiva de preços');
+  const titulo = document.createElement('h2'); titulo.textContent='Confirmar produtos e preços'; dialog.append(titulo);
+  const aviso = document.createElement('p');
+  aviso.textContent='Somente os selecionados serão alterados e adotarão os preços canônicos nos pedidos. Custos e estoque permanecem individuais. '+(revisaoCompra?'Os participantes da mesma compra acompanham o reajuste. ':'')+'Confira também os preços efetivos dos pedidos.';
+  dialog.append(aviso);
+  const campos = {preco_vista:'À vista',preco_prazo:'A prazo',preco_vista_fracionado:'À vista fracionado',preco_prazo_fracionado:'A prazo fracionado'};
+  const moeda = valor => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(valor || 0));
+  const efetivo = p => p.adotado ? p.precos.preco_vista : Number(p.legados.preco_venda_1 || 0) || Number(p.preco_venda || 0);
+  grupo.produtos.forEach(p => {
+    const bloco=document.createElement('section');bloco.style.cssText='padding:12px 0;border-bottom:1px solid #ddd';
+    const label=document.createElement('label');label.style.cssText='display:flex;gap:10px;align-items:center;min-height:44px';
+    const box=document.createElement('input');box.type='checkbox';box.value=p.id;box.checked=obrigatorios.has(String(p.id));box.disabled=box.checked;box.dataset.destinatario='1';
+    const nome=document.createElement('strong');nome.textContent=p.nome+(p.ativo?'':' (inativo)')+(box.checked?(revisaoCompra?' — participante obrigatório':' — produto iniciador'):(revisaoCompra?' — não participou da compra / opcional':' — outro integrante / opcional'));
+    label.append(box,nome);bloco.append(label);
+    Object.entries(campos).forEach(([campo,texto]) => {
+      if(!grupo.campos.includes(campo))return;
+      const antes=p.precos[campo], depois=campo in novos ? novos[campo] : antes;
+      const linha=document.createElement('div');linha.textContent=texto+': '+moeda(antes)+' → '+moeda(depois)+' (diferença '+moeda(Number(depois)-Number(antes))+')';bloco.append(linha);
+    });
+    const pedido=document.createElement('p');pedido.textContent='Pedido, embalagem: '+moeda(efetivo(p))+' → '+moeda(novos.preco_vista ?? p.precos.preco_vista)+'. Adoção atual: '+(p.adotado?'canônicos':'preferência legada')+'. Custo individual atual: '+moeda(p.custo)+'.';bloco.append(pedido);
+    if(p.vende_fracionado){
+      const secundario=document.createElement('p');
+      const antes=p.adotado?p.precos.preco_vista_fracionado:Number(p.legados.preco_venda_2 || 0)||Number(p.precos.preco_vista_fracionado || 0)||Number(p.precos.preco_prazo_fracionado || 0);
+      secundario.textContent='Pedido, fracionado: '+moeda(antes)+' → '+moeda(novos.preco_vista_fracionado ?? p.precos.preco_vista_fracionado);bloco.append(secundario);
+    }
+    dialog.append(bloco);
+  });
+  const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent='Voltar sem aplicar';
+  const confirmar=document.createElement('button');confirmar.type='button';confirmar.textContent='Confirmar selecionados e preços';
+  [cancelar,confirmar].forEach(b=>b.style.cssText='min-height:44px;margin:12px 8px 0 0');dialog.append(cancelar,confirmar);
+  document.body.append(dialog);dialog.showModal();
+  return new Promise((resolve,reject)=>{
+    let encerrado=false;
+    function fechar(valor){if(encerrado)return;encerrado=true;dialog.close();dialog.remove();if(valor)resolve({ids:valor,versao:grupo.versao_grupo,assinatura:grupo.assinatura_precos});else reject(new Error('Confirmação cancelada. Nenhum preço foi enviado.'));}
+    confirmar.onclick=()=>fechar(Array.from(dialog.querySelectorAll('[data-destinatario]:checked')).map(b=>b.value));
+    cancelar.onclick=()=>fechar(null);dialog.addEventListener('cancel',e=>{e.preventDefault();fechar(null);});
+  });
+};
+</script>

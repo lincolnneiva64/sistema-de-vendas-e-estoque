@@ -35,6 +35,9 @@ def pagina_novo_grupo(request):
 
 urlpatterns = [path('novo-grupo-teste/', pagina_novo_grupo), path('', include('sistema.urls'))]
 
+from .tests_precos_vinculados import (alterar_todos_precos_fixture as alterar_precos_grupo,
+    aplicar_todos_precos_compra_fixture as aplicar_precos_compra, confirmacao_todos_fixture, payload_todos_fixture)
+
 
 class InterfacesPrecosVinculadosTests(TestCase):
     compra = servico_tests.ServicoPrecosVinculadosTests.compra
@@ -62,31 +65,33 @@ class InterfacesPrecosVinculadosTests(TestCase):
         dados.update(categoria='Bebidas', vende_fracionado='on', grupo_precos_id=self.grupo.pk)
         self.grupo.refresh_from_db()
         dados['versao_precos_grupo'] = self.grupo.versao_precos
+        comando=confirmacao_todos_fixture(produto.pk)
+        dados.update(destinatarios_precos=[p.pk for p in self.produtos if p.pk!=produto.pk],confirmar_precos_seletivos=True,assinatura_precos_seletivos=comando['assinatura_esperada'])
         dados.pop('fornecedores', None)
         return dados
 
-    def test_activation_requires_reference_confirmation_and_fresh_preview(self):
+    def test_activation_requires_confirmation_and_fresh_preview_without_reference(self):
         models.QuerySet.update(Produto.objects.filter(pk=self.produtos[1].pk), preco_prazo=42)
         before = self.snapshot()
         payload = self.comando(self.produtos[1].pk)
-        for field in ('referencia', 'confirmar', 'versao_observada'):
+        for field in ('confirmar', 'versao_observada'):
             invalid = dict(payload); invalid.pop(field)
             self.assertEqual(self.client.post(self.url, invalid).status_code, 400)
             self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.client.post(self.url, payload).status_code, 200)
         self.grupo.refresh_from_db()
         self.assertTrue(self.grupo.precos_regularizados)
-        self.assertEqual(set(Produto.objects.values_list('preco_prazo', flat=True)), {Decimal(42)})
+        self.assertEqual(set(Produto.objects.values_list('preco_prazo', flat=True)), {Decimal(39),Decimal(42)})
         self.assertEqual(AlteracaoPrecoVinculado.objects.get().operador, self.operador)
 
-    def test_stale_incompatible_and_loss_activation_roll_back(self):
+    def test_stale_and_incompatible_activation_blocked_without_repricing(self):
         payload = self.comando()
         Produto.objects.filter(pk=self.produtos[1].pk).update(preco_compra=40)
         before = self.snapshot()
         self.assertEqual(self.client.post(self.url, payload).status_code, 400)
         self.assertEqual(self.snapshot(), before)
-        self.assertEqual(self.client.post(self.url, self.comando()).status_code, 400)
-        self.assertEqual(AlteracaoPrecoVinculado.objects.count(), 0)
+        self.assertEqual(self.client.post(self.url, self.comando()).status_code, 200)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(), 1)
         models.QuerySet.update(Produto.objects.filter(pk=self.produtos[1].pk), preco_compra=10, fator_conversao=12)
         before = self.snapshot()
         self.assertEqual(self.client.post(self.url, self.comando()).status_code, 400)
@@ -106,15 +111,15 @@ class InterfacesPrecosVinculadosTests(TestCase):
         self.assertEqual(self.client.post(self.criar_url, payload).status_code, 201)
         self.assertTrue(GrupoProdutoVinculado.objects.get().precos_regularizados)
 
-    def test_new_group_invalid_price_rolls_back_membership(self):
+    def test_group_activation_does_not_apply_existing_invalid_prices(self):
         self.client.post(self.url, {'acao': 'excluir', 'confirmar': '1'})
         Produto.objects.filter(pk=self.produtos[1].pk).update(preco_compra=40)
         payload = {'acao': 'previa', 'produto_ids': [p.pk for p in self.produtos], 'referencia': self.produtos[0].pk}
         d = self.client.post(self.criar_url, payload).json()['precos_vinculados']
         payload.update(acao='criar', nome='Não deve existir', confirmar='1', versao_observada=d['versao_observada'])
         before = self.snapshot()
-        self.assertEqual(self.client.post(self.criar_url, payload).status_code, 400)
-        self.assertFalse(GrupoProdutoVinculado.objects.exists())
+        self.assertEqual(self.client.post(self.criar_url, payload).status_code, 201)
+        self.assertTrue(GrupoProdutoVinculado.objects.exists())
         self.assertEqual(self.snapshot(), before)
 
     def test_editor_any_member_all_four_prices_and_individual_data(self):
@@ -160,6 +165,7 @@ class InterfacesPrecosVinculadosTests(TestCase):
             'versao_grupo_produto_'+str(item.produto_id): d['grupo_precos']['versao'],
             'atualizar_preco_venda_produto_ids[]': [item.produto_id],
             'atualizar_preco_venda_nomes[]': ['preco_vista'], 'atualizar_preco_venda_valores[]': ['40']}
+        payload.update(payload_todos_fixture(item.produto_id))
         response = self.client.post(reverse('estoque:revisao_precos_posterior_salvar'), payload)
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(set(Produto.objects.values_list('preco_vista', flat=True)), {Decimal(40)})
@@ -191,7 +197,7 @@ class InterfacesPrecosVinculadosTests(TestCase):
         self.assertEqual(self.snapshot(), before)
         payload['confirmar'] = '1'
         self.assertEqual(self.client.post(self.url, payload).status_code, 200)
-        novo.refresh_from_db(); self.assertEqual(novo.preco_vista, 36)
+        novo.refresh_from_db(); self.assertEqual(novo.preco_vista, 40)
         before = self.snapshot()
         self.assertEqual(self.client.post(self.url, {'acao': 'remover', 'produto_id': novo.pk}).status_code, 200)
         self.assertEqual(self.snapshot(), before)
@@ -199,7 +205,7 @@ class InterfacesPrecosVinculadosTests(TestCase):
     def test_editor_shows_members_and_hidden_version(self):
         self.ativar(); self.grupo.refresh_from_db()
         response = self.client.get(reverse('estoque:produto_editar', args=[self.produtos[0].pk]))
-        self.assertContains(response, 'Preços de venda compartilhados')
+        self.assertContains(response, 'Atualizacao seletiva')
         self.assertContains(response, 'name="versao_precos_grupo"')
         self.assertContains(response, self.produtos[1].nome)
 
@@ -252,10 +258,11 @@ class InterfacesPrecosBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
         InterfacesPrecosVinculadosTests.setUp(self)
 
-    def fluxo(self, width):
+    def fluxo(self, width, selecionar_todos=True):
         Produto.objects.all().update(categoria='Bebidas')
         models.QuerySet.update(Produto.objects.filter(pk=self.produtos[1].pk), preco_prazo=42)
         individuais = [(p.pk, p.quantidade, p.preco_compra, p.codigo) for p in Produto.objects.order_by('pk')]
+        pares_antes=list(Produto.objects.exclude(pk=self.produtos[2].pk).order_by('pk').values())
         with TemporaryDirectory(prefix='linked-prices-interface-', ignore_cleanup_errors=True) as profile:
             chrome = Chrome(r'C:\Program Files\Google\Chrome\Application\chrome.exe', profile).start()
             try:
@@ -267,26 +274,31 @@ class InterfacesPrecosBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('document.querySelector(".grupo-produto-vinculo").click();true')
                 tab.wait('document.getElementById("grupoProdutoModal").open && !document.getElementById("grupoProdutoPrecos").hidden')
                 self.assertTrue(tab.evaluate('document.getElementById("grupoProdutoRegularizar").disabled'))
-                tab.evaluate('document.getElementById("grupoProdutoPrecosReferencia").value="'+str(self.produtos[1].pk)+'";document.getElementById("grupoProdutoPrecosReferencia").dispatchEvent(new Event("change"));true')
-                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("39.00 → 42.00")')
+                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("42.00")')
                 tab.evaluate('document.getElementById("grupoProdutoPrecosConfirmacao").click();document.getElementById("grupoProdutoRegularizar").click();true')
-                tab.wait('document.getElementById("grupoProdutoSucesso").textContent.includes("ativada")')
+                tab.wait('document.getElementById("grupoProdutoSucesso").textContent.includes("ativado")')
                 self.grupo.refresh_from_db(); self.assertTrue(self.grupo.precos_regularizados)
-                self.assertEqual(set(Produto.objects.values_list('preco_prazo', flat=True)), {Decimal(42)})
+                self.assertEqual(set(Produto.objects.values_list('preco_prazo', flat=True)), {Decimal(39),Decimal(42)})
                 tab.call('Page.navigate', {'url': self.live_server_url+reverse('estoque:produto_editar', args=[self.produtos[2].pk])})
                 tab.wait('document.readyState === "complete" && !!document.getElementById("form-produto")')
                 self.assertTrue(tab.evaluate('!!document.querySelector("[name=versao_precos_grupo]").value'))
                 tab.evaluate('document.getElementById("id_preco_vista").value="40";document.getElementById("id_preco_vista").dispatchEvent(new Event("input",{bubbles:true}));true')
                 # Native form submission exercises server validation and version.
-                tab.evaluate('document.getElementById("form-produto").submit();true')
+                tab.evaluate('document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('!!document.querySelector("dialog[open] [data-destinatario]")')
+                self.assertFalse(tab.evaluate('Array.from(document.querySelectorAll("dialog[open] [data-destinatario]:not(:disabled)")).some(b=>b.checked)'))
+                tab.evaluate('document.querySelectorAll("dialog[open] [data-destinatario]:not(:disabled)").forEach(b=>b.checked='+str(selecionar_todos).lower()+');Array.from(document.querySelectorAll("dialog[open] button")).find(b=>b.textContent.includes("Confirmar selecionados")).click();true')
                 tab.wait('location.pathname === "/" && document.readyState === "complete"')
-                self.assertEqual(set(Produto.objects.values_list('preco_vista', flat=True)), {Decimal(40)})
+                self.assertEqual(set(Produto.objects.values_list('preco_vista', flat=True)), {Decimal(40)} if selecionar_todos else {Decimal(36),Decimal(40)})
+                if not selecionar_todos:self.assertEqual(list(Produto.objects.exclude(pk=self.produtos[2].pk).order_by('pk').values()),pares_antes)
                 self.assertEqual([(p.pk, p.quantidade, p.preco_compra, p.codigo) for p in Produto.objects.order_by('pk')], individuais)
             finally:
                 chrome.stop()
 
     def test_desktop_activation_and_editor(self): self.fluxo(1280)
     def test_mobile_activation_and_editor(self): self.fluxo(390)
+    def test_desktop_editor_unselected_members_preserved(self):self.fluxo(1280,False)
+    def test_mobile_editor_unselected_members_preserved(self):self.fluxo(390,False)
 
 
 @skipUnless(Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe').is_file(), 'Chrome indisponível')
@@ -309,8 +321,7 @@ class NovoGrupoPrecosBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('document.getElementById("grupoProdutoAtivar").click();document.querySelectorAll(".grupo-produto-checkbox").forEach(c=>c.click());document.getElementById("grupoProdutoCriar").click();true')
                 tab.wait('document.getElementById("grupoProdutoModal").open && !document.getElementById("grupoProdutoPrecos").hidden')
                 self.assertFalse(GrupoProdutoVinculado.objects.exists())
-                tab.evaluate('document.getElementById("grupoProdutoPrecosReferencia").value="'+str(self.produtos[2].pk)+'";document.getElementById("grupoProdutoPrecosReferencia").dispatchEvent(new Event("change"));true')
-                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("36.00 → 36.00")')
+                tab.wait('document.getElementById("grupoProdutoPrecosTabela").textContent.includes("36.00")')
                 tab.evaluate('document.getElementById("grupoProdutoPrecosConfirmacao").click();document.getElementById("grupoProdutoSalvar").click();true')
                 tab.wait('document.getElementById("grupoProdutoMensagemPagina").textContent.includes("vinculados com sucesso")')
                 self.assertTrue(GrupoProdutoVinculado.objects.get().precos_regularizados)
@@ -333,7 +344,7 @@ class RevisaoCompraVinculadaBrowserTests(compra_tests.CompraPreRevisaoFixture, S
         regularizar_grupo(self.grupo.pk, diagnosticar_grupo(list(self.grupo.produtos.all()))['versao_observada'],
             confirmar=True, operador=self.user)
 
-    def revisao(self, mobile):
+    def revisao(self, mobile, selecionar_ausente=True):
         with TemporaryDirectory(prefix='linked-purchase-review-', ignore_cleanup_errors=True) as profile:
             chrome = Chrome(r'C:\Program Files\Google\Chrome\Application\chrome.exe', profile).start()
             try:
@@ -356,16 +367,20 @@ class RevisaoCompraVinculadaBrowserTests(compra_tests.CompraPreRevisaoFixture, S
                 if mobile:
                     tab.evaluate('document.getElementById("btnRevisarPrecosAgoraCompra").click();true')
                 tab.wait('!!document.querySelector("#modalConferenciaPrecosCompra .campoNovoPrecoVendaCompra")')
-                self.assertIn('compartilhados', tab.evaluate('document.getElementById("modalConferenciaPrecosCompra").textContent'))
+                self.assertIn('seletivo', tab.evaluate('document.getElementById("modalConferenciaPrecosCompra").textContent'))
                 tab.evaluate("""const simulador=document.querySelector('#modalConferenciaPrecosCompra .compras-preco-simulador[data-campo-preco="preco_vista"]');
                     const campo=simulador.querySelector('.campoNovoPrecoVendaCompra');campo.value='20,00';
                     campo.dispatchEvent(new Event('input',{bubbles:true}));
                     simulador.querySelector('.marcarAtualizarVendaCompra').checked=true;
                     document.getElementById('btnAtualizarPrecosContinuarCompra').click();true""")
+                tab.wait('!!document.querySelector("dialog[open] [data-destinatario]")')
+                self.assertFalse(tab.evaluate('document.querySelector("dialog[open] [data-destinatario]:not(:disabled)").checked'))
+                tab.evaluate('document.querySelector("dialog[open] [data-destinatario]:not(:disabled)").checked='+str(selecionar_ausente).lower()+';Array.from(document.querySelectorAll("dialog[open] button")).find(b=>b.textContent.includes("Confirmar selecionados")).click();true')
                 tab.wait('location.pathname === "/compras/" && document.readyState === "complete"')
                 self.produto.refresh_from_db(); self.par.refresh_from_db(); self.compra.refresh_from_db()
                 self.assertEqual(self.produto.preco_vista, 20)
-                self.assertEqual(self.par.preco_vista, 20)
+                self.assertEqual(self.par.preco_vista, 20 if selecionar_ausente else 15)
+                self.assertEqual(self.par.precos_canonicos_adotados,selecionar_ausente)
                 self.assertEqual(self.produto.quantidade, 19)
                 self.assertEqual(self.par.quantidade, 50)
                 self.assertEqual(self.produto.preco_compra, 10)
@@ -377,3 +392,5 @@ class RevisaoCompraVinculadaBrowserTests(compra_tests.CompraPreRevisaoFixture, S
 
     def test_desktop_review_propagates_with_purchase_evidence(self): self.revisao(False)
     def test_mobile_review_propagates_with_purchase_evidence(self): self.revisao(True)
+    def test_desktop_absent_unchecked_remains_unchanged(self):self.revisao(False,False)
+    def test_mobile_absent_unchecked_remains_unchanged(self):self.revisao(True,False)
