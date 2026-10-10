@@ -360,7 +360,9 @@ def salvar_formulario_produto(form, *, operador=None):
                 # a later rejection rolls back this write too.
                 produto.save(update_fields=custos)
             campos = PRECOS_VINCULADOS if atual.vende_fracionado else PRECOS_VINCULADOS[:2]
-            mudancas={c:getattr(produto,c) for c in campos if getattr(produto,c)!=getattr(atual,c)}
+            confirmar_precos = form.cleaned_data.get('confirmar_precos_seletivos', False)
+            mudancas={c:getattr(produto,c) for c in campos
+                      if confirmar_precos or getattr(produto,c)!=getattr(atual,c)}
             if mudancas:
                 alterar_precos_grupo(produto.pk, mudancas,
                 versao_esperada=vinculo.grupo.versao_precos, operador=operador, origem='edicao_produto',

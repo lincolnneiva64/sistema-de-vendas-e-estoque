@@ -1060,8 +1060,9 @@ select.campo-obrigatorio-piscando:focus,
     const campos=['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'];
     const numero=v=>{let t=String(v).replace(/\s/g,'').replace(/[^\d,.-]/g,'');if(t.includes(','))t=t.replace(/\./g,'').replace(',','.');return Number(t);};
     const anteriores={preco_vista:'{{ form.precos_observados.preco_vista|unlocalize }}',preco_prazo:'{{ form.precos_observados.preco_prazo|unlocalize }}',preco_vista_fracionado:'{{ form.precos_observados.preco_vista_fracionado|unlocalize }}',preco_prazo_fracionado:'{{ form.precos_observados.preco_prazo_fracionado|unlocalize }}'};
-    const novos={};campos.forEach(c=>{const valor=numero(form.elements[c].value);if(valor!==numero(anteriores[c]))novos[c]=valor;});
-    if(!Object.keys(novos).length)return;
+    const mudouPreco=campos.some(c=>numero(form.elements[c].value)!==numero(anteriores[c]));
+    if(!mudouPreco)return;
+    const novos=Object.fromEntries(campos.map(c=>[c,numero(form.elements[c].value)]));
     const observada=JSON.parse(document.getElementById('produto-apresentacao-observada').textContent);
     const unidade=v=>String(v || '').trim().toUpperCase();
     const fracionado=['true','1','sim'].includes(String(form.elements.vende_fracionado.value).toLowerCase());
@@ -1071,7 +1072,7 @@ select.campo-obrigatorio-piscando:focus,
         || numero(form.elements.fator_conversao.value)!==numero(observada.fator_conversao)));
     if(mudouApresentacao){
       event.preventDefault();delete form.dataset.enviando;
-      alert('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.');
+      window.notificarPrecosSeletivos('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.','warning');
       return;
     }
     if(form.dataset.precoConsentido==='1'){delete form.dataset.precoConsentido;return;}
@@ -1085,7 +1086,11 @@ select.campo-obrigatorio-piscando:focus,
       alvo.ids.filter(id=>id!=='{{ form.instance.pk }}').forEach(id=>{const input=document.createElement('input');input.type='hidden';input.name='destinatarios_precos';input.value=id;form.append(input);});
       form.elements.assinatura_precos_seletivos.value=alvo.assinatura;form.elements.confirmar_precos_seletivos.value='True';form.dataset.precoConsentido='1';
       delete form.dataset.enviando;form.requestSubmit();
-    }catch(e){alert(e.message);delete form.dataset.enviando;}
+    }catch(e){
+      const cancelado=e.code==='PRECOS_SELETIVOS_CANCELADOS';
+      window.notificarPrecosSeletivos(e.message,cancelado?'warning':'danger');
+      delete form.dataset.enviando;
+    }
     finally{delete form.dataset.confirmandoPreco;}
   });
   </script>

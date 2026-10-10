@@ -5887,6 +5887,10 @@
     } catch (erro) {
       delete formCompra.dataset.confirmandoGrupo;
       camposAtualizarCustoCompra.replaceChildren();
+      if (erro.code === 'PRECOS_SELETIVOS_CANCELADOS') {
+        window.notificarPrecosSeletivos(erro.message, 'warning');
+        return;
+      }
       let aviso = document.getElementById('erroPrecosVinculadosCompra');
       if (!aviso) {
         aviso = document.createElement('p'); aviso.id = 'erroPrecosVinculadosCompra';

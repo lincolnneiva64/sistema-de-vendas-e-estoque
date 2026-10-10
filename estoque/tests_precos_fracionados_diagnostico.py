@@ -413,6 +413,65 @@ class FracionadosConcorrenciaTests(FracionadosFixture,TransactionTestCase):
 
 @skipUnless(Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe').is_file(),'Chrome unavailable')
 class FracionadosDiagnosticoBrowserTests(FracionadosFixture,StaticLiveServerTestCase):
+    def test_lopitos_confirmation_shows_all_targets_and_cancel_uses_inline_notice(self):
+        self.preparar_lopitos()
+        fonte=self.produtos[1]
+        estado_antes={p['id']:p for p in Produto.objects.values()}
+        eventos_antes=AlteracaoPrecoVinculado.objects.count()
+        self.grupo.refresh_from_db()
+        versao_antes=self.grupo.versao_precos
+        with TemporaryDirectory(prefix='lopitos-preview-',ignore_cleanup_errors=True) as profile:
+            chrome=Chrome(r'C:\Program Files\Google\Chrome\Application\chrome.exe',profile).start()
+            try:
+                tab=chrome.tab()
+                tab.call('Emulation.setDeviceMetricsOverride',{'width':1280,'height':844,'deviceScaleFactor':1,'mobile':False})
+                tab.call('Network.setCookie',{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url})
+                tab.call('Page.navigate',{'url':self.live_server_url+reverse('estoque:produto_editar',args=[fonte.pk])})
+                tab.wait('document.readyState === "complete" && !!document.getElementById("form-produto")')
+                tab.evaluate('window.alert=()=>{window.alertChamado=true;};document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.querySelector("[name=preco_prazo_fracionado]").dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('!!document.querySelector("dialog[open] [data-destinatario]")')
+                requeijao=tab.evaluate('Array.from(document.querySelectorAll("dialog[open] section")).find(s=>s.textContent.includes("Lopitos Requeijão 24/30G")).textContent').replace('\xa0',' ')
+                self.assertIn('À vista fracionado: R$ 0,00 → R$ 0,00',requeijao)
+                self.assertIn('A prazo fracionado: R$ 0,00 → R$ 0,00',requeijao)
+                tab.evaluate('document.querySelectorAll("dialog[open] [data-destinatario]:not(:disabled)").forEach(b=>{b.checked=true;b.dispatchEvent(new Event("change",{bubbles:true}));});true')
+                linhas=tab.evaluate('''Array.from(document.querySelectorAll('dialog[open] section')).map(s=>({
+                    nome:s.querySelector('strong').textContent.split(' — ')[0],
+                    texto:s.textContent
+                }))''')
+                por_nome={linha['nome']:linha['texto'].replace('\xa0',' ') for linha in linhas}
+                self.assertIn('À vista fracionado: R$ 1,20 → R$ 1,20',por_nome['Lopitos Cebolinha 24/30G'])
+                self.assertIn('A prazo fracionado: R$ 1,30 → R$ 1,30',por_nome['Lopitos Cebolinha 24/30G'])
+                self.assertIn('À vista fracionado: R$ 1,20 → R$ 1,20',por_nome['Lopitos Gal Caipira 24/30G'])
+                self.assertIn('A prazo fracionado: R$ 1,20 → R$ 1,30',por_nome['Lopitos Gal Caipira 24/30G'])
+                for nome in ('Lopitos Queijo 24/30G','Lopitos Requeijão 24/30G'):
+                    self.assertIn('À vista fracionado: R$ 0,00 → R$ 1,20',por_nome[nome])
+                    self.assertIn('A prazo fracionado: R$ 0,00 → R$ 1,30',por_nome[nome])
+                tab.evaluate('Array.from(document.querySelectorAll("dialog[open] button")).find(b=>b.textContent==="Voltar sem aplicar").click();true')
+                tab.wait('!!document.querySelector(".precos-seletivos-feedback") && !document.querySelector("dialog[open]")')
+                self.assertIn('Nenhum preço foi enviado',tab.evaluate('document.querySelector(".precos-seletivos-feedback").textContent'))
+                self.assertFalse(tab.evaluate('window.alertChamado===true'))
+                self.assertEqual({p['id']:p for p in Produto.objects.values()},estado_antes)
+                self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos_antes)
+                self.grupo.refresh_from_db()
+                self.assertEqual(self.grupo.versao_precos,versao_antes)
+                tab.evaluate('document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('!!document.querySelector("dialog[open] [data-destinatario]")')
+                tab.evaluate(f'Array.from(document.querySelectorAll("dialog[open] [data-destinatario]")).find(b=>b.value==={str(self.produtos[2].pk)!r}).checked=true;Array.from(document.querySelectorAll("dialog[open] button")).find(b=>b.textContent.includes("Confirmar selecionados")).click();true')
+                tab.wait('location.pathname === "/"')
+                depois={p['id']:p for p in Produto.objects.values()}
+                selecionados={fonte.pk,self.produtos[2].pk}
+                for produto in self.produtos:
+                    if produto.pk not in selecionados:
+                        self.assertEqual(depois[produto.pk],estado_antes[produto.pk])
+                    else:
+                        self.assertEqual(depois[produto.pk]['preco_vista'],Decimal('26.00'))
+                        self.assertEqual(depois[produto.pk]['preco_prazo'],Decimal('27.00'))
+                        self.assertEqual(depois[produto.pk]['preco_vista_fracionado'],Decimal('1.20'))
+                        self.assertEqual(depois[produto.pk]['preco_prazo_fracionado'],Decimal('1.30'))
+                self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos_antes+1)
+            finally:
+                chrome.stop()
+
     def fluxo(self,width,compativel,zerado=False,multiplo=False,ativo=False):
         if compativel:self.compatibilizar_fixture()
         fonte=self.produtos[2] if zerado else self.produtos[1]
@@ -481,8 +540,9 @@ class FracionadosDiagnosticoBrowserTests(FracionadosFixture,StaticLiveServerTest
                 tab.wait('document.readyState === "complete" && !!document.getElementById("vende_fracionado_visual")')
                 tab.evaluate('document.getElementById("vende_fracionado_visual").value="True";document.getElementById("vende_fracionado_visual").dispatchEvent(new Event("change",{bubbles:true}));document.getElementById("fator_visual").value="24";document.getElementById("fator_visual").dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("unidade_fracionada_visual").value="UN";document.getElementById("unidade_fracionada_visual").dispatchEvent(new Event("change",{bubbles:true}));true')
                 self.assertEqual(Decimal(tab.evaluate('document.querySelector("[name=preco_vista_fracionado]").value').replace(',','.')),0)
-                tab.evaluate('window.avisoSeparacao="";window.alert=mensagem=>{window.avisoSeparacao=mensagem;};document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.getElementById("form-produto").requestSubmit();true')
-                self.assertIn('Salve primeiro',tab.evaluate('window.avisoSeparacao'))
+                tab.evaluate('document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('!!document.querySelector(".precos-seletivos-feedback")')
+                self.assertIn('Salve primeiro',tab.evaluate('document.querySelector(".precos-seletivos-feedback").textContent'))
                 self.assertFalse(tab.evaluate('!!document.querySelector("dialog[open] [data-destinatario]")'))
                 self.assertEqual({p['id']:p for p in Produto.objects.values()},antes)
                 tab.evaluate('document.querySelector("[name=preco_prazo_fracionado]").value="0.00";true')

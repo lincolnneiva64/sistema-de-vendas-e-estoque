@@ -1,5 +1,20 @@
 <script>
 /* One confirmation for an explicit price command, never an automatic propagation. */
+window.notificarPrecosSeletivos = function(mensagem, tipo='info') {
+  const aviso=document.createElement('div');
+  aviso.className='alert alert-'+(tipo==='warning'?'warning':tipo==='danger'?'danger':'info')+' shadow-sm precos-seletivos-feedback';
+  aviso.setAttribute('role','status');
+  aviso.setAttribute('aria-live','polite');
+  aviso.style.cssText='position:fixed;right:16px;bottom:16px;z-index:20000;max-width:min(92vw,460px);margin:0;padding:12px 42px 12px 16px;border-radius:12px';
+  const texto=document.createElement('span');texto.textContent=mensagem;aviso.append(texto);
+  const fechar=document.createElement('button');fechar.type='button';fechar.className='btn-close';
+  fechar.setAttribute('aria-label','Fechar aviso');
+  fechar.style.cssText='position:absolute;right:12px;top:12px';
+  fechar.onclick=()=>aviso.remove();aviso.append(fechar);
+  document.body.append(aviso);
+  window.setTimeout(()=>aviso.remove(),7000);
+};
+
 window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
   const resposta = await fetch(url, {credentials:'same-origin', cache:'no-store'});
   const dados = await resposta.json();
@@ -23,17 +38,35 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
     const box=document.createElement('input');box.type='checkbox';box.value=p.id;box.checked=obrigatorios.has(String(p.id));box.disabled=box.checked;box.dataset.destinatario='1';
     const nome=document.createElement('strong');nome.textContent=p.nome+(p.ativo?'':' (inativo)')+(box.checked?(revisaoCompra?' — participante obrigatório':' — produto iniciador'):(revisaoCompra?' — não participou da compra / opcional':' — outro integrante / opcional'));
     label.append(box,nome);bloco.append(label);
+    const linhasPreco=[];
     Object.entries(campos).forEach(([campo,texto]) => {
       if(!grupo.campos.includes(campo))return;
-      const antes=p.precos[campo], depois=campo in novos ? novos[campo] : antes;
-      const linha=document.createElement('div');linha.textContent=texto+': '+moeda(antes)+' → '+moeda(depois)+' (diferença '+moeda(Number(depois)-Number(antes))+')';bloco.append(linha);
+      const linha=document.createElement('div');
+      const antes=p.precos[campo];
+      linhasPreco.push({linha,campo,texto,antes});
+      bloco.append(linha);
     });
-    const pedido=document.createElement('p');pedido.textContent='Pedido, embalagem: '+moeda(efetivo(p))+' → '+moeda(novos.preco_vista ?? p.precos.preco_vista)+'. Adoção atual: '+(p.adotado?'canônicos':'preferência legada')+'. Custo individual atual: '+moeda(p.custo)+'.';bloco.append(pedido);
+    const pedido=document.createElement('p');bloco.append(pedido);
+    let pedidoFracionado;
     if(p.vende_fracionado){
-      const secundario=document.createElement('p');
-      const antes=p.adotado?p.precos.preco_vista_fracionado:Number(p.legados.preco_venda_2 || 0)||Number(p.precos.preco_vista_fracionado || 0)||Number(p.precos.preco_prazo_fracionado || 0);
-      secundario.textContent='Pedido, fracionado: '+moeda(antes)+' → '+moeda(novos.preco_vista_fracionado ?? p.precos.preco_vista_fracionado);bloco.append(secundario);
+      pedidoFracionado=document.createElement('p');bloco.append(pedidoFracionado);
     }
+    function atualizarPrevia(){
+      linhasPreco.forEach(({linha,campo,texto,antes})=>{
+        const depois=box.checked && campo in novos ? novos[campo] : antes;
+        linha.textContent=texto+': '+moeda(antes)+' → '+moeda(depois)+' (diferença '+moeda(Number(depois)-Number(antes))+')';
+      });
+      const atualEmbalagem=efetivo(p);
+      const novoEmbalagem=box.checked ? (novos.preco_vista ?? p.precos.preco_vista) : atualEmbalagem;
+      pedido.textContent='Pedido, embalagem: '+moeda(atualEmbalagem)+' → '+moeda(novoEmbalagem)+'. Adoção atual: '+(p.adotado?'canônicos':'preferência legada')+'. Custo individual atual: '+moeda(p.custo)+'.';
+      if(pedidoFracionado){
+        const atualFracionado=p.adotado?p.precos.preco_vista_fracionado:Number(p.legados.preco_venda_2 || 0)||Number(p.precos.preco_vista_fracionado || 0)||Number(p.precos.preco_prazo_fracionado || 0);
+        const novoFracionado=box.checked ? (novos.preco_vista_fracionado ?? p.precos.preco_vista_fracionado) : atualFracionado;
+        pedidoFracionado.textContent='Pedido, fracionado: '+moeda(atualFracionado)+' → '+moeda(novoFracionado);
+      }
+    }
+    atualizarPrevia();
+    box.addEventListener('change',atualizarPrevia);
     dialog.append(bloco);
   });
   const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent='Voltar sem aplicar';
@@ -42,7 +75,16 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
   document.body.append(dialog);dialog.showModal();
   return new Promise((resolve,reject)=>{
     let encerrado=false;
-    function fechar(valor){if(encerrado)return;encerrado=true;dialog.close();dialog.remove();if(valor)resolve({ids:valor,versao:grupo.versao_grupo,assinatura:grupo.assinatura_precos});else reject(new Error('Confirmação cancelada. Nenhum preço foi enviado.'));}
+    function fechar(valor){
+      if(encerrado)return;
+      encerrado=true;dialog.close();dialog.remove();
+      if(valor)resolve({ids:valor,versao:grupo.versao_grupo,assinatura:grupo.assinatura_precos});
+      else {
+        const erro=new Error('Confirmação cancelada. Nenhum preço foi enviado.');
+        erro.code='PRECOS_SELETIVOS_CANCELADOS';
+        reject(erro);
+      }
+    }
     confirmar.onclick=()=>fechar(Array.from(dialog.querySelectorAll('[data-destinatario]:checked')).map(b=>b.value));
     cancelar.onclick=()=>fechar(null);dialog.addEventListener('cancel',e=>{e.preventDefault();fechar(null);});
   });
