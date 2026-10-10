@@ -26,6 +26,9 @@
 #grupoProdutoAdicionarPainel, #grupoProdutoExcluirConfirmacao { margin-top:14px; padding:12px; border:1px solid #dce3eb; border-radius:10px; }
 #grupoProdutoElegiveis { max-height:260px; overflow:auto; }
 .grupo-produtos-nota { color:#657080; font-size:13px; }
+.grupo-produto-estado { display:block; font-size:13px; font-weight:700; margin-top:4px; }
+.grupo-produto-estado.ativado { color:#236039; }
+.grupo-produto-estado.pendente { color:#657080; }
 @media (max-width:860px) { .grupo-produtos-modal { padding:16px; } .grupo-produto-vinculo { padding:8px 10px; } }
 </style>
 <div class="grupo-produtos-barra">
@@ -48,6 +51,7 @@
       <h3>Preços vinculados — diagnóstico e prévia</h3>
       <p>Confira apresentações e preços. A ativacao e a entrada de integrantes preservam todos os precos e a origem utilizada nos pedidos. Os reajustes sao seletivos no cadastro ou na revisao de compra.</p>
       <p id="grupoProdutoPrecosEstado" role="status"></p>
+      <p id="grupoProdutoAtivacaoEstado" role="status"></p>
       <label hidden for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
       <select hidden id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
       <div id="grupoProdutoPrecosTabela" style="overflow-x:auto"></div>
@@ -87,6 +91,7 @@
 </dialog>
 <dialog id="grupoProdutoGerenciarModal" class="grupo-produtos-modal" aria-labelledby="grupoProdutoGerenciarTitulo">
   <h2 id="grupoProdutoGerenciarTitulo">Gerenciar grupos vinculados</h2>
+  <p id="grupoProdutoAtivadosContador" role="status" aria-live="polite"></p>
   <div id="grupoProdutoGrupos"></div>
   <p id="grupoProdutoGerenciarErro" class="grupo-produtos-erro" role="alert"></p>
   <div class="grupo-produtos-acoes"><button type="button" id="grupoProdutoGerenciarFechar">Fechar</button></div>
@@ -102,7 +107,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const gerenciarModal = el('grupoProdutoGerenciarModal');
   const urlCriar = "{% url 'estoque:grupos_produtos_criar' %}";
   const urlLista = "{% url 'estoque:grupos_produtos_lista' %}";
-  let diagnosticoAtual = null, adicaoPrevia = null;
+  let diagnosticoAtual = null, adicaoPrevia = null, retornarGerenciamento = false;
   let modo = false, grupoUrl = null, selecionados = [], alterado = false, ocupado = false, excluido = false;
   const boxes = Array.from(document.querySelectorAll('.grupo-produto-checkbox'));
   function quantidade(total) { return total + (total === 1 ? ' produto' : ' produtos'); }
@@ -141,7 +146,7 @@ document.addEventListener('DOMContentLoaded', function () {
     el('grupoProdutoContagem').textContent = modo ? selecionados.length + ' selecionados. Produtos já vinculados exigem remoção do vínculo atual.' : '';
   }
   async function requisitar(url, dados) {
-    const opcoes = dados ? {method:'POST', headers:{'X-CSRFToken':form.querySelector('[name=csrfmiddlewaretoken]').value}, body:dados} : {};
+    const opcoes = dados ? {method:'POST', headers:{'X-CSRFToken':form.querySelector('[name=csrfmiddlewaretoken]').value}, body:dados} : {cache:'no-store'};
     const resposta = await fetch(url, opcoes);
     let resultado;
     try { resultado = await resposta.json(); }
@@ -157,6 +162,7 @@ document.addEventListener('DOMContentLoaded', function () {
     el("grupoProdutoRegularizar").hidden=!grupoUrl || !!(diagnostico && diagnostico.regularizado);
     el("grupoProdutoRegularizar").disabled=true;
     secao.hidden=!diagnostico;
+    el('grupoProdutoAtivacaoEstado').textContent=diagnostico?(diagnostico.regularizado?'Grupo já ativado':'Pendente de ativação'):'';
     if(!diagnostico)return;
     el('grupoProdutoPrecosEstado').textContent=diagnostico.status+' · '+diagnostico.aviso+
       (diagnostico.divergentes.length?' Diferenças: '+diagnostico.divergentes.join(', ')+'.':'')+
@@ -233,10 +239,12 @@ document.addEventListener('DOMContentLoaded', function () {
     controles.forEach(([no]) => { no.disabled = true; });
     try {
       const resultado = await requisitar(grupoUrl, dados);
-      alterado = true;
+      if (dados.get('acao') !== 'regularizar') alterado = true;
       if (resultado.excluido) grupoEncerrado(resultado.mensagem);
       else { mostrarMembros(resultado.grupo.produtos); mostrarPrecos(resultado.grupo.precos_vinculados); sucesso.textContent = resultado.mensagem; }
       if (apos) apos(resultado);
+      try { await atualizarListaGrupos(); }
+      catch (e) { el('grupoProdutoGerenciarErro').textContent=e.message;el('grupoProdutoAtivadosContador').textContent='Não foi possível atualizar a contagem. Reabra a lista.'; }
     } catch (e) { erro.textContent = e.message; }
     finally {
       controles.forEach(([no, disabled]) => { no.disabled = disabled; });
@@ -284,12 +292,12 @@ document.addEventListener('DOMContentLoaded', function () {
       linha.append(texto, botao); membros.append(linha);
     });
   }
-  async function editarGrupo(url) {
+  async function editarGrupo(url, doGerenciamento=false) {
     if (ocupado) return;
     ocupado = true;
     try {
       const grupo = await requisitar(url);
-      grupoUrl = url; alterado = false;
+      grupoUrl = url; alterado = false; retornarGerenciamento=doGerenciamento;
       gerenciarModal.close(); nome.value = grupo.nome;
       abrir('Editar grupo vinculado'); mostrarMembros(grupo.produtos); mostrarPrecos(grupo.precos_vinculados);
     } catch (e) {
@@ -300,20 +308,29 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.grupo-produto-vinculo').forEach(botao => botao.addEventListener('click', event => {
     event.stopPropagation(); editarGrupo(botao.dataset.grupoUrl);
   }));
+  async function atualizarListaGrupos() {
+      const resultado = await requisitar(urlLista); const lista = el('grupoProdutoGrupos'); lista.replaceChildren();
+      el('grupoProdutoAtivadosContador').textContent=resultado.ativados+' de '+resultado.total+' grupos ativados';
+      if (!resultado.grupos.length) lista.textContent = 'Nenhum grupo vinculado cadastrado.';
+      resultado.grupos.forEach(grupo => {
+        const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';linha.dataset.grupoId=grupo.id;
+        const texto = document.createElement('span'); texto.textContent = grupo.nome + ' · ' + quantidade(grupo.quantidade);
+        const estado=document.createElement('span');estado.className='grupo-produto-estado '+(grupo.ativado?'ativado':'pendente');
+        if(grupo.ativado){const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='✓ ';estado.append(icone,document.createTextNode('Ativado'));}
+        else estado.textContent='Pendente';
+        texto.append(estado);
+        const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Editar';
+        botao.setAttribute('aria-label', 'Editar grupo ' + grupo.nome);
+        botao.addEventListener('click', () => editarGrupo(grupo.url,true)); linha.append(texto, botao); lista.append(linha);
+      });
+  }
   el('grupoProdutoGerenciar').addEventListener('click', async function () {
     if (ocupado) return;
     ocupado = true; el('grupoProdutoGerenciarErro').textContent = '';
+    el('grupoProdutoAtivadosContador').textContent='Consultando estado dos grupos...';
     el('grupoProdutoGrupos').textContent = 'Carregando grupos…'; gerenciarModal.showModal();
     try {
-      const resultado = await requisitar(urlLista); const lista = el('grupoProdutoGrupos'); lista.replaceChildren();
-      if (!resultado.grupos.length) lista.textContent = 'Nenhum grupo vinculado cadastrado.';
-      resultado.grupos.forEach(grupo => {
-        const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';
-        const texto = document.createElement('span'); texto.textContent = grupo.nome + ' · ' + quantidade(grupo.quantidade);
-        const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Editar';
-        botao.setAttribute('aria-label', 'Editar grupo ' + grupo.nome);
-        botao.addEventListener('click', () => editarGrupo(grupo.url)); linha.append(texto, botao); lista.append(linha);
-      });
+      await atualizarListaGrupos();
     } catch (e) { el('grupoProdutoGerenciarErro').textContent = e.message; el('grupoProdutoGrupos').replaceChildren(); }
     finally { ocupado = false; }
   });
@@ -403,6 +420,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (alterado) {
       try { sessionStorage.setItem('grupoProdutosMensagem', sucesso.textContent); } catch (_) {}
       window.location.reload();
+    } else if(retornarGerenciamento) {
+      retornarGerenciamento=false;el('grupoProdutoGerenciar').click();
     }
   });
 });

@@ -25,11 +25,13 @@ def dados_grupo(grupo, referencia_id=None):
 
 @require_GET
 def grupos_lista(request):
-    grupos = GrupoProdutoVinculado.objects.annotate(quantidade=Count("membros")).order_by("nome", "pk")
-    return JsonResponse({"grupos": [
-        {"id": g.pk, "nome": g.nome, "quantidade": g.quantidade,
+    grupos = list(GrupoProdutoVinculado.objects.annotate(quantidade=Count("membros")).order_by("nome", "pk"))
+    response = JsonResponse({"total": len(grupos), "ativados": sum(g.precos_regularizados for g in grupos), "grupos": [
+        {"id": g.pk, "nome": g.nome, "quantidade": g.quantidade, "ativado": g.precos_regularizados,
          "url": reverse("estoque:grupos_produtos_detalhe", args=[g.pk])} for g in grupos
     ]})
+    response['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @require_POST
