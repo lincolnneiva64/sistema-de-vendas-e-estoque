@@ -198,6 +198,58 @@ class FracionadosDiagnosticoBrowserTests(FracionadosFixture,StaticLiveServerTest
     def test_desktop_zero_price_pending_source_only(self):self.fluxo(1280,True,zerado=True)
     def test_mobile_zero_price_active_multiple(self):self.fluxo(390,True,zerado=True,multiplo=True,ativo=True)
 
+    def configuracao_sem_precos(self,width):
+        fonte=self.produtos[2]
+        models.QuerySet.update(Produto.objects.filter(pk=fonte.pk),cadastro_incompleto=True,percentual_vista_fracionado=5,percentual_prazo_fracionado=7)
+        models.QuerySet.update(Produto.objects.filter(pk=self.produtos[3].pk),vende_fracionado=True,unidade_venda_2='UN',fator_conversao=24)
+        antes={p['id']:p for p in Produto.objects.values()}
+        with TemporaryDirectory(prefix='fractional-config-only-',ignore_cleanup_errors=True) as profile:
+            chrome=Chrome(r'C:\Program Files\Google\Chrome\Application\chrome.exe',profile).start()
+            try:
+                tab=chrome.tab()
+                tab.call('Emulation.setDeviceMetricsOverride',{'width':width,'height':844,'deviceScaleFactor':1,'mobile':width<860})
+                tab.call('Network.setCookie',{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url})
+                url=self.live_server_url+reverse('estoque:produto_editar',args=[fonte.pk])
+                tab.call('Page.navigate',{'url':url})
+                tab.wait('document.readyState === "complete" && !!document.getElementById("vende_fracionado_visual")')
+                tab.evaluate('document.getElementById("vende_fracionado_visual").value="True";document.getElementById("vende_fracionado_visual").dispatchEvent(new Event("change",{bubbles:true}));document.getElementById("fator_visual").value="24";document.getElementById("fator_visual").dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("unidade_fracionada_visual").value="UN";document.getElementById("unidade_fracionada_visual").dispatchEvent(new Event("change",{bubbles:true}));true')
+                self.assertEqual(Decimal(tab.evaluate('document.querySelector("[name=preco_vista_fracionado]").value').replace(',','.')),0)
+                tab.evaluate('window.avisoSeparacao="";window.alert=mensagem=>{window.avisoSeparacao=mensagem;};document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.getElementById("form-produto").requestSubmit();true')
+                self.assertIn('Salve primeiro',tab.evaluate('window.avisoSeparacao'))
+                self.assertFalse(tab.evaluate('!!document.querySelector("dialog[open] [data-destinatario]")'))
+                self.assertEqual({p['id']:p for p in Produto.objects.values()},antes)
+                tab.evaluate('document.querySelector("[name=preco_prazo_fracionado]").value="0.00";true')
+                tab.evaluate('window.dialogoDePrecosAberto=false;const abrir=HTMLDialogElement.prototype.showModal;HTMLDialogElement.prototype.showModal=function(){window.dialogoDePrecosAberto=true;return abrir.call(this);};document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('location.pathname === "/" || !!document.querySelector("dialog[open] [data-destinatario]") || !!document.getElementById("alerta-erros-produto")')
+                self.assertEqual(tab.evaluate('location.pathname'),'/',tab.evaluate('document.getElementById("alerta-erros-produto")?.textContent || document.querySelector("dialog[open]")?.textContent || "no error"'))
+                fonte.refresh_from_db()
+                self.assertTrue(fonte.vende_fracionado)
+                self.assertEqual(fonte.fator_conversao,24)
+                self.assertEqual(fonte.unidade_venda_2,'UN')
+                self.assertEqual(fonte.preco_vista_fracionado,0)
+                self.assertEqual(fonte.preco_prazo_fracionado,0)
+                self.assertEqual(fonte.percentual_vista_fracionado,5)
+                self.assertEqual(fonte.percentual_prazo_fracionado,7)
+                for p in Produto.objects.exclude(pk=fonte.pk).values():self.assertEqual(p,antes[p['id']])
+                self.assertFalse(AlteracaoPrecoVinculado.objects.exists())
+                self.grupo.refresh_from_db();self.assertFalse(self.grupo.precos_regularizados)
+                self.assertEqual(fonte.quantidade,antes[fonte.pk]['quantidade'])
+                depois={p['id']:p for p in Produto.objects.values()}
+                tab.call('Page.navigate',{'url':url})
+                tab.wait('document.readyState === "complete" && !!document.getElementById("form-produto")')
+                tab.evaluate('document.querySelector("[name=preco_vista_fracionado]").value="1,20";document.querySelector("[name=preco_vista_fracionado]").dispatchEvent(new Event("input",{bubbles:true}));document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.querySelector("[name=preco_prazo_fracionado]").dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("form-produto").requestSubmit();true')
+                tab.wait('!!document.querySelector("dialog[open] [data-destinatario]")')
+                self.assertFalse(tab.evaluate('Array.from(document.querySelectorAll("dialog[open] [data-destinatario]:not(:disabled)")).some(b=>b.checked)'))
+                tab.evaluate('Array.from(document.querySelectorAll("dialog[open] button")).find(b=>b.textContent.includes("Confirmar selecionados")).click();true')
+                tab.wait('location.pathname === "/"')
+                fonte.refresh_from_db();self.assertEqual(fonte.preco_vista_fracionado,Decimal('1.20'));self.assertEqual(fonte.preco_prazo_fracionado,Decimal('1.30'))
+                for p in Produto.objects.exclude(pk=fonte.pk).values():self.assertEqual(p,depois[p['id']])
+                self.assertTrue(AlteracaoPrecoVinculado.objects.exists())
+            finally:chrome.stop()
+
+    def test_desktop_enable_fractionation_without_price_confirmation(self):self.configuracao_sem_precos(1280)
+    def test_mobile_enable_fractionation_without_price_confirmation(self):self.configuracao_sem_precos(390)
+
     @override_settings(ROOT_URLCONF='estoque.tests_precos_vinculados_interfaces')
     def diagnostico_visual(self,width):
         antes=list(Produto.objects.order_by('pk').values())

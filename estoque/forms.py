@@ -226,6 +226,13 @@ class ProdutoForm(forms.ModelForm):
         self.precos_observados = {campo: getattr(self.instance, campo) for campo in (
             'preco_vista', 'preco_prazo', 'preco_vista_fracionado', 'preco_prazo_fracionado',
         )}
+        self.apresentacao_observada = {
+            'unidade_compra': self.instance.unidade_compra or '',
+            'unidade_venda_1': self.instance.unidade_venda_1 or self.instance.unidade_compra or '',
+            'unidade_venda_2': self.instance.unidade_venda_2 or '',
+            'fator_conversao': str(self.instance.fator_conversao or 0),
+            'vende_fracionado': self.instance.vende_fracionado,
+        }
         if self.instance.pk:
             from .services.precos_vinculados import versao_cadastro_produto
             self.initial['versao_cadastro_precos'] = versao_cadastro_produto(self.instance)

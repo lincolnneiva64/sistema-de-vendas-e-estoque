@@ -1053,14 +1053,27 @@ select.campo-obrigatorio-piscando:focus,
   {% endif %}
   {% include 'estoque/includes/precos_seletivos.html' %}
   {% if form.grupo_precos %}
+  {{ form.apresentacao_observada|json_script:"produto-apresentacao-observada" }}
   <script>
   document.getElementById('form-produto').addEventListener('submit',async function(event){
     const form=this;
-    const campos=['preco_vista','preco_prazo'{% if form.instance.vende_fracionado %},'preco_vista_fracionado','preco_prazo_fracionado'{% endif %}];
+    const campos=['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'];
     const numero=v=>{let t=String(v).replace(/\s/g,'').replace(/[^\d,.-]/g,'');if(t.includes(','))t=t.replace(/\./g,'').replace(',','.');return Number(t);};
     const anteriores={preco_vista:'{{ form.precos_observados.preco_vista|unlocalize }}',preco_prazo:'{{ form.precos_observados.preco_prazo|unlocalize }}',preco_vista_fracionado:'{{ form.precos_observados.preco_vista_fracionado|unlocalize }}',preco_prazo_fracionado:'{{ form.precos_observados.preco_prazo_fracionado|unlocalize }}'};
     const novos={};campos.forEach(c=>{const valor=numero(form.elements[c].value);if(valor!==numero(anteriores[c]))novos[c]=valor;});
     if(!Object.keys(novos).length)return;
+    const observada=JSON.parse(document.getElementById('produto-apresentacao-observada').textContent);
+    const unidade=v=>String(v || '').trim().toUpperCase();
+    const fracionado=['true','1','sim'].includes(String(form.elements.vende_fracionado.value).toLowerCase());
+    const mudouApresentacao=unidade(form.elements.unidade_compra.value)!==unidade(observada.unidade_compra)
+      || fracionado!==observada.vende_fracionado
+      || (fracionado && (unidade(form.elements.unidade_venda_2.value)!==unidade(observada.unidade_venda_2)
+        || numero(form.elements.fator_conversao.value)!==numero(observada.fator_conversao)));
+    if(mudouApresentacao){
+      event.preventDefault();delete form.dataset.enviando;
+      alert('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.');
+      return;
+    }
     if(form.dataset.precoConsentido==='1'){delete form.dataset.precoConsentido;return;}
     event.preventDefault();
     if(form.dataset.confirmandoPreco==='1')return;
@@ -1413,7 +1426,7 @@ select.campo-obrigatorio-piscando:focus,
             class="form-control"
             id="preco_vista_fracionado"
             name="preco_vista_fracionado"
-            value="{% if form.instance.cadastro_incompleto and form.preco_vista_fracionado.value == form.preco_compra_fracionado.value %}{% else %}{{ form.preco_vista_fracionado.value|default_if_none:'' }}{% endif %}"
+            value="{% if form.instance.cadastro_incompleto and not form.grupo_precos and form.preco_vista_fracionado.value == form.preco_compra_fracionado.value %}{% else %}{{ form.preco_vista_fracionado.value|default_if_none:'' }}{% endif %}"
             placeholder="0,00"
         >
     </div>
@@ -1451,7 +1464,7 @@ select.campo-obrigatorio-piscando:focus,
             class="form-control"
             id="preco_prazo_fracionado"
             name="preco_prazo_fracionado"
-            value="{% if form.instance.cadastro_incompleto and form.preco_prazo_fracionado.value == form.preco_compra_fracionado.value %}{% else %}{{ form.preco_prazo_fracionado.value|default_if_none:'' }}{% endif %}"
+            value="{% if form.instance.cadastro_incompleto and not form.grupo_precos and form.preco_prazo_fracionado.value == form.preco_compra_fracionado.value %}{% else %}{{ form.preco_prazo_fracionado.value|default_if_none:'' }}{% endif %}"
             placeholder="0,00"
         >
     </div>
@@ -1861,7 +1874,7 @@ camposFracionados.forEach(campo => {
         const preco = numero(precoCampo.value);
 
         if (base <= 0) {
-            if (origem === "preco") percentualCampo.value = "";
+            if (origem === "preco") percentualCampo.value = {% if form.grupo_precos %}precoCampo.value.trim() !== "" && preco === 0 ? percentualCampo.value.trim() || "0.00" : ""{% else %}""{% endif %};
             return;
         }
 
@@ -1873,7 +1886,9 @@ camposFracionados.forEach(campo => {
 
         if (origem === "preco") {
             if (precoCampo.value.trim() === "" || preco <= 0) {
-                percentualCampo.value = "";
+                // A linked member may be configured first, with sale prices
+                // still zero. Keep its non-null percentage placeholder.
+                percentualCampo.value = {% if form.grupo_precos %}precoCampo.value.trim() !== "" && preco === 0 ? percentualCampo.value.trim() || "0.00" : ""{% else %}""{% endif %};
                 return;
             }
             percentualCampo.value = formatarDuasCasas(((preco - base) / base) * 100);
