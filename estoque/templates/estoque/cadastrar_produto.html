@@ -12,6 +12,41 @@
     rel="stylesheet"
 </head>
 <style>
+.precos-vinculados-aviso {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #b6d4fe;
+  border-radius: 8px;
+  background: #eaf3ff;
+  color: #193f70;
+  font-size: 13px;
+}
+.precos-vinculados-aviso > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  cursor: pointer;
+  list-style: none;
+}
+.precos-vinculados-aviso > summary::-webkit-details-marker { display: none; }
+.precos-vinculados-aviso > summary::before { content: "▸"; flex-shrink: 0; }
+.precos-vinculados-aviso[open] > summary::before { content: "▾"; }
+.precos-vinculados-aviso > summary:focus-visible { outline: 2px solid #214b80; outline-offset: 2px; }
+.precos-vinculados-aviso > summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.precos-vinculados-detalhes { padding: 0 10px 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.precos-vinculados-detalhes p { margin: 6px 0; }
+@media (max-width: 860px) {
+  .precos-vinculados-aviso > summary { min-height: 44px; }
+}
+
     .form-control,
     .form-select,
     .input-group-text {
@@ -1005,12 +1040,15 @@ select.campo-obrigatorio-piscando:focus,
   {% csrf_token %}
   {{ form.grupo_precos_id }}{{ form.versao_precos_grupo }}{{ form.versao_cadastro_precos }}
   {% if form.grupo_precos %}
-  <div class="col-12 alert alert-info" role="status">
-    <strong>{{ form.grupo_precos.nome }}</strong>
-    <p>Atualizacao seletiva: ao reajustar, confirme os integrantes destinatarios. Os demais preservam seus precos e a origem utilizada nos pedidos. Custos e estoque permanecem individuais.</p>
-    {{ form.assinatura_precos_seletivos }}{{ form.destinatarios_precos }}{{ form.confirmar_precos_seletivos }}
-    <div>Demais integrantes: {% for integrante in form.integrantes_precos %}{{ integrante.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}.</div>
-  </div>
+  {{ form.assinatura_precos_seletivos }}{{ form.destinatarios_precos }}{{ form.confirmar_precos_seletivos }}
+  <details class="col-12 precos-vinculados-aviso">
+    <summary><span title="{{ form.grupo_precos.nome }}">Preços vinculados · <strong>{{ form.grupo_precos.nome }}</strong></span></summary>
+    <div class="precos-vinculados-detalhes">
+      <div>Grupo: <strong>{{ form.grupo_precos.nome }}</strong></div>
+      <p>Atualizacao seletiva: ao reajustar, confirme os integrantes destinatarios. Os demais preservam seus precos e a origem utilizada nos pedidos. Custos e estoque permanecem individuais.</p>
+      <div>Demais integrantes: {% for integrante in form.integrantes_precos %}{{ integrante.nome }}{% if not forloop.last %}; {% endif %}{% endfor %}.</div>
+    </div>
+  </details>
   {% endif %}
   {% include 'estoque/includes/precos_seletivos.html' %}
   {% if form.grupo_precos %}
