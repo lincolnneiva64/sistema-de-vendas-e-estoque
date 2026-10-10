@@ -2,7 +2,12 @@
 .grupo-produtos-barra { max-width:720px; margin:12px auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .grupo-produtos-barra > button { flex-shrink:0; }
 .grupo-produtos-resumo { display:inline-flex; align-items:center; gap:6px; padding:4px 6px; color:#657080; font-size:13px; font-weight:500; white-space:nowrap; }
-.grupo-produtos-barra button, .grupo-produtos-modal button { min-height:44px; padding:8px 14px; border:1px solid #ced4da; border-radius:8px; background:#fff; color:#212529; }
+.grupo-produtos-barra button, .grupo-produtos-modal button { min-height:40px; padding:8px 14px; border:1px solid #cbd5e1; border-radius:9px; background:#fff; color:#243247; font-size:.9rem; font-weight:700; transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease; }
+.grupo-produtos-modal button:hover:not(:disabled) { background:#eff6ff; border-color:#93b4e3; }
+.grupo-produtos-modal button:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+.grupo-produtos-modal button:disabled { cursor:not-allowed; opacity:.55; }
+.grupo-produtos-barra button:first-child, .grupo-produtos-barra button:nth-child(3) { color:#fff; border-color:#2563eb; background:#2563eb; }
+.grupo-produtos-barra button:first-child:hover, .grupo-produtos-barra button:nth-child(3):hover { background:#1d4ed8; }
 .grupo-produto-selecao:not([hidden]) { display:flex; align-items:center; gap:8px; min-height:44px; font-size:13px; cursor:pointer; }
 .grupo-produto-checkbox, .grupo-produtos-opcao input { width:22px; height:22px; flex-shrink:0; }
 .grupo-produto-vinculo { display:inline-flex; align-items:flex-start; gap:7px; max-width:100%; box-sizing:border-box; margin-top:6px; border:1px solid #729ed7; border-radius:10px; padding:6px 9px; background:#dbe9fc; color:#193f70; font-size:12px; font-weight:650; line-height:1.5; text-align:left; cursor:pointer; }
@@ -11,31 +16,104 @@
 .grupo-produto-vinculo strong { font-weight:800; }
 .grupo-produto-vinculo:hover { background:#cee0f9; border-color:#5d8cc9; }
 .grupo-produto-vinculo:focus-visible { outline:2px solid #214b80; outline-offset:2px; }
-.grupo-produtos-modal { width:min(92vw,580px); max-height:85vh; overflow:auto; border:1px solid #ced4da; border-radius:14px; padding:20px; box-sizing:border-box; }
-.grupo-produtos-modal::backdrop { background:rgba(0,0,0,.45); }
-.grupo-produtos-modal input[type=text], .grupo-produtos-modal input[type=search] { width:100%; min-height:44px; margin:8px 0; padding:8px; box-sizing:border-box; border:1px solid #ced4da; border-radius:8px; }
-.grupo-produto-membro { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #eee; }
+.grupo-produtos-modal { width:min(94vw,760px); max-height:min(90dvh,900px); overflow:hidden; border:1px solid #dbe4ef; border-radius:16px; padding:0; box-sizing:border-box; color:#172033; background:#fff; box-shadow:0 24px 70px rgba(15,23,42,.24); }
+.grupo-produtos-modal[open] { display:flex; flex-direction:column; }
+.grupo-produtos-modal::backdrop { background:rgba(15,23,42,.48); backdrop-filter:blur(2px); }
+.grupo-produtos-modal h2 { margin:0; color:#172033; font-size:1.15rem; font-weight:850; line-height:1.25; }
+.grupo-produtos-modal h3 { margin:0; color:#1e3a5f; font-size:.98rem; font-weight:800; }
+.grupo-produtos-modal input[type=text], .grupo-produtos-modal input[type=search] { width:100%; min-height:40px; margin:6px 0 0; padding:8px 10px; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:9px; color:#172033; background:#fff; }
+.grupo-produtos-modal input[type=text]:focus, .grupo-produtos-modal input[type=search]:focus { outline:0; border-color:#6b9de4; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.grupo-produtos-modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; border-bottom:1px solid #e7edf5; background:linear-gradient(135deg,#f8fbff,#eff6ff); }
+.grupo-produtos-modal-head p { margin:4px 0 0; color:#64748b; font-size:.84rem; }
+.grupo-produtos-modal-head .grupo-produtos-contador { flex:0 0 auto; margin:0; padding:6px 10px; border:1px solid #bfdbfe; border-radius:999px; color:#1d4ed8; background:#eff6ff; font-size:.8rem; font-weight:800; }
+.grupo-produtos-modal-body { min-height:0; overflow:auto; overscroll-behavior:contain; padding:16px 20px; }
+.grupo-produtos-modal form { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; max-height:min(90dvh,900px); }
+.grupo-produtos-modal form > .grupo-produtos-modal-body { flex:1 1 auto; }
+#grupoProdutoModal { width:min(96vw,1080px); }
+#grupoProdutoGerenciarModal { width:min(94vw,780px); }
+.grupo-produtos-modal-footer { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e7edf5; background:#f8fafc; }
+.grupo-produtos-modal-footer .grupo-produtos-acoes { margin:0; }
+.grupo-produtos-modal button.grupo-produtos-primario { color:#fff; border-color:#2563eb; background:#2563eb; box-shadow:0 4px 10px rgba(37,99,235,.16); }
+.grupo-produtos-modal button.grupo-produtos-primario:hover:not(:disabled) { color:#fff; border-color:#1d4ed8; background:#1d4ed8; }
+.grupo-produto-membro { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 10px; border:1px solid #e7edf5; border-radius:9px; background:#fff; }
+.grupo-produtos-lista-membros { display:grid; gap:6px; margin-top:8px; }
 .grupo-produto-membro span { min-width:0; overflow-wrap:anywhere; }
-.grupo-produto-membro button { flex-shrink:0; }
+.grupo-produto-membro button { flex-shrink:0; min-height:34px; padding:5px 10px; color:#475569; font-size:.82rem; }
+.grupo-produtos-linha-grupo { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:12px; padding:10px 12px; border:1px solid #e2eaf4; border-radius:11px; background:#fff; box-shadow:0 2px 5px rgba(15,23,42,.035); }
+.grupo-produtos-linha-grupo:hover { border-color:#bfdbfe; background:#f8fbff; }
+.grupo-produtos-grupo-nome { min-width:0; color:#172033; font-weight:800; overflow-wrap:anywhere; }
+.grupo-produtos-grupo-quantidade { margin-left:5px; color:#64748b; font-size:.82rem; font-weight:600; }
+.grupo-produtos-linha-grupo > button { min-width:78px; color:#1d4ed8; border-color:#bfdbfe; background:#eff6ff; }
+.grupo-produtos-lista-grupos { display:grid; gap:8px; max-height:min(62dvh,680px); overflow:auto; align-content:start; padding:2px; overscroll-behavior:contain; }
+.grupo-produtos-vazio { padding:18px 14px; border:1px dashed #cbd5e1; border-radius:10px; color:#64748b; background:#f8fafc; text-align:center; }
 .grupo-produtos-opcao { display:flex; align-items:center; gap:10px; min-height:44px; padding:6px 0; cursor:pointer; }
 .grupo-produtos-opcao[hidden] { display:none; }
 .grupo-produtos-acoes { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-.grupo-produtos-modal .grupo-produtos-perigo { color:#a52834; border-color:#e7bec4; }
-.grupo-produtos-status:not(:empty) { padding:10px; border-radius:8px; background:#edf8f0; color:#236039; }
-.grupo-produtos-erro { color:#b42318; }
-#grupoProdutoAdicionarPainel, #grupoProdutoExcluirConfirmacao { margin-top:14px; padding:12px; border:1px solid #dce3eb; border-radius:10px; }
-#grupoProdutoElegiveis { max-height:260px; overflow:auto; }
-.grupo-produtos-nota { color:#657080; font-size:13px; }
-.grupo-produto-estado { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; margin-top:4px; padding:2px 7px; border:1px solid; border-radius:5px; }
+.grupo-produtos-modal .grupo-produtos-perigo { color:#a52834; border-color:#f0c5cb; background:#fff7f7; }
+.grupo-produtos-modal .grupo-produtos-perigo:hover:not(:disabled) { color:#991b1b; border-color:#fca5a5; background:#fef2f2; }
+.grupo-produtos-status:not(:empty) { padding:9px 11px; border:1px solid #bbf7d0; border-radius:9px; background:#ecfdf3; color:#166534; font-size:.86rem; }
+.grupo-produtos-erro:not(:empty) { margin:8px 0 0; padding:9px 11px; border:1px solid #fecaca; border-radius:9px; color:#991b1b; background:#fef2f2; font-size:.86rem; }
+#grupoProdutoAdicionarPainel, #grupoProdutoExcluirConfirmacao { margin-top:12px; padding:12px; border:1px solid #dbe4ef; border-radius:11px; background:#f8fbff; }
+#grupoProdutoAdicionarPainel h3 { margin-bottom:8px; }
+#grupoProdutoExcluirConfirmacao { border-color:#fecaca; background:#fffafa; }
+#grupoProdutoExcluirConfirmacao p { margin:0; color:#7f1d1d; }
+#grupoProdutoElegiveis { max-height:260px; overflow:auto; padding:4px 8px; border:1px solid #e2eaf4; border-radius:9px; background:#fff; }
+.grupo-produtos-nota { margin:8px 0 0; color:#64748b; font-size:.82rem; }
+.grupo-produto-estado { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:800; margin:0; padding:4px 8px; border:1px solid; border-radius:999px; white-space:nowrap; }
 .grupo-produto-estado.ativado { color:#236039; background:#edf8f0; border-color:#94c5a2; }
 .grupo-produto-estado.pendente { color:#795600; background:#fff8df; border-color:#dec77e; }
-.grupo-produto-estado-linha { display:block; }
-.grupo-produto-ativacao { padding:10px 12px; border:1px solid; border-radius:8px; margin:10px 0; }
+.grupo-produto-estado-linha { display:inline-flex; margin-left:8px; vertical-align:middle; }
+.grupo-produto-ativacao { padding:10px 12px; border:1px solid; border-radius:10px; margin:10px 0; }
 .grupo-produto-ativacao.ativado { color:#236039; background:#edf8f0; border-color:#94c5a2; }
 .grupo-produto-ativacao.pendente { color:#795600; background:#fff8df; border-color:#dec77e; }
 .grupo-produto-ativacao strong { display:block; font-weight:800; }
-.grupo-produto-ativacao p { margin:4px 0 0; font-size:13px; }
-@media (max-width:860px) { .grupo-produtos-modal { padding:16px; } .grupo-produto-vinculo { padding:8px 10px; } }
+.grupo-produto-ativacao p { margin:3px 0 0; font-size:.82rem; }
+#grupoProdutoPrecos { margin-top:14px; padding:14px; border:1px solid #dbeafe; border-radius:12px; background:#f8fbff; }
+#grupoProdutoPrecos > p:first-of-type { margin:5px 0 9px; color:#64748b; font-size:.84rem; line-height:1.45; }
+#grupoProdutoPrecosEstado { margin:8px 0; padding:8px 10px; border-left:3px solid #60a5fa; border-radius:7px; color:#334155; background:#eff6ff; font-size:.84rem; line-height:1.45; }
+#grupoProdutoIncompatibilidades:not([hidden]) { margin:8px 0; padding:10px 12px; border:1px solid #fdba74; border-radius:9px; color:#7c2d12; background:#fff7ed; font-size:.84rem; }
+#grupoProdutoIncompatibilidades p { margin:0 0 8px; line-height:1.45; }
+#grupoProdutoIncompatibilidades strong { display:block; margin-top:7px; }
+#grupoProdutoIncompatibilidades ul { margin:3px 0 0; padding-left:20px; }
+#grupoProdutoIncompatibilidades li { margin:2px 0; overflow-wrap:anywhere; }
+#grupoProdutoPrecosTabela { max-width:100%; overflow:auto; border:1px solid #dbe4ef; border-radius:10px; background:#fff; }
+.grupo-produtos-precos-tabla { width:100%; min-width:790px; border-collapse:separate; border-spacing:0; font-size:.82rem; }
+.grupo-produtos-precos-tabla th { position:sticky; top:0; z-index:1; padding:9px 10px; border-bottom:1px solid #dbe4ef; color:#475569; background:#f1f6fd; text-align:left; white-space:nowrap; }
+.grupo-produtos-precos-tabla td { padding:8px 10px; border-bottom:1px solid #edf2f7; color:#243247; }
+.grupo-produtos-precos-tabla tbody tr:last-child td { border-bottom:0; }
+.grupo-produtos-precos-tabla tbody tr:nth-child(even) { background:#f8fafc; }
+.grupo-produtos-precos-tabla th:nth-child(n+3), .grupo-produtos-precos-tabla td:nth-child(n+3) { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.grupo-produtos-precos-tabla td:first-child { min-width:160px; font-weight:750; }
+.grupo-produtos-precos-tabla td:nth-child(2) { min-width:125px; color:#64748b; }
+#grupoProdutoAtivacaoConfirmacao { padding:8px 10px; border:1px solid #dbe4ef; border-radius:9px; background:#fff; font-size:.84rem; line-height:1.4; }
+#grupoProdutoRegularizar { margin-top:8px; }
+#grupoProdutoSalvar { margin-left:auto; }
+#grupoProdutoMembros:empty { display:none; }
+#grupoProdutoQuantidade { margin:0 0 10px; color:#64748b; font-size:.84rem; font-weight:700; }
+.grupo-produtos-modal [hidden] { display:none !important; }
+@media (max-width:860px) {
+  .grupo-produtos-modal { width:min(96vw,760px); max-height:92dvh; border-radius:14px; }
+  .grupo-produtos-modal-head { align-items:flex-start; padding:13px 14px; }
+  .grupo-produtos-modal-head .grupo-produtos-contador { font-size:.74rem; }
+  .grupo-produtos-modal-body { padding:13px 14px; }
+  .grupo-produtos-modal-footer { padding:10px 14px; }
+  .grupo-produtos-modal-footer button { flex:1 1 auto; }
+  .grupo-produtos-linha-grupo { grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:9px; }
+  .grupo-produtos-linha-grupo > .grupo-produto-estado { grid-column:1; grid-row:2; justify-self:start; }
+  .grupo-produtos-linha-grupo > button { grid-column:2; grid-row:1 / span 2; }
+  .grupo-produto-estado-linha { display:flex; margin:5px 0 0; }
+  #grupoProdutoPrecos { padding:10px; }
+  #grupoProdutoPrecosTabela { -webkit-overflow-scrolling:touch; }
+  .grupo-produtos-acoes { gap:6px; }
+}
+@media (max-width:420px) {
+  .grupo-produtos-modal-head { gap:7px; }
+  .grupo-produtos-modal-head h2 { font-size:1rem; }
+  .grupo-produtos-modal-head .grupo-produtos-contador { padding:5px 7px; }
+  .grupo-produtos-modal-footer { gap:6px; }
+  .grupo-produtos-modal-footer button { padding:7px 9px; font-size:.82rem; }
+  .grupo-produto-membro { align-items:flex-start; padding:7px; }
+}
 </style>
 <div class="grupo-produtos-barra">
   <button type="button" id="grupoProdutoAtivar">Vincular produtos</button>
@@ -48,14 +126,17 @@
 <dialog id="grupoProdutoModal" class="grupo-produtos-modal" aria-labelledby="grupoProdutoTitulo">
   <form id="grupoProdutoForm">
     {% csrf_token %}
-    <h2 id="grupoProdutoTitulo">Criar grupo</h2>
-    <label for="grupoProdutoNome">Nome do grupo</label>
-    <input type="text" id="grupoProdutoNome" maxlength="120" required>
-    <p id="grupoProdutoQuantidade"></p>
-    <div id="grupoProdutoMembros"></div>
-    <section id="grupoProdutoPrecos" hidden aria-label="Diagnóstico de preços vinculados">
+    <header class="grupo-produtos-modal-head">
+      <div><h2 id="grupoProdutoTitulo">Criar grupo</h2><p>Gerencie integrantes e confira a compatibilidade do grupo.</p></div>
+    </header>
+    <div class="grupo-produtos-modal-body">
+      <label for="grupoProdutoNome">Nome do grupo</label>
+      <input type="text" id="grupoProdutoNome" maxlength="120" required>
+      <p id="grupoProdutoQuantidade"></p>
+      <div id="grupoProdutoMembros" class="grupo-produtos-lista-membros"></div>
+      <section id="grupoProdutoPrecos" hidden aria-label="Diagnóstico de preços vinculados">
       <h3>Preços vinculados — diagnóstico e prévia</h3>
-      <p>Confira apresentações e preços. A ativacao e a entrada de integrantes preservam todos os precos e a origem utilizada nos pedidos. Os reajustes sao seletivos no cadastro ou na revisao de compra.</p>
+      <p>Confira apresentações e preços. Ativar ou adicionar integrantes preserva preços e pedidos; reajustes são seletivos.</p>
       <p id="grupoProdutoPrecosEstado" role="status"></p>
       <div id="grupoProdutoIncompatibilidades" hidden></div>
       <div id="grupoProdutoAtivacaoPainel" class="grupo-produto-ativacao" role="status" hidden>
@@ -65,47 +146,52 @@
       <label hidden for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
       <select hidden id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
       <div id="grupoProdutoPrecosTabela" style="overflow-x:auto"></div>
-      <label class="grupo-produtos-opcao" id="grupoProdutoAtivacaoConfirmacao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade dos integrantes. Nenhum preco sera aplicado por esta acao.</label>
-      <button type="button" id="grupoProdutoRegularizar" disabled>Ativar grupo sem alterar precos</button>
-    </section>
-    <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções de membros são salvas ao confirmar cada ação.</p>
-    <div class="grupo-produtos-acoes">
-      <button type="button" id="grupoProdutoAdicionar" hidden>Adicionar produtos</button>
-      <button type="button" id="grupoProdutoExcluir" class="grupo-produtos-perigo" hidden>Excluir grupo</button>
-    </div>
-    <section id="grupoProdutoAdicionarPainel" aria-labelledby="grupoProdutoAdicionarTitulo" hidden>
+      <label class="grupo-produtos-opcao" id="grupoProdutoAtivacaoConfirmacao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade. Esta ação não altera preços.</label>
+      <button type="button" id="grupoProdutoRegularizar" class="grupo-produtos-primario" disabled>Ativar grupo sem alterar precos</button>
+      </section>
+      <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções são salvas ao confirmar cada ação.</p>
+      <div class="grupo-produtos-acoes">
+        <button type="button" id="grupoProdutoAdicionar" hidden>Adicionar produtos</button>
+        <button type="button" id="grupoProdutoExcluir" class="grupo-produtos-perigo" hidden>Excluir grupo</button>
+      </div>
+      <section id="grupoProdutoAdicionarPainel" aria-labelledby="grupoProdutoAdicionarTitulo" hidden>
       <h3 id="grupoProdutoAdicionarTitulo">Adicionar produtos</h3>
       <label for="grupoProdutoBusca">Buscar produto disponível</label>
       <input type="search" id="grupoProdutoBusca" placeholder="Nome do produto">
       <div id="grupoProdutoElegiveis"></div>
       <label class="grupo-produtos-opcao" id="grupoProdutoAdicaoConfirmacao" hidden><input type="checkbox" id="grupoProdutoAdicaoCompatibilidade">Confirmo a compatibilidade dos novos integrantes. Seus preços atuais serão preservados.</label>
       <div class="grupo-produtos-acoes">
-        <button type="button" id="grupoProdutoConfirmarAdicao" disabled>Confirmar adição</button>
-        <button type="button" id="grupoProdutoAplicarAdicao" hidden>Aplicar prévia e adicionar</button>
+        <button type="button" id="grupoProdutoConfirmarAdicao" class="grupo-produtos-primario" disabled>Confirmar adição</button>
+        <button type="button" id="grupoProdutoAplicarAdicao" class="grupo-produtos-primario" hidden>Aplicar prévia e adicionar</button>
         <button type="button" id="grupoProdutoCancelarAdicao">Cancelar</button>
       </div>
-    </section>
-    <section id="grupoProdutoExcluirConfirmacao" hidden>
+      </section>
+      <section id="grupoProdutoExcluirConfirmacao" hidden>
       <p>Excluir este grupo? Todos os produtos ficarão sem vínculo e continuarão cadastrados.</p>
       <div class="grupo-produtos-acoes">
         <button type="button" id="grupoProdutoConfirmarExclusao" class="grupo-produtos-perigo">Confirmar exclusão</button>
         <button type="button" id="grupoProdutoCancelarExclusao">Cancelar</button>
       </div>
-    </section>
-    <p id="grupoProdutoSucesso" class="grupo-produtos-status" role="status"></p>
-    <p id="grupoProdutoErro" class="grupo-produtos-erro" role="alert"></p>
-    <div class="grupo-produtos-acoes">
-      <button type="submit" id="grupoProdutoSalvar">Salvar grupo</button>
-      <button type="button" id="grupoProdutoFechar">Fechar</button>
+      </section>
+      <p id="grupoProdutoSucesso" class="grupo-produtos-status" role="status"></p>
+      <p id="grupoProdutoErro" class="grupo-produtos-erro" role="alert"></p>
     </div>
+    <footer class="grupo-produtos-modal-footer">
+      <button type="submit" id="grupoProdutoSalvar" class="grupo-produtos-primario">Salvar grupo</button>
+      <button type="button" id="grupoProdutoFechar">Fechar</button>
+    </footer>
   </form>
 </dialog>
 <dialog id="grupoProdutoGerenciarModal" class="grupo-produtos-modal" aria-labelledby="grupoProdutoGerenciarTitulo">
-  <h2 id="grupoProdutoGerenciarTitulo">Gerenciar grupos vinculados</h2>
-  <p id="grupoProdutoAtivadosContador" role="status" aria-live="polite"></p>
-  <div id="grupoProdutoGrupos"></div>
-  <p id="grupoProdutoGerenciarErro" class="grupo-produtos-erro" role="alert"></p>
-  <div class="grupo-produtos-acoes"><button type="button" id="grupoProdutoGerenciarFechar">Fechar</button></div>
+  <header class="grupo-produtos-modal-head">
+    <div><h2 id="grupoProdutoGerenciarTitulo">Gerenciar grupos vinculados</h2><p>Consulte a situação e edite os grupos cadastrados.</p></div>
+    <p id="grupoProdutoAtivadosContador" class="grupo-produtos-contador" role="status" aria-live="polite"></p>
+  </header>
+  <div id="grupoProdutoGrupos" class="grupo-produtos-modal-body grupo-produtos-lista-grupos"></div>
+  <footer class="grupo-produtos-modal-footer">
+    <p id="grupoProdutoGerenciarErro" class="grupo-produtos-erro" role="alert"></p>
+    <button type="button" id="grupoProdutoGerenciarFechar">Fechar</button>
+  </footer>
 </dialog>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -187,29 +273,34 @@ document.addEventListener('DOMContentLoaded', function () {
       incompatibilidades.hidden=false;
       const orientacao=document.createElement('p');orientacao.textContent='Confirme a apresentação comercial com o operador antes de corrigir os campos abaixo. Nenhuma unidade ou fator será corrigido automaticamente.';incompatibilidades.append(orientacao);
       divergenciasFisicas.forEach(item=>{
-        const titulo=document.createElement('strong');titulo.textContent=item.rotulo+' ('+item.campo+')';incompatibilidades.append(titulo);
+        const titulo=document.createElement('strong');titulo.textContent=item.rotulo;incompatibilidades.append(titulo);
         const lista=document.createElement('ul');item.integrantes.forEach(p=>{const linha=document.createElement('li');linha.textContent=p.nome+' (#'+p.produto_id+'): '+p.valor;lista.append(linha);});incompatibilidades.append(lista);
       });
     }
-    el('grupoProdutoPrecosEstado').textContent=diagnostico.status+' · '+diagnostico.aviso+
-      (diagnostico.divergentes.length?' Diferenças: '+diagnostico.divergentes.join(', ')+'.':'')+
+    const statusTexto=diagnostico.status==='bloqueado'?'Há pontos que impedem a ativação.':
+      diagnostico.status==='precos_individuais'?'Preços diferentes entre integrantes.':'Preços alinhados entre integrantes.';
+    const nomesCampos={preco_vista:'à vista',preco_prazo:'a prazo',
+      preco_vista_fracionado:'à vista fracionado',preco_prazo_fracionado:'a prazo fracionado'};
+    el('grupoProdutoPrecosEstado').textContent=statusTexto+' '+diagnostico.aviso+
+      (diagnostico.divergentes.length?' Diferenças de preço: '+diagnostico.divergentes.map(c=>nomesCampos[c]||c).join(', ')+'.':'')+
       (diagnostico.bloqueios.length?' '+diagnostico.bloqueios.map(b=>(b.produto_id?'Produto '+b.produto_id+': ':'')+b.motivo).join(' '):'');
     seletor.replaceChildren(new Option('Selecione o produto de referência',''));
     diagnostico.produtos.forEach(p=>seletor.add(new Option(p.nome+(p.ativo?'':' (inativo)'),p.id)));
     seletor.value=diagnostico.referencia_id==null?'':String(diagnostico.referencia_id);
-    const tabela=document.createElement('table');tabela.style.cssText='width:100%;font-size:13px;border-spacing:8px';
-    const cabecalho=tabela.insertRow();
+    const tabela=document.createElement('table');tabela.className='grupo-produtos-precos-tabla';
+    const cabecalho=tabela.createTHead().insertRow();
     ['Produto','Apresentação','Vista','Prazo','Vista fracionado','Prazo fracionado'].forEach(texto=>{
       const th=document.createElement('th');th.textContent=texto;cabecalho.append(th);
     });
+    const corpo=tabela.createTBody();
+    const formatarPreco=valor=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(valor));
     diagnostico.produtos.forEach(p=>{
-      const proposta=null;
       const valores=[p.nome,p.unidade_principal+(p.vende_fracionado?' / '+p.fator+' '+p.unidade_fracionada:'')];
       ['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'].forEach(campo=>{
         valores.push(!diagnostico.campos.includes(campo)?'Não aplicável':
-          p.precos[campo]+(proposta?' → '+proposta.novos[campo]:''));
+          formatarPreco(p.precos[campo]));
       });
-      const linha=tabela.insertRow();valores.forEach(texto=>{linha.insertCell().textContent=texto;});
+      const linha=corpo.insertRow();valores.forEach(texto=>{linha.insertCell().textContent=texto;});
     });
     el('grupoProdutoPrecosTabela').replaceChildren(tabela);
   }
@@ -342,15 +433,18 @@ document.addEventListener('DOMContentLoaded', function () {
       el('grupoProdutoAtivadosContador').textContent=resultado.ativados+' de '+resultado.total+' grupos ativados';
       if (!resultado.grupos.length) lista.textContent = 'Nenhum grupo vinculado cadastrado.';
       resultado.grupos.forEach(grupo => {
-        const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';linha.dataset.grupoId=grupo.id;
-        const texto = document.createElement('span'); texto.textContent = grupo.nome + ' · ' + quantidade(grupo.quantidade);
+        const linha = document.createElement('div'); linha.className = 'grupo-produtos-linha-grupo';linha.dataset.grupoId=grupo.id;
+        const texto = document.createElement('div'); texto.className='grupo-produtos-grupo-info';
+        const titulo=document.createElement('span');titulo.className='grupo-produtos-grupo-nome';titulo.textContent=grupo.nome;
+        const total=document.createElement('span');total.className='grupo-produtos-grupo-quantidade';total.textContent=quantidade(grupo.quantidade);
+        texto.append(titulo,total);
         const estado=document.createElement('span');estado.className='grupo-produto-estado '+(grupo.ativado?'ativado':'pendente');
         if(grupo.ativado){const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='✓ ';estado.append(icone,document.createTextNode('ATIVADO'));}
         else {const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='⚠ ';estado.append(icone,document.createTextNode('PENDENTE'));}
-        const estadoLinha=document.createElement('span');estadoLinha.className='grupo-produto-estado-linha';estadoLinha.append(estado);texto.append(estadoLinha);
         const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Editar';
+        botao.className='grupo-produtos-primario';
         botao.setAttribute('aria-label', 'Editar grupo ' + grupo.nome);
-        botao.addEventListener('click', () => editarGrupo(grupo.url,true)); linha.append(texto, botao); lista.append(linha);
+        botao.addEventListener('click', () => editarGrupo(grupo.url,true)); linha.append(texto, estado, botao); lista.append(linha);
       });
   }
   el('grupoProdutoGerenciar').addEventListener('click', async function () {
