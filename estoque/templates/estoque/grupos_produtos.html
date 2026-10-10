@@ -26,9 +26,15 @@
 #grupoProdutoAdicionarPainel, #grupoProdutoExcluirConfirmacao { margin-top:14px; padding:12px; border:1px solid #dce3eb; border-radius:10px; }
 #grupoProdutoElegiveis { max-height:260px; overflow:auto; }
 .grupo-produtos-nota { color:#657080; font-size:13px; }
-.grupo-produto-estado { display:block; font-size:13px; font-weight:700; margin-top:4px; }
-.grupo-produto-estado.ativado { color:#236039; }
-.grupo-produto-estado.pendente { color:#657080; }
+.grupo-produto-estado { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:800; margin-top:4px; padding:2px 7px; border:1px solid; border-radius:5px; }
+.grupo-produto-estado.ativado { color:#236039; background:#edf8f0; border-color:#94c5a2; }
+.grupo-produto-estado.pendente { color:#795600; background:#fff8df; border-color:#dec77e; }
+.grupo-produto-estado-linha { display:block; }
+.grupo-produto-ativacao { padding:10px 12px; border:1px solid; border-radius:8px; margin:10px 0; }
+.grupo-produto-ativacao.ativado { color:#236039; background:#edf8f0; border-color:#94c5a2; }
+.grupo-produto-ativacao.pendente { color:#795600; background:#fff8df; border-color:#dec77e; }
+.grupo-produto-ativacao strong { display:block; font-weight:800; }
+.grupo-produto-ativacao p { margin:4px 0 0; font-size:13px; }
 @media (max-width:860px) { .grupo-produtos-modal { padding:16px; } .grupo-produto-vinculo { padding:8px 10px; } }
 </style>
 <div class="grupo-produtos-barra">
@@ -51,11 +57,14 @@
       <h3>Preços vinculados — diagnóstico e prévia</h3>
       <p>Confira apresentações e preços. A ativacao e a entrada de integrantes preservam todos os precos e a origem utilizada nos pedidos. Os reajustes sao seletivos no cadastro ou na revisao de compra.</p>
       <p id="grupoProdutoPrecosEstado" role="status"></p>
-      <p id="grupoProdutoAtivacaoEstado" role="status"></p>
+      <div id="grupoProdutoAtivacaoPainel" class="grupo-produto-ativacao" role="status" hidden>
+        <strong id="grupoProdutoAtivacaoEstado"></strong>
+        <p id="grupoProdutoAtivacaoAjuda"></p>
+      </div>
       <label hidden for="grupoProdutoPrecosReferencia">Produto de referência para a primeira aplicação</label>
       <select hidden id="grupoProdutoPrecosReferencia" style="max-width:100%;min-height:44px"></select>
       <div id="grupoProdutoPrecosTabela" style="overflow-x:auto"></div>
-      <label class="grupo-produtos-opcao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade dos integrantes. Nenhum preco sera aplicado por esta acao.</label>
+      <label class="grupo-produtos-opcao" id="grupoProdutoAtivacaoConfirmacao"><input type="checkbox" id="grupoProdutoPrecosConfirmacao">Confirmo a compatibilidade dos integrantes. Nenhum preco sera aplicado por esta acao.</label>
       <button type="button" id="grupoProdutoRegularizar" disabled>Ativar grupo sem alterar precos</button>
     </section>
     <p id="grupoProdutoNota" class="grupo-produtos-nota" hidden>Adições e remoções de membros são salvas ao confirmar cada ação.</p>
@@ -68,6 +77,7 @@
       <label for="grupoProdutoBusca">Buscar produto disponível</label>
       <input type="search" id="grupoProdutoBusca" placeholder="Nome do produto">
       <div id="grupoProdutoElegiveis"></div>
+      <label class="grupo-produtos-opcao" id="grupoProdutoAdicaoConfirmacao" hidden><input type="checkbox" id="grupoProdutoAdicaoCompatibilidade">Confirmo a compatibilidade dos novos integrantes. Seus preços atuais serão preservados.</label>
       <div class="grupo-produtos-acoes">
         <button type="button" id="grupoProdutoConfirmarAdicao" disabled>Confirmar adição</button>
         <button type="button" id="grupoProdutoAplicarAdicao" hidden>Aplicar prévia e adicionar</button>
@@ -155,14 +165,20 @@ document.addEventListener('DOMContentLoaded', function () {
     return resultado;
   }
   function payload(acao) { const dados = new FormData(); dados.set('acao', acao); return dados; }
-  function mostrarPrecos(diagnostico) {
+  function mostrarPrecos(diagnostico, previaAdicao=false) {
     const secao=el('grupoProdutoPrecos'), seletor=el('grupoProdutoPrecosReferencia');
-    diagnosticoAtual=diagnostico;
+    const ativo=!!(previaAdicao ? diagnosticoAtual && diagnosticoAtual.regularizado : diagnostico && diagnostico.regularizado);
+    diagnosticoAtual=diagnostico ? {...diagnostico,regularizado:ativo} : null;
     el("grupoProdutoPrecosConfirmacao").checked=false;
-    el("grupoProdutoRegularizar").hidden=!grupoUrl || !!(diagnostico && diagnostico.regularizado);
+    el("grupoProdutoPrecosConfirmacao").disabled=ativo || previaAdicao;
+    el("grupoProdutoAtivacaoConfirmacao").hidden=!diagnostico || ativo || previaAdicao;
+    el("grupoProdutoRegularizar").hidden=!grupoUrl || ativo || previaAdicao;
     el("grupoProdutoRegularizar").disabled=true;
     secao.hidden=!diagnostico;
-    el('grupoProdutoAtivacaoEstado').textContent=diagnostico?(diagnostico.regularizado?'Grupo já ativado':'Pendente de ativação'):'';
+    const painelEstado=el('grupoProdutoAtivacaoPainel');
+    painelEstado.hidden=!diagnostico;painelEstado.className='grupo-produto-ativacao '+(ativo?'ativado':'pendente');
+    el('grupoProdutoAtivacaoEstado').textContent=diagnostico?(ativo?'✓ GRUPO ATIVADO':'⚠ PENDENTE DE ATIVAÇÃO'):'';
+    el('grupoProdutoAtivacaoAjuda').textContent=diagnostico?(ativo?'Pronto para reajustes seletivos. Preços atuais preservados.':'Confira os integrantes antes de ativar.'):'';
     if(!diagnostico)return;
     el('grupoProdutoPrecosEstado').textContent=diagnostico.status+' · '+diagnostico.aviso+
       (diagnostico.divergentes.length?' Diferenças: '+diagnostico.divergentes.join(', ')+'.':'')+
@@ -204,10 +220,10 @@ document.addEventListener('DOMContentLoaded', function () {
     finally{ocupado=false;this.disabled=false;}
   });
   el('grupoProdutoPrecosConfirmacao').addEventListener('change',function(){
-    el('grupoProdutoRegularizar').disabled=!this.checked || !diagnosticoAtual || diagnosticoAtual.bloqueios.length>0;
+    el('grupoProdutoRegularizar').disabled=!this.checked || !diagnosticoAtual || diagnosticoAtual.regularizado || diagnosticoAtual.bloqueios.length>0;
   });
   el('grupoProdutoRegularizar').addEventListener('click',async()=>{
-    if(!diagnosticoAtual || !el('grupoProdutoPrecosConfirmacao').checked)return;
+    if(ocupado || !diagnosticoAtual || diagnosticoAtual.regularizado || !el('grupoProdutoPrecosConfirmacao').checked)return;
     const dados=payload('regularizar');dados.set('referencia',diagnosticoAtual.referencia_id);
     dados.set('versao_observada',diagnosticoAtual.versao_observada);dados.set('confirmar','1');
     await executarAcao(dados);
@@ -216,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function () {
     erro.textContent = ''; sucesso.textContent = ''; membros.replaceChildren();
     mostrarPrecos(null);
     painelAdicao.hidden = true; painelExclusao.hidden = true; excluido = false; adicaoPrevia=null; el("grupoProdutoAplicarAdicao").hidden=true;
+    el("grupoProdutoAdicaoConfirmacao").hidden=true;el("grupoProdutoAdicaoCompatibilidade").checked=false;
     el('grupoProdutoTitulo').textContent = titulo;
     salvar.textContent = grupoUrl ? 'Salvar alterações' : 'Salvar grupo';
     salvar.hidden = false; nome.disabled = false;
@@ -252,6 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
       ocupado = false;
       el('grupoProdutoAdicionar').disabled=!diagnosticoAtual;
       el('grupoProdutoRegularizar').disabled=true;
+      el('grupoProdutoPrecosConfirmacao').disabled=!!(diagnosticoAtual && diagnosticoAtual.regularizado);
       if (excluido) el('grupoProdutoFechar').focus();
     }
   }
@@ -316,9 +334,9 @@ document.addEventListener('DOMContentLoaded', function () {
         const linha = document.createElement('div'); linha.className = 'grupo-produto-membro';linha.dataset.grupoId=grupo.id;
         const texto = document.createElement('span'); texto.textContent = grupo.nome + ' · ' + quantidade(grupo.quantidade);
         const estado=document.createElement('span');estado.className='grupo-produto-estado '+(grupo.ativado?'ativado':'pendente');
-        if(grupo.ativado){const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='✓ ';estado.append(icone,document.createTextNode('Ativado'));}
-        else estado.textContent='Pendente';
-        texto.append(estado);
+        if(grupo.ativado){const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='✓ ';estado.append(icone,document.createTextNode('ATIVADO'));}
+        else {const icone=document.createElement('span');icone.setAttribute('aria-hidden','true');icone.textContent='⚠ ';estado.append(icone,document.createTextNode('PENDENTE'));}
+        const estadoLinha=document.createElement('span');estadoLinha.className='grupo-produto-estado-linha';estadoLinha.append(estado);texto.append(estadoLinha);
         const botao = document.createElement('button'); botao.type = 'button'; botao.textContent = 'Editar';
         botao.setAttribute('aria-label', 'Editar grupo ' + grupo.nome);
         botao.addEventListener('click', () => editarGrupo(grupo.url,true)); linha.append(texto, botao); lista.append(linha);
@@ -336,6 +354,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   function atualizarElegiveis() {
     adicaoPrevia=null;el('grupoProdutoAplicarAdicao').hidden=true;
+    el('grupoProdutoAdicaoConfirmacao').hidden=true;el('grupoProdutoAdicaoCompatibilidade').checked=false;
     const busca = el('grupoProdutoBusca').value.trim().toLocaleLowerCase();
     const opcoes = Array.from(el('grupoProdutoElegiveis').querySelectorAll('label'));
     opcoes.forEach(opcao => { opcao.hidden = !opcao.textContent.toLocaleLowerCase().includes(busca); });
@@ -370,17 +389,18 @@ document.addEventListener('DOMContentLoaded', function () {
     ocupado=true;erro.textContent='';
     try{
       const previa=(await requisitar(grupoUrl,dados)).precos_vinculados;
-      mostrarPrecos(previa);
+      mostrarPrecos(previa,true);
       el('grupoProdutoRegularizar').hidden=true;
       if(previa.bloqueios.length)throw new Error('Entrada bloqueada. Confira os problemas apresentados na prévia.');
       adicaoPrevia=dados;adicaoPrevia.set('acao','adicionar');
       adicaoPrevia.set('versao_observada',previa.versao_observada);adicaoPrevia.set('confirmar','1');
+      el('grupoProdutoAdicaoConfirmacao').hidden=false;el('grupoProdutoAdicaoCompatibilidade').checked=false;
       el('grupoProdutoAplicarAdicao').hidden=false;
     }catch(e){erro.textContent=e.message;adicaoPrevia=null;}
     finally{ocupado=false;}
   });
   el('grupoProdutoAplicarAdicao').addEventListener('click',async()=>{
-    if(!adicaoPrevia || !el('grupoProdutoPrecosConfirmacao').checked){erro.textContent='Confirme explicitamente a prévia de entrada.';return;}
+    if(!adicaoPrevia || !el('grupoProdutoAdicaoCompatibilidade').checked){erro.textContent='Confirme explicitamente a prévia de entrada.';return;}
     await executarAcao(adicaoPrevia,()=>{painelAdicao.hidden=true;adicaoPrevia=null;el('grupoProdutoAplicarAdicao').hidden=true;});
   });
   el('grupoProdutoExcluir').addEventListener('click', () => {
