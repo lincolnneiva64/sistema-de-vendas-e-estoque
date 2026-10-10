@@ -244,20 +244,25 @@ def alterar_precos_grupo(produto_id, atualizacoes, *, versao_esperada, operador=
     estrutural=diagnosticar_grupo(produtos, validar_precos=False)
     if estrutural['bloqueios']:raise ValidationError([b['motivo'] for b in estrutural['bloqueios']])
     valores={campo:Decimal(str(value)) for campo,value in atualizacoes.items()}
-    alterados={campo:value for campo,value in valores.items() if getattr(fonte,campo)!=value}
-    if not alterados:return None
-    if not fonte.vende_fracionado and set(alterados).intersection(PRECOS_VINCULADOS[2:]):
+    if not valores:return None
+    if not fonte.vende_fracionado and set(valores).intersection(PRECOS_VINCULADOS[2:]):
         raise ValidationError('Grupo sem fracionamento.')
-    if any(not value.is_finite() or value<0 or value>Decimal('99999999.99') or value!=value.quantize(Decimal('0.01')) for value in alterados.values()):
+    if any(not value.is_finite() or value<0 or value>Decimal('99999999.99') or value!=value.quantize(Decimal('0.01')) for value in valores.values()):
         raise ValidationError('Preco monetario invalido.')
     propostas={p.pk:copy.copy(p) for p in produtos}
     for pk in ids:
         candidato=propostas[pk]
-        for campo,value in alterados.items():setattr(candidato,campo,value)
+        for campo,value in valores.items():setattr(candidato,campo,value)
         candidato.preco_venda=candidato.preco_vista
         candidato.precos_canonicos_adotados=True
+    if not any(
+        any(getattr(p,campo)!=getattr(propostas[p.pk],campo)
+            for campo in (*PRECOS_VINCULADOS,'preco_venda','precos_canonicos_adotados'))
+        for p in produtos if p.pk in ids
+    ):
+        return None
     _validar([propostas[pk] for pk in ids])
-    evidencia_extra={**(evidencia_extra or {}),'selecionados':sorted(ids),'campos':sorted(alterados),'formato':2}
+    evidencia_extra={**(evidencia_extra or {}),'selecionados':sorted(ids),'campos':sorted(valores),'formato':2}
     return _gravar(grupo,produtos,propostas,operador,origem,evidencia_extra=evidencia_extra,using=using)
 
 

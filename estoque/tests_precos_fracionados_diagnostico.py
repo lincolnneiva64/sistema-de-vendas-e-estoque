@@ -1,11 +1,14 @@
 """Reproduce the reported fractional editor flow with isolated, fictional data."""
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.db import models
-from django.test import TestCase, override_settings
+from django.db import close_old_connections, connection, models
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from decimal import Decimal
@@ -15,7 +18,10 @@ from .models import Categoria, Unidade, Produto, AlteracaoPrecoVinculado
 from .forms import ProdutoForm
 from .grupos_produtos import criar_grupo
 from .tests_precos_vinculados import criar_operador_precos
-from .services.precos_vinculados import diagnosticar_grupo, versao_cadastro_produto, regularizar_grupo
+from .services.precos_vinculados import (
+    alterar_precos_grupo, diagnosticar_grupo, versao_cadastro_produto,
+    regularizar_grupo,
+)
 
 
 class FracionadosFixture:
@@ -38,6 +44,46 @@ class FracionadosFixture:
         models.QuerySet.update(Produto.objects.filter(pk__in=[p.pk for p in self.produtos[2:]]),
             vende_fracionado=True,unidade_venda_2='UN',fator_conversao=24,
             preco_vista_fracionado='1.20',preco_prazo_fracionado='1.30')
+
+    def preparar_lopitos(self):
+        nomes=('Lopitos Cebolinha 24/30G','Lopitos Gal Caipira 24/30G',
+            'Lopitos Queijo 24/30G','Lopitos Requeijão 24/30G')
+        precos_fracionados=(('1.20','1.30'),('1.20','1.20'),('0','0'),('0','0'))
+        for produto,nome,fracionados in zip(self.produtos,nomes,precos_fracionados):
+            models.QuerySet.update(Produto.objects.filter(pk=produto.pk),
+                nome=nome,preco_compra=20,preco_compra_fracionado='0.83',
+                unidade_compra='FD',unidade_venda_1='FD',unidade_venda_2='UN',
+                fator_conversao=24,vende_fracionado=True,preco_venda=26,
+                preco_vista=26,preco_prazo=27,
+                preco_vista_fracionado=fracionados[0],
+                preco_prazo_fracionado=fracionados[1],
+                percentual_vista_fracionado='44.58' if fracionados[0]!='0' else 0,
+                percentual_prazo_fracionado='56.63' if fracionados[1]=='1.30' else
+                    '44.58' if fracionados[1]!='0' else 0)
+        models.QuerySet.update(type(self.grupo).objects.filter(pk=self.grupo.pk),
+            nome='Lopitos 24/30G')
+        observacao=diagnosticar_grupo(list(self.grupo.produtos.all()),validar_precos=False)
+        regularizar_grupo(self.grupo.pk,observacao['versao_observada'],
+            confirmar=True,operador=self.operador)
+
+    def comando_lopitos(self,selecionados=None,fonte=1):
+        produtos=list(self.grupo.produtos.order_by('pk'))
+        self.grupo.refresh_from_db()
+        return {
+            'versao_esperada':self.grupo.versao_precos,
+            'operador':self.operador,
+            'selecionados':selecionados or [p.pk for p in produtos],
+            'confirmar':True,
+            'assinatura_esperada':diagnosticar_grupo(
+                produtos,validar_precos=False)['assinatura_precos'],
+        }
+
+    def atualizar_lopitos(self,selecionados=None,fonte=1):
+        valores={'preco_vista':Decimal('26.00'),'preco_prazo':Decimal('27.00'),
+            'preco_vista_fracionado':Decimal('1.20'),
+            'preco_prazo_fracionado':Decimal('1.30')}
+        return alterar_precos_grupo(self.produtos[fonte].pk,valores,
+            **self.comando_lopitos(selecionados,fonte))
 
 
 class FracionadosDiagnosticoTests(FracionadosFixture,TestCase):
@@ -219,6 +265,150 @@ class FracionadosDiagnosticoTests(FracionadosFixture,TestCase):
         self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos_antes)
         self.grupo.refresh_from_db()
         self.assertEqual(self.grupo.versao_precos,versao_antes)
+
+    def test_lopitos_explicit_targets_regularize_all_four_including_zero_fields(self):
+        self.preparar_lopitos()
+        antes={p['id']:p for p in Produto.objects.order_by('pk').values()}
+        evento=self.atualizar_lopitos(fonte=1)
+        depois={p['id']:p for p in Produto.objects.order_by('pk').values()}
+
+        self.assertEqual([p['nome'] for p in depois.values()],[
+            'Lopitos Cebolinha 24/30G','Lopitos Gal Caipira 24/30G',
+            'Lopitos Queijo 24/30G','Lopitos Requeijão 24/30G'])
+        for produto in self.produtos:
+            anterior=antes[produto.pk]
+            novo=depois[produto.pk]
+            for campo,esperado in {
+                'preco_vista':Decimal('26.00'),'preco_prazo':Decimal('27.00'),
+                'preco_vista_fracionado':Decimal('1.20'),
+                'preco_prazo_fracionado':Decimal('1.30'),
+            }.items():
+                self.assertEqual(novo[campo],esperado)
+            for campo in ('preco_compra','preco_compra_fracionado','quantidade',
+                          'unidade_compra','unidade_venda_1','unidade_venda_2',
+                          'fator_conversao'):
+                self.assertEqual(novo[campo],anterior[campo])
+            self.assertTrue(novo['precos_canonicos_adotados'])
+            self.assertEqual(novo['percentual_vista_fracionado'],Decimal('44.58'))
+            self.assertEqual(novo['percentual_prazo_fracionado'],Decimal('56.63'))
+
+        self.assertEqual(evento.evidencia['selecionados'],
+            sorted(p.pk for p in self.produtos))
+        self.assertEqual(evento.evidencia['campos'],[
+            'preco_prazo','preco_prazo_fracionado','preco_vista',
+            'preco_vista_fracionado'])
+        self.assertEqual(set(evento.evidencia['alteracoes'][str(self.produtos[0].pk)]),set())
+        for produto in self.produtos[1:]:
+            self.assertEqual(set(evento.evidencia['alteracoes'][str(produto.pk)]),{
+                'preco_prazo_fracionado',
+            } if produto.pk==self.produtos[1].pk else {
+                'preco_vista_fracionado','preco_prazo_fracionado',
+            })
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,2)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(),2)
+
+    def test_lopitos_partial_selection_keeps_other_group_members_unchanged(self):
+        self.preparar_lopitos()
+        antes={p['id']:p for p in Produto.objects.order_by('pk').values()}
+        selecionados=[self.produtos[1].pk,self.produtos[2].pk]
+        evento=self.atualizar_lopitos(selecionados=selecionados,fonte=1)
+        depois={p['id']:p for p in Produto.objects.order_by('pk').values()}
+
+        for produto in self.produtos:
+            if produto.pk not in selecionados:
+                self.assertEqual(depois[produto.pk],antes[produto.pk])
+            else:
+                self.assertEqual(depois[produto.pk]['preco_vista_fracionado'],Decimal('1.20'))
+                self.assertEqual(depois[produto.pk]['preco_prazo_fracionado'],Decimal('1.30'))
+                self.assertTrue(depois[produto.pk]['precos_canonicos_adotados'])
+        self.assertEqual(evento.evidencia['selecionados'],sorted(selecionados))
+        self.assertEqual(set(evento.evidencia['alteracoes']),{str(p.pk) for p in self.produtos})
+        self.assertEqual(evento.evidencia['alteracoes'][str(self.produtos[0].pk)],{})
+        self.assertEqual(evento.evidencia['alteracoes'][str(self.produtos[3].pk)],{})
+
+    def test_lopitos_repeated_explicit_targets_are_idempotent(self):
+        self.preparar_lopitos()
+        self.atualizar_lopitos(fonte=1)
+        antes=list(Produto.objects.order_by('pk').values())
+        eventos=AlteracaoPrecoVinculado.objects.count()
+        self.grupo.refresh_from_db()
+        versao=self.grupo.versao_precos
+
+        resultado=self.atualizar_lopitos(fonte=1)
+
+        self.assertIsNone(resultado)
+        self.assertEqual(list(Produto.objects.order_by('pk').values()),antes)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos)
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,versao)
+
+    def test_lopitos_failure_during_writes_rolls_back_products_group_and_audit(self):
+        self.preparar_lopitos()
+        antes=list(Produto.objects.order_by('pk').values())
+        eventos=AlteracaoPrecoVinculado.objects.count()
+        self.grupo.refresh_from_db()
+        versao=self.grupo.versao_precos
+        original=models.QuerySet.update
+        writes=0
+
+        def fail_on_third_product_write(queryset,**values):
+            nonlocal writes
+            if queryset.model is Produto and 'precos_canonicos_adotados' in values:
+                writes+=1
+                if writes==3:
+                    raise RuntimeError('isolated injected Lopitos write failure')
+            return original(queryset,**values)
+
+        with patch.object(models.QuerySet,'update',fail_on_third_product_write):
+            with self.assertRaises(RuntimeError):
+                self.atualizar_lopitos(fonte=1)
+
+        self.assertEqual(list(Produto.objects.order_by('pk').values()),antes)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos)
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,versao)
+
+
+@skipUnless(connection.vendor=='postgresql','Requires isolated PostgreSQL')
+class FracionadosConcorrenciaTests(FracionadosFixture,TransactionTestCase):
+    def test_lopitos_same_version_explicit_target_race_has_one_winner(self):
+        self.preparar_lopitos()
+        versao=self.grupo.versao_precos
+        assinatura=diagnosticar_grupo(
+            list(self.grupo.produtos.order_by('pk')),validar_precos=False)['assinatura_precos']
+        valores={'preco_vista':Decimal('26.00'),'preco_prazo':Decimal('27.00'),
+            'preco_vista_fracionado':Decimal('1.20'),
+            'preco_prazo_fracionado':Decimal('1.30')}
+        ids=[p.pk for p in self.produtos]
+        barreira=Barrier(2)
+
+        def executar(index):
+            close_old_connections()
+            try:
+                barreira.wait(timeout=15)
+                try:
+                    alterar_precos_grupo(self.produtos[index].pk,valores,
+                        versao_esperada=versao,operador=self.operador,
+                        selecionados=ids,confirmar=True,
+                        assinatura_esperada=assinatura)
+                    return True
+                except ValidationError:
+                    return False
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            resultados=list(pool.map(executar,(0,1)))
+
+        self.assertEqual(sum(resultados),1)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(),2)
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,2)
+        self.assertEqual(set(Produto.objects.values_list(
+            'preco_vista_fracionado',flat=True)),{Decimal('1.20')})
+        self.assertEqual(set(Produto.objects.values_list(
+            'preco_prazo_fracionado',flat=True)),{Decimal('1.30')})
 
 
 @skipUnless(Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe').is_file(),'Chrome unavailable')
