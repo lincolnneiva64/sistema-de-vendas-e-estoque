@@ -17,6 +17,7 @@ class ProdutoForm(forms.ModelForm):
     grupo_precos_id = forms.IntegerField(required=False, widget=forms.HiddenInput)
     versao_precos_grupo = forms.IntegerField(required=False, widget=forms.HiddenInput)
     versao_cadastro_precos = forms.CharField(required=False, max_length=64, widget=forms.HiddenInput)
+    evidencia_diagnostico_cadastro = forms.CharField(required=False, widget=forms.HiddenInput)
     fornecedores = forms.ModelMultipleChoiceField(
         queryset=Fornecedor.objects.none(),
         required=False,
@@ -214,6 +215,7 @@ class ProdutoForm(forms.ModelForm):
 
     @serializar_grupos
     def __init__(self, *args, **kwargs):
+        operador_precos = kwargs.pop('operador_precos', None)
         self.integrar_precos_vinculados = kwargs.pop('integrar_precos_vinculados', False)
         instance = kwargs.get('instance')
         if instance and instance.pk and not (args and args[0] is not None) and kwargs.get('data') is None:
@@ -227,6 +229,10 @@ class ProdutoForm(forms.ModelForm):
         if self.instance.pk:
             from .services.precos_vinculados import versao_cadastro_produto
             self.initial['versao_cadastro_precos'] = versao_cadastro_produto(self.instance)
+            if not self.is_bound:
+                from .services.diagnostico_cadastro import criar_evidencia
+                self.initial['evidencia_diagnostico_cadastro'] = criar_evidencia(
+                    self.instance, operador_precos, self.initial['versao_cadastro_precos'])
         self.grupo_precos = None
         self.integrantes_precos = []
         if self.instance.pk:

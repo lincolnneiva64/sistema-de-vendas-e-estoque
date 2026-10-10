@@ -100,7 +100,8 @@ def impedir_escrita_direta(produto_id, atualizacoes, using='default'):
                 if campo.startswith('unidade_'):anterior,novo=_unidade(anterior),_unidade(novo)
                 if anterior!=novo:raise ValidationError('Desvincule o produto antes de alterar a apresentacao/conversao do grupo ativo.')
     campos=set(atualizacoes).intersection((*PRECOS_VINCULADOS, 'preco_venda'))
-    if not produto.vende_fracionado:campos.difference_update(PRECOS_VINCULADOS[2:])
+    if not produto.vende_fracionado and not atualizacoes.get('vende_fracionado'):
+        campos.difference_update(PRECOS_VINCULADOS[2:])
     if not campos:return
     atual=Produto.objects.using(using).values(*campos).get(pk=produto_id)
     if any(atual[campo] != atualizacoes[campo] for campo in campos):
@@ -323,9 +324,20 @@ def salvar_formulario_produto(form, *, operador=None):
         if vinculo:
             exigir_operador_precos(operador)
             if form.cleaned_data.get('versao_precos_grupo') != vinculo.grupo.versao_precos:
-                raise ValidationError('Preços alterados por outra operação. Reabra o cadastro; nada foi gravado.')
+                from .diagnostico_cadastro import diagnosticar_recusa
+                diagnostico = diagnosticar_recusa(atual, operador, form.cleaned_data.get('versao_cadastro_precos'), form.cleaned_data.get('evidencia_diagnostico_cadastro'))
+                raise ValidationError('Preços alterados por outra operação. Reabra o cadastro; nada foi gravado. ' + diagnostico)
             if form.cleaned_data.get('versao_cadastro_precos') != versao_cadastro_produto(atual):
-                raise ValidationError('Cadastro, custo ou estoque alterado por outra operação. Reabra o cadastro; nada foi gravado.')
+                from .diagnostico_cadastro import diagnosticar_recusa
+                diagnostico = diagnosticar_recusa(atual, operador, form.cleaned_data.get('versao_cadastro_precos'), form.cleaned_data.get('evidencia_diagnostico_cadastro'))
+                raise ValidationError('Cadastro, custo ou estoque alterado por outra operação. Reabra o cadastro; nada foi gravado. ' + diagnostico)
+            campos_precos = PRECOS_VINCULADOS if atual.vende_fracionado or produto.vende_fracionado else PRECOS_VINCULADOS[:2]
+            mudou_apresentacao = (_assinatura_apresentacao(atual) != _assinatura_apresentacao(produto)
+                or _unidade(atual.unidade_compra) != _unidade(produto.unidade_compra))
+            if mudou_apresentacao and any(
+                getattr(atual,c) != getattr(produto,c) for c in campos_precos
+            ):
+                raise ValidationError('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.')
             custos = [c for c in ('preco_compra', 'preco_compra_fracionado') if getattr(produto, c) != getattr(atual, c)]
             if custos:
                 # Validate the proposed editor values, then write only this
@@ -358,6 +370,13 @@ def _unidade(value):
     return str(value or '').strip().upper()
 
 
+def _assinatura_apresentacao(produto):
+    return (_unidade(produto.unidade_venda_1 or produto.unidade_compra),
+            _unidade(produto.unidade_venda_2) if produto.vende_fracionado else '',
+            Decimal(produto.fator_conversao or 0) if produto.vende_fracionado else Decimal(0),
+            produto.vende_fracionado)
+
+
 def _dinheiro(value):
     return None if value is None else format(value, '.2f')
 
@@ -374,9 +393,9 @@ def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
         fator = Decimal(p.fator_conversao or 0) if p.vende_fracionado else Decimal(0)
         signatures.append((principal, secundaria, str(fator.normalize()), p.vende_fracionado))
         if p.unidade_compra and _unidade(p.unidade_compra) != principal:
-            bloqueios.append({'produto_id': p.pk, 'motivo': 'Unidade de compra e unidade principal divergentes.'})
+            bloqueios.append({'produto_id': p.pk, 'motivo': f'{p.nome}: unidade_compra={p.unidade_compra}; unidade_venda_1={principal}. Unidade de compra e unidade principal divergentes.'})
         if not principal or p.vende_fracionado and (not secundaria or secundaria == principal or not fator.is_finite() or fator <= 0):
-            bloqueios.append({'produto_id': p.pk, 'motivo': 'Unidade ou conversao incompleta/invalida.'})
+            bloqueios.append({'produto_id': p.pk, 'motivo': f'{p.nome}: unidade_venda_1 / unidade_compra={principal or "ausente"}; unidade_venda_2={secundaria or "ausente"}; fator_conversao={fator}; vende_fracionado={p.vende_fracionado}. Unidade ou conversao incompleta/invalida.'})
         if p.excluido:
             bloqueios.append({'produto_id': p.pk, 'motivo': 'Produto excluido ainda vinculado.'})
         atuais.append({'id': p.pk, 'nome': p.nome, 'ativo': p.ativo,
@@ -393,8 +412,30 @@ def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
                        'permitir_prejuizo': p.permitir_prejuizo, 'motivo_prejuizo': p.motivo_prejuizo or ''})
     if not produtos:
         bloqueios.append({'produto_id': None, 'motivo': 'Grupo sem integrantes.'})
-    if signatures and any(signature != signatures[0] for signature in signatures):
-        bloqueios.append({'produto_id': None, 'motivo': 'Integrantes com unidades, fator ou fracionamento diferentes.'})
+    incompatibilidades = []
+    campos_fisicos = (
+        ('unidade_venda_1 / unidade_compra', 'Unidade principal'),
+        ('unidade_venda_2', 'Unidade fracionada'),
+        ('fator_conversao', 'Fator de conversão'),
+        ('vende_fracionado', 'Venda fracionada'),
+    )
+    for indice, (campo, rotulo) in enumerate(campos_fisicos):
+        if len({assinatura[indice] for assinatura in signatures}) <= 1:
+            continue
+        integrantes = []
+        for p, assinatura in zip(produtos, signatures):
+            valor = assinatura[indice]
+            if indice == 3:
+                valor = 'Habilitada' if valor else 'Desabilitada'
+            elif indice in (1, 2) and not p.vende_fracionado:
+                valor = 'Não aplicável: venda fracionada desabilitada'
+            integrantes.append({'produto_id': p.pk, 'nome': p.nome, 'valor': str(valor or 'Não informado')})
+        incompatibilidades.append({'campo': campo, 'rotulo': rotulo, 'integrantes': integrantes})
+    if incompatibilidades:
+        detalhes = '; '.join(item['campo'] + ': ' + ', '.join(
+            p['nome'] + ' = ' + p['valor'] for p in item['integrantes']
+        ) for item in incompatibilidades)
+        bloqueios.append({'produto_id': None, 'motivo': 'Integrantes com unidades, fator ou fracionamento diferentes. Confira os cadastros, sem presumir um integrante como correto. ' + detalhes})
     campos = PRECOS_VINCULADOS if produtos and produtos[0].vende_fracionado else PRECOS_VINCULADOS[:2]
     divergentes = [campo for campo in campos if len({getattr(p, campo) for p in produtos}) > 1]
     derivados = [p.pk for p in produtos if p.preco_venda != p.preco_vista]
@@ -435,7 +476,7 @@ def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
                               'preco_venda_novo': _dinheiro(referencia.preco_vista)})
     version = hashlib.sha256(json.dumps(atuais, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
     assinatura=hashlib.sha256(json.dumps([{k:p[k] for k in ('id','precos','preco_venda','legados','adotado')} for p in atuais],sort_keys=True).encode()).hexdigest()
-    return {'assinatura_precos':assinatura,'status': 'bloqueado' if bloqueios else 'precos_individuais' if divergentes or derivados else 'precos_iguais',
+    return {'incompatibilidades':incompatibilidades,'assinatura_precos':assinatura,'status': 'bloqueado' if bloqueios else 'precos_individuais' if divergentes or derivados else 'precos_iguais',
             'campos': list(campos), 'divergentes': divergentes,
             'derivados_divergentes': derivados, 'bloqueios': bloqueios,
             'produtos': atuais, 'referencia_id': referencia_id, 'previa': propostas,

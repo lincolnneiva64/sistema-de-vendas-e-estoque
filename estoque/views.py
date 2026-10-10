@@ -15473,7 +15473,7 @@ def produto_editar(request, pk):
         retorno_url = ""
 
     if request.method == "POST":
-        form = ProdutoForm(request.POST, instance=produto, integrar_precos_vinculados=True)
+        form = ProdutoForm(request.POST, instance=produto, integrar_precos_vinculados=True, operador_precos=request.user)
         if form.is_valid():
             try:
                 produto = salvar_formulario_produto(form, operador=request.user if request.user.is_authenticated else None)
@@ -15482,7 +15482,7 @@ def produto_editar(request, pk):
             except ValidationError as exc:
                 form.add_error(None, exc)
     else:
-        form = ProdutoForm(instance=produto, integrar_precos_vinculados=True)
+        form = ProdutoForm(instance=produto, integrar_precos_vinculados=True, operador_precos=request.user)
 
     return render(request, "estoque/cadastrar_produto.html", {"form": form, "retorno_url": retorno_url})
 

@@ -1039,6 +1039,7 @@ select.campo-obrigatorio-piscando:focus,
 <form method="post" class="row g-1" id="form-produto">
   {% csrf_token %}
   {{ form.grupo_precos_id }}{{ form.versao_precos_grupo }}{{ form.versao_cadastro_precos }}
+  {{ form.evidencia_diagnostico_cadastro }}
   {% if form.grupo_precos %}
   {{ form.assinatura_precos_seletivos }}{{ form.destinatarios_precos }}{{ form.confirmar_precos_seletivos }}
   <details class="col-12 precos-vinculados-aviso">

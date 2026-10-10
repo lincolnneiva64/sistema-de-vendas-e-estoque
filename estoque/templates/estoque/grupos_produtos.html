@@ -57,6 +57,7 @@
       <h3>Preços vinculados — diagnóstico e prévia</h3>
       <p>Confira apresentações e preços. A ativacao e a entrada de integrantes preservam todos os precos e a origem utilizada nos pedidos. Os reajustes sao seletivos no cadastro ou na revisao de compra.</p>
       <p id="grupoProdutoPrecosEstado" role="status"></p>
+      <div id="grupoProdutoIncompatibilidades" hidden></div>
       <div id="grupoProdutoAtivacaoPainel" class="grupo-produto-ativacao" role="status" hidden>
         <strong id="grupoProdutoAtivacaoEstado"></strong>
         <p id="grupoProdutoAtivacaoAjuda"></p>
@@ -176,10 +177,20 @@ document.addEventListener('DOMContentLoaded', function () {
     el("grupoProdutoRegularizar").disabled=true;
     secao.hidden=!diagnostico;
     const painelEstado=el('grupoProdutoAtivacaoPainel');
+    const incompatibilidades=el('grupoProdutoIncompatibilidades');incompatibilidades.replaceChildren();incompatibilidades.hidden=true;
     painelEstado.hidden=!diagnostico;painelEstado.className='grupo-produto-ativacao '+(ativo?'ativado':'pendente');
     el('grupoProdutoAtivacaoEstado').textContent=diagnostico?(ativo?'✓ GRUPO ATIVADO':'⚠ PENDENTE DE ATIVAÇÃO'):'';
     el('grupoProdutoAtivacaoAjuda').textContent=diagnostico?(ativo?'Pronto para reajustes seletivos. Preços atuais preservados.':'Confira os integrantes antes de ativar.'):'';
     if(!diagnostico)return;
+    const divergenciasFisicas=diagnostico.incompatibilidades || [];
+    if(divergenciasFisicas.length){
+      incompatibilidades.hidden=false;
+      const orientacao=document.createElement('p');orientacao.textContent='Confirme a apresentação comercial com o operador antes de corrigir os campos abaixo. Nenhuma unidade ou fator será corrigido automaticamente.';incompatibilidades.append(orientacao);
+      divergenciasFisicas.forEach(item=>{
+        const titulo=document.createElement('strong');titulo.textContent=item.rotulo+' ('+item.campo+')';incompatibilidades.append(titulo);
+        const lista=document.createElement('ul');item.integrantes.forEach(p=>{const linha=document.createElement('li');linha.textContent=p.nome+' (#'+p.produto_id+'): '+p.valor;lista.append(linha);});incompatibilidades.append(lista);
+      });
+    }
     el('grupoProdutoPrecosEstado').textContent=diagnostico.status+' · '+diagnostico.aviso+
       (diagnostico.divergentes.length?' Diferenças: '+diagnostico.divergentes.join(', ')+'.':'')+
       (diagnostico.bloqueios.length?' '+diagnostico.bloqueios.map(b=>(b.produto_id?'Produto '+b.produto_id+': ':'')+b.motivo).join(' '):'');
