@@ -143,6 +143,83 @@ class FracionadosDiagnosticoTests(FracionadosFixture,TestCase):
         for p,anterior in zip(Produto.objects.order_by('pk').values(),antes):
             if p['id']!=self.produtos[2].pk:self.assertEqual(p,anterior)
 
+    def test_selected_zero_fractional_prices_are_validated_after_proposal(self):
+        self.compatibilizar_fixture()
+        selecionados=self.produtos[2:]
+        models.QuerySet.update(Produto.objects.filter(pk__in=[p.pk for p in selecionados]),
+            preco_compra=20,preco_compra_fracionado=0,
+            preco_vista_fracionado=0,preco_prazo_fracionado=0)
+        diagnostico=diagnosticar_grupo(list(self.grupo.produtos.all()),validar_precos=False)
+        regularizar_grupo(self.grupo.pk,diagnostico['versao_observada'],confirmar=True,operador=self.operador)
+        antes={p['id']:p for p in Produto.objects.values()}
+
+        from estoque.views import _custo_produto_para_unidade_venda
+        for produto in selecionados:
+            self.assertEqual(_custo_produto_para_unidade_venda(
+                Produto.objects.get(pk=produto.pk),'UN'),Decimal('0.83'))
+
+        dados=self.dados_editor(2)
+        dados.update(preco_vista_fracionado='1.20',preco_prazo_fracionado='1.30',
+            destinatarios_precos=[str(selecionados[1].pk)],
+            confirmar_precos_seletivos=True,
+            assinatura_precos_seletivos=diagnosticar_grupo(
+                list(self.grupo.produtos.all()),validar_precos=False)['assinatura_precos'])
+        resposta=self.client.post(reverse('estoque:produto_editar',args=[selecionados[0].pk]),dados)
+
+        self.assertEqual(resposta.status_code,302,str(resposta.context['form'].errors) if resposta.context else '')
+        depois={p['id']:p for p in Produto.objects.values()}
+        selecionados_ids={p.pk for p in selecionados}
+        for produto_id,anterior in antes.items():
+            novo=depois[produto_id]
+            if produto_id not in selecionados_ids:
+                self.assertEqual(novo,anterior)
+                continue
+            self.assertEqual(novo['preco_vista_fracionado'],Decimal('1.20'))
+            self.assertEqual(novo['preco_prazo_fracionado'],Decimal('1.30'))
+            for campo in ('preco_vista','preco_prazo','preco_compra',
+                          'preco_compra_fracionado','quantidade'):
+                self.assertEqual(novo[campo],anterior[campo])
+
+        evento=AlteracaoPrecoVinculado.objects.order_by('-versao_depois').first()
+        self.assertEqual(evento.evidencia['selecionados'],sorted(selecionados_ids))
+        for produto in selecionados:
+            self.assertEqual(set(evento.evidencia['alteracoes'][str(produto.pk)]),
+                {'preco_vista_fracionado','preco_prazo_fracionado'})
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,2)
+
+    def test_below_cost_rejection_reports_each_final_fractional_value_and_cost(self):
+        self.compatibilizar_fixture()
+        selecionados=self.produtos[2:]
+        models.QuerySet.update(Produto.objects.filter(pk__in=[p.pk for p in selecionados]),
+            preco_compra=20,preco_compra_fracionado=0,
+            preco_vista_fracionado=0,preco_prazo_fracionado=0)
+        models.QuerySet.update(Produto.objects.filter(pk=selecionados[1].pk),preco_compra=36)
+        diagnostico=diagnosticar_grupo(list(self.grupo.produtos.all()),validar_precos=False)
+        regularizar_grupo(self.grupo.pk,diagnostico['versao_observada'],confirmar=True,operador=self.operador)
+        antes=list(Produto.objects.order_by('pk').values())
+        eventos_antes=AlteracaoPrecoVinculado.objects.count()
+        self.grupo.refresh_from_db()
+        versao_antes=self.grupo.versao_precos
+
+        dados=self.dados_editor(2)
+        dados.update(preco_vista_fracionado='1.20',preco_prazo_fracionado='1.30',
+            destinatarios_precos=[str(selecionados[1].pk)],
+            confirmar_precos_seletivos=True,
+            assinatura_precos_seletivos=diagnosticar_grupo(
+                list(self.grupo.produtos.all()),validar_precos=False)['assinatura_precos'])
+        resposta=self.client.post(reverse('estoque:produto_editar',args=[selecionados[0].pk]),dados)
+        erros=str(resposta.context['form'].errors)
+
+        self.assertEqual(resposta.status_code,200)
+        self.assertIn('Produto '+str(selecionados[1].pk),erros)
+        self.assertIn('preco_vista_fracionado=R$ 1,20 (custo individual R$ 1,50)',erros)
+        self.assertIn('preco_prazo_fracionado=R$ 1,30 (custo individual R$ 1,50)',erros)
+        self.assertEqual(list(Produto.objects.order_by('pk').values()),antes)
+        self.assertEqual(AlteracaoPrecoVinculado.objects.count(),eventos_antes)
+        self.grupo.refresh_from_db()
+        self.assertEqual(self.grupo.versao_precos,versao_antes)
+
 
 @skipUnless(Path(r'C:\Program Files\Google\Chrome\Application\chrome.exe').is_file(),'Chrome unavailable')
 class FracionadosDiagnosticoBrowserTests(FracionadosFixture,StaticLiveServerTestCase):

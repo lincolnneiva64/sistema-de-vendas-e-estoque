@@ -127,6 +127,15 @@ def bloquear_produtos_precos(produto_ids, using='default'):
     return {p.pk:p for p in Produto.objects.using(using).select_for_update().filter(pk__in=ids).order_by('pk')}
 
 
+def _detalhar_precos_fracionados_abaixo_do_custo(produto, custo):
+    return ', '.join(
+        f'{campo}=R$ {format(getattr(produto, campo), ".2f").replace(".", ",")} '
+        f'(custo individual R$ {format(custo, ".2f").replace(".", ",")})'
+        for campo in PRECOS_VINCULADOS[2:]
+        if getattr(produto, campo) < custo
+    )
+
+
 def _validar(produtos):
     from estoque.views import _custo_produto_para_unidade_venda
     for p in produtos:
@@ -138,7 +147,8 @@ def _validar(produtos):
         if p.vende_fracionado:
             custo=_custo_produto_para_unidade_venda(p,p.unidade_venda_2)
             if custo>0 and any(getattr(p,campo)<custo for campo in PRECOS_VINCULADOS[2:]):
-                raise ValidationError(f'Produto {p.pk}: preco fracionado abaixo do custo individual, conforme protecao de vendas.')
+                detalhes=_detalhar_precos_fracionados_abaixo_do_custo(p,custo)
+                raise ValidationError(f'Produto {p.pk}: preco fracionado abaixo do custo individual, conforme protecao de vendas: {detalhes}.')
     diagnostico=diagnosticar_grupo(produtos)
     if diagnostico['bloqueios']:
         raise ValidationError([f"Produto {b['produto_id']}: {b['motivo']}" for b in diagnostico['bloqueios']])
@@ -464,7 +474,8 @@ def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
                     from estoque.views import _custo_produto_para_unidade_venda
                     custo = _custo_produto_para_unidade_venda(candidato, candidato.unidade_venda_2)
                     if custo > 0 and any(getattr(candidato, c) < custo for c in PRECOS_VINCULADOS[2:]):
-                        raise ValidationError('Preço fracionado abaixo do custo individual, conforme proteção de vendas.')
+                        detalhes=_detalhar_precos_fracionados_abaixo_do_custo(candidato,custo)
+                        raise ValidationError(f'Preço fracionado abaixo do custo individual, conforme proteção de vendas: {detalhes}.')
             except ValidationError as exc:
                 bloqueios.append({'produto_id': p.pk, 'motivo': ' '.join(exc.messages)})
             if referencia is None:
