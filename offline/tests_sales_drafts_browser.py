@@ -25,6 +25,10 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         self.second_customer = Cliente.objects.create(nome='Segundo Cliente', prazo_padrao_dias=7)
         self.second_product = Produto.objects.create(nome='Segundo Produto', codigo='P-02', preco_compra=1,
             preco_vista=5, preco_prazo=6, unidade_compra='UN', quantidade=100)
+        self.third_product = Produto.objects.create(nome='Terceiro Produto', codigo='P-03', preco_compra=1,
+            preco_vista=5, preco_prazo=6, unidade_compra='UN', quantidade=100)
+        self.fourth_product = Produto.objects.create(nome='Quarto Produto', codigo='P-04', preco_compra=1,
+            preco_vista=5, preco_prazo=6, unidade_compra='UN', quantidade=100)
         self.client = Client()
         self.client.force_login(self.user)
 
@@ -66,7 +70,17 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.wait('document.querySelector("#sales-draft-status [role=status]").textContent.includes("salvo")')
 
     def repository(self, tab):
-        tab.evaluate("window.core=await import('/offline/assets/2-8f/core.js');window.drafts=await import('/offline/assets/2-8f/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=await drafts.draftScope(repo,await repo.get('metadata','sales-identity'));true")
+        tab.evaluate("window.core=await import('/offline/assets/2-8f/core.js');window.drafts=await import('/offline/assets/2-8f/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope=window.salesDraftUI.scope;true")
+
+    def recover_available_draft(self, tab, item_count=1):
+        tab.evaluate("""window.salesDraftBridge.confirmRecover=async()=>true;
+            const select=document.getElementById('sales-draft-recovery-select');
+            const option=[...select.options].find(item=>item.value&&!item.disabled);
+            if(!option)throw new Error('Nenhum rascunho recuperável foi listado.');
+            select.value=option.value;select.dispatchEvent(new Event('change'));true""")
+        self.assertFalse(tab.evaluate('document.getElementById("sales-draft-recovery-button").disabled'))
+        tab.evaluate('document.getElementById("sales-draft-recovery-button").click();true')
+        tab.wait(f'document.querySelectorAll("#tabelaProdutos tr").length==={item_count}')
 
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]
@@ -86,6 +100,8 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 target_id = tab.call('Target.getTargetInfo')['targetInfo']['targetId']
                 chrome.browser.call('Target.closeTarget', {'targetId':target_id})
                 tab = self.open_sales(chrome)
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
+                self.recover_available_draft(tab)
                 self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
                 tab.wait('!document.querySelector(".offline-commercial button").disabled')
                 tab.evaluate('document.querySelector(".offline-commercial button").click();true')
@@ -93,6 +109,8 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 chrome.stop()
                 chrome = Chrome(CHROME, profile).start()
                 tab = self.open_sales(chrome)
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
+                self.recover_available_draft(tab)
                 self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
                 tab.wait('!!navigator.serviceWorker.controller')
                 worker = chrome.worker(); worker.call('Network.enable')
@@ -165,24 +183,27 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                     self.assertTrue(tab.evaluate('try{await drafts.loadDraft(repo,{...scope,' + field + ':' + replacement + '});false}catch(e){true}'))
                 self.reload(tab)
                 other = self.open_sales(chrome)
+                self.assertNotEqual(tab.evaluate('salesDraftUI.scope.tab_id'), other.evaluate('salesDraftUI.scope.tab_id'))
                 other.evaluate('tipoVenda.value="À vista";tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();true')
-                tab.wait('salesDraftUI.blocked')
+                self.assertFalse(tab.evaluate('salesDraftUI.blocked'))
                 tab.evaluate('tipoVenda.value="consumo_proprio";tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();true')
                 self.repository(other)
                 self.assertEqual(other.evaluate('(await drafts.loadDraft(repo,scope)).draft.tipo_venda'), 'À vista')
-                self.assertTrue(tab.evaluate('await salesDraftUI.beforeSubmit()===false'))
+                self.repository(tab)
+                self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft.tipo_venda'), 'consumo_proprio')
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
                 self.reload(other)
                 self.product.preco_vista = 99
                 self.product.fator_conversao = 10
                 self.product.save(update_fields=['preco_vista', 'fator_conversao'])
-                self.reload(other)
-                self.assertEqual(other.evaluate('document.querySelector("#tabelaProdutos tr").dataset.precoUnitario'), '24.00')
-                self.assertEqual(other.evaluate('document.querySelector("#tabelaProdutos tr").dataset.draftFator'), '12.00')
+                self.reload(tab)
+                self.assertEqual(tab.evaluate('document.querySelector("#tabelaProdutos tr").dataset.precoUnitario'), '24.00')
+                self.assertEqual(tab.evaluate('document.querySelector("#tabelaProdutos tr").dataset.draftFator'), '12.00')
                 self.product.ativo = False; self.product.save(update_fields=['ativo'])
-                self.reload(other)
-                self.assertEqual(other.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
-                self.assertIn('fora do catálogo', other.evaluate('document.querySelector("#tabelaProdutos tr").textContent'))
-                self.assertTrue(other.evaluate('await salesDraftUI.beforeSubmit()===false'))
+                self.reload(tab)
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
+                self.assertIn('fora do catálogo', tab.evaluate('document.querySelector("#tabelaProdutos tr").textContent'))
+                self.assertTrue(tab.evaluate('await salesDraftUI.beforeSubmit()===false'))
             finally:
                 chrome.stop()
 
@@ -214,8 +235,11 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                     self.reload(second)
                     self.assertEqual(second.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
                 self.reload(second)
-                self.assertEqual(second.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
+                self.assertEqual(second.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
                 self.repository(second)
+                second.evaluate('window.salesDraftBridge.confirmRecover=async()=>true;const select=document.getElementById("sales-draft-recovery-select");const option=[...select.options].find(item=>item.value&&item.textContent.includes("1 item(ns)"));if(option){select.value=option.value;select.dispatchEvent(new Event("change"));}true')
+                second.evaluate('document.getElementById("sales-draft-recovery-button").click();true')
+                second.wait('document.querySelectorAll("#tabelaProdutos tr").length===1')
                 old_device = second.evaluate('await repo.get("metadata","device")')
                 second.evaluate('await repo.put("metadata",{key:"device",id:crypto.randomUUID(),sequence:0});true')
                 self.reload(second)
@@ -228,6 +252,85 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 second.evaluate('window.last=await drafts.loadDraft(repo,scope);window.payload=last.draft;await drafts.discardDraft(repo,scope,last.revision);true')
                 self.assertTrue(second.evaluate('try{await drafts.saveDraft(repo,scope,payload,last.revision);false}catch(e){true}'))
                 self.assertIsNone(second.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
+            finally:
+                chrome.stop()
+
+    def test_two_tab_finalization_duplicate_recovery_and_legacy_preservation(self):
+        with TemporaryDirectory(prefix='sales-drafts-tabs-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                first = self.open_sales(chrome)
+                self.select_customer(first, 'Cliente Comercial')
+                for name in ['Produto Fracionado', 'Segundo Produto', 'Terceiro Produto', 'Quarto Produto']:
+                    self.add_product(first, name)
+                self.repository(first)
+                first.evaluate('window.firstSaved=await drafts.loadDraft(repo,scope);true')
+                first_tab_id = first.evaluate('salesDraftUI.scope.tab_id')
+
+                second = self.open_sales(chrome)
+                self.select_customer(second, 'Segundo Cliente')
+                self.add_product(second, 'Segundo Produto')
+                self.repository(second)
+                second.evaluate('window.secondSaved=await drafts.loadDraft(repo,scope);window.finalizedB=await drafts.finalizeDraftOffline(repo,scope,{revision:secondSaved.revision,draft_id:secondSaved.draft.draft_id,transport:"online"});window.retryB=await drafts.finalizeDraftOffline(repo,scope,{revision:secondSaved.revision,draft_id:secondSaved.draft.draft_id,transport:"online"});true')
+                self.assertTrue(second.evaluate('retryB.alreadyFinalized'))
+                self.assertEqual(second.evaluate('(await repo.all("operations")).length'), 1)
+                self.assertEqual(first.evaluate('(await drafts.loadDraft(repo,scope)).draft.itens.length'), 4)
+                self.assertEqual(first.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 4)
+
+                duplicate = self.open_sales(chrome)
+                duplicate.evaluate('sessionStorage.setItem("sales-draft-tab-id",' + repr(first_tab_id) + ');true')
+                self.reload(duplicate)
+                self.assertNotEqual(duplicate.evaluate('salesDraftUI.scope.tab_id'), first_tab_id)
+                self.assertEqual(first.evaluate('(await drafts.loadDraft(repo,scope)).draft.itens.length'), 4)
+                self.assertEqual(duplicate.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
+            finally:
+                chrome.stop()
+
+    def test_legacy_draft_explicit_recovery_is_single_claim_and_preserves_source(self):
+        with TemporaryDirectory(prefix='sales-drafts-recovery-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                first = self.open_sales(chrome)
+                self.select_customer(first, 'Cliente Comercial')
+                self.add_product(first, 'Produto Fracionado')
+                self.repository(first)
+                first.evaluate('window.legacyScope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.legacySaved=await drafts.saveDraft(repo,legacyScope,salesDraftBridge.capture(),0);true')
+                second = self.open_sales(chrome)
+                self.repository(second)
+                second.evaluate('window.salesDraftBridge.confirmRecover=async()=>true;true')
+                second.evaluate('const select=document.getElementById("sales-draft-recovery-select");const option=[...select.options].find(item=>item.value&&item.textContent.includes("rascunho legado"));if(option){select.value=option.value;select.dispatchEvent(new Event("change"));}true')
+                self.assertFalse(second.evaluate('document.getElementById("sales-draft-recovery-button").disabled'))
+                second.evaluate('document.getElementById("sales-draft-recovery-button").click();true')
+                second.wait('document.querySelectorAll("#tabelaProdutos tr").length===1')
+                self.assertEqual(second.evaluate('(await drafts.loadDraft(repo,scope)).draft.itens.length'), 1)
+                self.assertIsNotNone(second.evaluate('await repo.get("metadata",drafts.legacyDraftKey(scope))'))
+                self.reload(second)
+                self.assertEqual(second.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
+                self.assertFalse(second.evaluate('document.querySelector("#sales-draft-recovery-select").textContent.includes("rascunho legado")'))
+            finally:
+                chrome.stop()
+
+    def test_modern_draft_explicit_recovery_transfers_between_tabs(self):
+        with TemporaryDirectory(prefix='sales-drafts-modern-recovery-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                first = self.open_sales(chrome)
+                self.select_customer(first, 'Cliente Comercial')
+                self.add_product(first, 'Produto Fracionado')
+                self.repository(first)
+                first.evaluate('window.source=await drafts.loadDraft(repo,scope);true')
+
+                second = self.open_sales(chrome)
+                self.repository(second)
+                self.assertIn('transferir de outra aba', second.evaluate(
+                    'document.getElementById("sales-draft-recovery-select").textContent'))
+                self.recover_available_draft(second)
+                self.assertEqual(second.evaluate('(await drafts.loadDraft(repo,scope)).draft.itens.length'), 1)
+                self.assertIsNone(first.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
+                self.assertTrue(first.evaluate(
+                    'try{await drafts.saveDraft(repo,scope,source.draft,source.revision);false}catch(e){true}'))
+                self.reload(second)
+                self.assertEqual(second.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 1)
             finally:
                 chrome.stop()
 
@@ -247,6 +350,9 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 self.select_customer(tab, 'Cliente Comercial')
                 self.add_product(tab, 'Produto Fracionado')
                 tab.evaluate('document.querySelector("#tabelaProdutos tr").click();quantidade.value="1";quantidade.dispatchEvent(new Event("input",{bubbles:true}));unidade.value="UN";unidade.dispatchEvent(new Event("change",{bubbles:true}));preco.value="3.25";preco.dispatchEvent(new Event("input",{bubbles:true}));true')
+                tab.evaluate('produtoBusca.value="";produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+                self.assertTrue(tab.evaluate('!document.getElementById("venda-linha-produto-pendente").hidden'))
+                self.assertEqual(tab.evaluate('salesDraftBridge.capture().lancamento.produto_nome'), self.product.nome)
                 # No explicit flush and no debounce sleep: normal F5 must flush the editor.
                 self.reload(tab)
                 self.assertEqual(tab.evaluate('quantidade.value'), '1')
@@ -279,10 +385,12 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 self.reload(tab)
                 self.assertEqual(tab.evaluate('document.querySelector("#tabelaProdutos tr").dataset.quantidade'), '2')
                 self.assertTrue(tab.evaluate('!btnGravarVenda.disabled && btnGravarVenda.textContent==="Salvar venda offline"'))
+                saved_scope = tab.evaluate('salesDraftUI.scope')
                 tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/?editar=99'})
                 tab.wait('location.search.includes("editar=") && window.salesDraftUI?.ready && window.salesDraftBridge?.eligible===false')
                 self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 0)
-                self.repository(tab)
+                tab.evaluate("window.core=await import('/offline/assets/2-8f/core.js');window.drafts=await import('/offline/assets/2-8f/sales-drafts.js');window.repo=new core.Repository(await core.openDB());window.scope="
+                    + json.dumps(saved_scope) + ";true")
                 self.assertIsNotNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'))
             finally:
                 chrome.stop()

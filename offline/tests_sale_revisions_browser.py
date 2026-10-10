@@ -29,8 +29,8 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
     def seed(self,chrome):
         tab=self.open_sales(chrome);self.select_customer(tab,'Cliente Comercial');self.add_product(tab,'Produto Fracionado')
         tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);window.normalBefore=await drafts.loadDraft(repo,scope);true')
-        normal=tab.evaluate('normalBefore.draft');scope=tab.evaluate('scope');identifier=str(uuid4())
-        command={'operation_id':identifier,'aggregate_id':identifier,**scope,'type':'criar_venda','schema_version':1,
+        normal=tab.evaluate('normalBefore.draft');scope=tab.evaluate('scope');identity={key:scope[key] for key in ('actor_id','environment_id','device_id')};identifier=str(uuid4())
+        command={'operation_id':identifier,'aggregate_id':identifier,**identity,'type':'criar_venda','schema_version':1,
                  'created_at':timezone.now().isoformat(),'sequence':1,
                  'payload':{'schema_version':1,'cliente_id':str(self.customer.pk),'data_venda':normal['data_venda'],
                             'data_vencimento':normal['data_vencimento'],'operador':self.operator.nome,'tipo_pagamento':'A prazo',
@@ -68,7 +68,8 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
     def unchanged(self,tab):
         self.assertEqual(tab.evaluate('await repo.get("operations",'+json.dumps(self.command['operation_id'])+')'),self.original)
         self.assertEqual(tab.evaluate('await repo.get("history",'+json.dumps(self.command['operation_id'])+')'),self.original_history)
-        self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'),self.normal)
+        original_scope = json.dumps(self.scope)
+        self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,'+original_scope+')).draft'),self.normal)
         self.assertEqual(OperacaoSincronizacao.objects.values().get(operation_id=self.command['operation_id']),self.before_server)
 
     def test_original_normal_draft_catalog_values_and_manual_confirmation(self):

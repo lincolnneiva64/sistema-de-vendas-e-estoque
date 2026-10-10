@@ -13,8 +13,11 @@ const date = value => value === '' || /^\d{4}-\d{2}-\d{2}$/.test(value);
 export function draftKey(scope) {
     if (!scope || !id(scope.actor_id) || !string(scope.environment_id) || !scope.environment_id || !uuid(scope.device_id))
         throw new Error('Identidade local do rascunho inválida.');
-    return 'rascunho_venda:' + JSON.stringify([scope.environment_id, scope.actor_id, scope.device_id]);
+    if (scope.tab_id != null && !uuid(scope.tab_id)) throw new Error('Identidade da aba inválida.');
+    return 'rascunho_venda:' + JSON.stringify([scope.environment_id, scope.actor_id, scope.device_id,
+        ...(scope.tab_id ? [scope.tab_id] : [])]);
 }
+export const legacyDraftKey = scope => draftKey({...scope, tab_id:null});
 // Independent, small recovery marker: IDB cleanup may be unavailable after POST.
 // No payload, queue, operation ID or sequence is stored here.
 function confirmationKey(scope, record) {
@@ -76,8 +79,9 @@ export function projectAssembly(value) {
         total_referencia: itens.reduce((sum, item) => sum + Number(item.subtotal_referencia), 0).toFixed(2)};
 }
 
-export async function draftScope(repo, identity) {
+export async function draftScope(repo, identity, tabId = null) {
     if (!identity?.actor_id || !identity.environment_id) return null;
+    if (tabId != null && !uuid(tabId)) throw new Error('Identidade da aba inválida.');
     let error;
     return repo.transaction(['metadata'], true, (tx, done) => {
         const store = tx.objectStore('metadata');
@@ -87,7 +91,8 @@ export async function draftScope(repo, identity) {
             store.get('device').onsuccess = event => {
                 try {
                     const device = event.target.result || {key:'device', id:crypto.randomUUID(), sequence:0};
-                    const scope = {actor_id:identity.actor_id, environment_id:identity.environment_id, device_id:device.id};
+                    const scope = {actor_id:identity.actor_id, environment_id:identity.environment_id, device_id:device.id,
+                        ...(tabId ? {tab_id:tabId} : {})};
                     draftKey(scope);
                     if (!event.target.result) store.put(device);
                     done(scope);
@@ -166,6 +171,87 @@ export function loadDraft(repo, scope) {
         const safe = validateRecord(record, scope, revision), confirmation = submissionMarker(scope, safe);
         return {revision, draft:confirmation?.estado === 'concluido' ? null : safe, confirmation};
     });
+}
+const recoveryClaimKey = key => key + ':recovered';
+function recoveryBlock(record, operations, scope) {
+    if (ambiguousSales(operations, scope).length)
+        return 'Há envio pendente ou resultado desconhecido; sincronize ou consulte antes de recuperar.';
+    const operation = operations.find(item => item.operation_id === record.draft_id);
+    if (operation) return 'Existe uma operação associada; consulte o resultado antes de recuperar.';
+    if (submissionMarker({...scope, tab_id:record.tab_id || null}, record))
+        return 'Existe um envio online iniciado ou concluído; recuperação bloqueada.';
+    return '';
+}
+export async function listRecoverableDrafts(repo, scope) {
+    const activeKey = draftKey(scope), legacyKey = legacyDraftKey(scope);
+    const [metadata, operations] = await Promise.all([repo.all('metadata'), repo.all('operations')]);
+    const claims = new Set(metadata.filter(item => item.key?.endsWith(':recovered')).map(item => item.key));
+    return metadata.filter(record => record.tipo === 'rascunho_venda' && record.key !== activeKey
+        && (record.key === legacyKey || record.key?.startsWith('rascunho_venda:'))
+        && record.actor_id === scope.actor_id && record.environment_id === scope.environment_id
+        && record.device_id === scope.device_id && Number.isSafeInteger(record.revision)
+        && !claims.has(recoveryClaimKey(record.key)))
+        .map(record => {
+            const reason = recoveryBlock(record, operations, scope);
+            return {key:record.key, draft_id:record.draft_id, revision:record.revision,
+                updated_at:record.atualizado_em, customer:record.cliente?.nome || '',
+                item_count:Array.isArray(record.itens) ? record.itens.length : 0,
+                total:record.total_referencia || '', legacy:record.key === legacyKey, blocked:!!reason, reason};
+        })
+        .sort((left, right) => String(right.updated_at).localeCompare(String(left.updated_at)));
+}
+export async function recoverDraft(repo, scope, candidate) {
+    if (!candidate?.key || candidate.key === draftKey(scope) || !scope.tab_id)
+        throw new Error('Selecione um rascunho disponível para esta aba.');
+    let error;
+    return repo.transaction(['metadata','operations'], true, (tx, done) => {
+        const store = tx.objectStore('metadata'), operationsStore = tx.objectStore('operations');
+        const sourceRequest = store.get(candidate.key), destinationRequest = store.get(draftKey(scope));
+        const sourceFenceRequest = store.get(candidate.key + ':revision');
+        const destinationFenceRequest = store.get(draftKey(scope) + ':revision');
+        const claimKey = recoveryClaimKey(candidate.key), claimRequest = store.get(claimKey);
+        const operationsRequest = operationsStore.getAll();
+        let source, sourceFence, destination, fence, claim, operations;
+        const settle = () => {
+            if (source === undefined || sourceFence === undefined || destination === undefined || fence === undefined
+                || claim === undefined || operations === undefined) return;
+            try {
+                if (destination) throw new Error('Esta aba já possui um rascunho. Ele foi preservado.');
+                if (!source || source.draft_id !== candidate.draft_id || source.revision !== candidate.revision
+                    || source.actor_id !== scope.actor_id || source.environment_id !== scope.environment_id
+                    || source.device_id !== scope.device_id || source.tipo !== 'rascunho_venda')
+                    throw new Error('O rascunho mudou desde a listagem. Atualize as opções; nenhum dado foi removido.');
+                if (sourceFence?.revision !== source.revision)
+                    throw new Error('A revisão salva diverge da trava de concorrência. O rascunho foi preservado.');
+                const destinationRevision = fence?.revision ?? 0;
+                if (!Number.isSafeInteger(destinationRevision) || destinationRevision < 0
+                    || destinationRevision >= Number.MAX_SAFE_INTEGER || source.revision >= Number.MAX_SAFE_INTEGER)
+                    throw new Error('Revisão local inválida. O rascunho foi preservado.');
+                validateRecord(source, {...scope, tab_id:source.tab_id || null}, source.revision);
+                const reason = recoveryBlock(source, operations, scope);
+                if (reason) throw new Error(reason);
+                const revision = destinationRevision + 1;
+                const recovered = {...source, key:draftKey(scope), tab_id:scope.tab_id, revision};
+                if (candidate.key === legacyDraftKey(scope)) {
+                    if (claim) throw new Error('O rascunho legado já foi recuperado em outra aba.');
+                    store.add({key:claimKey, draft_id:source.draft_id, tab_id:scope.tab_id, recovered_at:new Date().toISOString()});
+                } else {
+                    store.delete(candidate.key);
+                    const sourceFenceKey = candidate.key + ':revision';
+                    store.put({key:sourceFenceKey, revision:source.revision + 1});
+                }
+                store.put(recovered);
+                store.put({key:draftKey(scope) + ':revision', revision});
+                done({revision, draft:validateRecord(recovered, scope, revision), source_preserved:candidate.key === legacyDraftKey(scope)});
+            } catch (caught) { error = caught; tx.abort(); }
+        };
+        sourceRequest.onsuccess = () => { source = sourceRequest.result || null; settle(); };
+        sourceFenceRequest.onsuccess = () => { sourceFence = sourceFenceRequest.result || null; settle(); };
+        destinationRequest.onsuccess = () => { destination = destinationRequest.result || null; settle(); };
+        destinationFenceRequest.onsuccess = () => { fence = destinationFenceRequest.result || null; settle(); };
+        claimRequest.onsuccess = () => { claim = claimRequest.result || null; settle(); };
+        operationsRequest.onsuccess = () => { operations = operationsRequest.result; settle(); };
+    }).catch(caught => { throw error || caught; });
 }
 // A started upload may still commit. It must never unlock another assembly.
 export function ambiguousSales(operations, scope) {
@@ -260,7 +346,7 @@ export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfir
         const next = {key, tipo:'rascunho_venda', schema_version:DRAFT_SCHEMA,
             draft_id:previous?.draft_id || crypto.randomUUID(), criado_em:previous?.criado_em || now,
             atualizado_em:now, environment_id:scope.environment_id, actor_id:scope.actor_id,
-            device_id:scope.device_id, revision:revision + 1, ...safe};
+            device_id:scope.device_id, ...(scope.tab_id ? {tab_id:scope.tab_id} : {}), revision:revision + 1, ...safe};
         store.put(next); store.put({key:revisionKey, revision:next.revision});
         return {revision:next.revision, draft:next};
     }, ['metadata','operations']);
@@ -279,9 +365,17 @@ export function discardDraft(repo, scope, expectedRevision) {
 
 function salePayload(record, origin) {
     const draft = projectAssembly(record);
-    if (!draft.itens.length || draft.itens.length > 200 || !draft.data_venda || !draft.tipo_venda
-        || draft.operador.length > 120 || draft.lancamento)
-        throw new Error('Revise data, pagamento e itens. Adicione ou encerre a linha em montagem antes de concluir.');
+    if (!draft.itens.length) throw new Error('Adicione pelo menos um produto à venda.');
+    if (draft.itens.length > 200) throw new Error('A venda excede o limite de 200 itens.');
+    if (!draft.data_venda) throw new Error('Informe a data da venda.');
+    if (!draft.tipo_venda) throw new Error('Selecione a forma de pagamento.');
+    if (draft.operador.length > 120) throw new Error('O nome do operador excede o limite permitido.');
+    if (draft.lancamento) {
+        const line = draft.lancamento;
+        const product = line.produto_nome || 'Produto selecionado';
+        if (!line.quantidade) throw new Error(`Informe a quantidade da linha pendente: ${product}.`);
+        throw new Error(`A linha de ${product} ainda não foi adicionada ou atualizada. Use “Adicionar Item” ou “Atualizar Item”, ou cancele a linha.`);
+    }
     const payload = {schema_version:1, cliente_id:draft.cliente?.id || null,
         data_venda:draft.data_venda, data_vencimento:draft.data_vencimento,
         tipo_pagamento:draft.tipo_venda, operador:draft.operador,

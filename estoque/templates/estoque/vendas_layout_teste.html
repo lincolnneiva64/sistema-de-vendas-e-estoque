@@ -3409,6 +3409,20 @@ const operadorVenda = document.getElementById("operadorVenda");
 const produtoBusca = document.getElementById("produtoBusca");
 const sugestoesBox = document.getElementById("produtoSugestoes");
 const estoquePreview = document.getElementById("estoquePreview");
+const pendingProductLine = document.createElement("div");
+pendingProductLine.id = "venda-linha-produto-pendente";
+pendingProductLine.setAttribute("role", "status");
+pendingProductLine.style.cssText = "gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px;margin-top:4px;border:1px solid #f0c36d;border-radius:8px;background:#fff8e6;font-size:12px";
+const pendingProductMessage = document.createElement("span");
+const restorePendingProduct = document.createElement("button");
+restorePendingProduct.type = "button"; restorePendingProduct.textContent = "Restaurar produto";
+const commitPendingProduct = document.createElement("button");
+commitPendingProduct.type = "button";
+const cancelPendingProduct = document.createElement("button");
+cancelPendingProduct.type = "button"; cancelPendingProduct.textContent = "Cancelar linha";
+pendingProductLine.append(pendingProductMessage, restorePendingProduct, commitPendingProduct, cancelPendingProduct);
+pendingProductLine.hidden = true;
+produtoBusca.parentElement.append(pendingProductLine);
 const historicoProdutoCliente = document.getElementById("historicoProdutoCliente");
 const quantidade = document.getElementById("quantidade");
 const unidade = document.getElementById("unidade");
@@ -3425,6 +3439,13 @@ const btnNovaVendaEdicao = document.getElementById("btnNovaVendaEdicao");
 const btnAlternarEdicaoVenda = document.getElementById("btnAlternarEdicaoVenda");
 const btnLimparItens = document.getElementById("btnLimparItens");
 const btnAdicionarItemVenda = document.getElementById("btnAdicionarItemVenda");
+commitPendingProduct.addEventListener("click", () => {
+    const selected = produto.options[produto.selectedIndex];
+    if (!selected?.dataset.produtoId) return;
+    produtoBusca.value = selected.value;
+    refreshPendingProductLine();
+    btnAdicionarItemVenda.click();
+});
 const btnConsultarVendas = document.getElementById("btnConsultarVendas");
 const btnContasReceberVenda = document.getElementById("btnContasReceberVenda");
 const atalhosVenda = document.getElementById("atalhosVenda");
@@ -3443,6 +3464,18 @@ const btnVendaErroOk = document.getElementById("btnVendaErroOk");
 const vendaConfirmacaoOverlay = document.getElementById("vendaConfirmacaoOverlay");
 const vendaConfirmacaoTexto = document.getElementById("vendaConfirmacaoTexto");
 const btnCancelarConfirmacaoVenda = document.getElementById("btnCancelarConfirmacaoVenda");
+restorePendingProduct.addEventListener("click", () => {
+    const selected = produto.options[produto.selectedIndex];
+    if (!selected?.dataset.produtoId) return;
+    produtoBusca.value = selected.value;
+    refreshPendingProductLine();
+    quantidade.focus();
+});
+cancelPendingProduct.addEventListener("click", () => {
+    limparEstadoEdicaoItemVenda();
+    limparCamposProdutoVenda();
+    refreshPendingProductLine();
+});
 const btnConfirmarConfirmacaoVenda = document.getElementById("btnConfirmarConfirmacaoVenda");
 const vendaFechamentoOverlay = document.getElementById("vendaFechamentoOverlay");
 const vendaFechamentoTotal = document.getElementById("vendaFechamentoTotal");
@@ -4984,9 +5017,11 @@ clienteBusca.addEventListener("keydown", (e) => {
     aplicarEstadoConferenciaPreco(optionSelecionada);
     atualizarCustoMargemVenda();
     atualizarHistoricoProdutoCliente();
-});
+    refreshPendingProductLine();
+    });
 let linhaSelecionada = null;
 let ultimoItemRemovido = null;
+let produtoAutoPreenchidoVenda = false;
 
 function atualizarBotaoEdicaoItemVenda() {
     if (!btnAdicionarItemVenda) return;
@@ -5409,6 +5444,8 @@ function limparCamposProdutoVenda() {
     if (precoMargemCusto) precoMargemCusto.textContent = "";
     preco.value = "";
     resetarAutocompleteProduto();
+    produtoAutoPreenchidoVenda = false;
+    refreshPendingProductLine();
 }
 
 function limparCabecalhoVenda(resetarTipo = false) {
@@ -6595,6 +6632,7 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
     const proximoOpt = opcoes[proximoIndice];
 
     selecionarProduto(proximoOpt);
+    produtoAutoPreenchidoVenda = true;
 
     quantidade.value = "";
     setTimeout(selecionarTextoProdutoBuscaSugerido, 100);
@@ -6620,6 +6658,12 @@ function adicionarItemVendaAtual() {
 
     if (!produtoNome || !produtoValor || !produtoId) {
         mostrarToastVenda("Selecione um produto antes de adicionar.");
+        focarProximoCampo(produtoBusca);
+        return false;
+    }
+    if (produtoNome !== produtoValor) {
+        mostrarToastVenda(`A busca mostra "${produtoNome}", mas o produto selecionado é "${produtoValor}". Restaure o produto ou cancele a linha antes de continuar.`);
+        refreshPendingProductLine();
         focarProximoCampo(produtoBusca);
         return false;
     }
@@ -8010,10 +8054,37 @@ function aplicarEstadoConferenciaPreco(opt) {
     }
 }
 
+function refreshPendingProductLine() {
+    const selected = produto.options[produto.selectedIndex];
+    if (!selected?.dataset.produtoId) {
+        setPendingProductLineVisible(false);
+        return;
+    }
+    const searchText = produtoBusca.value.trim();
+    const mismatch = searchText !== selected.value.trim();
+    if (!quantidade.value.trim() && !linhaSelecionada && !mismatch) {
+        setPendingProductLineVisible(false);
+        return;
+    }
+    const quantityText = quantidade.value.trim() || "não informada";
+    pendingProductMessage.textContent = mismatch
+        ? `Linha pendente: ${selected.value} — quantidade ${quantityText}. O texto da busca não corresponde ao produto selecionado.`
+        : `Produto em montagem: ${selected.value} — quantidade ${quantityText}${linhaSelecionada ? ' — edição de item existente' : ''}.`;
+    commitPendingProduct.textContent = linhaSelecionada ? "Atualizar item pendente" : "Adicionar item pendente";
+    restorePendingProduct.hidden = !mismatch;
+    setPendingProductLineVisible(true);
+}
+
+function setPendingProductLineVisible(visible) {
+    pendingProductLine.hidden = !visible;
+    pendingProductLine.style.display = visible ? "flex" : "none";
+}
+
 function selecionarProduto(opt) {
 if (bloquearProdutoDuplicadoNoCampoProdutoVenda(opt)) {
     return;
 }
+produtoAutoPreenchidoVenda = false;
 
 produto.value = opt.value;
 produtoBusca.value = opt.value;
@@ -8040,6 +8111,7 @@ if (!window.salesOffline.active && !isNaN(estoqueProdutoSelecionado) && estoqueP
         produtoBusca.select();
     }, 50);
 
+    refreshPendingProductLine();
     return;
 }
 
@@ -8170,15 +8242,30 @@ produtoBusca.addEventListener("input", () => {
     autocompleteAberto = true;
 
     const texto = produtoBusca.value.trim();
+    let selected = produto.options[produto.selectedIndex];
+    if (selected?.dataset.produtoId && produtoAutoPreenchidoVenda && !quantidade.value.trim() && !linhaSelecionada
+        && texto !== selected.value.trim()) {
+        produto.value = ""; unidade.value = ""; preco.value = "";
+        produtoAutoPreenchidoVenda = false;
+        selected = produto.options[produto.selectedIndex];
+    }
+    if (selected?.dataset.produtoId && texto !== selected.value.trim()) {
+        sugestoesBox.style.display = "none";
+        refreshPendingProductLine();
+        return;
+    }
 
     if (!texto) {
     sugestoesBox.style.display = "none";
     estoquePreview.textContent = "";
+    refreshPendingProductLine();
     return;
 }
     filtrarProdutos(texto);
     renderSugestoes();
 });
+quantidade.addEventListener("input", refreshPendingProductLine);
+produto.addEventListener("change", refreshPendingProductLine);
 produtoBusca.addEventListener("click", () => {
     autocompleteAberto = true;
 
@@ -8302,7 +8389,8 @@ window.salesDraftBridge = {
         && !['editar', 'pedido_id', 'cliente_id'].some(key => new URL(location.href).searchParams.has(key)),
     capture() {
         const selected = produto.options[produto.selectedIndex];
-        const lancamento = selected?.dataset.produtoId && (quantidade.value || linhaSelecionada) ? {
+        const searchMismatch = selected?.dataset.produtoId && produtoBusca.value.trim() !== selected.value.trim();
+        const lancamento = selected?.dataset.produtoId && (quantidade.value || linhaSelecionada || searchMismatch) ? {
             produto_id:selected.dataset.produtoId, produto_nome:selected.value,
             quantidade:quantidade.value, unidade:unidade.value, preco:preco.value,
             fator:normalizarNumeroVenda(selected.dataset.fator) || '0', unidade1:selected.dataset.unidade1 || '',
@@ -8370,10 +8458,16 @@ window.salesDraftBridge = {
             quantidade.value = editor.quantidade; unidade.value = editor.unidade; preco.value = editor.preco;
             atualizarCustoMargemVenda();
         }
+        refreshPendingProductLine();
         window.atualizarSelectsBonitosVenda?.();
     },
     clear() { limparItensVenda(); limparCabecalhoVenda(true); dataVendaEscolhidaExplicitamente = false; atualizarTotalGeral(); },
     confirmDiscard() { return confirmarAcaoVenda('Descartar o rascunho local e limpar a montagem?'); },
+    confirmRecover(legacy) {
+        return confirmarAcaoVenda(legacy
+            ? 'Recuperar o rascunho legado para esta aba? A cópia original será preservada e não poderá ser recuperada novamente.'
+            : 'Transferir este rascunho para esta aba? A aba de origem não poderá salvar uma versão antiga.');
+    },
     error(message) { mostrarErroGravacaoVenda(message); },
 };
 document.dispatchEvent(new Event('sales-draft-bridge-ready'));
@@ -9201,7 +9295,3 @@ const operador = buscarCampoOperadorVenda();
 {% endif %}
 </body>
 </html>
-
-
-
-

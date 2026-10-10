@@ -54,12 +54,16 @@ export async function mirrorClosure(repo,scope,op,receipt) {
         const previous = meta.find(row => row.key === closureKey(op));
         if (previous && canonical(previous.receipt) !== canonical(receipt)) throw new Error('Encerramento local divergente.');
         store.put({key:closureKey(op),receipt});
-        const key = 'rascunho_venda:' + JSON.stringify([scope.environment_id,scope.actor_id,scope.device_id]);
-        const marker = meta.find(row => row.key === key),fence = meta.find(row => row.key === key + ':revision');
+        const marker = meta.find(row => row.tipo === 'venda_concluida_offline'
+            && row.operation_id === op.operation_id && row.draft_id === op.operation_id
+            && row.actor_id === scope.actor_id && row.environment_id === scope.environment_id
+            && row.device_id === scope.device_id);
+        const key = marker?.key;
+        const fence = key && meta.find(row => row.key === key + ':revision');
         let revision = fence?.revision || 0,released = false;
         const pendingChild=ops.some(child=>child.payload?.revisao?.original_operation_id===op.operation_id
             && !(child.status==='conflito' && validReceipt(child.server_result,child) && child.server_result.code==='revisao_origem_bloqueada'));
-        if (marker?.tipo === 'venda_concluida_offline' && marker.operation_id === op.operation_id && marker.draft_id === op.operation_id && op.device_id === scope.device_id && !ambiguous(ops,scope) && !pendingChild) {
+        if (key && marker.revision === revision && op.device_id === scope.device_id && !ambiguous(ops,scope) && !pendingChild) {
             if (marker.revision !== revision || marker.actor_id !== scope.actor_id || marker.environment_id !== scope.environment_id
                 || marker.device_id !== scope.device_id || !Number.isSafeInteger(revision) || revision >= Number.MAX_SAFE_INTEGER)
                 throw new Error('Marcador da montagem incompatível.');

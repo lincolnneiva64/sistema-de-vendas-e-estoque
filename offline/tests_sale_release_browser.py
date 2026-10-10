@@ -38,6 +38,7 @@ class SaleReleaseBrowserTests(StaticLiveServerTestCase):
 
     def original_conflict(self, chrome):
         tab = self.prepare(chrome, quantity='2')
+        self.original_scope = tab.evaluate('scope')
         # The online editor refuses quantities above its current stock. Conclude
         # a valid local draft, then simulate stock consumed before its upload.
         Produto.objects.filter(pk=self.product.pk).update(quantidade=Decimal('0'))
@@ -150,6 +151,7 @@ class SaleReleaseBrowserTests(StaticLiveServerTestCase):
                 tab = self.revision_tab(chrome); self.quantity(tab,'1'); child = self.conclude(tab)
                 normal.call('Page.close')
                 self.stable(tab); self.manual(tab); self.assert_official()
+                tab.evaluate('window.originalScope='+json.dumps(self.original_scope)+';true')
                 tab.evaluate('window.revisions=await import("/offline/assets/2-8f/sales-revisions.js");await revisions.lookupOriginal(repo,original,scope);window.good=await repo.get("operations",salesRevisionUI.record.replacement_operation_id);window.observationKey=revisions.resolutionObservationKey(scope,original.operation_id);window.observed=await repo.get("metadata",observationKey);true')
                 mutations = [
                     'bad.server_result.record_id=0',
@@ -165,7 +167,7 @@ class SaleReleaseBrowserTests(StaticLiveServerTestCase):
                     tab.evaluate('window.bad=structuredClone(good);'+mutation+';await repo.put("operations",bad);window.before=JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history")});true')
                     self.assertTrue(tab.evaluate('try{await drafts.releaseConfirmedDraft(repo,scope,original.operation_id);false}catch(e){true}'),mutation)
                     self.assertTrue(tab.evaluate('before===JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history")})'))
-                    self.assertTrue(tab.evaluate('!!(await drafts.loadDraft(repo,scope)).finalization'))
+                    self.assertTrue(tab.evaluate('!!(await drafts.loadDraft(repo,window.originalScope)).finalization'))
                 tab.evaluate('await repo.put("operations",good);await repo.put("metadata",observed);window.before=JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history")});await drafts.releaseConfirmedDraft(repo,scope,original.operation_id);true')
                 self.assertTrue(tab.evaluate('before===JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history")})'))
                 self.assert_original_preserved(tab)

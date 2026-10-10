@@ -82,7 +82,9 @@ class ConsecutiveSalesBrowserTests(StaticLiveServerTestCase):
             try:
                 tab = self.open_sales(chrome)
                 self.assertEqual(tab.evaluate('(await repo.all("operations")).length'),3)
-                self.assertIsNotNone(tab.evaluate('(await drafts.loadDraft(repo,scope)).finalization'))
+                self.assertEqual(tab.evaluate('salesDraftUI.lastDeviceSale?.operation_id'),
+                    max(operations, key=lambda operation: operation['sequence'])['operation_id'])
+                self.assertFalse(tab.evaluate('!!salesDraftUI.finalization'))
                 self.reconnect(tab)
                 self.assertEqual(tab.evaluate('sent.length'),0)
                 self.assertTrue(tab.evaluate('document.getElementById("offline-global-sync").disabled'))
@@ -163,8 +165,11 @@ class ConsecutiveSalesBrowserTests(StaticLiveServerTestCase):
                 # A stale tab cannot restore the old finalized draft or release again.
                 self.assertTrue(other.evaluate('try{await drafts.saveDraft(repo,scope,savedDraft,marker.revision);false}catch(e){true}'))
                 for page in [tab,other]:
-                    page.evaluate('window.finishPromise=drafts.finalizeDraftOffline(repo,scope,{revision:savedDraft.revision,draft_id:savedDraft.draft_id}).then(r=>r.finalization.operation_id);true')
-                self.assertEqual(tab.evaluate('await finishPromise'),other.evaluate('await finishPromise'))
+                    page.evaluate('window.finishPromise=drafts.finalizeDraftOffline(repo,scope,{revision:savedDraft.revision,draft_id:savedDraft.draft_id}).then(r=>({status:"finalized",operation_id:r.finalization.operation_id}),error=>({status:"blocked",message:error.message}));true')
+                results = [tab.evaluate('await finishPromise'),other.evaluate('await finishPromise')]
+                self.assertEqual([result['status'] for result in results].count('finalized'), 1)
+                self.assertEqual([result['status'] for result in results].count('blocked'), 1)
+                self.assertTrue(next(result for result in results if result['status'] == 'blocked')['message'])
                 self.assertEqual(tab.evaluate('(await repo.all("operations")).length'),2)
                 self.assertEqual(Venda.objects.count(),0)
             finally: chrome.stop()
@@ -200,12 +205,14 @@ class ConsecutiveSalesBrowserTests(StaticLiveServerTestCase):
                 other.wait('!salesDraftUI.finalization && !salesDraftUI.blocked && !clienteBusca.disabled')
                 self.assertEqual(other.evaluate('await repo.all("operations")'),original)
                 self.select_customer(tab,'Cliente Comercial'); self.add_product(tab,'Segundo Produto','1')
-                other.wait('salesDraftUI.blocked')
-                # The stale tab can neither release again nor save over the new draft.
+                # Starting a new assembly in one tab neither blocks another
+                # independent tab nor allows it to affect that assembly.
                 saved = tab.evaluate('(await drafts.loadDraft(repo,scope)).draft')
                 self.assertTrue(other.evaluate('try{await drafts.startNextOfflineDraft(repo,scope,'+json.dumps(original[0]['operation_id'])+',salesDraftUI.revision);false}catch(e){true}'))
-                other.evaluate('await salesDraftUI.startNextSale();await salesDraftUI.flush();true')
+                self.assertFalse(other.evaluate('salesDraftUI.blocked || salesOffline.completed'))
+                self.select_customer(other,'Segundo Cliente'); self.add_product(other,'Terceiro Produto','1')
                 self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'),saved)
+                self.assertNotEqual(other.evaluate('(await drafts.loadDraft(repo,scope)).draft.draft_id'),saved['draft_id'])
                 self.assertEqual(tab.evaluate('await repo.all("operations")'),original)
                 self.assertEqual(Venda.objects.count(),0)
             finally: chrome.stop()

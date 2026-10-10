@@ -42,9 +42,9 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const cache=await caches.open('offline-pilot-shell-v30-admin-close');
-                    return keys.includes('offline-pilot-shell-v30-admin-close')
-                        && !keys.includes('offline-pilot-shell-v21')
+                    const cache=await caches.open('offline-pilot-shell-v31-isolated-sales-drafts');
+                    return keys.includes('offline-pilot-shell-v31-isolated-sales-drafts')
+                        && !keys.includes('offline-pilot-shell-v30-admin-close')
                         && !!(await cache.match('/offline/vendas-shell/'))
                         && !!(await cache.match('/offline/assets/2-8g-close/sales-closures.js'))
                         && !!(await cache.match('/offline/assets/2-8g-close/sales-draft-ui.js'));
