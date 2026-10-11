@@ -73,7 +73,57 @@ def _tipo_formulario(tipo):
     return tipo
 
 
-def bloqueio_financeiro(compra, estado):
+def _movimentos_automaticos_reversiveis(compra, estado, bloquear=False):
+    from estoque.views import _descricao_compra_a_vista
+
+    if (
+        _tipo_formulario(compra.tipo_pagamento) != "avista"
+        or estado["pagamentos"]
+        or estado["contas"]
+        or estado["cartao"]
+        or compra.cartao_id
+        or estado["parcelas_diretas"]
+        or estado["parcelas_lista"]
+    ):
+        return []
+
+    consulta = MovimentoFinanceiro.objects.filter(compra=compra).select_related("conta").order_by("pk")
+    if bloquear:
+        consulta = consulta.select_for_update()
+    movimentos = list(consulta)
+    movimentos_estado = {movimento["id"] for movimento in estado["movimentos"]}
+    if not movimentos or movimentos_estado != {movimento.pk for movimento in movimentos}:
+        return []
+
+    total = Decimal(estado["compra"]["total"]).quantize(Decimal("0.01"))
+    soma = Decimal("0.00")
+    for movimento in movimentos:
+        valor = Decimal(movimento.valor)
+        if (
+            movimento.origem != "compra_a_vista"
+            or movimento.tipo != MovimentoFinanceiro.TIPO_SAIDA
+            or movimento.conta_destino_id is not None
+            or movimento.pagamento_conta_pagar_id is not None
+            or movimento.data != compra.data_compra
+            or movimento.operador != (compra.operador or "")
+            or movimento.descricao != _descricao_compra_a_vista(compra, movimento.conta)
+            or not valor.is_finite()
+            or valor <= 0
+        ):
+            return []
+        for relacao in movimento._meta.related_objects:
+            if relacao.related_model._base_manager.filter(
+                **{relacao.field.name: movimento}
+            ).exists():
+                return []
+        soma += valor
+
+    if soma.quantize(Decimal("0.01")) != total:
+        return []
+    return movimentos
+
+
+def bloqueio_financeiro(compra, estado, permitir_reversao_automatica=False):
     if compra.cancelada or compra.status != Compra.STATUS_FINALIZADA or not compra.estoque_entrada_realizada:
         return "Compra cancelada ou com estado de estoque inconsistente; revisao manual necessaria."
     vinculo = _bloqueio_vinculos(compra, estado)
@@ -83,7 +133,9 @@ def bloqueio_financeiro(compra, estado):
         return "Forma de pagamento historica desconhecida; exige conciliacao manual."
     if estado["pagamentos"]:
         return "Existe pagamento registrado, inclusive cancelado. Itens, valores e forma de pagamento exigem conciliacao."
-    if estado["movimentos"]:
+    if estado["movimentos"] and not (
+        permitir_reversao_automatica and _movimentos_automaticos_reversiveis(compra, estado)
+    ):
         return "Existe movimento financeiro ou vinculo legado ambiguo. Registro nao comprova pagamento: correcao de lancamento e devolucao real exigem conciliacao."
     if estado["cartao"] or compra.cartao_id:
         return "Compra vinculada a cartao/fatura; alteracoes financeiras exigem conciliacao."
@@ -115,7 +167,10 @@ def contexto_edicao(compra, usuario):
         for linha, conta in zip(pagamento["linhas"], contas):
             parcela = por_numero.get(conta.numero_parcela or linha["numero"])
             linha["observacao"] = parcela.observacao if parcela else ""
-    motivo = bloqueio_financeiro(compra, estado)
+    motivo = bloqueio_financeiro(
+        compra, estado,
+        permitir_reversao_automatica=bool(_movimentos_automaticos_reversiveis(compra, estado)),
+    )
     if _compra_pagamento_a_prazo(compra.tipo_pagamento) and not contas:
         motivo = motivo or "Compra a prazo sem obrigacoes ativas; reconcilie as contas antes de editar."
     return {
@@ -230,7 +285,15 @@ def salvar_edicao(request, compra_id):
         antigo_prazo = _compra_pagamento_a_prazo(compra.tipo_pagamento)
         mudou_pagamento = _tipo_formulario(compra.tipo_pagamento) != _tipo_formulario(dados["tipo_pagamento"])
         ativos = [c for c in contas if c.status != ContaPagar.STATUS_CANCELADA]
-        bloqueio = bloqueio_financeiro(compra, antes)
+        movimentos_para_reverter = _movimentos_automaticos_reversiveis(compra, antes, bloquear=True)
+        converter_para_prazo = (
+            bool(movimentos_para_reverter)
+            and dados["compra_a_prazo"]
+            and mudou_pagamento
+        )
+        bloqueio = bloqueio_financeiro(
+            compra, antes, permitir_reversao_automatica=converter_para_prazo,
+        )
         if bloqueio and not antigo_prazo and dados["compra_a_prazo"]:
             raise ValueError(bloqueio)
         vinculo_inseguro = _bloqueio_vinculos(compra, antes)
@@ -277,6 +340,9 @@ def salvar_edicao(request, compra_id):
         for pk, delta in deltas.items():
             if delta and (pk not in produtos or not Decimal("0") <= (produtos[pk].quantidade or Decimal("0")) + delta < Decimal("1000000000")):
                 raise ValueError("A correcao deixaria estoque negativo ou possui produto sem vinculo.")
+        if converter_para_prazo:
+            for movimento in movimentos_para_reverter:
+                movimento.delete()
         for pk, delta in deltas.items():
             if delta:
                 Produto.objects.filter(pk=pk).update(quantidade=(produtos[pk].quantidade or Decimal("0")) + delta, atualizado_em=timezone.now())
@@ -323,7 +389,17 @@ def salvar_edicao(request, compra_id):
         if dados["observacao"] != (compra.observacao or ""):
             compra.observacao = f"{compra.observacao or ''}\nObservacao informada na edicao: {dados['observacao']}".strip()
         compra.save()
-        _registrar_observacao_compra(compra, f"Edicao {token['operacao']} por {request.user.get_username()}. Motivo: {motivo}. Estoque corrigido por diferenca; nenhum movimento financeiro criado.")
+        observacao_edicao = (
+            f"Edicao {token['operacao']} por {request.user.get_username()}. Motivo: {motivo}. "
+            "Estoque corrigido por diferenca; nenhum movimento financeiro criado."
+        )
+        if converter_para_prazo:
+            ids_revertidos = ", ".join(str(movimento.pk) for movimento in movimentos_para_reverter)
+            observacao_edicao = (
+                f"Edicao {token['operacao']} por {request.user.get_username()}. Motivo: {motivo}. "
+                f"Movimentos automaticos de compra a vista {ids_revertidos} revertidos e preservados na auditoria."
+            )
+        _registrar_observacao_compra(compra, observacao_edicao)
         registro = EdicaoCompra.objects.create(compra=compra, operacao=token["operacao"], usuario=request.user,
             motivo=motivo, payload_hash=payload_hash, antes=antes, depois=estado_compra(compra))
         return registro, True

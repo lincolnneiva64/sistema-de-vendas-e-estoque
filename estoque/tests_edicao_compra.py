@@ -67,6 +67,16 @@ class EdicaoFixture:
         self.assertEqual(Produto.objects.get(pk=self.produto.pk).quantidade, estoque)
         self.assertFalse(EdicaoCompra.objects.exists())
 
+    def movimento_automatico_compra_avista(self, **extra):
+        from .views import _descricao_compra_a_vista
+        caixa = ContaFinanceira.objects.create(nome="Caixa compra teste", tipo="caixa")
+        return MovimentoFinanceiro.objects.create(
+            compra=self.compra, conta=caixa, tipo=MovimentoFinanceiro.TIPO_SAIDA,
+            valor=self.compra.total, data=self.compra.data_compra,
+            descricao=_descricao_compra_a_vista(self.compra, caixa),
+            operador=self.compra.operador or "", origem="compra_a_vista", **extra,
+        )
+
 
 class EdicaoCompraTests(EdicaoFixture, TestCase):
     def test_original_preenchida_e_links_preservam_alternativa(self):
@@ -239,6 +249,107 @@ class EdicaoCompraTests(EdicaoFixture, TestCase):
         self.produto.refresh_from_db()
         self.assertEqual(self.produto.quantidade, Decimal("20"))
         self.assertFalse(MovimentoFinanceiro.objects.exists())
+
+    def test_conversao_reverte_saida_automatica_com_auditoria_e_sem_repetir_estoque(self):
+        self.conta.delete()
+        self.compra.tipo_pagamento = "avista"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        movimento = self.movimento_automatico_compra_avista()
+        estoque_antes = self.produto.quantidade
+        item_id = self.item.pk
+        self.assertFalse(self.client.get(self.url).context["bloqueio_edicao"])
+        dados = self.payload(
+            compra_conta_id_1="", compra_forma_cobranca_nota="varios_boletos",
+            compra_quantidade_boletos="2", compra_valor_nota_boleto="100",
+            compra_parcela_valor_1="40", compra_parcela_vencimento_1="2026-11-08",
+            compra_parcela_valor_2="60", compra_parcela_vencimento_2="2026-12-08",
+        )
+
+        resposta = self.client.post(self.url, dados)
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertFalse(MovimentoFinanceiro.objects.filter(pk=movimento.pk).exists())
+        self.assertEqual(self.compra.contas_pagar.exclude(status=ContaPagar.STATUS_CANCELADA).count(), 2)
+        self.assertEqual(list(self.compra.contas_pagar.order_by("numero_parcela").values_list("valor_original", flat=True)),
+            [Decimal("40"), Decimal("60")])
+        self.assertEqual(self.compra.parcelas_nota.count(), 2)
+        self.assertFalse(PagamentoContaPagar.objects.exists())
+        self.assertEqual(MovimentoFinanceiro.objects.count(), 0)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, estoque_antes)
+        self.assertEqual(self.compra.itens.get().pk, item_id)
+
+        auditoria = EdicaoCompra.objects.get()
+        self.assertEqual(auditoria.usuario, self.user)
+        self.assertEqual(auditoria.motivo, "Conferencia da nota")
+        self.assertIsNotNone(auditoria.criado_em)
+        self.assertEqual(auditoria.antes["movimentos"][0]["id"], movimento.pk)
+        self.assertEqual(auditoria.antes["movimentos"][0]["valor"], "100.00")
+        self.assertEqual(auditoria.depois["movimentos"], [])
+
+    def test_conversao_com_saida_automatica_e_idempotente(self):
+        self.conta.delete()
+        self.compra.tipo_pagamento = "avista"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        movimento = self.movimento_automatico_compra_avista()
+        dados = self.payload(
+            compra_conta_id_1="", compra_forma_cobranca_nota="varios_boletos",
+            compra_quantidade_boletos="2", compra_valor_nota_boleto="100",
+            compra_parcela_valor_1="40", compra_parcela_valor_2="60",
+            compra_parcela_vencimento_2="2026-12-08",
+        )
+
+        self.client.post(self.url, dados)
+        estado_apos_primeiro_envio = estado_compra(self.compra)
+        self.client.post(self.url, dados)
+
+        self.assertEqual(EdicaoCompra.objects.count(), 1)
+        self.assertEqual(estado_compra(self.compra), estado_apos_primeiro_envio)
+        self.assertFalse(MovimentoFinanceiro.objects.filter(pk=movimento.pk).exists())
+        self.assertEqual(self.compra.contas_pagar.exclude(status=ContaPagar.STATUS_CANCELADA).count(), 2)
+
+        contas = list(self.compra.contas_pagar.order_by("numero_parcela"))
+        reenvio = self.payload(
+            compra_conta_id_1=str(contas[0].pk), compra_conta_id_2=str(contas[1].pk),
+            compra_forma_cobranca_nota="varios_boletos", compra_quantidade_boletos="2",
+            compra_valor_nota_boleto="100", compra_parcela_valor_1="40",
+            compra_parcela_vencimento_1="2026-11-08", compra_parcela_valor_2="60",
+            compra_parcela_vencimento_2="2026-12-08",
+        )
+        self.client.post(self.url, reenvio)
+
+        self.assertEqual(self.compra.contas_pagar.count(), 2)
+        self.assertEqual(self.compra.parcelas_nota.count(), 2)
+        self.assertFalse(MovimentoFinanceiro.objects.exists())
+        self.assertEqual(EdicaoCompra.objects.count(), 2)
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, Decimal("20"))
+
+    def test_conversao_bloqueia_saida_automatica_com_vinculo_incompativel(self):
+        self.conta.delete()
+        self.compra.tipo_pagamento = "avista"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        outra_conta = ContaFinanceira.objects.create(nome="Banco destino", tipo="banco")
+        self.movimento_automatico_compra_avista(conta_destino=outra_conta)
+        dados = self.payload(compra_conta_id_1="", compra_quantidade_boletos="2",
+            compra_forma_cobranca_nota="varios_boletos", compra_parcela_valor_1="40",
+            compra_parcela_valor_2="60", compra_parcela_vencimento_2="2026-12-08")
+        self.assert_bloqueado(dados, "Registro nao comprova pagamento")
+
+    def test_conversao_bloqueia_pagamento_real_mesmo_com_saida_automatica(self):
+        self.compra.tipo_pagamento = "avista"
+        self.compra.save(update_fields=["tipo_pagamento"])
+        self.movimento_automatico_compra_avista()
+        PagamentoContaPagar.objects.create(
+            conta=self.conta, valor=20, data_pagamento=date(2026, 10, 9),
+        )
+        self.conta.valor_em_aberto = 80
+        self.conta.status = ContaPagar.STATUS_PARCIAL
+        self.conta.save(update_fields=["valor_em_aberto", "status"])
+        dados = self.payload(compra_forma_cobranca_nota="varios_boletos",
+            compra_quantidade_boletos="2", compra_parcela_valor_1="40",
+            compra_parcela_valor_2="60", compra_parcela_vencimento_2="2026-12-08")
+        self.assert_bloqueado(dados, "Existe pagamento registrado")
 
     def test_conversion_prazo_para_vista_preserva_conta(self):
         self.assert_bloqueado(self.payload(tipo_pagamento="avista"), "Conversao para pagamento imediato")
