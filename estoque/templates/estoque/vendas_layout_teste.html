@@ -8652,16 +8652,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
     }
 
     function buscarCampoOperador() {
-        const selects = Array.from(document.querySelectorAll("select"));
-        return selects.find((select) => {
-            const id = (select.id || "").toLowerCase();
-            const name = (select.name || "").toLowerCase();
-            const texto = (select.closest("label, div, form")?.innerText || "").toLowerCase();
-
-            return id.includes("operador")
-                || name.includes("operador")
-                || texto.includes("operador");
-        });
+        return document.getElementById("operadorVenda");
     }
 
     function garantirOpcaoVazia(select) {
@@ -8752,16 +8743,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
 <script>
 (function bloqueiaGravarVendaSemOperador() {
     function buscarCampoOperador() {
-        const selects = Array.from(document.querySelectorAll("select"));
-        return selects.find((select) => {
-            const id = (select.id || "").toLowerCase();
-            const name = (select.name || "").toLowerCase();
-            const texto = (select.closest("label, div, form")?.innerText || "").toLowerCase();
-
-            return id.includes("operador")
-                || name.includes("operador")
-                || texto.includes("operador");
-        });
+        return document.getElementById("operadorVenda");
     }
 
     function avisarOperadorObrigatorio(operador) {
@@ -8813,17 +8795,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
 <script>
 (function validacaoForteOperadorVenda() {
     function buscarCampoOperadorVenda() {
-        const selects = Array.from(document.querySelectorAll("select"));
-
-        return selects.find((select) => {
-            const id = (select.id || "").toLowerCase();
-            const name = (select.name || "").toLowerCase();
-            const textoProximo = (select.closest("label, div, form")?.innerText || "").toLowerCase();
-
-            return id.includes("operador")
-                || name.includes("operador")
-                || textoProximo.includes("operador");
-        });
+        return document.getElementById("operadorVenda");
     }
 
     function mostrarErroOperadorVenda(operador) {
@@ -8885,19 +8857,7 @@ const operador = buscarCampoOperadorVenda();
 <script>
 (function travaCampoOperadorAteSelecionar() {
     function campoOperadorVenda() {
-        const selects = Array.from(document.querySelectorAll("select"));
-
-        return selects.find((select) => {
-            const id = (select.id || "").toLowerCase();
-            const name = (select.name || "").toLowerCase();
-            const optionsText = Array.from(select.options).map(opt => opt.textContent.toLowerCase()).join(" ");
-
-            return id.includes("operador")
-                || name.includes("operador")
-                || optionsText.includes("operador")
-                || optionsText.includes("roseli")
-                || optionsText.includes("lincoln");
-        });
+        return document.getElementById("operadorVenda");
     }
 
     function operadorVazio() {
