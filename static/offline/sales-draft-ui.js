@@ -14,7 +14,7 @@ box.id = 'sales-draft-status';
 box.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 12px;font-size:12px;flex-shrink:0';
 const message = document.createElement('span'); message.setAttribute('role', 'status');
 const discard = document.createElement('button'); discard.type = 'button'; discard.textContent = 'Descartar rascunho';
-discard.id = 'sales-draft-discard'; discard.disabled = true;
+discard.id = 'sales-draft-discard'; discard.disabled = true; discard.hidden = true;
 box.append(message, discard);
 const officialLink = document.createElement('a');
 officialLink.id = 'sales-official-sale-link'; officialLink.hidden = true;
@@ -38,8 +38,10 @@ recover.addEventListener('click', () => { void window.salesDraftUI.recoverOnline
 const nextSale = document.createElement('button');
 nextSale.type = 'button'; nextSale.id = 'sales-new-offline-sale'; nextSale.textContent = 'Nova venda'; nextSale.hidden = true;
 const queueCount = document.createElement('span'); queueCount.id = 'sales-pending-count';
+queueCount.hidden = true;
 const dateNote = document.createElement('span'); dateNote.id = 'sales-draft-date-note'; dateNote.hidden = true;
 const recovery = document.createElement('details'); recovery.id = 'sales-draft-recovery';
+recovery.hidden = true;
 const recoverySummary = document.createElement('summary'); recoverySummary.textContent = 'Recuperar outro rascunho';
 const recoveryPanel = document.createElement('div');
 const recoverySelect = document.createElement('select'); recoverySelect.id = 'sales-draft-recovery-select';
@@ -87,8 +89,8 @@ tabChannel?.addEventListener('message', event => {
 });
 async function claimTabId() {
     let tabId;
-    try { tabId = sessionStorage.getItem('sales-draft-tab-id'); } catch { tabId = null; }
-    if (!tabChannel || !navigator.locks) return crypto.randomUUID();
+    try { tabId = sessionStorage.getItem('sales-draft-tab-id'); }
+    catch { throw new Error('Não foi possível identificar esta aba para preservar o rascunho.'); }
     if (!tabIdPattern.test(tabId || '')) tabId = crypto.randomUUID();
     if (tabChannel) {
         currentTabId = tabId; probingTabId = tabId; tabCollision = false;
@@ -96,25 +98,26 @@ async function claimTabId() {
         await new Promise(resolve => setTimeout(resolve, 140));
         probingTabId = null;
         if (tabCollision) tabId = crypto.randomUUID();
-        if (navigator.locks) {
-            let acquired = false;
-            while (!acquired) {
-                acquired = await new Promise((resolve, reject) => {
-                    navigator.locks.request('sales-draft-tab:' + tabId, {ifAvailable:true}, lock => {
-                        resolve(!!lock);
-                        if (!lock) return;
-                        return new Promise(done => { releaseTabLock = done; });
-                    }).catch(reject);
-                });
-                if (!acquired) tabId = crypto.randomUUID();
-            }
-        }
-        currentTabId = tabId;
-        try { sessionStorage.setItem('sales-draft-tab-id', tabId); } catch {}
-        window.addEventListener('pagehide', event => {
-            if (!event.persisted) releaseTabLock?.();
-        }, {once:true});
     }
+    if (navigator.locks) {
+        let acquired = false;
+        while (!acquired) {
+            acquired = await new Promise((resolve, reject) => {
+                navigator.locks.request('sales-draft-tab:' + tabId, {ifAvailable:true}, lock => {
+                    resolve(!!lock);
+                    if (!lock) return;
+                    return new Promise(done => { releaseTabLock = done; });
+                }).catch(reject);
+            });
+            if (!acquired) tabId = crypto.randomUUID();
+        }
+    }
+    currentTabId = tabId;
+    try { sessionStorage.setItem('sales-draft-tab-id', tabId); }
+    catch { throw new Error('Não foi possível preservar a identidade desta aba. O rascunho foi mantido.'); }
+    window.addEventListener('pagehide', event => {
+        if (!event.persisted) releaseTabLock?.();
+    }, {once:true});
     return tabId;
 }
 const observer = new MutationObserver(() => { if (!ignoreReset) schedule(0); });
@@ -123,6 +126,10 @@ function announce(type = 'draft-updated', operationId = null, draftId = activeDr
     channel?.postMessage({type,scope,revision,tab_id:scope?.tab_id,draft_id:draftId,operation_id:operationId});
 }
 function showError(error) { message.textContent = error.message || 'Não foi possível salvar o rascunho local. Último rascunho preservado.'; }
+function setDiscardEnabled(enabled) {
+    discard.disabled = !enabled;
+    discard.hidden = !enabled;
+}
 function renderDeviceSales(operations) {
     deviceSalesList.replaceChildren();
     deviceSales.hidden = operations.length === 0;
@@ -161,6 +168,7 @@ function updateRecoveryButton() {
 async function refreshRecoveryList() {
     if (!repo || !scope) return;
     recoveryCandidates = await listRecoverableDrafts(repo, scope);
+    recovery.hidden = recoveryCandidates.length === 0;
     recoverySelect.replaceChildren();
     const placeholder = document.createElement('option');
     placeholder.value = ''; placeholder.textContent = recoveryCandidates.length
@@ -176,6 +184,14 @@ async function refreshRecoveryList() {
         option.disabled = item.blocked;
         recoverySelect.append(option);
     }
+    const singleCandidate = recoveryCandidates.length === 1 ? recoveryCandidates[0] : null;
+    if (singleCandidate) recoverySelect.value = singleCandidate.key;
+    recoverySummary.textContent = singleCandidate
+        ? singleCandidate.legacy ? 'Rascunho antigo preservado' : 'Rascunho em outra aba'
+        : 'Recuperar outro rascunho';
+    recoverySelect.hidden = !!singleCandidate;
+    recoveryRefresh.hidden = !!singleCandidate;
+    recoveryButton.textContent = singleCandidate ? 'Recuperar rascunho' : 'Recuperar selecionado';
     updateRecoveryButton();
 }
 recoveryRefresh.addEventListener('click', () => { void refreshRecoveryList().catch(showError); });
@@ -185,14 +201,14 @@ recoveryButton.addEventListener('click', async () => {
     if (!candidate || candidate.blocked) return;
     try {
         await pending;
-        if (!await bridge.confirmRecover(candidate.legacy)) return;
+        if (!candidate.legacy && !await bridge.confirmRecover(false)) return;
         if (hasCurrentDraft || bridge.capture().itens.length || bridge.capture().cliente || bridge.capture().lancamento)
             throw new Error('Esta aba já contém dados de venda. Salve ou conclua essa montagem antes de recuperar outra.');
         const result = await recoverDraft(repo, scope, candidate);
         revision = result.revision; activeDraftId = result.draft.draft_id; hasCurrentDraft = true;
         bridge.restore(result.draft);
         saved = JSON.stringify(bridge.capture());
-        discard.disabled = false;
+        setDiscardEnabled(true);
         message.textContent = result.source_preserved
             ? 'Rascunho legado recuperado nesta aba; a cópia original foi preservada. Revise os itens antes de concluir.'
             : 'Rascunho recuperado nesta aba. Revise os itens antes de concluir.';
@@ -223,7 +239,7 @@ function completed(marker) {
         if (!completionControls.has(field)) completionControls.set(field, field.disabled);
         field.disabled = true;
     }
-    resetVisual(); discard.disabled = true;
+    resetVisual(); setDiscardEnabled(false);
     message.textContent = `Venda salva neste aparelho e aguardando sincronização. Sem número oficial. Referência ${marker.operation_id.slice(0,8)}. Será enviada manualmente quando a conexão estiver estável.`;
     offlineActions();
     void refreshCompletion().catch(showError);
@@ -244,7 +260,9 @@ async function refreshCompletion() {
             finalized_at:latest.created_at, historical:true} : null;
     }
     const marker = localCompletion || historicalCompletion;
-    queueCount.textContent = `${sales.filter(op => op.status !== 'confirmada' && !closedLocally(nextStock.closures,op)).length} venda(s) aguardando sincronização ou resolução.`;
+    const pendingCount = sales.filter(op => op.status !== 'confirmada' && !closedLocally(nextStock.closures,op)).length;
+    queueCount.textContent = `${pendingCount} venda(s) aguardando sincronização ou resolução.`;
+    queueCount.hidden = pendingCount === 0;
     queueBlocked = ambiguousSales(operations,scope).length > 0;
     nextSale.hidden = true;
     if (!localCompletion) {
@@ -319,7 +337,7 @@ async function refreshCompletion() {
             historicalCompletion=marker;localCompletion=null;window.salesOffline.completed=false;
             blocked=false;ignoreReset=false;saved='';activeDraftId=null;hasCurrentDraft=false;revision=current.revision;
             for(const [field,disabled] of completionControls)field.disabled=disabled;
-            completionControls.clear();discard.disabled=true;
+            completionControls.clear();setDiscardEnabled(false);
             document.getElementById('btnGravarVenda').textContent='Gravar Venda';
             document.getElementById('btnGravarVenda').disabled=false;document.getElementById('btnConfirmarFechamentoVenda').disabled=false;
             announce('draft-confirmed',marker.operation_id,marker.draft_id);
@@ -333,7 +351,7 @@ async function refreshCompletion() {
         window.salesOffline.completed = false;
         blocked = false; ignoreReset = false; saved = ''; activeDraftId = null; hasCurrentDraft = false; revision = result.revision;
         for (const [field, disabled] of completionControls) field.disabled = disabled;
-        completionControls.clear(); discard.disabled = true;
+        completionControls.clear(); setDiscardEnabled(false);
         document.getElementById('btnGravarVenda').textContent = 'Gravar Venda';
         document.getElementById('btnGravarVenda').disabled = false;
         document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
@@ -367,7 +385,7 @@ function flush() {
             replaceConfirmed = false;
             revision = result.revision; saved = fingerprint; activeDraftId = result.draft.draft_id;
             hasCurrentDraft = true;
-            discard.disabled = false;
+            setDiscardEnabled(true);
             message.textContent = 'Rascunho local salvo. Dados de referência a revalidar.';
             announce();
         } catch (error) {
@@ -397,7 +415,7 @@ async function checkIdentity() {
         blocked = true; clearTimeout(timer); resetVisual();
         completionGeneration++;
         message.textContent = 'Identidade mudou. Rascunho anterior preservado e montagem limpa.';
-        discard.disabled = true;
+        setDiscardEnabled(false);
         officialLink.hidden = true;
         diagnostics.replaceChildren();
         return false;
@@ -432,7 +450,7 @@ window.salesDraftUI = {
             revision = result.revision; blocked = false; ignoreReset = false; saved = ''; activeDraftId = null; hasCurrentDraft = false;
             resetVisual();
             for (const [field,disabled] of completionControls) field.disabled = disabled;
-            completionControls.clear(); discard.disabled = true; nextSale.hidden = true;
+            completionControls.clear(); setDiscardEnabled(false); nextSale.hidden = true;
             document.getElementById('btnGravarVenda').disabled = false;
             document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
             document.getElementById('btnGravarVenda').textContent = 'Gravar Venda';
@@ -656,7 +674,7 @@ window.salesDraftUI = {
         }
         try {
             const result = await discardDraft(repo, scope, submitted.revision);
-            revision = result.revision; saved = ''; activeDraftId = null; hasCurrentDraft = false; discard.disabled = true;
+            revision = result.revision; saved = ''; activeDraftId = null; hasCurrentDraft = false; setDiscardEnabled(false);
             message.textContent = 'Venda online confirmada. Rascunho local removido.';
             announce('draft-confirmed',null,submitted.record?.draft_id);
         } catch (error) {
@@ -695,10 +713,8 @@ try {
                 activeDraftId = result.draft.draft_id;
                 hasCurrentDraft = true;
                 bridge.restore(result.draft);
-                dateNote.textContent = 'Rascunho restaurado. Data preservada: ' + result.draft.data_venda + '.';
-                dateNote.hidden = false;
-                saved = JSON.stringify(bridge.capture()); discard.disabled = false;
-                message.textContent = `Rascunho local restaurado. Data da venda preservada: ${result.draft.data_venda}. Última alteração: ${new Date(result.draft.atualizado_em).toLocaleString('pt-BR')}. Dados de referência a revalidar. Para outra venda, use Descartar rascunho; operações concluídas não são descartadas.`;
+                saved = JSON.stringify(bridge.capture()); setDiscardEnabled(true);
+                message.textContent = `Rascunho restaurado. Data da venda preservada: ${result.draft.data_venda}.`;
             }
         } else message.textContent = 'Autentique-se online para salvar rascunhos locais.';
         if (scope) {
@@ -763,7 +779,7 @@ if (channel) channel.onmessage = async event => {
             window.salesOffline.completed = false; revision = current.revision;
             blocked = false; ignoreReset = false; saved = ''; resetVisual();
             for (const [field,disabled] of completionControls) field.disabled = disabled;
-            completionControls.clear(); discard.disabled = true;
+            completionControls.clear(); setDiscardEnabled(false);
             document.getElementById('btnGravarVenda').disabled = false;
             document.getElementById('btnConfirmarFechamentoVenda').disabled = false;
             await refreshCompletion(); offlineActions(); return;
@@ -784,7 +800,7 @@ discard.addEventListener('click', async () => {
         const discardedDraftId = activeDraftId;
         const result = await discardDraft(repo, scope, revision);
         revision = result.revision; saved = ''; activeDraftId = null; hasCurrentDraft = false; resetVisual();
-        ignoreReset = true; discard.disabled = true; message.textContent = 'Rascunho local descartado.';
+        ignoreReset = true; setDiscardEnabled(false); message.textContent = 'Rascunho local descartado.';
         announce('draft-discarded',null,discardedDraftId);
     } catch (error) { showError(error); }
 });

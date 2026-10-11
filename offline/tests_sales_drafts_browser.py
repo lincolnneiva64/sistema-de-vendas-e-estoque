@@ -32,8 +32,10 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         self.client = Client()
         self.client.force_login(self.user)
 
-    def open_sales(self, chrome, offline=False):
+    def open_sales(self, chrome, offline=False, init_script=None):
         tab = chrome.tab()
+        if init_script:
+            tab.call('Page.addScriptToEvaluateOnNewDocument', {'source':init_script})
         tab.call('Network.enable')
         tab.call('Network.setCookie', {'name':'sessionid', 'value':self.client.cookies['sessionid'].value, 'url':self.live_server_url})
         if offline:
@@ -163,6 +165,38 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
             finally:
                 chrome.stop()
         self.assertEqual({m.__name__:list(m.objects.order_by('pk').values()) for m in models}, before)
+
+    def test_reload_restores_same_tab_without_web_locks(self):
+        with TemporaryDirectory(prefix='sales-drafts-no-locks-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                no_locks = "Object.defineProperty(Navigator.prototype,'locks',{configurable:true,get(){return undefined;}});"
+                first = self.open_sales(chrome, init_script=no_locks)
+                self.assertTrue(first.evaluate('document.getElementById("sales-draft-recovery").hidden && document.getElementById("sales-draft-discard").hidden && document.getElementById("sales-pending-count").hidden'))
+                self.select_customer(first, 'Cliente Comercial')
+                for name in ['Produto Fracionado', 'Segundo Produto', 'Terceiro Produto']:
+                    self.add_product(first, name)
+                self.repository(first)
+                saved_id = first.evaluate('(await drafts.loadDraft(repo,scope)).draft.draft_id')
+                first_tab_id = first.evaluate('salesDraftUI.scope.tab_id')
+                self.reload(first)
+                self.repository(first)
+                self.assertEqual(first.evaluate('salesDraftUI.scope.tab_id'), first_tab_id)
+                self.assertEqual(first.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 3)
+                self.assertEqual(first.evaluate('(await drafts.loadDraft(repo,scope)).draft.draft_id'), saved_id)
+                self.assertTrue(first.evaluate('document.getElementById("sales-draft-recovery").hidden'))
+
+                second = self.open_sales(chrome, init_script=no_locks)
+                self.assertNotEqual(second.evaluate('salesDraftUI.scope.tab_id'), first_tab_id)
+                self.select_customer(second, 'Segundo Cliente')
+                self.add_product(second, 'Quarto Produto')
+                self.repository(second)
+                second.evaluate('window.secondSaved=await drafts.loadDraft(repo,scope);window.finalized=await drafts.finalizeDraftOffline(repo,scope,{revision:secondSaved.revision,draft_id:secondSaved.draft.draft_id,transport:"online"});true')
+                self.assertEqual(first.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 3)
+                self.assertEqual(first.evaluate('(await drafts.loadDraft(repo,scope)).draft.draft_id'), saved_id)
+                self.assertEqual(second.evaluate('(await repo.all("operations")).length'), 1)
+            finally:
+                chrome.stop()
 
     def test_atomic_scope_projection_missing_catalog_and_stale_tab(self):
         with TemporaryDirectory(prefix='sales-drafts-safety-') as profile:
@@ -297,6 +331,9 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
                 first.evaluate('window.legacyScope=await drafts.draftScope(repo,await repo.get("metadata","sales-identity"));window.legacySaved=await drafts.saveDraft(repo,legacyScope,salesDraftBridge.capture(),0);true')
                 second = self.open_sales(chrome)
                 self.repository(second)
+                self.assertFalse(second.evaluate('document.getElementById("sales-draft-recovery").hidden'))
+                self.assertFalse(second.evaluate('document.getElementById("sales-draft-recovery-select").hidden'))
+                self.assertEqual(second.evaluate('document.getElementById("sales-draft-recovery-button").textContent'), 'Recuperar selecionado')
                 second.evaluate('window.salesDraftBridge.confirmRecover=async()=>true;true')
                 second.evaluate('const select=document.getElementById("sales-draft-recovery-select");const option=[...select.options].find(item=>item.value&&item.textContent.includes("rascunho legado"));if(option){select.value=option.value;select.dispatchEvent(new Event("change"));}true')
                 self.assertFalse(second.evaluate('document.getElementById("sales-draft-recovery-button").disabled'))
