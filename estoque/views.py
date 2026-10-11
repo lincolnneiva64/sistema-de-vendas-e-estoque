@@ -27936,7 +27936,8 @@ def contas_pagar(request):
         data_por = "compra"
     if data_inicio and data_fim and data_inicio > data_fim:
         data_inicio, data_fim = data_fim, data_inicio
-    situacao = (request.GET.get("situacao") or request.GET.get("status") or "todas").strip()
+    situacao_solicitada = (request.GET.get("situacao") or request.GET.get("status") or "").strip()
+    situacao = situacao_solicitada or "todas"
     atalho = (request.GET.get("atalho") or "").strip()
     hoje = timezone.localdate()
     amanha = hoje + timedelta(days=1)
@@ -27972,6 +27973,10 @@ def contas_pagar(request):
             | Q(documento_legado__icontains=compra_documento)
         )
 
+    contas_abertas_base = contas_base.filter(
+        status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+        valor_em_aberto__gt=Decimal("0.00"),
+    )
     situacoes_validas = {
         "todas",
         "abertas",
@@ -27987,9 +27992,14 @@ def contas_pagar(request):
     periodo_tipo = "vencimento"
 
     if situacao == "abertas":
-        contas = contas.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
+        contas = contas_abertas_base
+    elif situacao == "todas":
+        if not situacao_solicitada:
+            contas = contas_abertas_base
     elif situacao in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL, ContaPagar.STATUS_PAGA, ContaPagar.STATUS_CANCELADA}:
         contas = contas.filter(status=situacao)
+        if situacao in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL}:
+            contas = contas.filter(valor_em_aberto__gt=Decimal("0.00"))
 
     if atalho == "todas":
         situacao = "todas"
@@ -27997,25 +28007,29 @@ def contas_pagar(request):
     elif atalho == "vencidas":
         contas = contas_base.filter(
             status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
             data_vencimento__lt=hoje,
         )
     elif atalho == "hoje":
         contas = contas_base.filter(
             status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
             data_vencimento=hoje,
         )
     elif atalho == "proximos_7":
         contas = contas_base.filter(
             status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
             data_vencimento__range=(amanha, fim_7),
         )
     elif atalho == "proximos_30":
         contas = contas_base.filter(
             status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL],
+            valor_em_aberto__gt=Decimal("0.00"),
             data_vencimento__range=(amanha, fim_30),
         )
     elif atalho == "parciais":
-        contas = contas_base.filter(status=ContaPagar.STATUS_PARCIAL)
+        contas = contas_base.filter(status=ContaPagar.STATUS_PARCIAL, valor_em_aberto__gt=Decimal("0.00"))
     elif atalho == "pagas":
         periodo_tipo = "pagamento"
         contas = contas_base.filter(status=ContaPagar.STATUS_PAGA)
@@ -28049,8 +28063,6 @@ def contas_pagar(request):
         else:
             campo_periodo = "compra__data_compra" if periodo_tipo == "compra" else "data_vencimento"
             contas = contas.filter(**{f"{campo_periodo}__lte": data_fim})
-
-    contas_abertas_base = contas_base.filter(status__in=[ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL])
 
     def resumo_contas(qs):
         agregado = qs.aggregate(total=Sum("valor_em_aberto"), quantidade=Count("id"))

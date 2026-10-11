@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from offline.browser_support import Chrome
-from .models import Compra, ContaPagar, Fornecedor
+from .models import Compra, ContaPagar, Fornecedor, PagamentoContaPagar
 
 
 class FiltrosContasPagarTests(TestCase):
@@ -159,13 +159,18 @@ class FiltrosContasPagarTests(TestCase):
             (self.coca, 15, ContaPagar.STATUS_PARCIAL, '28746'),
             (self.coca, 20, ContaPagar.STATUS_PAGA, '28747'),
             (self.outro, 10, ContaPagar.STATUS_PARCIAL, '28745-B'),
+            (self.coca, 25, ContaPagar.STATUS_CANCELADA, '28748'),
+            (self.coca, 26, ContaPagar.STATUS_ABERTA, '28749'),
         ]:
             compra = Compra.objects.create(fornecedor=fornecedor, data_compra=date(2026, 9, dia))
             self.contas.append(ContaPagar.objects.create(compra=compra,
                 fornecedor=fornecedor, data_emissao=date(2026, 9, 1),
                 data_vencimento=date(2026, 9, dia), status=status,
                 documento_legado=documento, valor_original=100,
-                valor_em_aberto=0 if status == ContaPagar.STATUS_PAGA else 50,
+                valor_em_aberto=(
+                    50 if status in {ContaPagar.STATUS_ABERTA, ContaPagar.STATUS_PARCIAL} and documento != '28749'
+                    else 0
+                ),
             ))
 
     def test_combinacoes_remocao_reload_e_urls_antigas(self):
@@ -174,18 +179,21 @@ class FiltrosContasPagarTests(TestCase):
         periodo = {'data_inicio': '2026-09-01', 'data_fim': '2026-09-30'}
         parcial = {'situacao': ContaPagar.STATUS_PARCIAL}
         casos = [
-            ({}, [0, 1, 2, 3]), (fornecedor, [0, 1, 2]),
-            ({'data_inicio': '2026-09-15'}, [1, 2]),
+            ({}, [0, 1, 3]), (fornecedor, [0, 1]),
+            ({'data_inicio': '2026-09-15'}, [1]),
             ({'data_fim': '2026-09-10'}, [0, 3]),
-            (dia, [0, 3]), (periodo, [0, 1, 2, 3]),
+            (dia, [0, 3]), (periodo, [0, 1, 3]),
             (parcial, [1, 3]), ({'compra': '28745'}, [0, 3]),
-            (fornecedor | dia, [0]), (fornecedor | periodo, [0, 1, 2]),
+            (fornecedor | dia, [0]), (fornecedor | periodo, [0, 1]),
             (fornecedor | parcial, [1]), (fornecedor | periodo | parcial, [1]),
             (periodo | parcial, [1, 3]),
-            (fornecedor | periodo | {'situacao': 'todas'}, [0, 1, 2]),
+            (fornecedor | periodo | {'situacao': 'todas'}, [0, 1, 2, 4, 5]),
             (fornecedor | periodo | {'compra': '28745', 'situacao': ContaPagar.STATUS_ABERTA}, [0]),
             ({'status': ContaPagar.STATUS_PARCIAL}, [1, 3]),
-            ({'q': 'Coca'}, [0, 1, 2]), ({'compra': 'inexistente'}, []),
+            ({'situacao': ContaPagar.STATUS_PAGA}, [2]),
+            ({'situacao': ContaPagar.STATUS_CANCELADA}, [4]),
+            ({'situacao': 'todas'}, [0, 1, 2, 3, 4, 5]),
+            ({'q': 'Coca'}, [0, 1]), ({'compra': 'inexistente'}, []),
         ]
         for params, indices in casos:
             with self.subTest(params=params):
@@ -200,13 +208,37 @@ class FiltrosContasPagarTests(TestCase):
                 self.assertNotContains(response, '<strong>Situação:</strong>')
                 self.assertNotContains(response, 'name="situacao"')
                 self.assertNotContains(response, 'name="status"')
-                if not params:
+                if not params or params == {'situacao': 'todas'}:
                     self.assertNotContains(response, 'class="cp-results cp-results-filtered"')
                     self.assertEqual(response.context['situacao'], 'todas')
+                    if not params:
+                        self.assertEqual(response.context['resumo_cards']['aberto']['quantidade'], 3)
+                        self.assertEqual(response.context['resumo_cards']['aberto']['valor'], 150)
                 else:
                     self.assertContains(response, 'class="cp-results cp-results-filtered"', count=1)
                 if not indices:
                     self.assertContains(response, 'Nenhuma conta corresponde aos filtros aplicados.')
+
+    def test_status_padrao_exclui_saldos_fechados_e_historico_mantem_pagamento(self):
+        for params in ({}, {'fornecedor': str(self.coca.pk)}):
+            resposta = self.client.get(self.url, params, secure=True)
+            ids = {conta.pk for conta in resposta.context['contas']}
+            self.assertNotIn(self.contas[2].pk, ids)
+            self.assertNotIn(self.contas[4].pk, ids)
+            self.assertTrue(all(conta.valor_em_aberto > 0 for conta in resposta.context['contas']))
+
+        pago = self.contas[2]
+        PagamentoContaPagar.objects.create(
+            conta=pago, data_pagamento=date(2026, 9, 20), valor=100,
+            juros_bancarios=0,
+        )
+        historico = self.client.get(reverse('estoque:contas_pagar_pagamentos'), {
+            'periodo': 'personalizado', 'data_inicio': '2026-09-20', 'data_fim': '2026-09-20',
+            'fornecedor': str(self.coca.pk),
+        }, secure=True)
+        self.assertEqual(historico.status_code, 200)
+        self.assertEqual([pagamento.conta_id for pagamento in historico.context['pagamentos']], [pago.pk])
+        self.assertEqual(historico.context['total_principal'], 100)
 
     def test_browser_autocomplete_enter_autoaplicacao_e_responsividade(self):
         antiga = self.client.get(self.url, {'q': 'Outro', 'situacao': ContaPagar.STATUS_PARCIAL}, secure=True)
@@ -247,7 +279,7 @@ class FiltrosContasPagarTests(TestCase):
                         enviados = tab.evaluate('window.submits[0]')
                         self.assertNotIn('q', enviados)
                         nova = self.client.get(self.url, enviados, secure=True)
-                        self.assertEqual({c.pk for c in nova.context['contas']}, {c.pk for c in self.contas[:3]})
+                        self.assertEqual({c.pk for c in nova.context['contas']}, {c.pk for c in self.contas[:2]})
                         self.assertNotContains(nova, '<strong>Busca:</strong>')
                         for origem, destino in [('cpFiltro_compra', 'cpFiltro_data_por'), ('cpFiltro_data_por', 'cpFiltro_data_inicio'), ('cpFiltro_data_inicio', 'cpFiltro_data_fim'), ('cpFiltro_data_fim', 'cpFiltro_data_fim')]:
                             tab.evaluate('window.enter(' + json.dumps(origem) + ')')

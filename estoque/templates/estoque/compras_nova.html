@@ -6639,6 +6639,7 @@
   const compraDiferencaBoletosChip = document.getElementById("compraDiferencaBoletosChip");
   const valorCobradoCompraBoletos = document.getElementById("valorCobradoCompra");
   let boletosCompraValoresAutomaticos = !(painelBoletosCompra && painelBoletosCompra.dataset.valoresPersonalizados === "1");
+  let boletosCompraSaldoFinalAtivo = !(painelBoletosCompra && painelBoletosCompra.dataset.valoresPersonalizados === "1");
   let valorNotaBoletoEditadoManualmente = !!(painelBoletosCompra && painelBoletosCompra.dataset.valorFinanceiroSalvo === "1");
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
@@ -6869,8 +6870,31 @@
   function marcarValoresBoletosComoManuais(event) {
     const alvo = event && event.target ? event.target : null;
     if (!alvo || !alvo.matches('[name^="compra_parcela_valor_"]')) return;
+    const linhas = compraListaBoletos ? Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")) : [];
+    if (linhas.length > 1 && linhas[linhas.length - 1].contains(alvo) && boletosCompraSaldoFinalAtivo) return;
     boletosCompraValoresAutomaticos = false;
     alvo.dataset.valorAutomatico = "0";
+    if (linhas.length > 1 && !linhas[linhas.length - 1].contains(alvo)) {
+      boletosCompraSaldoFinalAtivo = true;
+      atualizarUltimoBoletoRestante();
+    }
+    atualizarUltimoBoletoRestante();
+  }
+
+  function atualizarUltimoBoletoRestante() {
+    if (!compraListaBoletos) return;
+    const linhas = Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]"));
+    if (linhas.length < 2) return;
+    const total = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
+    const somaAnteriores = linhas.slice(0, -1).reduce(function(soma, linha) {
+      const valor = linha.querySelector('[name^="compra_parcela_valor_"]');
+      return soma + centavosCompraBoletos(valor ? valor.value : "");
+    }, 0);
+    const campoFinal = linhas[linhas.length - 1].querySelector('[name^="compra_parcela_valor_"]');
+    if (!campoFinal) return;
+    campoFinal.value = valorCampoCompraBoletos(Math.max(0, total - somaAnteriores));
+    campoFinal.dataset.valorAutomatico = "1";
+    campoFinal.readOnly = boletosCompraSaldoFinalAtivo;
   }
 
   function renderizarBoletosCompra(quantidade, opcoes) {
@@ -6887,13 +6911,14 @@
       const usarSugestao = redistribuir || boletosCompraValoresAutomaticos || !atual.valor;
       const valorLinha = usarSugestao ? valorCampoCompraBoletos(valorSugerido) : atual.valor;
       const valorAutomatico = usarSugestao ? "1" : "0";
+      const ultimoBoleto = quantidade > 1 && indice === quantidade - 1 && boletosCompraSaldoFinalAtivo;
       const linha = document.createElement("div");
       linha.className = "compras-boleto-linha";
       linha.setAttribute("data-boleto-linha", "1");
       linha.innerHTML = [
         {% if edicao_finalizada %}'<input type="hidden" name="compra_conta_id_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.contaId || "") + '">',{% endif %}
         '<div class="compras-boleto-numero">Boleto ' + numero + '</div>',
-        '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(valorLinha) + '" data-valor-automatico="' + valorAutomatico + '"></div>',
+        '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(valorLinha) + '" data-valor-automatico="' + valorAutomatico + '"' + (ultimoBoleto ? ' readonly' : '') + '></div>',
         '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>',
         '<div class="compras-field"><label>Observacao do boleto</label><input type="text" name="compra_parcela_observacao_' + numero + '" maxlength="120" value="' + escapeHtmlCompraBoletos(atual.observacao || "") + '"></div>'
       ].join("");
@@ -6919,6 +6944,7 @@
       valor.value = valorCampoCompraBoletos(valoresSugeridos[indice] || 0);
       valor.dataset.valorAutomatico = "1";
     });
+    atualizarUltimoBoletoRestante();
     boletosCompraValoresAutomaticos = true;
   }
 
@@ -6957,6 +6983,9 @@
     }
     if (boletosAtuaisCompra().length !== quantidade) {
       renderizarBoletosCompra(quantidade, { redistribuir: boletosCompraValoresAutomaticos });
+    }
+    if (boletosCompraSaldoFinalAtivo) {
+      atualizarUltimoBoletoRestante();
     }
     atualizarResumoBoletosCompra();
   }
@@ -7267,6 +7296,8 @@
       if (boletosCompraValoresAutomaticos) {
         const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
         redistribuirValoresBoletosCompra(quantidade);
+      } else if (boletosCompraSaldoFinalAtivo) {
+        atualizarUltimoBoletoRestante();
       }
       atualizarResumoBoletosCompra();
     });
