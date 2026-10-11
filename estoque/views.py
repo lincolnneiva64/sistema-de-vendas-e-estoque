@@ -12251,7 +12251,7 @@ def compra_editar(request, pk):
         contexto = _contexto_form_compra(compra)
         contexto.update(contexto_edicao(compra, request.user))
         contexto["fornecedores"] = list(Fornecedor.objects.filter(Q(ativo=True) | Q(pk=compra.fornecedor_id)).order_by("nome", "pk"))
-        contexto["produtos"] = list(Produto.objects.filter(Q(ativo=True, excluido=False) | Q(pk__in=compra.itens.values_list("produto_id", flat=True))).order_by("nome", "pk"))
+        contexto["produtos"] = list(Produto.objects.filter(Q(ativo=True, excluido=False) | Q(pk__in=compra.itens.values_list("produto_id", flat=True))).select_related("vinculo_grupo__grupo").order_by("nome", "pk"))
         contexto["cartoes_credito"] = list(CartaoCredito.objects.filter(Q(ativo=True) | Q(pk=compra.cartao_id)))
         return render(request, "estoque/compras_nova.html", contexto)
     if not _compra_editavel_ou_redireciona(compra):

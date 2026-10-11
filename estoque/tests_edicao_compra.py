@@ -11,6 +11,7 @@ from django.contrib.messages import get_messages
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase
+from django.test.utils import CaptureQueriesContext
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.urls import reverse
 
@@ -19,6 +20,7 @@ from .models import (
     Compra, ContaPagar, ContaFinanceira, EdicaoCompra, Fornecedor, ItemCompra,
     ListaCompraFornecedor, MovimentoFinanceiro, PagamentoContaPagar, ParcelaCompra,
     ParcelaNotaListaCompraFornecedor, Produto, CartaoCredito, LancamentoCartao,
+    GrupoProdutoVinculado, MembroGrupoProduto,
 )
 from .services.edicao_compra import estado_compra
 
@@ -87,6 +89,37 @@ class EdicaoCompraTests(EdicaoFixture, TestCase):
         self.assertContains(pagina, f'value="{self.item.pk}"')
         self.assertContains(pagina, reverse("estoque:compra_corrigir_itens", args=[self.compra.pk]))
         self.assertContains(self.client.get(reverse("estoque:compras_lista")), self.url)
+
+    def test_edicao_finalizada_com_varios_itens_nao_consulta_grupos_por_produto(self):
+        grupo = GrupoProdutoVinculado.objects.create(nome="Grupo para teste de edicao")
+        produtos = [self.produto]
+        for indice in (2, 3):
+            produtos.append(Produto.objects.create(
+                nome=f"Produto da compra {indice}", quantidade=10, preco_compra=15,
+                preco_vista=25, preco_prazo=30, unidade_compra="UN",
+            ))
+        for produto in produtos:
+            MembroGrupoProduto.objects.create(produto=produto, grupo=grupo)
+        for indice, produto in enumerate(produtos[1:], start=2):
+            ItemCompra.objects.create(
+                compra=self.compra, produto=produto, quantidade=indice,
+                preco_unitario=10, valor_total=indice * 10, unidade="UN",
+            )
+
+        with CaptureQueriesContext(connection) as queries:
+            pagina = self.client.get(self.url)
+
+        self.assertEqual(pagina.status_code, 200)
+        consultas_grupo = [
+            consulta["sql"] for consulta in queries.captured_queries
+            if "estoque_membrogrupoproduto" in consulta["sql"].lower()
+        ]
+        self.assertLessEqual(len(consultas_grupo), 2, consultas_grupo)
+        linhas = pagina.context["item_linhas"]
+        self.assertEqual(len(linhas), 3)
+        self.assertEqual({linha["produto_nome"] for linha in linhas}, {
+            "Produto Historico", "Produto Da Compra 2", "Produto Da Compra 3",
+        })
 
     def test_delta_de_estoque_preserva_ids_e_precos_catalogo(self):
         dados = self.payload(**{"quantidade[]": ["12"], "preco_unitario[]": ["11"],
