@@ -2776,7 +2776,7 @@
   <header class="compras-header">
     <div>
       <h1 class="compras-title">{% if compra %}Compra #{{ compra.id }}{% else %}Nova Compra{% endif %}</h1>
-      <p class="compras-subtitle">{% if finalizando %}Confirme a origem do dinheiro para finalizar de verdade.{% else %}Salve como rascunho quantas vezes precisar, sem lancar financeiro.{% endif %}</p>
+      <p class="compras-subtitle">{% if edicao_finalizada %}Corrija os dados da compra finalizada. O estoque acompanha somente a diferença; preços atuais do catálogo são preservados.{% elif finalizando %}Confirme a origem do dinheiro para finalizar de verdade.{% else %}Salve como rascunho quantas vezes precisar, sem lancar financeiro.{% endif %}</p>
       {% if compra %}
         <div class="compras-meta">
           <span>Status: {{ compra.get_status_display }}</span>
@@ -2835,11 +2835,22 @@
     <button type="button" class="compras-btn compras-btn-primary" id="abrirContasPagarGeralCompra">Ver / pagar contas</button>
   </section>
 
-  <form method="post" id="formCompra" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
+  <form method="post" id="formCompra" data-edicao-finalizada="{% if edicao_finalizada %}1{% else %}0{% endif %}" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra and not edicao_finalizada %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
     {% csrf_token %}
     <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" hidden></p>
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
-    <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
+    <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if edicao_finalizada %}salvar_edicao_finalizada{% elif finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
+    {% if edicao_finalizada %}
+    <input type="hidden" name="edicao_token" value="{{ edicao_token }}">
+    <div class="compras-alerta" id="avisoEdicaoFinalizada">
+      {% if bloqueio_edicao %}<p role="alert">{{ bloqueio_edicao }} Nesta edição, preserve esses dados e corrija somente observações ou vencimentos das contas ativas.</p>{% endif %}
+      <label for="motivoEdicaoCompra">Motivo da correção</label>
+      <input type="text" name="motivo_edicao" id="motivoEdicaoCompra" required maxlength="1000" style="width:100%;">
+      <p>Pagamentos e devoluções reais são tratados no financeiro. Esta edição não cria entradas ou saídas de dinheiro.</p>
+      {% for movimento in contas_financeiras_edicao %}<p>Conta registrada: {{ movimento.conta.nome }} — {{ movimento.get_tipo_display }} R$ {{ movimento.valor|floatformat:2 }}.</p>{% endfor %}
+      <a href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Abrir correção antiga</a>
+    </div>
+    {% endif %}
     <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
     <input type="hidden" name="revisao_precos_pendente" id="revisaoPrecosPendenteCompra" value="0">
     <div id="camposAtualizarCustoCompra"></div>
@@ -2900,10 +2911,10 @@
             <label>Tipo de pagamento</label>
             <select name="tipo_pagamento" id="tipoPagamentoCompra">
               <option value="">Selecione...</option>
-              <option value="avista" {% if compra.tipo_pagamento == "avista" %}selected{% endif %}>A vista (Dinheiro / Pix)</option>
-              <option value="aprazo" {% if not compra or compra.tipo_pagamento == "aprazo" %}selected{% endif %}>A prazo</option>
-              <option value="cartao_credito" {% if compra.tipo_pagamento == "cartao_credito" %}selected{% endif %}>Cartao credito</option>
-              <option value="cartao_debito" {% if compra.tipo_pagamento == "cartao_debito" %}selected{% endif %}>Cartao debito</option>
+              <option value="avista" {% if tipo_pagamento_form == "avista" %}selected{% endif %}>A vista (Dinheiro / Pix)</option>
+              <option value="aprazo" {% if not compra or tipo_pagamento_form == "aprazo" %}selected{% endif %}>A prazo</option>
+              <option value="cartao_credito" {% if tipo_pagamento_form == "cartao_credito" %}selected{% endif %}>Cartao credito</option>
+              <option value="cartao_debito" {% if tipo_pagamento_form == "cartao_debito" %}selected{% endif %}>Cartao debito</option>
             </select>
             {% if erro_tipo_pagamento %}
               <div class="compras-field-error" id="erroTipoPagamentoCompra">
@@ -2928,10 +2939,9 @@
             <input type="date" name="data_vencimento" id="dataVencimentoCompra" value="{% if compra.data_vencimento %}{{ compra.data_vencimento|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}">
           </div>
         </div>
-        {% if lista_origem_compra %}
-          <div class="compras-boletos-compra" id="painelBoletosCompra" data-lista-id="{{ lista_origem_compra.id }}" data-valores-personalizados="{% if pagamento_nota_compra and pagamento_nota_compra.forma == 'varios_boletos' and pagamento_nota_compra.linhas %}1{% else %}0{% endif %}">
+          <div class="compras-boletos-compra oculto" id="painelBoletosCompra" data-lista-id="{{ lista_origem_compra.id|default:'' }}" data-valores-personalizados="{% if pagamento_nota_compra and pagamento_nota_compra.forma == 'varios_boletos' and pagamento_nota_compra.linhas %}1{% else %}0{% endif %}" data-valor-financeiro-salvo="{% if pagamento_nota_compra.valor_nota_input and pagamento_nota_compra.valor_nota != compra.total %}1{% else %}0{% endif %}">
             <div class="compras-boletos-topo">
-              <strong>Financeiro da nota da Lista #{{ lista_origem_compra.id }}</strong>
+              <strong>{% if lista_origem_compra %}Financeiro da nota da Lista #{{ lista_origem_compra.id }}{% else %}Boletos da compra{% endif %}</strong>
               <span>Dados usados para criar as Contas a Pagar ao finalizar.</span>
             </div>
             <div class="compras-grid">
@@ -2961,6 +2971,7 @@
               {% if pagamento_nota_compra and pagamento_nota_compra.linhas %}
                 {% for parcela in pagamento_nota_compra.linhas %}
                   <div class="compras-boleto-linha" data-boleto-linha>
+                    {% if edicao_finalizada %}<input type="hidden" name="compra_conta_id_{{ parcela.numero }}" value="{{ parcela.conta_id|default:'' }}">{% endif %}
                     <div class="compras-boleto-numero">Boleto {{ parcela.numero }}</div>
                     <div class="compras-field">
                       <label>Valor</label>
@@ -2999,7 +3010,6 @@
               <textarea name="compra_observacao_pagamento_nota" id="compraObservacaoPagamentoNota" placeholder="Opcional">{{ pagamento_nota_compra.observacao|default:"" }}</textarea>
             </div>
           </div>
-        {% endif %}
         <div class="compras-field campo-observacao-compra" style="margin-top:10px;">
           <label>Observacao</label>
           <textarea name="observacao" placeholder="Observacao opcional">{{ compra.observacao|default:"" }}</textarea>
@@ -3115,6 +3125,8 @@
             {% for linha in item_linhas %}
             <tr class="linha-item">
               <td data-label="Produto">
+                {% if edicao_finalizada %}<input type="hidden" name="item_edicao_id[]" value="{{ linha.item_id|default:'' }}">{% endif %}
+                <input type="hidden" name="observacao_item[]" value="{{ linha.observacao }}">
                 <label class="conferencia-nota-check-wrap" aria-label="Marcar item como conferido">
                   <input type="checkbox" class="conferencia-nota-checkbox" autocomplete="off">
                 </label>
@@ -3233,7 +3245,10 @@
 
     <div class="compras-actions compras-actions-final">
       <h2 class="compras-actions-final-titulo compras-mobile-inline-only">Pr&oacute;ximos passos</h2>
-      {% if finalizando %}
+      {% if edicao_finalizada %}
+        <a href="{% url 'estoque:compras_detalhe' compra.id %}" class="compras-btn compras-btn-secondary">Cancelar edição</a>
+        <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Salvar alterações</button>
+      {% elif finalizando %}
         <p class="compras-acoes-ajuda-mobile">Salve como rascunho para continuar depois ou finalize quando a compra estiver conferida.</p>
         <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarRascunhoCompra"><span class="compras-label-desktop">Continuar Editando</span><span class="compras-label-mobile">Salvar Rascunho</span></button>
         <button type="button" class="compras-btn compras-btn-primary" id="btnSalvarCompra">Finalizar Compra</button>
@@ -3324,6 +3339,7 @@
 <script>
 (function() {
   const formCompra = document.getElementById("formCompra");
+  const edicaoFinalizada = formCompra && formCompra.dataset.edicaoFinalizada === "1";
   const parametrosCompra = new URLSearchParams(window.location.search);
   const continuarItensAoAbrir = parametrosCompra.get("continuar_itens") === "1";
   const rascunhoSalvoAoAbrir = parametrosCompra.get("rascunho_salvo") === "1";
@@ -4673,6 +4689,10 @@
   }
 
   function limparLinhaItem(linha) {
+    const itemEdicaoId = linha.querySelector('[name="item_edicao_id[]"]');
+    if (itemEdicaoId) itemEdicaoId.value = "";
+    const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
+    if (observacaoItem) observacaoItem.value = "";
     const produto = linha.querySelector('[name="produto_id[]"]');
     cancelarEdicaoItemMobile(linha);
     produto.value = "";
@@ -6098,7 +6118,7 @@
   if (btnSalvarCompra && formCompra) {
     btnSalvarCompra.addEventListener("click", function() {
       window.compraMobileMantendoItemVisivel = false;
-      enviarCompraComAcao("{% if finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
+      enviarCompraComAcao("{% if edicao_finalizada %}salvar_edicao_finalizada{% elif finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
     });
   }
 
@@ -6152,6 +6172,14 @@
 
       sincronizarTodosPrecosUnitarios();
       atualizarFluxoMobileCompra();
+
+      if (edicaoFinalizada) {
+        acaoCompra.value = "salvar_edicao_finalizada";
+        desabilitarItensProvisoriosParaEnvio();
+        formCompra.dataset.enviando = "1";
+        if (btnSalvarCompra) { btnSalvarCompra.disabled = true; btnSalvarCompra.textContent = "Salvando alterações..."; }
+        return;
+      }
 
       if (acaoCompra && ["voltar_rascunho", "voltar_itens", "continuar_editando"].includes(acaoCompra.value)) {
         formCompra.dataset.enviando = "1";
@@ -6611,7 +6639,7 @@
   const compraDiferencaBoletosChip = document.getElementById("compraDiferencaBoletosChip");
   const valorCobradoCompraBoletos = document.getElementById("valorCobradoCompra");
   let boletosCompraValoresAutomaticos = !(painelBoletosCompra && painelBoletosCompra.dataset.valoresPersonalizados === "1");
-  let valorNotaBoletoEditadoManualmente = false;
+  let valorNotaBoletoEditadoManualmente = !!(painelBoletosCompra && painelBoletosCompra.dataset.valorFinanceiroSalvo === "1");
   const primeiroProduto = form.querySelector('[name="produto_busca[]"]');
   let fornecedorAtivo = -1;
   let bloquearAberturaInicialFornecedor = false;
@@ -6826,11 +6854,13 @@
       const valor = linha.querySelector('[name^="compra_parcela_valor_"]');
       const vencimento = linha.querySelector('[name^="compra_parcela_vencimento_"]');
       const observacao = linha.querySelector('[name^="compra_parcela_observacao_"]');
+      const contaId = linha.querySelector('[name^="compra_conta_id_"]');
       return {
         valor: valor ? valor.value : "",
         automatico: valor ? valor.dataset.valorAutomatico === "1" : true,
         vencimento: vencimento ? vencimento.value : "",
         observacao: observacao ? observacao.value : "",
+        contaId: contaId ? contaId.value : "",
         numero: indice + 1
       };
     });
@@ -6861,6 +6891,7 @@
       linha.className = "compras-boleto-linha";
       linha.setAttribute("data-boleto-linha", "1");
       linha.innerHTML = [
+        {% if edicao_finalizada %}'<input type="hidden" name="compra_conta_id_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.contaId || "") + '">',{% endif %}
         '<div class="compras-boleto-numero">Boleto ' + numero + '</div>',
         '<div class="compras-field"><label>Valor</label><input type="text" name="compra_parcela_valor_' + numero + '" inputmode="decimal" autocomplete="off" value="' + escapeHtmlCompraBoletos(valorLinha) + '" data-valor-automatico="' + valorAutomatico + '"></div>',
         '<div class="compras-field"><label>Vencimento</label><input type="date" name="compra_parcela_vencimento_' + numero + '" value="' + escapeHtmlCompraBoletos(atual.vencimento || (dataVencimento ? dataVencimento.value : "")) + '"></div>',
@@ -6918,7 +6949,7 @@
     if (!ativo) return;
     const varios = compraFormaCobrancaNota && compraFormaCobrancaNota.value === "varios_boletos";
     let quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
-    quantidade = varios ? Math.max(2, quantidade) : 1;
+    quantidade = varios ? Math.min(12, Math.max(2, quantidade)) : 1;
     if (compraQuantidadeBoletos) {
       compraQuantidadeBoletos.value = String(quantidade);
       compraQuantidadeBoletos.min = varios ? "2" : "1";
@@ -9804,6 +9835,11 @@
     var select = pegarTipoPagamento();
 
     if (!botao || !select) return;
+    var formulario = document.getElementById("formCompra");
+    if (formulario && formulario.dataset.edicaoFinalizada === "1") {
+      botao.textContent = formulario.dataset.enviando === "1" ? "Salvando alterações..." : "Salvar alterações";
+      return;
+    }
 
     var tipo = textoTipoPagamento(select);
 

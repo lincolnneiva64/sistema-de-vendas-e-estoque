@@ -2073,6 +2073,9 @@ class Compra(models.Model):
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total_produtos = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     ajuste_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    valor_nota_boleto = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
+    forma_cobranca_nota = models.CharField(max_length=20, blank=True, default="")
+    observacao_pagamento_nota = models.TextField(blank=True, default="")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ABERTA)
     observacao = models.TextField(blank=True, null=True)
     cancelada = models.BooleanField(default=False)
@@ -2117,6 +2120,37 @@ class Compra(models.Model):
             "cartao": "Cartão",
         }
         return rotulos.get(valor.casefold(), valor or "-")
+
+
+class EdicaoCompra(models.Model):
+    compra = models.ForeignKey(Compra, on_delete=models.PROTECT, related_name="edicoes")
+    operacao = models.UUIDField(unique=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    motivo = models.TextField()
+    payload_hash = models.CharField(max_length=64)
+    antes = models.JSONField()
+    depois = models.JSONField()
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+
+class ParcelaCompra(models.Model):
+    """Programacao da compra direta; nao representa divida nem pagamento."""
+
+    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="parcelas_nota")
+    numero = models.PositiveIntegerField()
+    data_vencimento = models.DateField()
+    valor = models.DecimalField(max_digits=12, decimal_places=2)
+    observacao = models.CharField(max_length=120, blank=True, default="")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["numero", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["compra", "numero"], name="parcela_compra_numero_unico"),
+            models.CheckConstraint(condition=Q(numero__gte=1, numero__lte=12), name="parcela_compra_numero_valido"),
+            models.CheckConstraint(condition=Q(valor__gt=0), name="parcela_compra_valor_positivo"),
+        ]
 
 
 class ItemCompra(models.Model):

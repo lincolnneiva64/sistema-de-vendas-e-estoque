@@ -678,7 +678,8 @@
         <div class="nota-compra-acoes-grupo">
           <span class="nota-compra-acoes-grupo-titulo">Correções</span>
           <div class="nota-compra-acoes-lista">
-            <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Corrigir itens</a>
+            <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_editar' compra.id %}">Editar compra</a>
+            <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Correção antiga de itens</a>
             {% if compra_a_vista %}
               <a class="nota-compra-btn secundario" href="{% url 'estoque:compra_corrigir_origem_pagamento' compra.id %}">Corrigir origem</a>
             {% endif %}

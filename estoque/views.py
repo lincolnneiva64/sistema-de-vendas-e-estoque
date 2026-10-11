@@ -31,6 +31,7 @@ from django.urls import reverse
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import GrupoProdutoVinculado
+from .models import ParcelaCompra
 from .services.precos_vinculados import serializar_grupos, bloquear_catalogo, bloquear_produtos_precos, salvar_formulario_produto, proteger_precos_http, exigir_operador_precos
 from .models import AjusteItemVendaQuitada, Categoria, CatalogoDespesa, CartaoCredito, Cliente, ContaFinanceira, ContaPagar, ContaReceber, CreditoCliente, DespesaDiaria, DespesaRotaConferencia, EmprestimoDivida, EmprestimoRapido, EntregaChecklistItem, EntregaRota, EntregaRotaItem, EventoVenda, EnvioListaCompraFornecedor, EnvioInternoListaCompraFornecedor, FechamentoRotaRecebimento, FaturaCartao, Fornecedor, FornecedorContato, FornecedorContatoTelefone, FornecedorDestinatarioLista, FornecedorDestinatarioRecente, Funcionario, MeioPagamento, MovimentoFinanceiro, MovimentacaoEstoqueManual, Compra, ItemCompra, LancamentoCartao, ItemListaCompraFornecedor, ItemPedido, ItemVenda, ItemVendaRemovido, ListaCompraFornecedor, OperacaoRecebimentoCliente, PagamentoContaPagar, PagamentoFaturaCartao, PagamentoEmprestimoDivida, ParcelaNotaListaCompraFornecedor, Pedido, PendenciaPedidoEncerrada, PixRecebido, Produto, ProdutoFornecedor, RecebimentoContaReceber, RegistroCobrancaCliente, ResolucaoVisitaFornecedor, SeparacaoVenda, SeparacaoVendaItem, Unidade, Venda
 from .utils_pix import OCR_RENDER_MODO_LEVE, analisar_comprovante_pix, analisar_comprovante_pix_google_vision
@@ -76,7 +77,7 @@ from .services.precos_antigo_snapshot import (
 )
 from locacoes.services import painel_operacional_rapido_locacoes
 from django.contrib import messages
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -8921,30 +8922,8 @@ def _salvar_pagamento_nota_lista_fornecedor(request, lista):
     parcelas = []
     if forma == ListaCompraFornecedor.FORMA_COBRANCA_AVISTA:
         parcelas = []
-    else:
-        try:
-            quantidade = int(request.POST.get("quantidade_boletos") or "0")
-        except ValueError:
-            quantidade = 0
-        if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
-            quantidade = 1
-        if forma == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS and quantidade < 2:
-            raise ValueError("Informe pelo menos 2 boletos.")
-        if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO and quantidade != 1:
-            quantidade = 1
-        if forma in {ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO, ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS}:
-            for numero in range(1, quantidade + 1):
-                valor = _valor_monetario_obrigatorio_lista_fornecedor(request.POST.get(f"parcela_valor_{numero}"))
-                vencimento_texto = (request.POST.get(f"parcela_vencimento_{numero}") or "").strip()
-                vencimento = parse_date(vencimento_texto) if vencimento_texto else None
-                if not vencimento:
-                    raise ValueError(f"Informe a data de vencimento do boleto {numero}.")
-                parcelas.append({
-                    "numero": numero,
-                    "data_vencimento": vencimento,
-                    "valor": valor,
-                    "observacao": (request.POST.get(f"parcela_observacao_{numero}") or "").strip(),
-                })
+    elif forma in {ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO, ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS}:
+        parcelas = _dados_parcelas_pagamento_nota(request, forma, lista.valor_nota_boleto)
 
     total_parcelas = sum((parcela["valor"] for parcela in parcelas), Decimal("0.00")).quantize(Decimal("0.01"))
     if parcelas and total_parcelas != lista.valor_nota_boleto:
@@ -8980,85 +8959,106 @@ def _lista_origem_compra(compra):
     return None
 
 
-def _salvar_pagamento_nota_compra_lista(request, compra, dados):
-    lista = _lista_origem_compra(compra)
-    if not lista or not dados.get("compra_a_prazo"):
-        return None
-
-    forma = (request.POST.get("compra_forma_cobranca_nota") or "").strip()
-    if not forma:
-        forma = ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO
-    if forma not in {
-        ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
-        ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
-    }:
+def _validar_plano_pagamento_nota(forma, valor_nota, parcelas, mensagem_soma="A soma dos boletos precisa bater com o valor financeiro da nota."):
+    unico = ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO
+    varios = ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS
+    if forma not in {unico, varios}:
         raise ValueError("Informe a forma de cobranca da nota.")
+    if not valor_nota.is_finite() or not Decimal("0.00") < valor_nota < Decimal("10000000000"):
+        raise ValueError("Informe um valor financeiro da nota valido e maior que zero.")
+    if not 1 <= len(parcelas) <= 12:
+        raise ValueError("Informe de 1 a 12 boletos.")
+    if forma == unico and len(parcelas) != 1:
+        raise ValueError("Informe exatamente 1 boleto.")
+    if forma == varios and len(parcelas) < 2:
+        raise ValueError("Informe pelo menos 2 boletos.")
+    if [parcela["numero"] for parcela in parcelas] != list(range(1, len(parcelas) + 1)):
+        raise ValueError("A numeracao dos boletos esta divergente.")
+    for parcela in parcelas:
+        valor = parcela["valor"]
+        if not valor.is_finite() or not Decimal("0.00") < valor < Decimal("10000000000"):
+            raise ValueError(f"Informe um valor valido para o boleto {parcela['numero']}.")
+        if not parcela["data_vencimento"]:
+            raise ValueError(f"Informe a data de vencimento do boleto {parcela['numero']}.")
+        if len(parcela["observacao"]) > 120:
+            raise ValueError("A observacao de cada boleto deve ter no maximo 120 caracteres.")
+    if sum((parcela["valor"] for parcela in parcelas), Decimal("0.00")) != valor_nota:
+        raise ValueError(mensagem_soma)
 
-    valor_nota = _valor_monetario_obrigatorio_lista_fornecedor(
-        request.POST.get("compra_valor_nota_boleto") or dados.get("total")
-    )
-    if valor_nota <= Decimal("0.00"):
-        raise ValueError("Informe um valor financeiro da nota maior que zero.")
 
+def _dados_parcelas_pagamento_nota(request, forma, valor_nota, prefixo="", vencimento_padrao=None):
+    """Mesmo contrato de validacao para a lista e para qualquer formulario de compra."""
     try:
-        quantidade = int(request.POST.get("compra_quantidade_boletos") or "0")
+        quantidade = int(request.POST.get(f"{prefixo}quantidade_boletos") or "1")
     except ValueError:
-        quantidade = 0
+        raise ValueError("Informe uma quantidade valida de boletos.")
+    if not 1 <= quantidade <= 12:
+        raise ValueError("Informe de 1 a 12 boletos.")
     if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
         quantidade = 1
-    if forma == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS and quantidade < 2:
-        raise ValueError("Informe pelo menos 2 boletos.")
-
     parcelas = []
     for numero in range(1, quantidade + 1):
-        valor_texto = request.POST.get(f"compra_parcela_valor_{numero}")
-        if not str(valor_texto or "").strip() and forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
+        valor_texto = request.POST.get(f"{prefixo}parcela_valor_{numero}")
+        if not str(valor_texto or "").strip() and vencimento_padrao and forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO:
             valor_texto = valor_nota
-        valor = _valor_monetario_obrigatorio_lista_fornecedor(
-            valor_texto
+        valor = _valor_monetario_obrigatorio_lista_fornecedor(valor_texto)
+        vencimento_texto = (request.POST.get(f"{prefixo}parcela_vencimento_{numero}") or "").strip()
+        vencimento = parse_date(vencimento_texto) if vencimento_texto else (
+            vencimento_padrao if forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO else None
         )
-        if valor <= Decimal("0.00"):
-            raise ValueError(f"Informe um valor valido para o boleto {numero}.")
-        vencimento_texto = (request.POST.get(f"compra_parcela_vencimento_{numero}") or "").strip()
-        if not vencimento_texto and forma == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO and dados.get("data_vencimento"):
-            vencimento_texto = dados["data_vencimento"].isoformat()
-        vencimento = parse_date(vencimento_texto) if vencimento_texto else None
-        if not vencimento:
-            raise ValueError(f"Informe a data de vencimento do boleto {numero}.")
         parcelas.append({
             "numero": numero,
             "data_vencimento": vencimento,
             "valor": valor,
-            "observacao": (request.POST.get(f"compra_parcela_observacao_{numero}") or "").strip(),
+            "observacao": (request.POST.get(f"{prefixo}parcela_observacao_{numero}") or "").strip(),
         })
+    mensagem_soma = (
+        "A soma dos boletos precisa bater com o valor financeiro da nota."
+        if prefixo else "A soma dos boletos precisa bater com o valor da nota."
+    )
+    _validar_plano_pagamento_nota(forma, valor_nota, parcelas, mensagem_soma=mensagem_soma)
+    return parcelas
 
-    total_parcelas = sum((parcela["valor"] for parcela in parcelas), Decimal("0.00")).quantize(Decimal("0.01"))
-    if total_parcelas != valor_nota:
-        raise ValueError("A soma dos boletos precisa bater com o valor financeiro da nota.")
 
-    lista.valor_nota_boleto = valor_nota
-    lista.forma_cobranca_nota = forma
-    lista.observacao_pagamento_nota = (
+def _salvar_pagamento_nota_compra(request, compra, dados):
+    # Os chamadores mantem o lock da compra dentro da mesma transacao dos itens.
+    if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+        raise ValueError("Compra ja finalizada. Recarregue a pagina.")
+    lista = _lista_origem_compra(compra)
+    if not dados.get("compra_a_prazo"):
+        # Limpa somente o plano da compra direta; a nota da lista e historico independente.
+        compra.parcelas_nota.all().delete()
+        compra.valor_nota_boleto = None
+        compra.forma_cobranca_nota = ""
+        compra.observacao_pagamento_nota = ""
+        compra.save(update_fields=["valor_nota_boleto", "forma_cobranca_nota", "observacao_pagamento_nota"])
+        return None
+    forma = (request.POST.get("compra_forma_cobranca_nota") or "boleto_unico").strip()
+    valor_nota = _valor_monetario_obrigatorio_lista_fornecedor(
+        request.POST.get("compra_valor_nota_boleto") or dados.get("total")
+    )
+    parcelas = _dados_parcelas_pagamento_nota(
+        request, forma, valor_nota, prefixo="compra_", vencimento_padrao=dados.get("data_vencimento"),
+    )
+    origem = ListaCompraFornecedor.objects.select_for_update().get(pk=lista.pk) if lista else compra
+    origem.valor_nota_boleto = valor_nota
+    origem.forma_cobranca_nota = forma
+    origem.observacao_pagamento_nota = (
         request.POST.get("compra_observacao_pagamento_nota") or ""
     ).strip()
-    lista.save(update_fields=[
+    origem.save(update_fields=[
         "valor_nota_boleto",
         "forma_cobranca_nota",
         "observacao_pagamento_nota",
         "atualizado_em",
     ])
-    lista.parcelas_nota.all().delete()
-    ParcelaNotaListaCompraFornecedor.objects.bulk_create([
-        ParcelaNotaListaCompraFornecedor(
-            lista=lista,
-            numero=parcela["numero"],
-            data_vencimento=parcela["data_vencimento"],
-            valor=parcela["valor"],
-            observacao=parcela["observacao"],
-        )
-        for parcela in parcelas
-    ])
-    return lista
+    origem.parcelas_nota.all().delete()
+    modelo = ParcelaNotaListaCompraFornecedor if lista else ParcelaCompra
+    vinculo = {"lista": origem} if lista else {"compra": compra}
+    modelo.objects.bulk_create([modelo(**vinculo, **parcela) for parcela in parcelas])
+    compra.data_vencimento = parcelas[0]["data_vencimento"]
+    compra.save(update_fields=["data_vencimento", "atualizado_em"])
+    return origem
 
 
 def _normalizar_whatsapp_fornecedor(valor):
@@ -11587,6 +11587,7 @@ def _linhas_item_compra(compra=None):
     linhas = []
     for item in itens_qs:
         linhas.append({
+            "item_id": item.pk,
             "produto_id": item.produto_id or "",
             "produto_nome": item.produto.nome if item.produto else "",
             "quantidade": str(item.quantidade).replace(".", ","),
@@ -11613,8 +11614,8 @@ ERRO_TIPO_PAGAMENTO_COMPRA = "Selecione o tipo de pagamento antes de finalizar a
 def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None, rascunho_salvo=False, erro_tipo_pagamento=False):
     lista_origem_compra = _lista_origem_compra(compra)
     pagamento_nota_compra = (
-        _parcelas_pagamento_nota_para_tela(lista_origem_compra)
-        if lista_origem_compra
+        _parcelas_pagamento_nota_para_tela(lista_origem_compra or compra)
+        if lista_origem_compra or compra
         else None
     )
 
@@ -11634,6 +11635,7 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "unidades_produto": list(Unidade.objects.filter(ativa=True).order_by("sigla", "nome")),
         "hoje": timezone.localdate(),
         "compra": compra,
+        "tipo_pagamento_form": compra.tipo_pagamento if compra else "",
         "lista_origem_compra": lista_origem_compra,
         "pagamento_nota_compra": pagamento_nota_compra,
         "finalizando": finalizando,
@@ -11648,24 +11650,30 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "cartoes_credito": list(CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")),
     }
 
-def _dados_compra_post(request, exigir_itens=True):
+def _dados_compra_post(request, exigir_itens=True, compra_edicao=None):
     fornecedor_id = request.POST.get("fornecedor_id")
     data_compra = parse_date(request.POST.get("data_compra") or "")
     tipo_pagamento = (request.POST.get("tipo_pagamento") or "").strip()
     data_vencimento = parse_date(request.POST.get("data_vencimento") or "")
     observacao = (request.POST.get("observacao") or "").strip()
     compra_a_prazo = _compra_pagamento_a_prazo(tipo_pagamento)
+    if compra_a_prazo and not data_vencimento:
+        data_vencimento = parse_date(request.POST.get("compra_parcela_vencimento_1") or "")
     compra_cartao_credito = _compra_pagamento_cartao_credito(tipo_pagamento)
     compra_conta_futura = _compra_pagamento_conta_futura(tipo_pagamento)
     cartao = None
 
     if compra_cartao_credito:
         cartao_id = request.POST.get("cartao_id")
-        cartao = CartaoCredito.objects.filter(pk=cartao_id, ativo=True).first()
+        cartao = CartaoCredito.objects.filter(pk=cartao_id).filter(
+            Q(ativo=True) | Q(pk=compra_edicao.cartao_id if compra_edicao else None)
+        ).first()
         if not cartao:
             raise ValueError("Selecione o cartao de credito utilizado.")
 
-    fornecedor = Fornecedor.objects.filter(pk=fornecedor_id, ativo=True).first()
+    fornecedor = Fornecedor.objects.filter(pk=fornecedor_id).filter(
+        Q(ativo=True) | Q(pk=compra_edicao.fornecedor_id if compra_edicao else None)
+    ).first()
     if not fornecedor:
         raise ValueError("Selecione um fornecedor ativo.")
     if not data_compra:
@@ -11687,7 +11695,11 @@ def _dados_compra_post(request, exigir_itens=True):
         if produto_id:
             ids_validos.append(produto_id)
 
-    produtos_map = Produto.objects.filter(pk__in=ids_validos, excluido=False, ativo=True).in_bulk()
+    permitidos = compra_edicao.itens.values_list("produto_id", flat=True) if compra_edicao else []
+    produtos_map = Produto.objects.filter(pk__in=ids_validos).filter(
+        Q(excluido=False, ativo=True) | Q(pk__in=permitidos)
+    ).in_bulk()
+    item_ids = request.POST.getlist("item_edicao_id[]")
 
     itens_validos = []
     produtos_vistos = set()
@@ -11711,13 +11723,14 @@ def _dados_compra_post(request, exigir_itens=True):
         quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
         preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)
         unidade = (unidades[indice] if indice < len(unidades) else "").strip()
-        if quantidade <= 0:
+        if not quantidade.is_finite() or quantidade <= 0:
             raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
-        if preco_unitario < 0:
+        if not preco_unitario.is_finite() or preco_unitario < 0:
             raise ValueError(f"Informe preco valido para {produto.nome}.")
 
         valor_total = (quantidade * preco_unitario).quantize(Decimal("0.01"))
         itens_validos.append({
+            "item_id": int(item_ids[indice]) if compra_edicao and indice < len(item_ids) and item_ids[indice] else None,
             "produto": produto,
             "quantidade": quantidade,
             "unidade": unidade,
@@ -11734,7 +11747,7 @@ def _dados_compra_post(request, exigir_itens=True):
     total = total_produtos
     if valor_cobrado_texto:
         total = _decimal_compra(valor_cobrado_texto, casas=2)
-        if total < Decimal("0.00"):
+        if not total.is_finite() or total < Decimal("0.00"):
             raise ValueError("Informe um valor cobrado maior ou igual a zero.")
     ajuste_total = (total - total_produtos).quantize(Decimal("0.01"))
     return {
@@ -11969,8 +11982,8 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
 
 
 def _parcelas_financeiras_compra(compra):
-    lista = getattr(compra, "lista_fornecedor", None)
-    if not lista or lista.forma_cobranca_nota not in {
+    origem = _lista_origem_compra(compra) or compra
+    if origem.forma_cobranca_nota not in {
         ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO,
         ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS,
     }:
@@ -11983,21 +11996,14 @@ def _parcelas_financeiras_compra(compra):
             "observacao": compra.observacao or "",
         }]
 
-    if lista.valor_nota_boleto is None:
-        raise ValueError("Informe o valor da nota/boleto da lista antes de finalizar a compra.")
-
-    parcelas = list(lista.parcelas_nota.order_by("numero", "id"))
-    if lista.forma_cobranca_nota == ListaCompraFornecedor.FORMA_COBRANCA_BOLETO_UNICO and len(parcelas) != 1:
-        raise ValueError("O boleto unico da lista precisa estar cadastrado antes de finalizar a compra.")
-    if lista.forma_cobranca_nota == ListaCompraFornecedor.FORMA_COBRANCA_VARIOS_BOLETOS and len(parcelas) < 2:
-        raise ValueError("Informe pelo menos 2 boletos da lista antes de finalizar a compra.")
-
-    total_parcelas = sum((parcela.valor for parcela in parcelas), Decimal("0.00")).quantize(Decimal("0.01"))
-    valor_nota = _financeiro_dinheiro(lista.valor_nota_boleto).quantize(Decimal("0.01"))
-    if total_parcelas != valor_nota:
-        raise ValueError("A soma dos boletos precisa bater com o valor financeiro da nota.")
-    if any(not parcela.data_vencimento for parcela in parcelas):
-        raise ValueError("Todas as parcelas da nota precisam ter vencimento.")
+    if origem.valor_nota_boleto is None:
+        raise ValueError("Informe o valor da nota/boleto antes de finalizar a compra.")
+    parcelas = list(origem.parcelas_nota.order_by("numero", "id"))
+    _validar_plano_pagamento_nota(origem.forma_cobranca_nota, origem.valor_nota_boleto, [
+        {"numero": parcela.numero, "valor": parcela.valor,
+         "data_vencimento": parcela.data_vencimento, "observacao": parcela.observacao}
+        for parcela in parcelas
+    ])
 
     quantidade = len(parcelas)
     return [
@@ -12006,16 +12012,34 @@ def _parcelas_financeiras_compra(compra):
             "total": quantidade,
             "data_vencimento": parcela.data_vencimento,
             "valor": _financeiro_dinheiro(parcela.valor).quantize(Decimal("0.01")),
-            "observacao": parcela.observacao or lista.observacao_pagamento_nota or compra.observacao or "",
+            "observacao": parcela.observacao or origem.observacao_pagamento_nota or compra.observacao or "",
         }
         for parcela in parcelas
     ]
 
 
 def _criar_contas_pagar_compra(compra):
-    if ContaPagar.objects.filter(compra=compra).exists():
-        return
+    # Serializa inclusive chamadas fora da finalizacao. Nao ignora conjuntos incompletos.
+    with transaction.atomic():
+        compra = Compra.objects.select_for_update().get(pk=compra.pk)
+        return _criar_contas_pagar_compra_bloqueada(compra)
+
+
+def _criar_contas_pagar_compra_bloqueada(compra):
     parcelas = _parcelas_financeiras_compra(compra)
+    existentes = list(ContaPagar.objects.select_for_update().filter(compra=compra).order_by("numero_parcela", "id"))
+    if existentes:
+        esperado = [
+            (parcela["numero"] or (indice if len(parcelas) > 1 else None),
+             parcela["total"] or (len(parcelas) if len(parcelas) > 1 else None),
+             parcela["valor"], parcela["data_vencimento"], compra.fornecedor_id, compra.data_compra)
+            for indice, parcela in enumerate(parcelas, 1)
+        ]
+        atual = [(conta.numero_parcela, conta.total_parcelas, conta.valor_original,
+                  conta.data_vencimento, conta.fornecedor_id, conta.data_emissao) for conta in existentes]
+        if atual != esperado or any(conta.status == ContaPagar.STATUS_CANCELADA for conta in existentes):
+            raise ValueError("As Contas a Pagar existentes divergem dos boletos. Nenhuma parcela foi criada.")
+        return
     for indice, parcela in enumerate(parcelas, start=1):
         total_parcelas = parcela["total"] or (len(parcelas) if len(parcelas) > 1 else None)
         numero_parcela = parcela["numero"] or (indice if total_parcelas else None)
@@ -12117,22 +12141,17 @@ def compras_nova(request):
             return redirect("estoque:compras_nova")
 
         try:
-            with transaction.atomic():
-                compra = Compra.objects.create(
-                    fornecedor=dados["fornecedor"],
-                    data_compra=dados["data_compra"],
-                    data_vencimento=dados["data_vencimento"],
-                    tipo_pagamento=dados["tipo_pagamento"],
-                    cartao=dados["cartao"],
-                    total=dados["total"],
-                    total_produtos=dados["total_produtos"],
-                    ajuste_total=dados["ajuste_total"],
-                    observacao=dados["observacao"],
-                    status=Compra.STATUS_RASCUNHO,
+            with transaction.atomic(), bloquear_catalogo():
+                compra, _ = Compra.objects.get_or_create(
                     fechamento_token=fechamento_token,
+                    defaults={"data_compra": dados["data_compra"], "status": Compra.STATUS_RASCUNHO},
                 )
+                compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
+                    return redirect("estoque:compras_detalhe", pk=compra.pk)
                 status = Compra.STATUS_RASCUNHO
                 _salvar_compra_e_itens(compra, dados, status)
+                _salvar_pagamento_nota_compra(request, compra, dados)
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
@@ -12193,7 +12212,7 @@ def compra_salvar_pre_revisao(request, pk=None):
             if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                 return JsonResponse({"ok": False, "erro": "Compra ja finalizada. Recarregue a pagina para consultar o resultado."}, status=409)
             _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
-            _salvar_pagamento_nota_compra_lista(request, compra, dados)
+            _salvar_pagamento_nota_compra(request, compra, dados)
         return JsonResponse({
             "ok": True,
             "editar_url": reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
@@ -12211,6 +12230,30 @@ def compra_salvar_pre_revisao(request, pk=None):
 def compra_editar(request, pk):
     compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
     compra = get_object_or_404(compra_qs, pk=pk)
+    if compra.status == Compra.STATUS_FINALIZADA and (
+        request.method == "GET" or request.POST.get("acao_compra") == "salvar_edicao_finalizada"
+    ):
+        if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
+            return HttpResponseForbidden("Entre com um usuario autorizado a editar compras.")
+        from .services.edicao_compra import contexto_edicao, salvar_edicao
+        if request.method == "POST":
+            try:
+                _, alterou = salvar_edicao(request, pk)
+            except (ValueError, ValidationError) as exc:
+                messages.error(request, str(exc))
+                return redirect("estoque:compra_editar", pk=pk)
+            except Exception:
+                logger.exception("Falha na edicao historica da compra %s", pk)
+                messages.error(request, "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; recarregue a compra.")
+                return redirect("estoque:compra_editar", pk=pk)
+            messages.success(request, "Compra corrigida com historico preservado." if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
+            return redirect("estoque:compras_detalhe", pk=pk)
+        contexto = _contexto_form_compra(compra)
+        contexto.update(contexto_edicao(compra, request.user))
+        contexto["fornecedores"] = list(Fornecedor.objects.filter(Q(ativo=True) | Q(pk=compra.fornecedor_id)).order_by("nome", "pk"))
+        contexto["produtos"] = list(Produto.objects.filter(Q(ativo=True, excluido=False) | Q(pk__in=compra.itens.values_list("produto_id", flat=True))).order_by("nome", "pk"))
+        contexto["cartoes_credito"] = list(CartaoCredito.objects.filter(Q(ativo=True) | Q(pk=compra.cartao_id)))
+        return render(request, "estoque/compras_nova.html", contexto)
     if not _compra_editavel_ou_redireciona(compra):
         messages.warning(request, "Compra finalizada deve ser editada pela correcao de itens.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -12246,8 +12289,7 @@ def compra_editar(request, pk):
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                     return redirect("estoque:compras_detalhe", pk=compra.pk)
                 _salvar_compra_e_itens(compra, dados, status)
-                if acao in {"finalizar", "confirmar_financeiro"}:
-                    _salvar_pagamento_nota_compra_lista(request, compra, dados)
+                _salvar_pagamento_nota_compra(request, compra, dados)
                 if acao == "finalizar":
                     _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
                     _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
@@ -12340,7 +12382,7 @@ def compra_finalizar(request, pk):
                     if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                         return redirect("estoque:compras_detalhe", pk=compra.pk)
                     _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
-                    _salvar_pagamento_nota_compra_lista(request, compra, dados)
+                    _salvar_pagamento_nota_compra(request, compra, dados)
                     _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
             except ValueError as exc:
                 messages.error(request, str(exc))
