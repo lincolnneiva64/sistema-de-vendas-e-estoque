@@ -293,7 +293,7 @@ export function indicatorState({operations, stability, now, wall, syncing = fals
     else if (notice && notice.until > wall) { kind = notice.kind; label = notice.label; }
     else if (ready && sendable) { kind = 'ready'; label = 'Conexão estável — ' + quantity + (count === 1 ? ' pronta' : ' prontas') + ' para sincronizar'; }
     else if (ready && pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
-    else if (!ready && (count || stability.reconnecting)) { kind = 'waiting'; label = 'Conexão restabelecida — Verificando estabilidade para sincronização segura (' + Math.floor(stability.elapsed(now, wall) / 60000) + ' de 15 minutos)' + (count ? ' \u00b7 ' + quantity + ' aguardando' : ''); }
+    else if (!ready && count > 0) { kind = 'waiting'; label = 'Conexão restabelecida — Verificando estabilidade para sincronização segura (' + Math.floor(stability.elapsed(now, wall) / 60000) + ' de 15 minutos)' + (count ? ' \u00b7 ' + quantity + ' aguardando' : ''); }
     else { kind = 'online'; label = 'ONLINE'; }
     return {kind, label, count, canSync: ready && authenticated && sendable && !syncing};
 }
