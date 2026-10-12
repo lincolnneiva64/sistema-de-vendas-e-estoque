@@ -219,6 +219,41 @@
 {% endif %}
     <section class="cardx">
       <h3 class="mt-4 mb-3">Entrega e recolhimento</h3>
+      {% if regularizacao_tarefa %}
+        <div class="operacional-item mb-3">
+          <h2>Regularizar entrega encerrada administrativamente</h2>
+          <p class="muted">Registre a entrega ou retirada que aconteceu sem checklist. O recolhimento permanece pendente para conferência real.</p>
+          <form method="post" action="{% url 'locacoes:resolver_tarefa_operacional' regularizacao_tarefa.pk %}" data-enter-nav>
+            {% csrf_token %}
+            <input type="hidden" name="origem" value="detalhe">
+            <div class="grid">
+              <div>
+                <label class="form-label" for="regularizacaoResultado">Resultado</label>
+                <select class="form-select" id="regularizacaoResultado" name="resultado" required>
+                  <option value="">Escolha explicitamente</option>
+                  <option value="entrega_equipe">Entrega realizada pela equipe</option>
+                  <option value="retirada_cliente">Material retirado pelo cliente</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label" for="regularizacaoData">Data efetiva da entrega/retirada</label>
+                <input class="form-control" id="regularizacaoData" type="date" name="data_efetiva" required>
+              </div>
+              <div>
+                <label class="form-label" for="regularizacaoResponsavel">Responsável pela entrega/retirada</label>
+                <input class="form-control" id="regularizacaoResponsavel" name="responsavel" maxlength="120" required>
+              </div>
+              <div>
+                <label class="form-label" for="regularizacaoMotivo">Motivo</label>
+                <textarea class="form-control" id="regularizacaoMotivo" name="motivo" maxlength="500" required></textarea>
+              </div>
+            </div>
+            <div class="d-flex justify-content-end mt-3">
+              <button class="btn btn-locacoes" type="submit">Salvar regularização</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
       {% if locacao.status == 'reservada' %}
         <form method="post" action="{% url 'locacoes:marcar_saiu_para_entrega' locacao.id %}" data-enter-nav>
           {% csrf_token %}

@@ -1399,11 +1399,31 @@ def detalhe(request, pk):
 
     ultimo_pagamento = locacao.pagamentos.all().first()
 
+    entrega_encerrada = locacao.tarefas_operacionais.filter(
+        tipo=TarefaOperacionalLocacao.TIPO_ENTREGA,
+        status=TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+    ).first()
+    recolhimento_existente = locacao.tarefas_operacionais.filter(
+        tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+    ).first()
+    pode_regularizar_entrega = (
+        entrega_encerrada is not None
+        and locacao.status == Locacao.STATUS_RESERVADA
+        and not locacao.entrega_confirmada()
+        and not locacao.eventos.filter(
+            tipo__in=["entregue", "checklist_entrega_confirmada"],
+        ).exists()
+        and not entrega_encerrada.confirmado_em
+        and not locacao.conferencias_recolhimento.exists()
+        and (recolhimento_existente is None or recolhimento_existente.pendente_operacional)
+    )
+
     return render(
         request,
         "locacoes/detalhe.html",
         {
             "locacao": locacao,
+            "regularizacao_tarefa": entrega_encerrada if pode_regularizar_entrega else None,
             "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
             "tarefa_entrega": tarefa_entrega,
             "tarefa_recolhimento": tarefa_recolhimento,
@@ -2125,12 +2145,28 @@ def conferencia_recolhimento(request, pk):
 def resolver_tarefa_operacional(request, pk):
     tarefa = get_object_or_404(TarefaOperacionalLocacao, pk=pk)
     try:
+        resultado = request.POST.get("resultado", "")
+        if not resultado:
+            raise ValidationError("Escolha explicitamente o resultado da tarefa.")
+        try:
+            data_efetiva = parse_date(request.POST.get("data_efetiva", ""))
+        except ValueError:
+            data_efetiva = None
         tarefa.resolver_administrativamente(
             motivo=request.POST.get("motivo", ""),
-            responsavel=_responsavel_request(request),
+            responsavel=(request.POST.get("responsavel", "") if resultado != "tarefa_engano"
+                         else _responsavel_request(request)),
+            resultado=resultado,
+            data_efetiva=data_efetiva,
         )
     except ValidationError as exc:
+        if request.POST.get("origem") == "detalhe":
+            messages.error(request, "; ".join(exc.messages))
+            return redirect("locacoes:detalhe", pk=tarefa.locacao_id)
         return JsonResponse({"ok": False, "erro": "; ".join(exc.messages)}, status=400)
+    if request.POST.get("origem") == "detalhe":
+        messages.success(request, "Entrega regularizada sem checklist fisico. Recolhimento mantido pendente.")
+        return redirect("locacoes:detalhe", pk=tarefa.locacao_id)
     return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
 
 

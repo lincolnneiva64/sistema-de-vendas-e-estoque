@@ -1,4 +1,5 @@
 import uuid
+from datetime import date
 
 from decimal import Decimal
 
@@ -1182,33 +1183,72 @@ class TarefaOperacionalLocacao(models.Model):
             self.STATUS_NAO_POSSIVEL,
         }
 
-    def resolver_administrativamente(self, motivo, responsavel=""):
+    def resolver_administrativamente(self, motivo, responsavel="", *,
+                                     resultado="tarefa_engano", data_efetiva=None):
         motivo = str(motivo or "").strip()
         if not motivo or len(motivo) > 500:
             raise ValidationError("Informe um motivo de ate 500 caracteres.")
+        if resultado not in {"entrega_equipe", "retirada_cliente", "tarefa_engano"}:
+            raise ValidationError("Escolha um resultado valido para a tarefa.")
+        entrega_realizada = resultado != "tarefa_engano"
+        responsavel = str(responsavel or "").strip()
+        if entrega_realizada:
+            if type(data_efetiva) is not date or data_efetiva > timezone.localdate():
+                raise ValidationError("Informe uma data efetiva valida, que nao seja futura.")
+            if not responsavel or len(responsavel) > 120:
+                raise ValidationError("Informe o responsavel pela entrega (ate 120 caracteres).")
         with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
             tarefa = type(self).objects.select_for_update().get(pk=self.pk)
-            if not tarefa.pendente_operacional:
+            regularizacao_posterior = (
+                entrega_realizada and tarefa.status == self.STATUS_RESOLVIDA_ADMIN
+                and locacao.status == Locacao.STATUS_RESERVADA
+            )
+            if not tarefa.pendente_operacional and not regularizacao_posterior:
                 raise ValidationError("Esta tarefa ja foi encerrada.")
+            if entrega_realizada:
+                if tarefa.tipo != self.TIPO_ENTREGA:
+                    raise ValidationError("Recolhimento exige conferencia real; nao pode regularizar entrega.")
+                if (locacao.status not in {Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA}
+                        or locacao.entrega_confirmada()
+                        or locacao.eventos.filter(tipo__in=["entregue", "checklist_entrega_confirmada"]).exists()
+                        or tarefa.confirmado_em):
+                    raise ValidationError("Esta locacao nao possui uma entrega reservada sem confirmacao.")
+                recolhimento = locacao.tarefas_operacionais.filter(tipo=self.TIPO_RECOLHIMENTO).first()
+                if (locacao.conferencias_recolhimento.exists()
+                        or (recolhimento and not recolhimento.pendente_operacional)):
+                    raise ValidationError("Recolhimento ja encerrado ou conferido; revise o historico da locacao.")
+                descricao = (
+                    f"Regularizacao sem checklist fisico. Resultado: {resultado}. "
+                    f"Data efetiva: {data_efetiva.isoformat()}. Motivo: {motivo}."
+                )
+                if locacao.status == Locacao.STATUS_RESERVADA:
+                    locacao.marcar_saiu_para_entrega(responsavel, descricao)
+                locacao.confirmar_entrega(responsavel, descricao)
+                from .services import obter_ou_criar_tarefa_operacional
+                obter_ou_criar_tarefa_operacional(locacao, self.TIPO_RECOLHIMENTO)
             anterior = tarefa.status
             agora = timezone.now()
             tarefa.status = self.STATUS_RESOLVIDA_ADMIN
-            tarefa.resolvida_em = agora
-            tarefa.resolvida_por = str(responsavel or "Sistema").strip()[:120]
-            tarefa.motivo_resolucao = motivo
-            tarefa.save(update_fields=[
-                "status", "resolvida_em", "resolvida_por",
-                "motivo_resolucao", "atualizado_em",
-            ])
+            if not regularizacao_posterior:
+                tarefa.resolvida_em = agora
+                tarefa.resolvida_por = str(responsavel or "Sistema").strip()[:120]
+                tarefa.motivo_resolucao = motivo
+                tarefa.save(update_fields=[
+                    "status", "resolvida_em", "resolvida_por",
+                    "motivo_resolucao", "atualizado_em",
+                ])
             EventoLocacao.objects.create(
                 locacao_id=tarefa.locacao_id,
                 tipo="tarefa_resolvida_admin",
-                responsavel=tarefa.resolvida_por,
+                responsavel=responsavel or tarefa.resolvida_por,
                 descricao=(
                     f"Resolucao administrativa da tarefa #{tarefa.pk}.\n"
                     f"Tipo: {tarefa.tipo}\nStatus anterior: {anterior}\n"
                     f"Data/hora: {timezone.localtime(agora).isoformat()}\n"
-                    f"Responsavel: {tarefa.resolvida_por}\nMotivo: {motivo}\n"
+                    f"Responsavel: {responsavel or tarefa.resolvida_por}\nMotivo: {motivo}\n"
+                    f"Resultado: {resultado}\nData efetiva: {data_efetiva or 'nao se aplica'}\n"
+                    f"Regularizacao posterior: {regularizacao_posterior}\n"
                     "Encerramento da pendencia sem confirmar checklist fisico."
                 ),
             )

@@ -3179,6 +3179,22 @@ td:first-child {
                                 data-resolver-url="{% url 'locacoes:resolver_tarefa_operacional' item.tarefa.pk %}">
                                 Dar como resolvida
                             </button>
+                            <form data-resolver-form hidden>
+<label class="d-block mt-2">Resultado
+<select class="form-select" name="resultado" required>
+  <option value="">Escolha explicitamente</option>
+  {% if item.tarefa.tipo == 'entrega' %}
+  <option value="entrega_equipe">Entrega realizada pela equipe</option>
+  <option value="retirada_cliente">Material retirado pelo cliente</option>
+  {% endif %}
+  <option value="tarefa_engano">Tarefa criada por engano</option>
+</select></label>
+<label class="d-block mt-2">Data efetiva da entrega/retirada <input class="form-control" type="date" name="data_efetiva"></label>
+<label class="d-block mt-2">Responsável pela entrega/retirada <input class="form-control" name="responsavel" maxlength="120"></label>
+<label class="d-block mt-2">Motivo <textarea class="form-control" name="motivo" maxlength="500" required></textarea></label>
+<p>Entrega/retirada exige data efetiva e responsável. Recolhimento exige conferência real para devolver materiais.</p>
+<button class="btn btn-primary" type="submit">Salvar regularização</button>
+                            </form>
                             <p class="locacoes-rapidas-alerta" data-resolver-erro role="alert" hidden></p>
                         </article>
                     {% empty %}
@@ -7111,34 +7127,37 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         const confirmar = card.querySelector(".locacoes-rapidas-confirmar");
         const resolver = card.querySelector(".locacoes-rapidas-resolver");
         const erroResolucao = card.querySelector("[data-resolver-erro]");
-        resolver?.addEventListener("click", async () => {
-            const motivo = window.prompt(
-                "Use apenas quando a entrega ou o recolhimento já aconteceu na prática, mas não foi registrado corretamente. " +
-                "Isso encerra somente a pendência; não confirma checklist nem altera materiais ou valores.\n\nInforme um motivo curto (até 500 caracteres):"
-            );
-            if (motivo === null) return;
-            if (!motivo.trim() || motivo.trim().length > 500) {
-                erroResolucao.textContent = "Informe um motivo de até 500 caracteres.";
+        const formularioResolucao = card.querySelector("[data-resolver-form]");
+        resolver?.addEventListener("click", () => {
+            formularioResolucao.hidden = !formularioResolucao.hidden;
+        });
+        formularioResolucao?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const campos = new FormData(formularioResolucao);
+            const entregaRealizada = campos.get("resultado") !== "tarefa_engano";
+            if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("responsavel").trim())) {
+                erroResolucao.textContent = "Informe data efetiva e responsável pela entrega/retirada.";
                 erroResolucao.hidden = false;
                 return;
             }
-            if (!window.confirm("Dar esta tarefa como resolvida administrativamente?\nMotivo: " + motivo.trim())) return;
             resolver.disabled = true;
+            const salvar = formularioResolucao.querySelector("button[type=submit]");
+            salvar.disabled = true;
             erroResolucao.hidden = true;
             try {
                 const resposta = await fetch(resolver.dataset.resolverUrl, {
                     method: "POST",
                     headers: {"X-CSRFToken": obterCookie("csrftoken"), "X-Requested-With": "XMLHttpRequest"},
-                    body: new URLSearchParams({motivo: motivo.trim()}),
+                    body: new URLSearchParams(campos),
                 });
                 const dados = await resposta.json();
                 if (!resposta.ok || !dados.ok) throw new Error(dados.erro || "Não foi possível resolver a tarefa.");
-                card.remove();
-                atualizarContadores();
+                window.location.reload();
             } catch (erro) {
                 erroResolucao.textContent = erro.message || "Não foi possível resolver a tarefa. Tente novamente.";
                 erroResolucao.hidden = false;
                 resolver.disabled = false;
+                salvar.disabled = false;
             }
         });
         const chaveFuncionario = "locacoes.operacional.funcionario." + (card.dataset.tarefaId || "");
