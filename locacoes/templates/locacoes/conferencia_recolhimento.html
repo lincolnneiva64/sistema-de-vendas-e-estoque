@@ -421,6 +421,7 @@
 
         <form method="post" data-enter-nav novalidate>
           {% csrf_token %}
+          {% include "locacoes/includes/operacao_identificacao.html" %}
 
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
@@ -796,5 +797,6 @@
   </script>
 <section data-checklist-task="{{ tarefa.pk }}"></section>
 {% include 'locacoes/includes/offline_checklist.html' %}
+{% include "locacoes/includes/checklist_embutido.html" %}
 </body>
 </html>

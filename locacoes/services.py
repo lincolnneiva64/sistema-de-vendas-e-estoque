@@ -1,6 +1,7 @@
 from urllib.parse import quote, urlencode
 
 from django.conf import settings
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
@@ -15,6 +16,31 @@ STATUS_LOCACAO_ENCERRADOS = {
     Locacao.STATUS_DEVOLVIDA,
     Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
 }
+
+
+def funcionarios_operacionais_locacoes():
+    return Funcionario.objects.filter(ativo=True).filter(
+        Q(pode_receber_checklist=True) | Q(pode_operar_sistema=True),
+    ).order_by("nome", "pk")
+
+
+def indicador_operacional_locacao(locacao, hoje=None):
+    hoje = hoje or timezone.localdate()
+    if locacao.status in {Locacao.STATUS_DEVOLVIDA, Locacao.STATUS_DEVOLVIDA_COM_AVARIA}:
+        ultima = next(iter(locacao.conferencias_recolhimento.all()), None)
+        return {"texto": "Devolucao concluida", "data": ultima.criado_em.date() if ultima else None,
+                "horario": None, "atraso": False}
+    if locacao.status == Locacao.STATUS_CANCELADA:
+        return {"texto": "Cancelada", "data": None, "horario": None, "atraso": False}
+    entrega = locacao.status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA}
+    tipo = "entrega" if entrega else "recolhimento"
+    tarefa = next((t for t in locacao.tarefas_operacionais.all() if t.tipo == tipo), None)
+    data = tarefa.data_agendada if tarefa else (locacao.data_entrega if entrega else locacao.data_prevista_devolucao)
+    horario = (tarefa.horario_agendado if tarefa else locacao.horario_entrega) if entrega else None
+    atraso = data < hoje or (data == hoje and horario is not None and horario <= timezone.localtime().time())
+    texto = "Entrega prevista" if entrega else "Aguardando recolhimento"
+    return {"texto": ("Atraso na entrega" if entrega else "Atraso na devolucao") if atraso else texto,
+            "data": data, "horario": horario, "atraso": atraso}
 
 
 def dados_agendamento_tarefa(locacao, tipo):
@@ -649,7 +675,9 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
                 item["data_label"] = proxima_data.strftime("%d/%m")
             itens.append(item)
 
+    funcionarios_operacionais = list(funcionarios_operacionais_locacoes())
     for item in itens:
+        item["funcionarios_operacionais"] = funcionarios_operacionais
         item["entrega_antiga"] = (
             item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
             and item["tarefa"].data_agendada < data_referencia - timedelta(days=2)
@@ -710,6 +738,15 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
                  - timezone.datetime.combine(checklist["data"], hora_atual)
                  ).total_seconds() <= 30 * 60
         )
+
+    itens.sort(key=lambda item: (
+        0 if item["vencida"] else (1 if item["tarefa"].data_agendada == data_referencia else 2),
+        item["tarefa"].data_agendada,
+        item["horario"] is None, item["horario"] or timezone.datetime.max.time(),
+        item["locacao"].pk,
+    ))
+    for indice, item in enumerate(itens, start=1):
+        item["ordem_operacional"] = indice
 
     return {
         "data": checklist["data"],

@@ -1,0 +1,41 @@
+<script>
+(function () {
+  if (new URLSearchParams(window.location.search).get("embutido") !== "1") return;
+  const style = document.createElement("style");
+  style.textContent = ".top, .atalho-despesa-global {display:none!important;} .page {width:100%;padding:8px;} body{background:#fff;}";
+  document.head.appendChild(style);
+  const formulario = document.querySelector("form[data-enter-nav]");
+  if (!formulario) return;
+  formulario.addEventListener("submit", async (event) => {
+    if (event.defaultPrevented || !navigator.onLine) return;
+    event.preventDefault();
+    const botao = formulario.querySelector("button[type=submit]");
+    if (botao) botao.disabled = true;
+    let aviso = formulario.querySelector("[data-erro-envio]");
+    if (!aviso) {aviso = document.createElement("p"); aviso.dataset.erroEnvio = "1"; aviso.setAttribute("role", "alert"); formulario.prepend(aviso);}
+    try {
+      const resposta = await fetch(window.location.href, {method:"POST", body:new FormData(formulario), headers:{"X-Requested-With":"XMLHttpRequest"}});
+      if (resposta.headers.get("Content-Type")?.includes("application/json")) {
+        const dados = await resposta.json();
+        if (!resposta.ok || !dados.ok) throw new Error(dados.erro || "Falha ao salvar conferência.");
+        window.parent.postMessage({tipo:"locacao-conferida", tarefaId:dados.tarefa_id, parcial:dados.parcial}, window.location.origin);
+        formulario.hidden = true;
+        const sucesso = document.createElement("p"); sucesso.textContent = "Conferência salva com sucesso."; formulario.after(sucesso);
+      } else if (resposta.ok && !resposta.redirected) {
+        const html = await resposta.text();
+        document.open(); document.write(html); document.close();
+      } else {
+        throw new Error("A tarefa mudou ou a sessão expirou. Atualize a operação antes de continuar.");
+      }
+    } catch (erro) {
+      aviso.textContent = erro.message || "Falha no envio. Verifique a conexão antes de tentar novamente.";
+      // The response may have been lost after saving a partial conference.
+      // Reload current quantities before allowing a new submission.
+      if (botao) {botao.disabled = true; botao.textContent = "Atualize a conferência antes de continuar";}
+      const atualizar = document.createElement("button"); atualizar.type = "button";
+      atualizar.textContent = "Atualizar conferência";
+      atualizar.addEventListener("click", () => window.location.reload()); aviso.after(atualizar);
+    }
+  });
+})();
+</script>

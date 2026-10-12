@@ -12,8 +12,11 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 from urllib.parse import quote, urlencode
+
+from .services import funcionarios_operacionais_locacoes, indicador_operacional_locacao
 
 from .forms import (
     AcaoOperacionalLocacaoForm,
@@ -762,6 +765,7 @@ def lista(request):
                 for item in locacao.itens.all()
             ]
         )
+        locacao.indicador_operacional = indicador_operacional_locacao(locacao, hoje)
         locacao.acoes_consulta = _acoes_locacao(locacao, request=request)
         locacao.saldo_vencido_lista = locacao.saldo_vencido_em(hoje)
     return render(
@@ -1424,6 +1428,7 @@ def detalhe(request, pk):
         {
             "locacao": locacao,
             "regularizacao_tarefa": entrega_encerrada if pode_regularizar_entrega else None,
+            "funcionarios_operacionais": funcionarios_operacionais_locacoes(),
             "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
             "tarefa_entrega": tarefa_entrega,
             "tarefa_recolhimento": tarefa_recolhimento,
@@ -1507,7 +1512,17 @@ def abrir_tarefa_operacional_locacao(request, pk, tipo):
     return redirect(f"{reverse('locacoes:checklist_operacional')}?data={tarefa.data_agendada:%Y-%m-%d}&tarefa={tarefa.pk}")
 
 
+def _initial_identificacao_checklist(request, responsavel=""):
+    initial = {"responsavel": responsavel}
+    for campo in ("modalidade", "funcionario_conferente", "transportador", "data_efetiva", "observacao"):
+        valor = request.GET.get(campo)
+        if valor:
+            initial[campo] = valor
+    return initial
+
+
 @ensure_csrf_cookie
+@xframe_options_sameorigin
 def conferencia_entrega(request, pk):
     tarefa = get_object_or_404(
         TarefaOperacionalLocacao.objects
@@ -1593,8 +1608,11 @@ def conferencia_entrega(request, pk):
         form = ConferenciaEntregaLocacaoForm(
             dados_post,
             locacao=locacao,
+            exigir_identificacao=request.GET.get("embutido") == "1",
         )
         if form.is_valid():
+            if form.cleaned_data.get("modalidade"):
+                form.cleaned_data["observacao"] += "\nUsuario que registrou: " + _responsavel_request(request)
             try:
                 conferencia = ConferenciaEntregaLocacao.registrar(
                     tarefa=tarefa,
@@ -1617,6 +1635,9 @@ def conferencia_entrega(request, pk):
                     "Nao foi possivel registrar a conferencia.",
                 )
             else:
+                if request.GET.get("embutido") == "1":
+                    return JsonResponse({"ok": True, "tarefa_id": tarefa.pk,
+                                         "parcial": conferencia.situacao == ConferenciaEntregaLocacao.SITUACAO_PARCIAL})
                 if (
                     conferencia.situacao
                     == ConferenciaEntregaLocacao.SITUACAO_PARCIAL
@@ -1642,7 +1663,8 @@ def conferencia_entrega(request, pk):
     else:
         form = ConferenciaEntregaLocacaoForm(
             locacao=locacao,
-            initial={"responsavel": responsavel_checklist},
+            exigir_identificacao=request.GET.get("embutido") == "1",
+            initial=_initial_identificacao_checklist(request, responsavel_checklist),
         )
 
     historico = locacao.conferencias_entrega.all()
@@ -1904,6 +1926,7 @@ def checklist_recolhimento_cliente(request, pk):
     )
 
 
+@xframe_options_sameorigin
 def conferencia_recolhimento(request, pk):
     tarefa = get_object_or_404(
         TarefaOperacionalLocacao.objects
@@ -1993,9 +2016,13 @@ def conferencia_recolhimento(request, pk):
         form = ConferenciaRecolhimentoLocacaoForm(
             dados_post,
             locacao=locacao,
+            exigir_identificacao=request.GET.get("embutido") == "1",
         )
 
         if form.is_valid():
+            if form.cleaned_data.get("modalidade"):
+                form.cleaned_data["pessoa_local_nome"] = form.cleaned_data["responsavel"]
+                form.cleaned_data["observacao"] += "\nUsuario que registrou: " + _responsavel_request(request)
             try:
                 conferencia = (
                     ConferenciaRecolhimentoLocacao.registrar(
@@ -2027,6 +2054,9 @@ def conferencia_recolhimento(request, pk):
                     ),
                 )
             else:
+                if request.GET.get("embutido") == "1":
+                    return JsonResponse({"ok": True, "tarefa_id": tarefa.pk,
+                                         "parcial": conferencia.situacao == ConferenciaRecolhimentoLocacao.SITUACAO_PARCIAL})
                 if (
                     conferencia.situacao
                     == ConferenciaRecolhimentoLocacao
@@ -2074,6 +2104,8 @@ def conferencia_recolhimento(request, pk):
     else:
         form = ConferenciaRecolhimentoLocacaoForm(
             locacao=locacao,
+            initial=_initial_identificacao_checklist(request, responsavel_checklist),
+            exigir_identificacao=request.GET.get("embutido") == "1",
         )
 
     checklist_url = (
@@ -2152,13 +2184,32 @@ def resolver_tarefa_operacional(request, pk):
             data_efetiva = parse_date(request.POST.get("data_efetiva", ""))
         except ValueError:
             data_efetiva = None
-        tarefa.resolver_administrativamente(
-            motivo=request.POST.get("motivo", ""),
-            responsavel=(request.POST.get("responsavel", "") if resultado != "tarefa_engano"
-                         else _responsavel_request(request)),
-            resultado=resultado,
-            data_efetiva=data_efetiva,
-        )
+        responsavel = request.POST.get("responsavel", "")
+        funcionario_registro = request.POST.get("funcionario_registro", "")
+        transportador = None
+        if funcionario_registro and resultado != "tarefa_engano":
+            funcionario = funcionarios_operacionais_locacoes().filter(pk=funcionario_registro).first() if funcionario_registro.isdigit() else None
+            if not funcionario:
+                raise ValidationError("Selecione um funcionario habilitado para registrar a operacao.")
+            responsavel = funcionario.nome[:120]
+            if resultado == "entrega_equipe":
+                transportador_id = request.POST.get("transportador", "")
+                transportador = funcionarios_operacionais_locacoes().filter(pk=transportador_id).first() if transportador_id.isdigit() else None
+                if not transportador:
+                    raise ValidationError("Selecione quem transportou os materiais.")
+        with transaction.atomic():
+            tarefa.resolver_administrativamente(
+                motivo=request.POST.get("motivo", ""),
+                responsavel=responsavel if resultado != "tarefa_engano" else _responsavel_request(request),
+                resultado=resultado, data_efetiva=data_efetiva,
+            )
+            if funcionario_registro and resultado != "tarefa_engano":
+                EventoLocacao.objects.create(
+                    locacao_id=tarefa.locacao_id, tipo="transporte_regularizado", responsavel=responsavel,
+                    descricao=(f"Transportou: {transportador.nome if transportador else 'Cliente, no deposito'}. "
+                               f"Registrou: {responsavel}. Usuario: {_responsavel_request(request)}. "
+                               f"Data efetiva: {data_efetiva}. Motivo: {request.POST.get('motivo', '')}"),
+                )
     except ValidationError as exc:
         if request.POST.get("origem") == "detalhe":
             messages.error(request, "; ".join(exc.messages))

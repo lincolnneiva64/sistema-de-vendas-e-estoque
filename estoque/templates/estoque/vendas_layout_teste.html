@@ -3122,6 +3122,8 @@ td:first-child {
                                     </div>
                                     <div class="locacoes-rapidas-cliente">{{ item.cliente }}</div>
                                     <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
+                                    <div class="locacoes-rapidas-meta">Prevista: {{ item.tarefa.data_agendada|date:"d/m/Y" }}{% if item.horario %} às {{ item.horario|time:"H:i" }}{% else %} — sem horário definido{% endif %}</div>
+                                    <div class="locacoes-rapidas-meta" data-atraso-label {% if not item.vencida %}hidden{% endif %}>Em atraso</div>
                                 </div>
                                 <div class="locacoes-rapidas-hora">
                                     {% if item.vencida %}
@@ -3136,7 +3138,7 @@ td:first-child {
                                 </div>
                             </div>
                             <div class="locacoes-rapidas-funcionario" data-envio-operacional>
-                                <label for="locacoes-funcionario-{{ item.tarefa.id }}">Funcionario responsavel</label>
+                                <label for="locacoes-funcionario-{{ item.tarefa.id }}">Destinatário do checklist (WhatsApp)</label>
                                 <select
                                     id="locacoes-funcionario-{{ item.tarefa.id }}"
                                     class="locacoes-rapidas-select funcionario-select"
@@ -3175,6 +3177,13 @@ td:first-child {
                                 </button>
                             </div>
                             <div class="locacoes-rapidas-confirmado">Checklist enviado</div>
+                            <button type="button" class="btn btn-outline-success" data-abrir-checklist="{% if item.tipo == 'entrega' %}{{ item.conferencia_entrega_url }}{% else %}{{ item.conferencia_recolhimento_url }}{% endif %}?embutido=1">
+                              {% if item.tipo == 'entrega' %}Registrar entrega / retirada{% else %}Conferir devolução / recolhimento{% endif %}
+                            </button>
+                            <div data-checklist-area hidden>
+                              <button type="button" class="btn btn-outline-secondary" data-fechar-checklist>Fechar conferência</button>
+                              <iframe data-checklist-frame title="Conferência de materiais" style="width:100%;height:70vh;border:1px solid #fed7aa;border-radius:8px"></iframe>
+                            </div>
                             <button type="button" class="locacoes-rapidas-resolver"
                                 data-resolver-url="{% url 'locacoes:resolver_tarefa_operacional' item.tarefa.pk %}">
                                 Dar como resolvida
@@ -3186,11 +3195,23 @@ td:first-child {
   {% if item.tarefa.tipo == 'entrega' %}
   <option value="entrega_equipe">Entrega realizada pela equipe</option>
   <option value="retirada_cliente">Material retirado pelo cliente</option>
+  {% else %}
+  <option value="recolhimento_equipe">Recolhimento realizado pela equipe</option>
+  <option value="devolucao_cliente">Cliente devolveu no deposito</option>
   {% endif %}
   <option value="tarefa_engano">Tarefa criada por engano</option>
 </select></label>
-<label class="d-block mt-2">Data efetiva da entrega/retirada <input class="form-control" type="date" name="data_efetiva"></label>
-<label class="d-block mt-2">Responsável pela entrega/retirada <input class="form-control" name="responsavel" maxlength="120"></label>
+<label class="d-block mt-2">Data efetiva da operação <input class="form-control" type="date" name="data_efetiva"></label>
+<label class="d-block mt-2">Funcionário que registra
+<select class="form-select" name="funcionario_registro">
+  <option value="">Selecione quem registrou</option>
+  {% for funcionario in item.funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
+</select></label>
+<label class="d-block mt-2">Quem transportou (quando equipe)
+<select class="form-select" name="transportador">
+  <option value="">Cliente no depósito / selecione a equipe</option>
+  {% for funcionario in item.funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
+</select></label>
 <label class="d-block mt-2">Motivo <textarea class="form-control" name="motivo" maxlength="500" required></textarea></label>
 <p>Entrega/retirada exige data efetiva e responsável. Recolhimento exige conferência real para devolver materiais.</p>
 <button class="btn btn-primary" type="submit">Salvar regularização</button>
@@ -7016,6 +7037,10 @@ function alternarLocacoesOperacionaisVenda(forcarAberto) {
     const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !locacoesOperacionaisVenda.classList.contains("aberto");
     locacoesOperacionaisVenda.classList.toggle("aberto", abrir);
     btnLocacoesOperacionaisVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
+    if (!abrir) {
+        delete locacoesOperacionaisVenda.dataset.filtroManual;
+        document.getElementById("locacoesOperacionaisVendaPainel")?.dispatchEvent(new Event("locacoes-reset"));
+    }
 }
 
 btnAtalhosVenda?.addEventListener("click", (event) => {
@@ -7038,21 +7063,25 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
     event.stopPropagation();
 });
 
-(function configurarLocacoesRapidas() {
+let intervaloLocacoesRapidas;
+function configurarLocacoesRapidas() {
     const painel = document.getElementById("locacoesOperacionaisVendaPainel");
     if (!painel) return;
     const tabs = Array.from(painel.querySelectorAll("[data-locacoes-filtro]"));
     const cards = Array.from(painel.querySelectorAll("[data-locacoes-card]"));
     const vazioFiltro = painel.querySelector("[data-locacoes-sem-filtro]");
 
-    let filtroAtual = "tudo";
+    const filtroAutomatico = () => cards.some(card => card.dataset.tipo === "entrega") ? "entrega" : "recolhimento";
+    let filtroAtual = locacoesOperacionaisVenda.dataset.filtroManual || filtroAutomatico();
+    painel.onLocacoesReset = () => aplicarFiltro(filtroAutomatico());
     function aplicarFiltro(filtro) {
         filtroAtual = filtro;
         let visiveis = 0;
         cards.forEach((card) => {
             const antiga = card.dataset.entregaAntiga === "1";
-            const mostrar = card.isConnected && (filtro === "antigas"
-                ? antiga : !antiga && (filtro === "tudo" || card.dataset.tipo === filtro));
+            const mostrar = card.isConnected && (filtro === "antigas" ? antiga
+                : filtro === "entrega" ? card.dataset.tipo === "entrega"
+                : !antiga && (filtro === "tudo" || card.dataset.tipo === filtro));
             card.hidden = !mostrar;
             if (mostrar) visiveis += 1;
         });
@@ -7070,7 +7099,7 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         const antigas = ativos.length - recentes.length;
         const contagens = {
             tudo: recentes.length,
-            entrega: recentes.filter(card => card.dataset.tipo === "entrega").length,
+            entrega: ativos.filter(card => card.dataset.tipo === "entrega").length,
             recolhimento: recentes.filter(card => card.dataset.tipo === "recolhimento").length,
             antigas,
         };
@@ -7078,13 +7107,12 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         tabs.forEach(tab => {
             const filtro = tab.dataset.locacoesFiltro;
             tab.textContent = rotulos[filtro] + " " + contagens[filtro];
-            if (filtro === "antigas") tab.hidden = antigas === 0;
+            if (filtro === "antigas") tab.hidden = antigas === 0 && filtroAtual !== "antigas";
         });
         const lateral = document.getElementById("locacoesOperacionaisVenda");
         const badge = lateral?.querySelector(".locacoes-operacionais-badge");
         if (badge) badge.textContent = recentes.length;
         atualizarAlertaLateral();
-        if (filtroAtual === "antigas" && antigas === 0) filtroAtual = "tudo";
         aplicarFiltro(filtroAtual);
     }
 
@@ -7111,13 +7139,21 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
                 card.classList.remove("atrasada", "proxima");
             }
         });
+        cards.forEach(card => {
+            const vencida = card.dataset.dataLateral < hoje || (card.dataset.dataLateral === hoje && Number(card.dataset.horarioLateral) > 0 && Number(card.dataset.horarioLateral) <= agora.getTime());
+            const label = card.querySelector("[data-atraso-label]"); if (label) label.hidden = !vencida;
+        });
         locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);
         locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && advertencia);
     }
-    setInterval(atualizarAlertaLateral, 1000);
+    clearInterval(intervaloLocacoesRapidas);
+    intervaloLocacoesRapidas = setInterval(atualizarAlertaLateral, 1000);
 
     tabs.forEach((tab) => {
-        tab.addEventListener("click", () => aplicarFiltro(tab.dataset.locacoesFiltro || "tudo"));
+        tab.addEventListener("click", () => {
+            locacoesOperacionaisVenda.dataset.filtroManual = tab.dataset.locacoesFiltro || "tudo";
+            aplicarFiltro(locacoesOperacionaisVenda.dataset.filtroManual);
+        });
     });
 
     cards.forEach((card) => {
@@ -7128,6 +7164,16 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
         const resolver = card.querySelector(".locacoes-rapidas-resolver");
         const erroResolucao = card.querySelector("[data-resolver-erro]");
         const formularioResolucao = card.querySelector("[data-resolver-form]");
+        const areaChecklist = card.querySelector("[data-checklist-area]");
+        const frameChecklist = card.querySelector("[data-checklist-frame]");
+        card.querySelector("[data-abrir-checklist]")?.addEventListener("click", event => {
+            frameChecklist.src = event.currentTarget.dataset.abrirChecklist;
+            areaChecklist.hidden = false;
+            formularioResolucao.hidden = true;
+        });
+        card.querySelector("[data-fechar-checklist]")?.addEventListener("click", () => {
+            areaChecklist.hidden = true; frameChecklist.removeAttribute("src");
+        });
         resolver?.addEventListener("click", () => {
             formularioResolucao.hidden = !formularioResolucao.hidden;
         });
@@ -7135,15 +7181,31 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
             event.preventDefault();
             const campos = new FormData(formularioResolucao);
             const entregaRealizada = campos.get("resultado") !== "tarefa_engano";
-            if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("responsavel").trim())) {
+            if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("funcionario_registro"))) {
                 erroResolucao.textContent = "Informe data efetiva e responsável pela entrega/retirada.";
                 erroResolucao.hidden = false;
                 return;
+            }
+            if (campos.get("resultado").endsWith("_equipe") && !campos.get("transportador")) {
+                erroResolucao.textContent = "Selecione quem transportou os materiais."; erroResolucao.hidden = false; return;
+            }
+            if (card.dataset.tipo === "recolhimento" && campos.get("resultado") !== "tarefa_engano") {
+                const destino = new URL(card.querySelector("[data-abrir-checklist]").dataset.abrirChecklist, window.location.origin);
+                destino.searchParams.set("modalidade", campos.get("resultado"));
+                destino.searchParams.set("funcionario_conferente", campos.get("funcionario_registro"));
+                destino.searchParams.set("transportador", campos.get("transportador"));
+                destino.searchParams.set("data_efetiva", campos.get("data_efetiva"));
+                destino.searchParams.set("observacao", campos.get("motivo"));
+                frameChecklist.src = destino.href;
+                areaChecklist.hidden = false; formularioResolucao.hidden = true;
+                erroResolucao.hidden = true;
+                return; // Quantities and conditions must be checked before any return is saved.
             }
             resolver.disabled = true;
             const salvar = formularioResolucao.querySelector("button[type=submit]");
             salvar.disabled = true;
             erroResolucao.hidden = true;
+            let operacaoSalva = false;
             try {
                 const resposta = await fetch(resolver.dataset.resolverUrl, {
                     method: "POST",
@@ -7152,12 +7214,13 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
                 });
                 const dados = await resposta.json();
                 if (!resposta.ok || !dados.ok) throw new Error(dados.erro || "Não foi possível resolver a tarefa.");
-                window.location.reload();
+                operacaoSalva = true;
+                await atualizarPainelLocacoes();
             } catch (erro) {
                 erroResolucao.textContent = erro.message || "Não foi possível resolver a tarefa. Tente novamente.";
                 erroResolucao.hidden = false;
-                resolver.disabled = false;
-                salvar.disabled = false;
+                resolver.disabled = operacaoSalva;
+                salvar.disabled = operacaoSalva;
             }
         });
         const chaveFuncionario = "locacoes.operacional.funcionario." + (card.dataset.tarefaId || "");
@@ -7213,7 +7276,25 @@ locacoesOperacionaisVenda?.addEventListener("click", (event) => {
     });
 
     atualizarContadores();
-})();
+}
+configurarLocacoesRapidas();
+document.getElementById("locacoesOperacionaisVendaPainel")?.addEventListener("locacoes-reset", event => event.currentTarget.onLocacoesReset?.());
+
+async function atualizarPainelLocacoes() {
+    const resposta = await fetch(window.location.href, {headers:{"X-Requested-With":"XMLHttpRequest"}, cache:"no-store"});
+    if (!resposta.ok || resposta.redirected) throw new Error("Operação salva; atualize o painel para conferir o resultado.");
+    const documento = new DOMParser().parseFromString(await resposta.text(), "text/html");
+    const novo = documento.getElementById("locacoesOperacionaisVendaPainel");
+    if (!novo) throw new Error("Operação salva; atualize o painel para conferir o resultado.");
+    document.getElementById("locacoesOperacionaisVendaPainel").innerHTML = novo.innerHTML;
+    configurarLocacoesRapidas();
+}
+window.addEventListener("message", async event => {
+    const frame = Array.from(document.querySelectorAll("[data-checklist-frame]")).find(frame => frame.contentWindow === event.source);
+    if (event.origin !== window.location.origin || !frame || event.data?.tipo !== "locacao-conferida") return;
+    try { await atualizarPainelLocacoes(); }
+    catch (erro) { const aviso = frame.closest("[data-locacoes-card]").querySelector("[data-resolver-erro]"); aviso.textContent = erro.message; aviso.hidden = false; }
+});
 
 document.addEventListener("click", () => {
     alternarAtalhosVenda(false);

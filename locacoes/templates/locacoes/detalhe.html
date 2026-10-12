@@ -219,6 +219,16 @@
 {% endif %}
     <section class="cardx">
       <h3 class="mt-4 mb-3">Entrega e recolhimento</h3>
+      {% if tarefa_entrega %}
+        <button class="btn btn-locacoes mb-3" type="button" data-checklist-local="{% url 'locacoes:conferencia_entrega' tarefa_entrega.pk %}?embutido=1">Registrar entrega / retirada no depósito</button>
+      {% endif %}
+      {% if tarefa_recolhimento and tarefa_recolhimento.pendente_operacional %}
+        <button class="btn btn-locacoes mb-3" type="button" data-checklist-local="{% url 'locacoes:conferencia_recolhimento' tarefa_recolhimento.pk %}?embutido=1">Conferir devolução / recolhimento</button>
+      {% endif %}
+      <div data-checklist-local-area hidden>
+        <button class="btn btn-outline-secondary mb-2" type="button" data-fechar-checklist-local">Fechar conferência</button>
+        <iframe title="Conferência da locação" style="width:100%;height:75vh;border:1px solid #fed7aa;border-radius:8px" data-checklist-local-frame></iframe>
+      </div>
       {% if regularizacao_tarefa %}
         <div class="operacional-item mb-3">
           <h2>Regularizar entrega encerrada administrativamente</h2>
@@ -240,8 +250,18 @@
                 <input class="form-control" id="regularizacaoData" type="date" name="data_efetiva" required>
               </div>
               <div>
-                <label class="form-label" for="regularizacaoResponsavel">Responsável pela entrega/retirada</label>
-                <input class="form-control" id="regularizacaoResponsavel" name="responsavel" maxlength="120" required>
+                <label class="form-label" for="regularizacaoResponsavel">Funcionário que registra</label>
+                <select class="form-select" id="regularizacaoResponsavel" name="funcionario_registro" required>
+                  <option value="">Selecione quem registrou</option>
+                  {% for funcionario in funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
+                </select>
+              </div>
+              <div>
+                <label class="form-label" for="regularizacaoTransportador">Quem transportou (quando equipe)</label>
+                <select class="form-select" id="regularizacaoTransportador" name="transportador">
+                  <option value="">Cliente no depósito / selecione a equipe</option>
+                  {% for funcionario in funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
+                </select>
               </div>
               <div>
                 <label class="form-label" for="regularizacaoMotivo">Motivo</label>
@@ -595,6 +615,20 @@
     </section>
   </main>
   {% include "locacoes/includes/enter_nav.html" %}
+<script>
+(function () {
+ const area = document.querySelector("[data-checklist-local-area]");
+ const frame = document.querySelector("[data-checklist-local-frame]");
+ document.querySelectorAll("[data-checklist-local]").forEach(botao => botao.addEventListener("click", () => {
+   frame.src = botao.dataset.checklistLocal; area.hidden = false; area.scrollIntoView({block:"nearest"});
+ }));
+ document.querySelector("[data-fechar-checklist-local]")?.addEventListener("click", () => {area.hidden = true; frame.removeAttribute("src");});
+ window.addEventListener("message", event => {
+   if (event.origin !== window.location.origin || event.source !== frame?.contentWindow || event.data?.tipo !== "locacao-conferida") return;
+   window.location.reload();
+ });
+})();
+</script>
 </body>
 </html>
 

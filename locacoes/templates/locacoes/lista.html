@@ -535,7 +535,10 @@
                   {% endif %}
                 </td>
                 <td>{{ locacao.nome_contratante }}</td>
-                <td><span class="badge-locacoes">{{ locacao.get_status_display }}</span></td>
+                <td><span class="badge-locacoes">{{ locacao.get_status_display }}</span>
+                  <span class="badge-locacoes {% if locacao.indicador_operacional.atraso %}text-danger{% endif %}">{{ locacao.indicador_operacional.texto }}</span>
+                  {% if locacao.indicador_operacional.data %}<small class="d-block">{{ locacao.indicador_operacional.data|date:"d/m/Y" }}{% if locacao.indicador_operacional.horario %} às {{ locacao.indicador_operacional.horario|time:"H:i" }}{% endif %}</small>{% endif %}
+                </td>
                 <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
                 <td>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</td>
                 <td>

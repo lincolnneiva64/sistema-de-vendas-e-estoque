@@ -1,4 +1,6 @@
 from django import forms
+from django.utils import timezone
+from .services import funcionarios_operacionais_locacoes
 
 from estoque.models import Cliente, Funcionario
 
@@ -463,7 +465,69 @@ class AcaoOperacionalLocacaoForm(forms.Form):
     )
 
 
-class ConferenciaEntregaLocacaoForm(forms.Form):
+class IdentificacaoOperacaoLocacaoForm(forms.Form):
+    modalidade = forms.ChoiceField(required=False, label="Transporte / local da operacao",
+                                  widget=forms.Select(attrs={"class": "form-select"}))
+    funcionario_conferente = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(), required=False, label="Funcionario que conferiu e registrou",
+        empty_label="Selecione o conferente", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    transportador = forms.ModelChoiceField(
+        queryset=Funcionario.objects.none(), required=False, label="Funcionario que transportou (quando equipe)",
+        empty_label="Selecione o transportador", widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    data_efetiva = forms.DateField(required=False, label="Data efetiva", initial=timezone.localdate,
+                                 widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}, format="%Y-%m-%d"))
+
+    def __init__(self, *args, **kwargs):
+        exigir_identificacao = kwargs.pop("exigir_identificacao", False)
+        super().__init__(*args, **kwargs)
+        if exigir_identificacao:
+            for campo in ("modalidade", "funcionario_conferente", "data_efetiva"):
+                self.fields[campo].required = True
+        entrega = self.tipo_operacao == "entrega"
+        self.fields["modalidade"].choices = (
+            [("entrega_equipe", "Entrega realizada pela equipe"), ("retirada_cliente", "Cliente retirou no deposito")]
+            if entrega else [("recolhimento_equipe", "Recolhimento realizado pela equipe"),
+                              ("devolucao_cliente", "Cliente devolveu no deposito")]
+        )
+        self.fields["modalidade"].initial = "entrega_equipe" if entrega else "recolhimento_equipe"
+        for campo in ("funcionario_conferente", "transportador"):
+            self.fields[campo].queryset = funcionarios_operacionais_locacoes()
+        if self.is_bound and self.data.get("modalidade"):
+            # New UI uses a selected employee; legacy checklist links remain compatible.
+            self.fields["responsavel"].required = False
+
+    def clean(self):
+        dados = super().clean()
+        modalidade = dados.get("modalidade")
+        if modalidade:
+            conferente = dados.get("funcionario_conferente")
+            if not conferente:
+                self.add_error("funcionario_conferente", "Selecione quem conferiu a operacao.")
+            else:
+                dados["responsavel"] = conferente.nome[:120]
+            if modalidade.endswith("_equipe") and not dados.get("transportador"):
+                self.add_error("transportador", "Selecione quem transportou os materiais.")
+            data = dados.get("data_efetiva")
+            if not data or data > timezone.localdate():
+                self.add_error("data_efetiva", "Informe a data efetiva, que nao seja futura.")
+        return dados
+
+    def identificar_operacao(self, dados):
+        modalidade = dados.get("modalidade")
+        if modalidade and not self.errors:
+            transportador = dados.get("transportador")
+            transporte = transportador.nome if modalidade.endswith("_equipe") else "Cliente, no deposito"
+            descricao = (f"Modalidade: {dict(self.fields['modalidade'].choices)[modalidade]}. "
+                         f"Data efetiva: {dados['data_efetiva'].isoformat()}. "
+                         f"Transportou: {transporte}. Conferiu/registrou: {dados['responsavel']}.")
+            dados["observacao"] = (str(dados.get("observacao") or "").strip() + "\n" + descricao).strip()
+        return dados
+
+
+class ConferenciaEntregaLocacaoForm(IdentificacaoOperacaoLocacaoForm):
+    tipo_operacao = "entrega"
     entregue_jogos = forms.IntegerField(
         min_value=0,
         initial=0,
@@ -838,7 +902,7 @@ class ConferenciaEntregaLocacaoForm(forms.Form):
             ),
         }
 
-        return cleaned_data
+        return self.identificar_operacao(cleaned_data)
 
     def dados_conferencia(self):
         if not self.is_valid():
@@ -865,7 +929,8 @@ class NaoPossivelOperacionalLocacaoForm(forms.Form):
         return observacao
 
 
-class ConferenciaRecolhimentoLocacaoForm(forms.Form):
+class ConferenciaRecolhimentoLocacaoForm(IdentificacaoOperacaoLocacaoForm):
+    tipo_operacao = "recolhimento"
     boa_mesas = forms.IntegerField(
         min_value=0,
         initial=0,
@@ -1215,7 +1280,7 @@ class ConferenciaRecolhimentoLocacaoForm(forms.Form):
         )
         cleaned_data["observacao"] = observacao
 
-        return cleaned_data
+        return self.identificar_operacao(cleaned_data)
 
 
 class DevolucaoLocacaoForm(forms.Form):

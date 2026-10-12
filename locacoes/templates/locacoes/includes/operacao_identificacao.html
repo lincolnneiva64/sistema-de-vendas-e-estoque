@@ -1,0 +1,7 @@
+<div class="grade grid mb-3">
+  <div><label class="form-label" for="{{ form.modalidade.id_for_label }}">{{ form.modalidade.label }}</label>{{ form.modalidade }}{{ form.modalidade.errors }}</div>
+  <div><label class="form-label" for="{{ form.data_efetiva.id_for_label }}">{{ form.data_efetiva.label }}</label>{{ form.data_efetiva }}{{ form.data_efetiva.errors }}</div>
+  <div><label class="form-label" for="{{ form.funcionario_conferente.id_for_label }}">{{ form.funcionario_conferente.label }}</label>{{ form.funcionario_conferente }}{{ form.funcionario_conferente.errors }}</div>
+  <div><label class="form-label" for="{{ form.transportador.id_for_label }}">{{ form.transportador.label }}</label>{{ form.transportador }}{{ form.transportador.errors }}</div>
+</div>
+<p class="muted">Cliente no depósito: o transporte é do cliente; selecione quem conferiu. As quantidades e condições abaixo devem ser verificadas de fato.</p>

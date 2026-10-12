@@ -281,6 +281,7 @@
       <h2>Conferência</h2>
       <form method="post" data-enter-nav data-form-bound="{% if form.is_bound %}true{% else %}false{% endif %}" novalidate>
         {% csrf_token %}
+          {% include "locacoes/includes/operacao_identificacao.html" %}
 
         {% if form.non_field_errors %}
           <div class="alert alert-danger">{{ form.non_field_errors }}</div>
@@ -686,5 +687,6 @@
   </script>
 <section data-checklist-task="{{ tarefa.pk }}"></section>
 {% include 'locacoes/includes/offline_checklist.html' %}
+{% include "locacoes/includes/checklist_embutido.html" %}
 </body>
 </html>

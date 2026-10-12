@@ -506,6 +506,26 @@ class Locacao(models.Model):
                 pendente = item.necessidade_pendente()
                 mesas += pendente["mesas"]
                 cadeiras += pendente["cadeiras"]
+            if not conferencias_entrega:
+                # Regularized deliveries have no delivery checklist. Real return
+                # conferences still reduce pending material, without changing stock.
+                retornos = list(locacao.conferencias_recolhimento.all())
+                if retornos:
+                    contratado = cls.necessidades_itens([
+                        {"tipo": item.tipo, "quantidade": item.quantidade}
+                        for item in locacao.itens.all()
+                    ])
+                    for chave in ("mesas", "cadeiras"):
+                        recolhido = sum(
+                            getattr(conferencia, f"{condicao}_{chave}")
+                            for conferencia in retornos
+                            for condicao in ("boa", "quebrada", "perdida", "descartada")
+                        )
+                        pendente = max(contratado[chave] - recolhido, 0)
+                        if chave == "mesas":
+                            mesas = min(mesas, pendente)
+                        else:
+                            cadeiras = min(cadeiras, pendente)
             return {"mesas": mesas, "cadeiras": cadeiras}
 
         entregues_mesas = sum(
