@@ -1028,3 +1028,84 @@ class IntegracaoOperacionalTests(TestCase):
                 tarefa.refresh_from_db()
                 self.assertEqual(tarefa.status, "pendente")
                 self.assertFalse(tarefa.locacao.eventos.filter(tipo="transporte_regularizado").exists())
+
+
+class RecolhimentoRealizadoAdministrativoTests(TestCase):
+    setUp = ResolucaoAdministrativaTests.setUp
+    dados_base = ResolucaoAdministrativaTests.dados_base
+    criar_locacao = ResolucaoAdministrativaTests.criar_locacao
+    colocar_na_rua = ResolucaoAdministrativaTests.colocar_na_rua
+    tarefa = ResolucaoAdministrativaTests.tarefa
+    painel = ResolucaoAdministrativaTests.painel
+
+    def snapshot(self, tarefa):
+        return {
+            "locacao": Locacao.objects.filter(pk=tarefa.locacao_id).values().get(),
+            "itens": list(tarefa.locacao.itens.values()),
+            "estoque": list(MovimentoEstoqueLocacao.objects.values()),
+            "financeiro": list(MovimentoFinanceiro.objects.values()),
+            "pagamentos": list(PagamentoLocacao.objects.values()),
+            "conferencias": list(ConferenciaRecolhimentoLocacao.objects.values()),
+        }
+
+    def test_recolhimento_realizado_sem_campos_adicionais_preserva_operacao(self):
+        tarefa = self.tarefa("recolhimento")
+        antes = self.snapshot(tarefa)
+        url = reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk])
+        resposta = self.client.post(url, {"resultado": "recolhimento_realizado"}, secure=True)
+        self.assertEqual(resposta.status_code, 200)
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, "resolvida_admin")
+        self.assertEqual(tarefa.resolvida_por, "Sistema")
+        self.assertIsNotNone(tarefa.resolvida_em)
+        self.assertIsNone(tarefa.confirmado_em)
+        self.assertEqual(antes, self.snapshot(tarefa))
+        evento = tarefa.locacao.eventos.get(tipo="tarefa_resolvida_admin")
+        self.assertEqual(evento.responsavel, "Sistema")
+        self.assertIn("Resultado: recolhimento_realizado", evento.descricao)
+        self.assertNotIn(tarefa.pk, [i["tarefa"].pk for i in self.painel()["itens"]])
+        eventos = tarefa.locacao.eventos.count()
+        self.assertEqual(self.client.post(url, {"resultado": "recolhimento_realizado"}, secure=True).status_code, 400)
+        self.assertEqual(eventos, tarefa.locacao.eventos.count())
+        self.assertEqual(antes, self.snapshot(tarefa))
+
+    def test_resultado_exclusivo_recolhimento(self):
+        tarefa = self.tarefa("entrega")
+        antes = self.snapshot(tarefa)
+        url = reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk])
+        self.assertEqual(self.client.post(url, {"resultado": "recolhimento_realizado"}, secure=True).status_code, 400)
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, "pendente")
+        self.assertEqual(antes, self.snapshot(tarefa))
+
+    def test_autenticacao_permissao_e_csrf(self):
+        from django.test import Client
+        tarefa = self.tarefa("recolhimento")
+        url = reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk])
+        dados = {"resultado": "recolhimento_realizado"}
+        self.client.logout()
+        self.assertEqual(self.client.post(url, dados, secure=True).status_code, 401)
+        usuario = get_user_model().objects.create_user(username="sem-permissao")
+        self.client.force_login(usuario)
+        self.assertEqual(self.client.post(url, dados, secure=True).status_code, 403)
+        csrf = Client(enforce_csrf_checks=True)
+        csrf.force_login(get_user_model().objects.get(username="Sistema"))
+        self.assertEqual(csrf.post(url, dados, secure=True).status_code, 403)
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, "pendente")
+        self.assertFalse(tarefa.locacao.eventos.filter(tipo="tarefa_resolvida_admin").exists())
+
+    def test_estados_terminais_preservados(self):
+        for status in ("confirmada", "confirmada_sem_checklist", "resolvida_admin"):
+            with self.subTest(status=status):
+                tarefa = self.tarefa("recolhimento")
+                TarefaOperacionalLocacao.objects.filter(pk=tarefa.pk).update(status=status)
+                tarefa.refresh_from_db()
+                antes = self.snapshot(tarefa)
+                eventos = tarefa.locacao.eventos.count()
+                url = reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk])
+                self.assertEqual(self.client.post(url, {"resultado": "recolhimento_realizado"}, secure=True).status_code, 400)
+                tarefa.refresh_from_db()
+                self.assertEqual(tarefa.status, status)
+                self.assertEqual(antes, self.snapshot(tarefa))
+                self.assertEqual(eventos, tarefa.locacao.eventos.count())

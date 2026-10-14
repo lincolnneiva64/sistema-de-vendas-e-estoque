@@ -292,3 +292,32 @@ class PickupChecklistBrowserTests(PickupFixture, StaticLiveServerTestCase):
                 self.assertFalse(tab.evaluate(f'!!document.querySelector({selector!r})'))
             finally:
                 chrome.stop()
+
+    def test_administrative_pickup_already_done_without_extra_fields(self):
+        before = type(self.rental).objects.filter(pk=self.rental.pk).values().get()
+        with TemporaryDirectory(prefix="pickup-admin-chrome-") as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call("Page.navigate", {"url": self.live_server_url + "/offline/login/?next=/vendas/"})
+                tab.wait('!!document.querySelector("input[name=password]")')
+                tab.evaluate('document.querySelector("input[name=username]").value="pickup-test";document.querySelector("input[name=password]").value="test-only";true')
+                self.click(tab, "form button")
+                tab.wait("!!window.salesDraftUI?.ready")
+                self.click(tab, "#btnLocacoesOperacionaisVenda")
+                self.click(tab, ".locacoes-rapidas-resolver")
+                self.assertEqual(tab.evaluate('document.querySelector("[data-resolver-form] option[value=recolhimento_realizado]").textContent'), "Recolhimento j\u00e1 realizado")
+                tab.evaluate('document.querySelector("[data-resolver-form] [name=resultado]").value="recolhimento_realizado";document.querySelector("[data-resolver-form] [name=resultado]").dispatchEvent(new Event("change"));localStorage.setItem("pickup-admin-preserve","rascunho");true')
+                self.assertTrue(tab.evaluate('Array.from(document.querySelectorAll("[data-resolver-form] [name=motivo], [data-resolver-form] [name=data_efetiva], [data-resolver-form] [name=responsavel]")).every(el=>el.disabled && !el.required)'))
+                previous = tab.evaluate("performance.timeOrigin")
+                self.click(tab, "[data-resolver-form] button[type=submit]")
+                tab.wait(f"performance.timeOrigin !== {previous} && !!window.salesDraftUI?.ready")
+                self.assertEqual(tab.evaluate('document.querySelector("[data-locacoes-filtro=recolhimento]").textContent.trim()'), "Recolhimentos 0")
+                self.assertEqual(tab.evaluate('localStorage.getItem("pickup-admin-preserve")'), "rascunho")
+                self.task.refresh_from_db()
+                self.assertEqual(self.task.status, "resolvida_admin")
+                self.assertEqual(self.task.resolvida_por, "pickup-test")
+                self.assertEqual(before, type(self.rental).objects.filter(pk=self.rental.pk).values().get())
+                self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
+            finally:
+                chrome.stop()

@@ -3216,6 +3216,8 @@ td:first-child {
                                   {% if item.tarefa.tipo == 'entrega' %}
                                   <option value="entrega_equipe">Entrega realizada pela equipe</option>
                                   <option value="retirada_cliente">Material retirado pelo cliente</option>
+                                  {% elif item.tarefa.tipo == 'recolhimento' %}
+                                  <option value="recolhimento_realizado">Recolhimento já realizado</option>
                                   {% endif %}
                                   <option value="tarefa_engano">Tarefa criada por engano</option>
                                 </select>
@@ -3237,7 +3239,7 @@ td:first-child {
                                 <label for="locacoes-motivo-{{ item.tarefa.pk }}">Motivo da tarefa criada por engano</label>
                                 <textarea id="locacoes-motivo-{{ item.tarefa.pk }}" name="motivo" maxlength="500" rows="3"></textarea>
                               </div>
-                              <p class="locacoes-operacionais-ajuda">Quem fez o registro e o horário serão salvos automaticamente. O recolhimento continua dependendo da conferência física.</p>
+                              <p class="locacoes-operacionais-ajuda">Quem fez o registro e o horário serão salvos automaticamente. {% if item.tarefa.tipo == 'recolhimento' %}Esta regularização encerra somente a tarefa, sem alterar materiais ou a locação.{% else %}O recolhimento continua dependendo da conferência física.{% endif %}</p>
                               <button type="submit" class="btn btn-primary">Salvar regularização</button>
                             </form>
                             <p class="locacoes-rapidas-alerta" data-resolver-erro role="alert" hidden></p>
@@ -7337,7 +7339,7 @@ function configurarLocacoesRapidas() {
             try {
                 if (!await acessoOperacionalDisponivel()) return;
                 const campos = new FormData(formularioResolucao);
-                const entregaRealizada = campos.get("resultado") !== "tarefa_engano";
+                const entregaRealizada = ['entrega_equipe', 'retirada_cliente'].includes(campos.get("resultado"));
                 if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("responsavel")?.trim())) {
                     mostrarErroOperacional("Informe data efetiva e responsável pela entrega ou retirada.");
                     return;

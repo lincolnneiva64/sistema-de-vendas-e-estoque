@@ -2243,6 +2243,11 @@ def resolver_tarefa_operacional(request, pk):
         resultado = request.POST.get("resultado", "")
         if not resultado:
             raise ValidationError("Escolha explicitamente o resultado da tarefa.")
+        recolhimento_realizado = resultado == "recolhimento_realizado"
+        if recolhimento_realizado:
+            impedimento = _proteger_alteracao_tarefa_operacional(request)
+            if impedimento is not None:
+                return impedimento
         try:
             data_efetiva = parse_date(request.POST.get("data_efetiva", ""))
         except ValueError:
@@ -2250,7 +2255,7 @@ def resolver_tarefa_operacional(request, pk):
         responsavel = request.POST.get("responsavel", "")
         funcionario_registro = request.POST.get("funcionario_registro", "")
         transportador = None
-        regularizacao_avancada = request.POST.get("origem") == "detalhe" or bool(funcionario_registro or request.POST.get("transportador"))
+        regularizacao_avancada = not recolhimento_realizado and (request.POST.get("origem") == "detalhe" or bool(funcionario_registro or request.POST.get("transportador")))
         if regularizacao_avancada and not str(request.POST.get("motivo") or "").strip():
             raise ValidationError("Informe o motivo da regularizacao avancada.")
         if regularizacao_avancada and resultado != "tarefa_engano":
@@ -2266,11 +2271,11 @@ def resolver_tarefa_operacional(request, pk):
         with transaction.atomic():
             tarefa.resolver_administrativamente(
                 motivo=request.POST.get("motivo", ""),
-                responsavel=responsavel if resultado != "tarefa_engano" else _responsavel_request(request),
-                resultado=resultado, data_efetiva=data_efetiva,
+                responsavel=responsavel if resultado in {"entrega_equipe", "retirada_cliente"} else _responsavel_request(request),
+                resultado=resultado, data_efetiva=None if recolhimento_realizado else data_efetiva,
                 registrado_por=_responsavel_request(request),
             )
-            if funcionario_registro and resultado != "tarefa_engano":
+            if funcionario_registro and resultado in {"entrega_equipe", "retirada_cliente"}:
                 EventoLocacao.objects.create(
                     locacao_id=tarefa.locacao_id, tipo="transporte_regularizado", responsavel=responsavel,
                     descricao=(f"Transportou: {transportador.nome if transportador else 'Cliente, no deposito'}. "
@@ -2283,7 +2288,7 @@ def resolver_tarefa_operacional(request, pk):
             return redirect("locacoes:detalhe", pk=tarefa.locacao_id)
         return JsonResponse({"ok": False, "erro": "; ".join(exc.messages)}, status=400)
     if request.POST.get("origem") == "detalhe":
-        messages.success(request, "Entrega regularizada sem checklist fisico. Recolhimento mantido pendente.")
+        messages.success(request, "Tarefa de recolhimento encerrada administrativamente." if recolhimento_realizado else "Entrega regularizada sem checklist fisico. Recolhimento mantido pendente.")
         return redirect("locacoes:detalhe", pk=tarefa.locacao_id)
     return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
 

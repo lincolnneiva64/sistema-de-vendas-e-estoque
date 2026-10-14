@@ -1208,9 +1208,12 @@ class TarefaOperacionalLocacao(models.Model):
     def resolver_administrativamente(self, motivo, responsavel="", *,
                                      resultado="tarefa_engano", data_efetiva=None, registrado_por=""):
         motivo = str(motivo or "").strip()
-        if resultado not in {"entrega_equipe", "retirada_cliente", "tarefa_engano"}:
+        if resultado not in {"entrega_equipe", "retirada_cliente", "tarefa_engano", "recolhimento_realizado"}:
             raise ValidationError("Escolha um resultado valido para a tarefa.")
-        entrega_realizada = resultado != "tarefa_engano"
+        entrega_realizada = resultado in {"entrega_equipe", "retirada_cliente"}
+        recolhimento_realizado = resultado == "recolhimento_realizado"
+        if recolhimento_realizado:
+            motivo = "Recolhimento ja realizado. Regularizacao administrativa sem nova conferencia fisica."
         if entrega_realizada and not motivo:
             motivo = ("Entrega ja realizada pela equipe." if resultado == "entrega_equipe"
                       else "Material ja retirado pelo cliente.") + " Regularizacao administrativa sem checklist fisico."
@@ -1226,6 +1229,8 @@ class TarefaOperacionalLocacao(models.Model):
         with transaction.atomic():
             locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
             tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if recolhimento_realizado and tarefa.tipo != self.TIPO_RECOLHIMENTO:
+                raise ValidationError("Este resultado e exclusivo para tarefas de recolhimento.")
             regularizacao_posterior = (
                 entrega_realizada and tarefa.status == self.STATUS_RESOLVIDA_ADMIN
                 and locacao.status == Locacao.STATUS_RESERVADA
