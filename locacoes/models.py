@@ -1284,7 +1284,7 @@ class TarefaOperacionalLocacao(models.Model):
         return self
 
     def confirmar(self, responsavel="", observacao=""):
-        if self.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
+        if not self.pendente_operacional:
             raise ValidationError("Esta tarefa operacional ja foi confirmada.")
 
         responsavel = str(responsavel or "").strip()
@@ -1293,7 +1293,7 @@ class TarefaOperacionalLocacao(models.Model):
 
         with transaction.atomic():
             tarefa = TarefaOperacionalLocacao.objects.select_for_update().select_related("locacao").get(pk=self.pk)
-            if tarefa.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
+            if not tarefa.pendente_operacional:
                 raise ValidationError("Esta tarefa operacional ja foi confirmada.")
 
             locacao = tarefa.locacao
@@ -1415,26 +1415,32 @@ class TarefaOperacionalLocacao(models.Model):
         motivo = str(motivo or "").strip()
         if not motivo:
             raise ValidationError("Informe o motivo/observacao para manter a pendencia.")
-        if self.status in {self.STATUS_CONFIRMADA, self.STATUS_RESOLVIDA_ADMIN}:
-            raise ValidationError("Esta tarefa ja foi confirmada. Registre uma correcao antes de alterar.")
+        # Use the saved state, not a potentially stale instance. Match the lock
+        # order of operational delivery: rental first, then its task.
+        with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
+            tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if not tarefa.pendente_operacional or locacao.status in {
+                Locacao.STATUS_CANCELADA, Locacao.STATUS_DEVOLVIDA,
+                Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+            }:
+                raise ValidationError("Esta tarefa ja foi encerrada. Registre uma correcao antes de alterar.")
 
-        self.status = self.STATUS_NAO_POSSIVEL
-        self.tentativa_em = timezone.now()
-        self.tentativa_por = str(responsavel or "").strip()
-        self.motivo_nao_realizado = motivo
-        self.save(update_fields=[
-            "status",
-            "tentativa_em",
-            "tentativa_por",
-            "motivo_nao_realizado",
-            "atualizado_em",
-        ])
-        EventoLocacao.objects.create(
-            locacao=self.locacao,
-            tipo=f"checklist_{self.tipo}_nao_possivel",
-            descricao=motivo,
-            responsavel=self.tentativa_por,
-        )
+            tarefa.status = self.STATUS_NAO_POSSIVEL
+            tarefa.tentativa_em = timezone.now()
+            tarefa.tentativa_por = str(responsavel or "").strip()[:120]
+            tarefa.motivo_nao_realizado = motivo
+            tarefa.save(update_fields=[
+                "status", "tentativa_em", "tentativa_por",
+                "motivo_nao_realizado", "atualizado_em",
+            ])
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo=f"checklist_{tarefa.tipo}_nao_possivel",
+                descricao=motivo,
+                responsavel=tarefa.tentativa_por,
+            )
+        self.refresh_from_db()
         return self
 
 
@@ -1683,7 +1689,7 @@ class ConferenciaEntregaLocacao(models.Model):
                     "Esta tarefa nao corresponde a uma entrega."
                 )
 
-            if tarefa.status in {TarefaOperacionalLocacao.STATUS_CONFIRMADA, TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN}:
+            if not tarefa.pendente_operacional:
                 raise ValidationError(
                     "Esta entrega ja foi confirmada."
                 )
@@ -2268,12 +2274,7 @@ class ConferenciaRecolhimentoLocacao(models.Model):
                     "Esta tarefa nao corresponde a um recolhimento."
                 )
 
-            if (
-                tarefa.status in {
-                    TarefaOperacionalLocacao.STATUS_CONFIRMADA,
-                    TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
-                }
-            ):
+            if not tarefa.pendente_operacional:
                 raise ValidationError(
                     "Este recolhimento ja foi concluido."
                 )

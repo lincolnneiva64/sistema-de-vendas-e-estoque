@@ -2323,12 +2323,31 @@ def confirmar_envio_checklist_entrega(request, pk):
     return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
 
 
+def _proteger_alteracao_tarefa_operacional(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({
+            "ok": False,
+            "erro": "Autentique-se novamente para registrar esta operacao. Dados locais preservados.",
+        }, status=401)
+    if not request.user.has_perm("locacoes.change_tarefaoperacionallocacao"):
+        return JsonResponse({
+            "ok": False,
+            "erro": "Voce nao tem permissao para alterar tarefas operacionais. Dados locais preservados.",
+        }, status=403)
+    return None
+
+
 @require_POST
 def confirmar_tarefa_operacional(request, pk):
+    impedimento = _proteger_alteracao_tarefa_operacional(request)
+    if impedimento is not None:
+        return impedimento
     tarefa = get_object_or_404(
         TarefaOperacionalLocacao.objects.select_related("locacao"),
         pk=pk,
     )
+    if not tarefa.pendente_operacional:
+        return JsonResponse({"ok": False, "erro": "Esta tarefa ja foi encerrada."}, status=409)
 
     if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
         messages.warning(
@@ -2374,13 +2393,16 @@ def confirmar_tarefa_operacional(request, pk):
 
 @require_POST
 def tarefa_operacional_nao_possivel(request, pk):
+    impedimento = _proteger_alteracao_tarefa_operacional(request)
+    if impedimento is not None:
+        return impedimento
     tarefa = get_object_or_404(TarefaOperacionalLocacao.objects.select_related("locacao"), pk=pk)
     form = NaoPossivelOperacionalLocacaoForm(request.POST)
     if form.is_valid():
         try:
             tarefa.registrar_nao_possivel(
                 motivo=form.cleaned_data.get("observacao", ""),
-                responsavel=form.cleaned_data.get("responsavel", ""),
+                responsavel=_responsavel_request(request),
             )
         except ValidationError as exc:
             messages.warning(request, "; ".join(exc.messages))
