@@ -51,7 +51,7 @@
     }
   </style>
 </head>
-<body>
+<body data-checklist-notes="disabled">
   <main class="page">
     <header class="top">
       <div>
@@ -79,7 +79,7 @@
       <div>Devoluções atrasadas: <strong>{{ resumo_dia.devolucoes_atrasadas }}</strong></div>
     </section>
 
-    {% if not checklist.total and not historico_dia.fisicas and not historico_dia.administrativas %}
+    {% if not checklist.total and not historico_dia.fisicas and not historico_dia.administrativas and not historico_dia.confirmadas_sem_checklist %}
       <p class="empty">Não há operações registradas nem pendências para este dia.</p>
     {% endif %}
 
@@ -120,6 +120,25 @@
               <span>{{ operacao.materiais }}</span>
               {% if operacao.motivo %}<span>Motivo: {{ operacao.motivo }}</span>{% endif %}
               {% if operacao.responsavel %}<span>Responsável: {{ operacao.responsavel }}</span>{% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </section>
+    {% endif %}
+
+    {% if historico_dia.confirmadas_sem_checklist %}
+      <section class="grupo" id="entregas-confirmadas-sem-checklist-dia">
+        <h2>Entregas confirmadas sem checklist físico</h2>
+        {% for operacao in historico_dia.confirmadas_sem_checklist %}
+          <article class="item historico-admin">
+            <div class="linha-topo">
+              <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
+              {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+            </div>
+            <div class="dados">
+              <strong>{{ operacao.status }}</strong>
+              <span>{{ operacao.materiais }}</span>
+              {% if operacao.responsavel %}<span>Responsável pelo registro: {{ operacao.responsavel }}</span>{% endif %}
             </div>
           </article>
         {% endfor %}
@@ -184,6 +203,6 @@
       });
     })();
   </script>
-{% include 'locacoes/includes/offline_checklist.html' %}
+{% include 'locacoes/includes/offline_checklist.html' with notes_disabled=True %}
 </body>
 </html>

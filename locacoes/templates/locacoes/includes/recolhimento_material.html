@@ -1,0 +1,4 @@
+<div class="check-item">
+  <div class="check-main"><strong>{{ material }}</strong><div class="check-meta">Previsto: {{ previsto }} · A recolher: {{ pendente }}</div><div class="check-meta">Estado: bom · Informe somente o recolhido agora</div></div>
+  <div class="qtd-wrap"><label for="{{ campo.id_for_label }}">Recolhido</label>{{ campo }}{% for erro in campo.errors %}<div class="erro">{{ erro }}</div>{% endfor %}</div>
+</div>

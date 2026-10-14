@@ -1100,9 +1100,21 @@ class ConferenciaRecolhimentoLocacaoForm(IdentificacaoOperacaoLocacaoForm):
         ),
     )
 
-    def __init__(self, *args, locacao, **kwargs):
+    def __init__(self, *args, locacao, operacional=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.locacao = locacao
+        self.operacional = operacional
+        if operacional:
+            self.fields["funcionario"] = forms.ModelChoiceField(
+                queryset=Funcionario.objects.filter(ativo=True).order_by("nome"),
+                label="Funcionário responsável",
+                widget=forms.Select(attrs={"class": "form-select"}),
+                empty_label="Selecione o funcionário",
+            )
+            self.fields["responsavel"].required = False
+            self.fields["pessoa_local_nome"].required = False
+            self.fields["pessoa_local_relacao"].required = False
+            self.fields["pessoa_local_relacao"].initial = ConferenciaEntregaLocacao.RELACAO_CLIENTE
 
         previsto = (
             ConferenciaRecolhimentoLocacao
@@ -1147,6 +1159,13 @@ class ConferenciaRecolhimentoLocacaoForm(IdentificacaoOperacaoLocacaoForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        if self.operacional:
+            funcionario = cleaned_data.get("funcionario")
+            if funcionario:
+                cleaned_data["responsavel"] = funcionario.nome
+            cleaned_data["pessoa_local_nome"] = (cleaned_data.get("pessoa_local_nome") or self.locacao.nome_contratante).strip()
+            cleaned_data["pessoa_local_relacao"] = cleaned_data.get("pessoa_local_relacao") or ConferenciaEntregaLocacao.RELACAO_CLIENTE
+
 
         campos_quantidade = [
             "boa_mesas",

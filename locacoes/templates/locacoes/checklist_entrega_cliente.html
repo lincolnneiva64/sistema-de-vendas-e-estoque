@@ -285,12 +285,20 @@
       <div class="doc-body" id="card-checklist-entrega">
         <div class="campo">
           <span class="rotulo">Cliente</span>
-          <div class="valor">{{ locacao.nome_contratante }}</div>
+          <div class="valor">{{ cliente_nome_checklist }}</div>
         </div>
 
         <div class="campo">
           <span class="rotulo">Endereço</span>
-          <div class="valor">{{ locacao.endereco_entrega }}</div>
+          <div class="valor">{% if cliente_endereco_checklist %}{{ cliente_endereco_checklist }}{% if cliente_endereco_mapa_url %} · <a href="{{ cliente_endereco_mapa_url }}" target="_blank" rel="noopener">Abrir endereço cadastral no mapa</a>{% endif %}{% else %}Não cadastrado{% endif %}</div>
+        </div>
+        <div class="campo">
+          <span class="rotulo">Local da entrega</span>
+          <div class="valor">{% if local_operacao_checklist %}{{ local_operacao_checklist }}{% if local_operacao_mapa_url %} · <a href="{{ local_operacao_mapa_url }}" target="_blank" rel="noopener">Abrir no mapa</a>{% endif %}{% else %}Não informado{% endif %}</div>
+        </div>
+        <div class="campo">
+          <span class="rotulo">Telefone</span>
+          <div class="valor">{% if cliente_tel_url %}<a href="{{ cliente_tel_url }}">{{ cliente_telefone_checklist }}</a>{% else %}Não informado{% endif %}</div>
         </div>
 
         <span class="rotulo">Materiais conferidos</span>

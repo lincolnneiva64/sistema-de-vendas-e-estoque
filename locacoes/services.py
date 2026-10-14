@@ -17,6 +17,10 @@ STATUS_LOCACAO_ENCERRADOS = {
     Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
 }
 
+RESPONSAVEIS_REGULARIZACAO = (
+    "Francisco Miranda", "Lincoln Albuquerque Neiva", "Roseli da Costa Gama",
+)
+
 
 def funcionarios_operacionais_locacoes():
     return Funcionario.objects.filter(ativo=True).filter(
@@ -92,7 +96,7 @@ def mensagem_checklist_operacional(tarefa, checklist_url):
     ])
 
 
-def envios_tarefa_operacional_context(request, tarefa):
+def envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=False):
     rota = (
         "locacoes:conferencia_entrega"
         if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA
@@ -101,7 +105,9 @@ def envios_tarefa_operacional_context(request, tarefa):
     checklist_path = reverse(rota, kwargs={"pk": tarefa.pk})
     checklist_url = request.build_absolute_uri(checklist_path)
     funcionarios = []
-    for funcionario in Funcionario.habilitados_para_checklist():
+    candidatos = (Funcionario.objects.filter(ativo=True).order_by("-pode_receber_checklist", "nome")
+                  if incluir_responsaveis else Funcionario.habilitados_para_checklist())
+    for funcionario in candidatos:
         checklist_funcionario_path = (
             f"{checklist_path}?{urlencode({'funcionario': funcionario.pk})}"
         )
@@ -125,6 +131,10 @@ def envios_tarefa_operacional_context(request, tarefa):
         (funcionario for funcionario in funcionarios if funcionario["telefone"]),
         None,
     )
+    if incluir_responsaveis:
+        funcionario_padrao = next((f for f in funcionarios if f["nome"].casefold() in {
+            tarefa.tentativa_por.casefold(), tarefa.confirmado_por.casefold(),
+        }), funcionario_padrao or next(iter(funcionarios), None))
     return {
         "checklist_url": checklist_url,
         "funcionarios": funcionarios,
@@ -451,6 +461,7 @@ def historico_operacional_do_dia(data_referencia):
     """Consulta encerramentos registrados, sem criar ou modificar tarefas."""
     fisicas = []
     administrativas = []
+    confirmadas_sem_checklist = []
 
     def item(locacao, tipo, instante, responsavel="", motivo=""):
         return {
@@ -483,6 +494,14 @@ def historico_operacional_do_dia(data_referencia):
             tarefa.resolvida_por, tarefa.motivo_resolucao,
         ))
 
+    for tarefa in tarefas.filter(
+        status=TarefaOperacionalLocacao.STATUS_CONFIRMADA_SEM_CHECKLIST,
+        confirmado_em__date=data_referencia,
+    ).order_by("confirmado_em", "id"):
+        registro = item(tarefa.locacao, tarefa.tipo, tarefa.confirmado_em, tarefa.confirmado_por)
+        registro["status"] = "Entrega confirmada sem checklist fisico"
+        confirmadas_sem_checklist.append(registro)
+
     # Operacoes antigas feitas diretamente na locacao tambem registram eventos.
     # A tarefa confirmada e a fonte principal; nao duplicar seu evento.
     eventos = (
@@ -499,6 +518,7 @@ def historico_operacional_do_dia(data_referencia):
             tarefa.tipo == tipo and tarefa.status in {
                 TarefaOperacionalLocacao.STATUS_CONFIRMADA,
                 TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
+                TarefaOperacionalLocacao.STATUS_CONFIRMADA_SEM_CHECKLIST,
             }
             for tarefa in evento.locacao.tarefas_operacionais.all()
         ):
@@ -513,7 +533,11 @@ def historico_operacional_do_dia(data_referencia):
         fisicas.append(item(evento.locacao, tipo, evento.criado_em, evento.responsavel))
         vistos.add(chave)
     fisicas.sort(key=lambda registro: registro["instante"])
-    return {"fisicas": fisicas, "administrativas": administrativas}
+    return {
+        "fisicas": fisicas,
+        "administrativas": administrativas,
+        "confirmadas_sem_checklist": confirmadas_sem_checklist,
+    }
 
 
 def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None):
@@ -554,7 +578,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
             item["envio_operacional"] = envios_tarefa_operacional_context(
                 request,
-                tarefa,
+                tarefa, incluir_responsaveis=True,
             )
             itens.append(item)
 
@@ -590,9 +614,31 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
         item["envio_operacional"] = envios_tarefa_operacional_context(
             request,
-            tarefa,
+            tarefa, incluir_responsaveis=True,
         )
         itens.append(item)
+
+    # Recolhimentos parciais continuam visiveis mesmo quando reagendados.
+    # O saldo pendente e a nova data permanecem definidos pela conferencia.
+    for tarefa in (
+        TarefaOperacionalLocacao.objects
+        .select_related("locacao", "locacao__cliente", "locacao__faixa_preco")
+        .prefetch_related("locacao__itens")
+        .filter(tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
+                status=TarefaOperacionalLocacao.STATUS_PARCIAL,
+                data_agendada__gt=data_referencia,
+                locacao__status__in=[Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO])
+    ):
+        if tarefa.pk in ids_existentes:
+            continue
+        item = tarefa_para_item_checklist(tarefa, data_referencia)
+        item["tipo"] = tarefa.tipo
+        item["tipo_label"] = "Recolhimento"
+        item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
+        item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
+        item["data_label"] = tarefa.data_agendada.strftime("%d/%m")
+        itens.append(item)
+        ids_existentes.add(tarefa.pk)
 
     # Adiciona somente a PRÓXIMA data futura que contenha tarefas operacionais
     # (entrega ou recolhimento). Não alterar checklist_operacional_locacoes().
@@ -648,7 +694,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             item["tipo"] = tarefa.tipo
             item["tipo_label"] = "Entrega"
             item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
-            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa)
+            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
             # marca como futura e define rótulo de data para o template
             if proxima_data == data_referencia + timedelta(days=1):
                 item["data_label"] = "Amanhã"
@@ -668,7 +714,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             item["tipo"] = tarefa.tipo
             item["tipo_label"] = "Recolhimento"
             item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
-            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa)
+            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
             if proxima_data == data_referencia + timedelta(days=1):
                 item["data_label"] = "Amanhã"
             else:
@@ -678,6 +724,12 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
     funcionarios_operacionais = list(funcionarios_operacionais_locacoes())
     for item in itens:
         item["funcionarios_operacionais"] = funcionarios_operacionais
+        tarefa = item["tarefa"]
+        item["responsaveis_regularizacao"] = RESPONSAVEIS_REGULARIZACAO
+        item["responsavel_regularizacao"] = next((nome for nome in (
+            tarefa.tentativa_por, tarefa.confirmado_por, tarefa.resolvida_por,
+        ) if nome in RESPONSAVEIS_REGULARIZACAO), "")
+        item["data_efetiva_padrao"] = min(tarefa.data_agendada, timezone.localdate())
         item["entrega_antiga"] = (
             item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
             and item["tarefa"].data_agendada < data_referencia - timedelta(days=2)

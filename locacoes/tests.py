@@ -3,6 +3,8 @@ from datetime import date, datetime, time, timedelta
 from urllib.parse import parse_qs, urlparse
 
 from django.apps import apps
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -916,9 +918,11 @@ class LocacoesPagamentosTermoTests(TestCase):
             "observacao": "",
         }
 
-    def criar_locacao(self):
+    def criar_locacao(self, **extras):
+        dados = self.dados_base()
+        dados.update(extras)
         return Locacao.criar_reserva(
-            self.dados_base(),
+            dados,
             [{
                 "tipo": ItemLocacao.TIPO_JOGO,
                 "quantidade": 2,
@@ -1426,11 +1430,14 @@ class LocacoesAlertasCobrancaTests(TestCase):
         recolhimento.marcar_saiu_para_entrega()
         recolhimento.confirmar_entrega()
 
-        response = self.client.get(reverse("estoque:home"), secure=True)
 
-        self.assertContains(response, f"Hoje: entregar para {entrega.nome_contratante}")
-        self.assertContains(response, f"Hoje: recolher mesas/cadeiras de {recolhimento.nome_contratante}")
-        self.assertContains(response, "locacoes-operacionais-alerta")
+        response = self.client.get(reverse("estoque:vendas"), secure=True)
+        painel = response.context["locacoes_operacionais"]
+        self.assertContains(response, entrega.nome_contratante)
+        self.assertContains(response, recolhimento.nome_contratante)
+        self.assertEqual(painel["total_entregas"], 1)
+        self.assertEqual(painel["total_recolhimentos"], 1)
+        self.assertEqual({item["locacao"].pk for item in painel["itens"]}, {entrega.pk, recolhimento.pk})
 
     def test_devolucao_atrasada_persiste_ate_encerramento(self):
         locacao = self.criar_locacao(
@@ -1441,14 +1448,16 @@ class LocacoesAlertasCobrancaTests(TestCase):
         locacao.marcar_saiu_para_entrega()
         locacao.confirmar_entrega()
 
-        response = self.client.get(reverse("estoque:home"), secure=True)
-        self.assertContains(response, "Devolucao atrasada: Atraso Persistente")
+        response = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertEqual(response.context["locacoes_operacionais"]["total_recolhimentos"], 1)
+        self.assertContains(response, "Atraso Persistente")
 
         item = locacao.itens.get()
         locacao.registrar_devolucao({item.id: {"devolvida_boa": 1}})
 
-        response = self.client.get(reverse("estoque:home"), secure=True)
-        self.assertNotContains(response, "Devolucao atrasada: Atraso Persistente")
+        response = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertEqual(response.context["locacoes_operacionais"]["total_recolhimentos"], 0)
+        self.assertNotContains(response, "Atraso Persistente")
 
     def test_pagamento_quitacao_remove_cobranca_de_locacao(self):
         locacao = self.criar_locacao(
@@ -1866,6 +1875,13 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
 
 class LocacoesChecklistOperacionalTests(TestCase):
     def setUp(self):
+        if hasattr(self, "client"):
+            usuario = get_user_model().objects.create_user(username="Camila", password="test-only")
+            usuario.user_permissions.add(*Permission.objects.filter(
+                content_type__app_label="locacoes",
+                codename__in=["add_conferenciarecolhimentolocacao", "change_locacao", "change_tarefaoperacionallocacao"],
+            ))
+            self.client.force_login(usuario)
         self.factory = RequestFactory()
         self.hoje = timezone.localdate()
         self.configuracao = ConfiguracaoLocacao.obter()
@@ -2178,7 +2194,8 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
         envio = painel["itens"][0]["envio_operacional"]
 
-        self.assertIsNone(envio["funcionario_padrao"])
+        self.assertIsNotNone(envio["funcionario_padrao"])
+        self.assertEqual(envio["funcionario_padrao"]["whatsapp_url"], "")
         self.assertFalse(envio["tem_funcionario_com_whatsapp"])
         self.assertEqual(envio["funcionarios"][0]["whatsapp_url"], "")
 
@@ -2204,8 +2221,23 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertContains(response, "data-locacoes-filtro=\"tudo\"")
         self.assertContains(response, "data-locacoes-filtro=\"entrega\"")
         self.assertContains(response, "data-locacoes-filtro=\"recolhimento\"")
-        self.assertContains(response, "Confirmar que o checklist foi enviado")
+        self.assertContains(response, "Confirmar entrega")
+        self.assertNotContains(response, 'data-confirmar-envio-form')
+        self.assertNotContains(response, "Confirmo que os materiais já foram entregues ou retirados pelo cliente e que o checklist foi enviado.")
         self.assertContains(response, "Abrir dia completo")
+
+    def test_contexto_de_regularizacao_nao_oculta_documento_do_painel_vendas(self):
+        from types import SimpleNamespace
+        from django.template.loader import render_to_string
+
+        response = self.client.get(reverse("estoque:vendas"), secure=True)
+        self.assertEqual(response.status_code, 200)
+        contexto = response.context[-1].flatten()
+        contexto["regularizacao_tarefa"] = SimpleNamespace(pk=999)
+        html = render_to_string("estoque/vendas_layout_teste.html", contexto)
+        self.assertIn("<!DOCTYPE html>", html)
+        self.assertIn("Vendas - Layout Teste", html)
+        self.assertIn("data-locacoes-filtro=\"tudo\"", html)
 
     def dados_conferencia_entrega(self, **extras):
         dados = {
@@ -2688,15 +2720,14 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        dados = response.json()
-        self.assertTrue(dados["ok"])
-        self.assertIn("redirectUrl", dados)
-        self.assertEqual(dados["envio"]["funcionario_nome"], "Lincoln Checklist")
-        self.assertTrue(
+        # The customer document is read-only, even with an AJAX header.
+        # Opening/POSTing the document is not proof that WhatsApp was sent.
+        self.assertTrue(response.headers["Content-Type"].startswith("text/html"))
+        self.assertTemplateUsed(response, "locacoes/checklist_entrega_cliente.html")
+        self.assertContains(response, locacao.nome_contratante)
+        self.assertFalse(
             locacao.eventos.filter(
                 tipo="checklist_entrega_funcionario_enviado",
-                responsavel="Camila",
-                descricao__contains="Lincoln Checklist",
             ).exists()
         )
 
@@ -3229,8 +3260,8 @@ class LocacoesChecklistOperacionalTests(TestCase):
             kwargs={"pk": tarefa.pk},
         )
 
-        self.assertContains(response, "Enviar recolhimento pelo WhatsApp")
-        self.assertContains(response, "web.whatsapp.com/send?phone=5591999990000")
+        self.assertContains(response, f'href="{checklist_url}"')
+        self.assertContains(response, ">Recolhimento</a>")
         whatsapp_href = response.context["locacoes"][0].acoes_consulta[
             "whatsapp_recolhimento"
         ]["whatsapp_url"]
@@ -3345,8 +3376,10 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "locacoes/conferencia_recolhimento.html")
         self.assertContains(response, "Checklist de recolhimento")
-        self.assertContains(response, "Mesas recolhidas")
-        self.assertContains(response, "Cadeiras recolhidas")
+        self.assertContains(response, "Mesas")
+        self.assertContains(response, "Cadeiras")
+        self.assertContains(response, 'name="boa_mesas"')
+        self.assertContains(response, 'name="boa_cadeiras"')
         self.assertContains(response, "Informar avarias (opcional)")
 
     def test_tela_conferencia_entrega_exibe_materiais_e_status_visual(self):
@@ -3400,7 +3433,9 @@ class LocacoesChecklistOperacionalTests(TestCase):
         )
         self.assertNotContains(response, "Enviar checklist pelo WhatsApp")
         self.assertNotContains(response, 'name="checklist_funcionario_envio"')
-        self.assertNotContains(response, 'target="_blank"')
+        self.assertContains(response, 'target="_blank" rel="noopener">Abrir no mapa')
+        self.assertContains(response, 'Contatar pelo WhatsApp')
+        self.assertEqual(urlparse(response.context["cliente_whatsapp_contato_url"]).netloc, "wa.me")
         self.assertNotContains(response, "about:blank")
         self.assertNotContains(response, "janelaWhatsapp.location.assign")
         self.assertNotContains(response, "window.location.href = dados.checklistUrl")
@@ -3573,13 +3608,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
 
         self.assertRedirects(
             response,
-            (
-                reverse(
-                    "locacoes:conferencia_recolhimento",
-                    kwargs={"pk": tarefa.pk},
-                )
-                + f"?conferencia={conferencia.pk}"
-            ),
+            reverse("locacoes:detalhe", kwargs={"pk": locacao.pk}),
             fetch_redirect_response=False,
         )
         self.assertEqual(
@@ -3651,13 +3680,13 @@ class LocacoesChecklistOperacionalTests(TestCase):
         texto = parse_qs(urlparse(whatsapp_href).query)["text"][0]
 
         self.assertContains(response, "Recolhimento registrado")
-        self.assertContains(response, "Abrir checklist compartilhável")
         self.assertContains(response, "Enviar checklist pelo WhatsApp")
-        self.assertContains(response, checklist_url)
-        self.assertIn("phone=5591988887777", whatsapp_href)
+        self.assertEqual(response.context["checklist_url"], f"https://agenda.example.com{checklist_url}")
+        self.assertEqual(urlparse(whatsapp_href).netloc, "wa.me")
+        self.assertEqual(urlparse(whatsapp_href).path, "/5591988887777")
         self.assertIn(f"https://agenda.example.com{checklist_url}", texto)
-        self.assertIn("Checklist de recolhimento da locacao", texto)
-        self.assertNotIn("Quebrado: 0", texto)
+        self.assertIn(conferencia.mensagem_whatsapp_snapshot, texto)
+        self.assertIn("Recolhido em bom estado agora: 1 mesa(s) e 4 cadeira(s)", texto)
         self.assertNotIn("Saldo", texto)
         self.assertNotIn("Pagamento", texto)
 

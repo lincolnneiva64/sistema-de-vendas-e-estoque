@@ -179,7 +179,14 @@ class EstoqueManualVendasFrontendTests(TestCase):
         self.assertIn("renderizarModalConferenciaEstoque(dados);", html)
         self.assertIn("atualizarBadgesConferenciaEstoque(produtoDados);", html)
         self.assertIn("atualizarContadorConferenciaEstoque(dados.conferencia);", html)
-        self.assertNotIn("window.location.reload", html)
+        # Rental regularization has its own refresh flow. Restrict this
+        # invariant to the stock conference and both of its click handlers.
+        inicio = html.index("async function enviarConferenciaEstoque(")
+        fim = html.index("function normalizarNumeroVenda(", inicio)
+        handlers_estoque = html[inicio:fim]
+        self.assertIn('btnConfirmarConferenciaEstoque.addEventListener("click"', handlers_estoque)
+        self.assertIn('btnCorrigirConferenciaEstoque.addEventListener("click"', handlers_estoque)
+        self.assertNotIn("window.location.reload", handlers_estoque)
 
     def test_frontend_bloqueia_submissao_dupla_e_usa_csrf(self):
         html = self._html()

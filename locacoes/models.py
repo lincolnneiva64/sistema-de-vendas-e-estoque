@@ -1162,17 +1162,19 @@ class TarefaOperacionalLocacao(models.Model):
     STATUS_CONFIRMADA = "confirmada"
     STATUS_NAO_POSSIVEL = "nao_possivel"
     STATUS_RESOLVIDA_ADMIN = "resolvida_admin"
+    STATUS_CONFIRMADA_SEM_CHECKLIST = "confirmada_sem_checklist"
     STATUS_CHOICES = [
         (STATUS_PENDENTE, "Pendente"),
         (STATUS_PARCIAL, "Parcial"),
         (STATUS_CONFIRMADA, "Confirmada"),
         (STATUS_NAO_POSSIVEL, "Nao foi possivel realizar"),
         (STATUS_RESOLVIDA_ADMIN, "Resolvida administrativamente"),
+        (STATUS_CONFIRMADA_SEM_CHECKLIST, "Entrega confirmada sem checklist fisico"),
     ]
 
     locacao = models.ForeignKey(Locacao, on_delete=models.CASCADE, related_name="tarefas_operacionais")
     tipo = models.CharField(max_length=20, choices=TIPO_CHOICES)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default=STATUS_PENDENTE)
     data_agendada = models.DateField()
     horario_agendado = models.TimeField(blank=True, null=True)
     confirmado_em = models.DateTimeField(blank=True, null=True)
@@ -1204,14 +1206,18 @@ class TarefaOperacionalLocacao(models.Model):
         }
 
     def resolver_administrativamente(self, motivo, responsavel="", *,
-                                     resultado="tarefa_engano", data_efetiva=None):
+                                     resultado="tarefa_engano", data_efetiva=None, registrado_por=""):
         motivo = str(motivo or "").strip()
-        if not motivo or len(motivo) > 500:
-            raise ValidationError("Informe um motivo de ate 500 caracteres.")
         if resultado not in {"entrega_equipe", "retirada_cliente", "tarefa_engano"}:
             raise ValidationError("Escolha um resultado valido para a tarefa.")
         entrega_realizada = resultado != "tarefa_engano"
+        if entrega_realizada and not motivo:
+            motivo = ("Entrega ja realizada pela equipe." if resultado == "entrega_equipe"
+                      else "Material ja retirado pelo cliente.") + " Regularizacao administrativa sem checklist fisico."
+        if not motivo or len(motivo) > 500:
+            raise ValidationError("Informe um motivo de ate 500 caracteres.")
         responsavel = str(responsavel or "").strip()
+        registrado_por = str(registrado_por or responsavel or "Sistema").strip()[:120]
         if entrega_realizada:
             if type(data_efetiva) is not date or data_efetiva > timezone.localdate():
                 raise ValidationError("Informe uma data efetiva valida, que nao seja futura.")
@@ -1240,7 +1246,8 @@ class TarefaOperacionalLocacao(models.Model):
                     raise ValidationError("Recolhimento ja encerrado ou conferido; revise o historico da locacao.")
                 descricao = (
                     f"Regularizacao sem checklist fisico. Resultado: {resultado}. "
-                    f"Data efetiva: {data_efetiva.isoformat()}. Motivo: {motivo}."
+                    f"Data efetiva: {data_efetiva.isoformat()}. Motivo: {motivo}. "
+                    f"Regularizado por: {registrado_por}."
                 )
                 if locacao.status == Locacao.STATUS_RESERVADA:
                     locacao.marcar_saiu_para_entrega(responsavel, descricao)
@@ -1252,7 +1259,7 @@ class TarefaOperacionalLocacao(models.Model):
             tarefa.status = self.STATUS_RESOLVIDA_ADMIN
             if not regularizacao_posterior:
                 tarefa.resolvida_em = agora
-                tarefa.resolvida_por = str(responsavel or "Sistema").strip()[:120]
+                tarefa.resolvida_por = registrado_por
                 tarefa.motivo_resolucao = motivo
                 tarefa.save(update_fields=[
                     "status", "resolvida_em", "resolvida_por",
@@ -1261,12 +1268,13 @@ class TarefaOperacionalLocacao(models.Model):
             EventoLocacao.objects.create(
                 locacao_id=tarefa.locacao_id,
                 tipo="tarefa_resolvida_admin",
-                responsavel=responsavel or tarefa.resolvida_por,
+                responsavel=registrado_por,
                 descricao=(
                     f"Resolucao administrativa da tarefa #{tarefa.pk}.\n"
                     f"Tipo: {tarefa.tipo}\nStatus anterior: {anterior}\n"
                     f"Data/hora: {timezone.localtime(agora).isoformat()}\n"
                     f"Responsavel: {responsavel or tarefa.resolvida_por}\nMotivo: {motivo}\n"
+                    f"Regularizado por: {registrado_por}\n"
                     f"Resultado: {resultado}\nData efetiva: {data_efetiva or 'nao se aplica'}\n"
                     f"Regularizacao posterior: {regularizacao_posterior}\n"
                     "Encerramento da pendencia sem confirmar checklist fisico."
@@ -1317,6 +1325,89 @@ class TarefaOperacionalLocacao(models.Model):
                 responsavel=responsavel,
             )
 
+        self.refresh_from_db()
+        return self
+
+    def confirmar_entrega_realizada(self, funcionario, usuario):
+        """Registra a entrega, sem declarar envio de WhatsApp ou conferencia."""
+        if not usuario.is_authenticated:
+            raise ValidationError("Autentique-se para confirmar a entrega.")
+        with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
+            tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if tarefa.tipo != self.TIPO_ENTREGA or not tarefa.pendente_operacional:
+                raise ValidationError("Esta entrega ja foi encerrada ou nao e uma tarefa de entrega.")
+            if tarefa.status == self.STATUS_PARCIAL or locacao.conferencias_entrega.exists():
+                raise ValidationError("A entrega possui conferencia parcial. Registre o restante pelo checklist fisico.")
+            if locacao.status not in {Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA}:
+                raise ValidationError("A locacao nao esta aguardando confirmacao de entrega.")
+            agora = timezone.now()
+            descricao = (
+                f"Entrega realizada. Funcionario: {funcionario.nome} (#{funcionario.pk}). "
+                f"Confirmada por: {usuario.get_username()} (usuario #{usuario.pk}). "
+                f"Data/hora: {timezone.localtime(agora).isoformat()}. "
+                "Sem declaracao de envio de WhatsApp e sem criar conferencia fisica."
+            )
+            if locacao.status == Locacao.STATUS_RESERVADA:
+                locacao.marcar_saiu_para_entrega(funcionario.nome, descricao)
+                locacao.refresh_from_db()
+            locacao.confirmar_entrega(funcionario.nome, descricao)
+            tarefa.status = self.STATUS_CONFIRMADA_SEM_CHECKLIST
+            tarefa.confirmado_em = agora
+            tarefa.confirmado_por = usuario.get_username()[:120]
+            tarefa.save(update_fields=["status", "confirmado_em", "confirmado_por", "atualizado_em"])
+            EventoLocacao.objects.create(locacao=locacao, tipo="entrega_confirmada_operacional",
+                responsavel=tarefa.confirmado_por, descricao=descricao)
+            from .services import obter_ou_criar_tarefa_operacional
+            obter_ou_criar_tarefa_operacional(locacao, self.TIPO_RECOLHIMENTO)
+        self.refresh_from_db()
+        return self
+
+    def confirmar_entrega_checklist_enviado(self, responsavel, modalidade):
+        """Confirma entrega ja realizada sem fabricar uma conferencia fisica."""
+        modalidades = {"equipe": "Entrega realizada pela equipe", "retirada_cliente": "Retirada pelo cliente no deposito"}
+        responsavel = str(responsavel or "").strip()[:120]
+        if not responsavel:
+            raise ValidationError("Informe quem confirmou o envio do checklist.")
+        if modalidade not in modalidades:
+            raise ValidationError("Escolha entrega pela equipe ou retirada pelo cliente.")
+        with transaction.atomic():
+            locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
+            tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if tarefa.tipo != self.TIPO_ENTREGA:
+                raise ValidationError("Esta acao so pode confirmar o envio do checklist de entrega.")
+            if tarefa.status in {self.STATUS_CONFIRMADA, self.STATUS_CONFIRMADA_SEM_CHECKLIST, self.STATUS_RESOLVIDA_ADMIN}:
+                raise ValidationError("A entrega ja foi encerrada.")
+            if tarefa.status == self.STATUS_PARCIAL or locacao.conferencias_entrega.exists():
+                raise ValidationError("A entrega possui conferencia parcial. Registre o restante pelo checklist fisico.")
+            if locacao.status not in {Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA}:
+                raise ValidationError("A locacao nao esta aguardando confirmacao de entrega.")
+
+            agora = timezone.now()
+            descricao = (
+                "Entrega confirmada apos declaracao de que os materiais ja foram entregues "
+                "e o checklist enviado ao cliente. "
+                f"Modalidade: {modalidades[modalidade]}. Responsavel pelo registro: {responsavel}. "
+                f"Confirmada em: {timezone.localtime(agora).isoformat()}. "
+                "Nao foi criada conferencia fisica."
+            )
+            if locacao.status == Locacao.STATUS_RESERVADA:
+                locacao.marcar_saiu_para_entrega(responsavel, "Saida confirmada no registro de envio do checklist.")
+                locacao.refresh_from_db()
+            locacao.confirmar_entrega(responsavel, descricao)
+
+            tarefa.status = self.STATUS_CONFIRMADA_SEM_CHECKLIST
+            tarefa.confirmado_em = agora
+            tarefa.confirmado_por = responsavel
+            tarefa.save(update_fields=["status", "confirmado_em", "confirmado_por", "atualizado_em"])
+            EventoLocacao.objects.create(
+                locacao=locacao,
+                tipo="entrega_confirmada_checklist_enviado",
+                descricao=descricao,
+                responsavel=responsavel,
+            )
+            from .services import obter_ou_criar_tarefa_operacional
+            obter_ou_criar_tarefa_operacional(locacao, self.TIPO_RECOLHIMENTO)
         self.refresh_from_db()
         return self
 

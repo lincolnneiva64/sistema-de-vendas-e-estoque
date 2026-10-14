@@ -1,5 +1,7 @@
-const CACHE = 'offline-pilot-shell-v32-isolated-sales-drafts';
+// Refresh modules inherited from upstream, including independent sales drafts.
+const CACHE = 'offline-pilot-shell-v38-integrated-pickup';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
+ASSETS.push('/offline/assets/2-8h-pickup/checklist.js');
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
 ASSETS.push(...['app.js', 'core.js', 'presentation.js', 'sales.js', 'sales-drafts.js',
     'sales-draft-ui.js', 'operation-details.js', 'sales-revisions.js', 'sales-revision-ui.js', 'commercial.js', 'commercial-ui.js',
@@ -7,6 +9,9 @@ ASSETS.push(...['app.js', 'core.js', 'presentation.js', 'sales.js', 'sales-draft
 ASSETS.push(...['app.js', 'operation-details.js', 'sales-draft-ui.js', 'sales-drafts.js', 'sales-revision-ui.js', 'sales-revisions.js', 'sales-stock.js', 'sales-closures.js'].map(file => '/offline/assets/2-8g-close/' + file));
 ASSETS.push(...['sales.js','sales-drafts.js','sales-draft-ui.js','sales-stock.js','commercial.js','commercial-ui.js']
     .map(file => '/offline/assets/2-8f-fix/' + file));
+ASSETS.push('/offline/assets/2-8g-sidebar/sales.js', '/offline/assets/2-8g-sidebar/sales-draft-ui.js');
+ASSETS.push('/offline/assets/2-8g-rental-actions/sales.js', '/offline/assets/2-8g-rental-actions/sales-draft-ui.js');
+ASSETS.push('/offline/assets/2-8g-auth-link/sales.js', '/offline/assets/2-8g-auth-link/sales-draft-ui.js');
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);
@@ -42,11 +47,10 @@ self.addEventListener('fetch', event => {
     if (event.request.method === 'GET' && url.origin === self.location.origin && event.request.mode === 'navigate'
         && (/^\/locacoes\/(checklist-operacional\/|tarefas-operacionais\/\d+\/conferencia-(entrega|recolhimento)\/)$/.test(url.pathname) || /^\/entregas\/\d+\/checklist\/$/.test(url.pathname))) {
         event.respondWith((async () => {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 5000);
-            try { return await fetch(event.request, {signal: controller.signal}); }
+            // A slow online response is not evidence of offline operation.
+            // Only a network failure may replace the requested page with the shell.
+            try { return await fetch(event.request, {cache: 'no-store'}); }
             catch { return (await caches.match('/static/offline/checklist.html', {cacheName: CACHE})) || Response.error(); }
-            finally { clearTimeout(timer); }
         })());
         return;
     }

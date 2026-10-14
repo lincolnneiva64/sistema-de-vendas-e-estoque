@@ -319,6 +319,9 @@
 
       .cardx { padding: 9px; }
     }
+    {% include "locacoes/includes/checklist_material_styles.html" %}
+    .mini-dados { display: grid; gap: 4px; font-size: .9rem; }
+    .check-item { grid-template-columns: 1fr 90px; }
   </style>
 </head>
 
@@ -361,18 +364,7 @@
     <section class="cardx">
       <h2>Locacao</h2>
 
-      <div class="dados">
-        <div>
-          <strong>Cliente:</strong>
-          {{ locacao.nome_contratante }}
-        </div>
-
-        <div>
-          <strong>Endereço:</strong>
-          {{ locacao.endereco_entrega|linebreaksbr }}
-        </div>
-
-      </div>
+      {% include "locacoes/includes/checklist_contato.html" %}
     </section>
 
     <section class="cardx">
@@ -405,6 +397,7 @@
           <strong>Situação:</strong>
           {{ conferencia_salva.get_situacao_display }}
         </p>
+        {% if whatsapp_url %}<a class="btn btn-outline-success w-100" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Enviar checklist pelo WhatsApp</a>{% else %}<a href="{{ checklist_url }}">Abrir comprovante do recolhimento</a>{% endif %}
 
         {% if conferencia_salva.situacao == "parcial" %}
           <a
@@ -421,7 +414,11 @@
 
         <form method="post" data-enter-nav novalidate>
           {% csrf_token %}
+          {% if form.operacional %}
+          <input type="hidden" name="interface_simplificada" value="1">
+          {% else %}
           {% include "locacoes/includes/operacao_identificacao.html" %}
+          {% endif %}
 
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
@@ -430,53 +427,41 @@
           {% endif %}
 
           <div class="grade">
-            <div class="grupo-quantidade campo-inteiro">
-              <h3>Quantidade recolhida</h3>
-
-              <div class="grade">
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.boa_mesas.id_for_label }}"
-                  >
-                    Mesas recolhidas
-                  </label>
-
-                  {{ form.boa_mesas }}
-
-                  {% for erro in form.boa_mesas.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
-                </div>
-
-                <div>
-                  <label
-                    class="form-label"
-                    for="{{ form.boa_cadeiras.id_for_label }}"
-                  >
-                    Cadeiras recolhidas
-                  </label>
-
-                  {{ form.boa_cadeiras }}
-
-                  {% for erro in form.boa_cadeiras.errors %}
-                    <div class="erro">{{ erro }}</div>
-                  {% endfor %}
-                </div>
-              </div>
+            <div class="campo-inteiro">
+              {% if form.operacional %}
+              <label class="form-label" for="id_funcionario">Funcionário responsável</label>
+              {{ form.funcionario }}
+              {% for erro in form.funcionario.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+              {% endif %}
             </div>
+            <div class="checklist campo-inteiro">
+              {% include "locacoes/includes/recolhimento_material.html" with material="Mesas" previsto=previsto_mesas pendente=pendente_mesas campo=form.boa_mesas %}
+              {% include "locacoes/includes/recolhimento_material.html" with material="Cadeiras" previsto=previsto_cadeiras pendente=pendente_cadeiras campo=form.boa_cadeiras %}
+            </div>
+            <details class="campo-inteiro" {% if form.pessoa_local_nome.errors or form.pessoa_local_relacao_outro.errors %}open{% endif %}>
+              <summary>Outra pessoa devolveu os materiais (opcional)</summary>
+              <label class="form-label" for="{{ form.pessoa_local_nome.id_for_label }}">Nome de quem devolveu</label>
+              {{ form.pessoa_local_nome }}
+              {% for erro in form.pessoa_local_nome.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+              <label class="form-label" for="{{ form.pessoa_local_relacao.id_for_label }}">Relação com o cliente</label>
+              {{ form.pessoa_local_relacao }}
+              <label class="form-label" for="{{ form.pessoa_local_relacao_outro.id_for_label }}">Se outra relação, informe qual</label>
+              {{ form.pessoa_local_relacao_outro }}
+              {% for erro in form.pessoa_local_relacao_outro.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
+            </details>
 
             <details class="grupo-quantidade avaria campo-inteiro">
               <summary>Informar avarias (opcional)</summary>
+              <p>Informe somente o material danificado efetivamente recolhido. Material ausente permanece pendente; não entra nesta contagem.</p>
 
               <div class="grade">
                 <div>
-                  <label class="form-label" for="{{ form.quebrada_mesas.id_for_label }}">Mesas com problema</label>
+                  <label class="form-label" for="{{ form.quebrada_mesas.id_for_label }}">Mesas danificadas (baixa por quebra)</label>
                   {{ form.quebrada_mesas }}
                   {% for erro in form.quebrada_mesas.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
                 </div>
                 <div>
-                  <label class="form-label" for="{{ form.quebrada_cadeiras.id_for_label }}">Cadeiras com problema</label>
+                  <label class="form-label" for="{{ form.quebrada_cadeiras.id_for_label }}">Cadeiras danificadas (baixa por quebra)</label>
                   {{ form.quebrada_cadeiras }}
                   {% for erro in form.quebrada_cadeiras.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
                 </div>
@@ -637,7 +622,7 @@
       <div class="dados">
         <div>
           <strong>Telefone:</strong>
-          {{ locacao.telefone_contratante|default:"Não informado" }}
+          {% if cliente_tel_url %}<a href="{{ cliente_tel_url }}">{{ cliente_telefone_checklist }}</a>{% else %}Não informado{% endif %}
         </div>
         <div>
           <strong>Devolução prevista:</strong>
@@ -795,8 +780,8 @@
       atualizarResultado();
     })();
   </script>
-<section data-checklist-task="{{ tarefa.pk }}"></section>
-{% include 'locacoes/includes/offline_checklist.html' %}
+<section data-checklist-task="{{ tarefa.pk }}" data-checklist-notes="disabled" hidden></section>
+{% include 'locacoes/includes/offline_checklist.html' with notes_disabled=True %}
 {% include "locacoes/includes/checklist_embutido.html" %}
 </body>
 </html>

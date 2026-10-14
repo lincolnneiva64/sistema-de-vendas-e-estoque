@@ -34,6 +34,8 @@ urlpatterns = [
         name="conferencia_recolhimento",
     ),
     path("tarefas-operacionais/<int:pk>/resolver/", views.resolver_tarefa_operacional, name="resolver_tarefa_operacional"),
+    path("tarefas-operacionais/<int:pk>/confirmar-entrega/", views.confirmar_entrega_operacional, name="confirmar_entrega_operacional"),
+    path("tarefas-operacionais/<int:pk>/confirmar-envio-checklist-entrega/", views.confirmar_envio_checklist_entrega, name="confirmar_envio_checklist_entrega"),
     path("tarefas-operacionais/<int:pk>/confirmar/", views.confirmar_tarefa_operacional, name="confirmar_tarefa_operacional"),
     path("tarefas-operacionais/<int:pk>/nao-possivel/", views.tarefa_operacional_nao_possivel, name="tarefa_operacional_nao_possivel"),
     path("<int:pk>/", views.detalhe, name="detalhe"),

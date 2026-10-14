@@ -1,0 +1,44 @@
+    .checklist { display: grid; gap: 8px; }
+    .check-item {
+      display: grid;
+      grid-template-columns: 58px 1fr 72px;
+      gap: 8px;
+      align-items: center;
+      padding: 9px;
+      border: 2px solid #e2e8f0;
+      border-left: 6px solid #94a3b8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    .check-item.status-completa { border-color: #86efac; border-left-color: var(--green); background: #f0fdf4; }
+    .check-item.status-parcial { border-color: #fcd34d; border-left-color: var(--yellow); background: #fffbeb; }
+    .check-item.status-excesso { border-color: #fca5a5; border-left-color: var(--red); background: #fef2f2; }
+    .check-toggle {
+      width: 48px;
+      height: 48px;
+      accent-color: var(--green);
+    }
+    .check-main strong { display: block; font-size: 1.08rem; font-weight: 950; line-height: 1.15; }
+    .contagem-fisica {
+      display: grid;
+      gap: 2px;
+    }
+    .contagem-fisica strong {
+      font-size: 1.12rem;
+    }
+    .contexto-jogo {
+      color: #64748b;
+      font-size: .82rem;
+      font-weight: 850;
+    }
+    .check-meta { margin-top: 3px; color: var(--muted); font-size: .76rem; font-weight: 800; }
+    .qtd-wrap label { margin: 0; color: var(--muted); font-size: .68rem; font-weight: 850; text-transform: uppercase; }
+    .qtd-wrap input {
+      width: 100%;
+      min-height: 42px;
+      border: 2px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      font-weight: 950;
+      text-align: center;
+    }

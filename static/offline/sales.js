@@ -3,6 +3,10 @@ import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot}
 
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
+const rentalActions = '#locacoesOperacionaisVenda .locacoes-rapidas-resolver, '
+    + '#locacoesOperacionaisVenda .locacoes-rapidas-confirmar, '
+    + '#locacoesOperacionaisVenda [data-resolver-form], '
+    + '#locacoesOperacionaisVenda [data-confirmar-envio-form]';
 let repo;
 try { repo = new Repository(await openDB()); }
 catch (_) { /* The missing-catalog guidance below also covers blocked IndexedDB. */ }
@@ -92,7 +96,10 @@ async function checkIdentity() {
     document.getElementById('clienteId').value = '';
     banner.hidden = false;
     banner.textContent = 'Identidade mudou. Reabra Vendas após autenticar-se. Montagem anterior preservada no dispositivo.';
-    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) field.disabled = true;
+    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+        // Rental forms enforce server authentication independently of the sale.
+        if (!field.matches('[data-sales-navigation-toggle]') && !field.closest(rentalActions)) field.disabled = true;
+    }
 }
 if (identityChannel) identityChannel.onmessage = checkIdentity;
 window.addEventListener('focus', checkIdentity);
@@ -151,12 +158,19 @@ document.addEventListener('sales-completion-released', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {
+    // Authentication navigation never releases a protected sale assembly.
+    if (event.target.closest('[data-operacional-login]')) return;
+    // Rental actions have their own connection/authentication checks. A pending
+    // sale may keep this assembly local even after the server is online again.
+    if (event.target.closest(rentalActions)) return;
+    if (event.target.closest('[data-sales-navigation-toggle]')) return;
     // Read-only navigation and closing a warning do not release the assembly.
     if (event.target.closest('#btnConsultarVendas, #btnFilaDepositoVendaGravada, #atalhosVenda a[href], #modal-operador-obrigatorio')) return;
-    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-draft-status, #btnConsultarVendas, #btnAtalhosVenda, #atalhosVenda, #modal-operador-obrigatorio')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
+    if ((state.completed && event.target.closest('#layout-vendas') && !event.target.closest('#sales-draft-status, #btnConsultarVendas, [data-sales-navigation], #modal-operador-obrigatorio')) || (state.active && event.target.closest('#vendaGravadaBloco, #locacoesOperacionaisVenda, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, #revisaoPrecosPosterior, #atalho-despesa-global'))) {
         event.preventDefault(); event.stopImmediatePropagation();
     }
 }, true);
 document.addEventListener('submit', event => {
+    if (event.target.matches('#locacoesOperacionaisVenda [data-resolver-form], #locacoesOperacionaisVenda [data-confirmar-envio-form]')) return;
     if (state.active) { event.preventDefault(); event.stopImmediatePropagation(); }
 }, true);

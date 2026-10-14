@@ -1,4 +1,4 @@
-import '/offline/assets/2-8f-fix/sales.js';
+import '/offline/assets/2-8g-auth-link/sales.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
@@ -69,7 +69,7 @@ let historicalCompletion = null;
 let queueBlocked = false, startingNext = false;
 let stockView = null;
 let hasCurrentDraft = false, recoveryCandidates = [];
-const navigation = '#btnConsultarVendas, #btnAtalhosVenda, #atalhosVenda, #sales-draft-status, #modal-operador-obrigatorio';
+const navigation = '#btnConsultarVendas, [data-sales-navigation], #sales-draft-status, #modal-operador-obrigatorio';
 const editingFields = () => [...document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')]
     .filter(field => !field.closest(navigation));
 const ambiguityControls = new Map();

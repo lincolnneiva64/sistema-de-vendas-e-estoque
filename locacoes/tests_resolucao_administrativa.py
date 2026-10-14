@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import TestCase, RequestFactory, override_settings
 from django.urls import reverse
@@ -24,6 +25,12 @@ class ResolucaoAdministrativaTests(TestCase):
             defaults={"nome": "Centro/perto", "preco_jogo_diaria": 8},
         )
         fixtures.LocacoesChecklistOperacionalTests.setUp(self)
+        usuario = get_user_model().objects.create_user(username="Sistema", password="test-only")
+        usuario.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="locacoes",
+            codename__in=["add_conferenciarecolhimentolocacao", "change_locacao", "change_tarefaoperacionallocacao"],
+        ))
+        self.client.force_login(usuario)
     dados_base = fixtures.LocacoesChecklistOperacionalTests.dados_base
     criar_locacao = fixtures.LocacoesChecklistOperacionalTests.criar_locacao
     colocar_na_rua = fixtures.LocacoesChecklistOperacionalTests.colocar_na_rua
@@ -212,6 +219,30 @@ class RegularizacaoEntregaTests(TestCase):
     tarefa = ResolucaoAdministrativaTests.tarefa
     painel = ResolucaoAdministrativaTests.painel
 
+    def test_endpoint_sem_justificativa_audita_usuario_e_preserva_materiais(self):
+        for resultado in ("entrega_equipe", "retirada_cliente"):
+            with self.subTest(resultado=resultado):
+                tarefa = self.tarefa()
+                antes = list(MovimentoEstoqueLocacao.objects.values())
+                data_efetiva = timezone.localdate() - timedelta(days=2)
+                resposta = self.client.post(reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk]), {
+                    "resultado": resultado, "responsavel": "Roseli da Costa Gama",
+                    "data_efetiva": data_efetiva.isoformat(), "registrado_por": "Usuario forjado",
+                }, secure=True)
+                self.assertEqual(resposta.status_code, 200, resposta.content)
+                tarefa.refresh_from_db()
+                self.assertEqual(tarefa.resolvida_por, "Sistema")
+                self.assertIsNotNone(tarefa.resolvida_em)
+                self.assertTrue(tarefa.motivo_resolucao)
+                evento = tarefa.locacao.eventos.get(tipo="tarefa_resolvida_admin")
+                self.assertEqual(evento.responsavel, "Sistema")
+                for texto in ("Roseli da Costa Gama", "Sistema", data_efetiva.isoformat()):
+                    self.assertIn(texto, evento.descricao)
+                self.assertNotIn("Usuario forjado", evento.descricao)
+                self.assertEqual(list(MovimentoEstoqueLocacao.objects.values()), antes)
+                self.assertEqual(tarefa.locacao.tarefas_operacionais.get(tipo="recolhimento").status, "pendente")
+                self.assertFalse(tarefa.locacao.conferencias_entrega.exists())
+
     def regularizar(self, tarefa, resultado="retirada_cliente", **extras):
         dados = {"resultado": resultado, "data_efetiva": self.hoje}
         dados.update(extras)
@@ -281,7 +312,7 @@ class RegularizacaoEntregaTests(TestCase):
             self.assertContains(html, reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk]))
             resposta = self.client.post(reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk]), {
                 "resultado": "retirada_cliente", "data_efetiva": "2026-10-10",
-                "responsavel": "Responsavel ficticio", "motivo": "Retirada sem registro", "origem": "detalhe",
+                "funcionario_registro": str(self.entregador_checklist.pk), "motivo": "Retirada sem registro", "origem": "detalhe",
             }, secure=True)
         self.assertRedirects(resposta, reverse("locacoes:detalhe", args=[87]), fetch_redirect_response=False)
         locacao.refresh_from_db()
@@ -417,7 +448,8 @@ class RegularizacaoEntregaTests(TestCase):
         for resultado in ("entrega_equipe", "retirada_cliente", "tarefa_engano"):
             self.assertIn(f'value="{resultado}"', html)
         self.assertIn('name="data_efetiva"', html)
-        self.assertIn('name="funcionario_registro"', html)
+        self.assertIn('name="responsavel"', html)
+        self.assertNotIn('name="funcionario_registro"', html)
 
 
 class ResolucaoAdministrativaRegressaoTests(TestCase):
@@ -469,6 +501,246 @@ class ResolucaoAdministrativaRegressaoTests(TestCase):
                                      data_prevista_devolucao=self.hoje + timedelta(days=dias))
                 tarefa.resolver_administrativamente("Ja realizada")
         self.assertEqual(_contexto_alertas_locacoes(self.hoje)["locacoes_alertas_operacionais"], [])
+
+
+class ConfirmarEnvioChecklistTests(TestCase):
+    setUp = ResolucaoAdministrativaTests.setUp
+    dados_base = ResolucaoAdministrativaTests.dados_base
+    criar_locacao = ResolucaoAdministrativaTests.criar_locacao
+    colocar_na_rua = ResolucaoAdministrativaTests.colocar_na_rua
+    tarefa = ResolucaoAdministrativaTests.tarefa
+    painel = ResolucaoAdministrativaTests.painel
+    dados_conferencia_entrega = fixtures.LocacoesChecklistOperacionalTests.dados_conferencia_entrega
+
+    def confirmar(self, tarefa, modalidade="equipe", **dados):
+        payload = {
+            "modalidade": modalidade,
+            "confirmacao": "materiais_entregues_checklist_enviado",
+        }
+        payload.update(dados)
+        return self.client.post(
+            reverse("locacoes:confirmar_envio_checklist_entrega", args=[tarefa.pk]),
+            payload,
+            secure=True,
+        )
+
+    def test_entrega_pela_equipe_e_retirada_persistem_sem_conferencia_e_mantem_recolhimento(self):
+        for modalidade in ("equipe", "retirada_cliente"):
+            with self.subTest(modalidade=modalidade):
+                tarefa = self.tarefa(data_entrega=self.hoje - timedelta(days=1))
+                locacao = tarefa.locacao
+                response = self.confirmar(tarefa, modalidade)
+                self.assertEqual(response.status_code, 200, response.content)
+                tarefa.refresh_from_db()
+                locacao.refresh_from_db()
+                self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_CONFIRMADA_SEM_CHECKLIST)
+                self.assertTrue(tarefa.confirmado_em)
+                self.assertEqual(tarefa.confirmado_por, "Sistema")
+                self.assertEqual(locacao.status, Locacao.STATUS_ENTREGUE)
+                self.assertFalse(locacao.conferencias_entrega.exists())
+                recolhimento = locacao.tarefas_operacionais.get(tipo="recolhimento")
+                self.assertEqual(recolhimento.status, TarefaOperacionalLocacao.STATUS_PENDENTE)
+                self.assertNotIn(tarefa.pk, [item["tarefa"].pk for item in self.painel()["itens"]])
+                detalhe = self.client.get(reverse("locacoes:detalhe", args=[locacao.pk]), secure=True)
+                self.assertContains(detalhe, "Entregue")
+                self.assertContains(detalhe, "Fazer checklist de recolhimento")
+                evento = locacao.eventos.get(tipo="entrega_confirmada_checklist_enviado")
+                self.assertEqual(evento.responsavel, "Sistema")
+                self.assertIn("materiais ja foram entregues", evento.descricao)
+                self.assertIn("checklist enviado ao cliente", evento.descricao)
+                modalidade_registrada = "Entrega realizada pela equipe" if modalidade == "equipe" else "Retirada pelo cliente no deposito"
+                self.assertIn(modalidade_registrada, evento.descricao)
+                self.assertTrue(evento.criado_em)
+                self.assertIn(recolhimento.pk, [item["tarefa"].pk for item in self.painel()["itens"]])
+
+    def test_confirma_requer_mensagem_modalidade_e_nao_aceita_duplicata(self):
+        tarefa = self.tarefa()
+        self.assertEqual(self.confirmar(tarefa, confirmacao="").status_code, 400)
+        self.assertEqual(self.confirmar(tarefa, modalidade="invalida").status_code, 400)
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_PENDENTE)
+        self.assertEqual(self.confirmar(tarefa).status_code, 200)
+        eventos = tarefa.locacao.eventos.count()
+        self.assertEqual(self.confirmar(tarefa).status_code, 400)
+        self.assertEqual(tarefa.locacao.eventos.count(), eventos)
+
+    def test_entrega_pendente_permanece_no_painel_e_entrega_parcial_nao_pode_ser_pulada(self):
+        tarefa = self.tarefa(data_entrega=self.hoje - timedelta(days=1))
+        self.assertIn(tarefa.pk, [item["tarefa"].pk for item in self.painel()["itens"]])
+        tarefa.status = TarefaOperacionalLocacao.STATUS_PARCIAL
+        tarefa.save(update_fields=["status"])
+        response = self.confirmar(tarefa)
+        self.assertEqual(response.status_code, 400)
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_PARCIAL)
+        self.assertEqual(tarefa.locacao.status, Locacao.STATUS_RESERVADA)
+
+    def test_recolhimento_parcial_permanece_pendente_com_materiais_na_rua(self):
+        tarefa = self.tarefa("recolhimento")
+        locacao = tarefa.locacao
+        dados = {
+            "boa_mesas": "0", "boa_cadeiras": "1", "quebrada_mesas": "0", "quebrada_cadeiras": "0",
+            "perdida_mesas": "0", "perdida_cadeiras": "0", "descartada_mesas": "0", "descartada_cadeiras": "0",
+            "pessoa_local_nome": "Maria", "pessoa_local_relacao": "cliente", "pessoa_local_relacao_outro": "",
+            "justificativa_parcial": "Cliente manteve os materiais para recolhimento posterior.",
+            "previsao_conclusao": (timezone.localtime() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "observacao": "Parcial", "responsavel": "Operador",
+        }
+        response = self.client.post(reverse("locacoes:conferencia_recolhimento", args=[tarefa.pk]), dados, secure=True)
+        self.assertEqual(response.status_code, 302)
+        tarefa.refresh_from_db()
+        locacao.refresh_from_db()
+        self.assertEqual(tarefa.status, TarefaOperacionalLocacao.STATUS_PARCIAL)
+        self.assertEqual(locacao.status, Locacao.STATUS_PENDENTE_DEVOLUCAO)
+        self.assertTrue(tarefa.conferencias_recolhimento.exists())
+        self.assertGreater(sum(item.quantidade_pendente() for item in locacao.itens.all()), 0)
+
+    def test_checklists_mostram_contato_cadastral_endereco_mapa_e_tel_seguro(self):
+        from urllib.parse import quote
+        from estoque.models import Cliente
+
+        cliente = Cliente.objects.create(
+            nome="Cliente Cadastro",
+            whatsapp="+55 (91) 98888-1234",
+            logradouro="Rua do Cliente",
+            numero="45 A",
+            complemento="Fundos",
+            bairro="Centro",
+            cidade="Belem",
+            uf="PA",
+            cep="66000-000",
+            referencia="Proximo da praca",
+        )
+        locacao = self.criar_locacao(
+            jogos=1,
+            tipo_pessoa=Locacao.TIPO_PESSOA_CLIENTE,
+            cliente=cliente,
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        )
+        tarefa_entrega = obter_ou_criar_tarefa_operacional(locacao, "entrega")
+        entrega_data = self.dados_conferencia_entrega()
+        self.client.post(reverse("locacoes:conferencia_entrega", args=[tarefa_entrega.pk]), entrega_data, secure=True)
+        entrega = ConferenciaEntregaLocacao.objects.get(locacao=locacao)
+        response_entrega = self.client.get(reverse("locacoes:checklist_entrega_cliente", args=[entrega.pk]), secure=True)
+        endereco_mapa = quote("Rua do Cliente, 45 A, Fundos, Centro, Belem, PA, CEP 66000-000, Referência: Proximo da praca")
+        for response in (response_entrega, self.client.get(reverse("locacoes:conferencia_entrega", args=[tarefa_entrega.pk]), secure=True)):
+            self.assertContains(response, "Cliente Cadastro")
+            self.assertContains(response, "Rua do Cliente")
+            self.assertContains(response, "Rua do Cliente, 45 A, Fundos, Centro, Belem, PA")
+            self.assertContains(response, "CEP 66000-000")
+            self.assertContains(response, "Referência: Proximo da praca")
+            self.assertContains(response, "Rua Checklist, 1")
+            self.assertContains(response, "Abrir no mapa")
+            self.assertContains(response, f"query={endereco_mapa}")
+            self.assertContains(response, "Abrir endereço cadastral no mapa")
+            self.assertContains(response, "query=Rua%20Checklist%2C%201")
+            self.assertContains(response, "tel:+5591988881234")
+
+        # A entrega completa libera o fluxo de recolhimento; finalizar a conferência cria seu checklist compartilhável.
+        locacao.refresh_from_db()
+        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(locacao, "recolhimento")
+        response_recolhimento_operacional = self.client.get(reverse("locacoes:conferencia_recolhimento", args=[tarefa_recolhimento.pk]), secure=True)
+        self.assertContains(response_recolhimento_operacional, "Cliente Cadastro")
+        self.assertContains(response_recolhimento_operacional, "Rua do Cliente")
+        self.assertContains(response_recolhimento_operacional, "Abrir no mapa")
+        self.assertContains(response_recolhimento_operacional, f"query={endereco_mapa}")
+        self.assertContains(response_recolhimento_operacional, "tel:+5591988881234")
+        recolhimento_payload = {
+            "boa_mesas": "1", "boa_cadeiras": "4", "quebrada_mesas": "0", "quebrada_cadeiras": "0",
+            "perdida_mesas": "0", "perdida_cadeiras": "0", "descartada_mesas": "0", "descartada_cadeiras": "0",
+            "pessoa_local_nome": "Maria", "pessoa_local_relacao": "cliente", "pessoa_local_relacao_outro": "",
+            "justificativa_parcial": "", "previsao_conclusao": "", "observacao": "", "responsavel": "Operador",
+        }
+        self.client.post(reverse("locacoes:conferencia_recolhimento", args=[tarefa_recolhimento.pk]), recolhimento_payload, secure=True)
+        recolhimento = ConferenciaRecolhimentoLocacao.objects.get(locacao=locacao)
+        response_recolhimento = self.client.get(reverse("locacoes:checklist_recolhimento_cliente", args=[recolhimento.pk]), secure=True)
+        self.assertContains(response_recolhimento, "Cliente Cadastro")
+        self.assertContains(response_recolhimento, "Rua do Cliente")
+        self.assertContains(response_recolhimento, "Abrir no mapa")
+        self.assertContains(response_recolhimento, f"query={endereco_mapa}")
+        self.assertContains(response_recolhimento, "tel:+5591988881234")
+
+    def test_endereco_cadastral_ausente_usa_link_da_operacao_identificado_e_recolhimento_sem_telefone(self):
+        from estoque.models import Cliente
+
+        cliente = Cliente.objects.create(nome="Cadastro sem endereço ou telefone")
+        locacao = self.criar_locacao(
+            jogos=1,
+            tipo_pessoa=Locacao.TIPO_PESSOA_CLIENTE,
+            cliente=cliente,
+            data_entrega=self.hoje - timedelta(days=1),
+            data_prevista_devolucao=self.hoje,
+        )
+        tarefa_entrega = obter_ou_criar_tarefa_operacional(locacao, "entrega")
+        self.client.post(
+            reverse("locacoes:conferencia_entrega", args=[tarefa_entrega.pk]),
+            self.dados_conferencia_entrega(), secure=True,
+        )
+        entrega = ConferenciaEntregaLocacao.objects.get(locacao=locacao)
+        checklist_entrega = self.client.get(
+            reverse("locacoes:checklist_entrega_cliente", args=[entrega.pk]), secure=True,
+        )
+        tela_entrega = self.client.get(
+            reverse("locacoes:conferencia_entrega", args=[tarefa_entrega.pk]), secure=True,
+        )
+        self.assertContains(checklist_entrega, "Não cadastrado")
+        self.assertNotContains(checklist_entrega, "Abrir endereço cadastral no mapa")
+        self.assertContains(checklist_entrega, "Local da entrega")
+        self.assertContains(checklist_entrega, "query=Rua%20Checklist%2C%201")
+        self.assertNotContains(tela_entrega, "Abrir endereço cadastral no mapa")
+        self.assertContains(tela_entrega, "Local da operação")
+        self.assertContains(tela_entrega, "query=Rua%20Checklist%2C%201")
+
+        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(locacao, "recolhimento")
+        tela_recolhimento = self.client.get(
+            reverse("locacoes:conferencia_recolhimento", args=[tarefa_recolhimento.pk]), secure=True,
+        )
+        self.assertNotContains(tela_recolhimento, "Abrir endereço cadastral no mapa")
+        self.assertContains(tela_recolhimento, "Local da operação")
+        self.assertContains(tela_recolhimento, "query=Rua%20Checklist%2C%201")
+        payload_recolhimento = {
+            "boa_mesas": "1", "boa_cadeiras": "4", "quebrada_mesas": "0", "quebrada_cadeiras": "0",
+            "perdida_mesas": "0", "perdida_cadeiras": "0", "descartada_mesas": "0", "descartada_cadeiras": "0",
+            "pessoa_local_nome": "Maria", "pessoa_local_relacao": "cliente", "pessoa_local_relacao_outro": "",
+            "justificativa_parcial": "", "previsao_conclusao": "", "observacao": "", "responsavel": "Operador",
+        }
+        self.client.post(
+            reverse("locacoes:conferencia_recolhimento", args=[tarefa_recolhimento.pk]),
+            payload_recolhimento, secure=True,
+        )
+        recolhimento = ConferenciaRecolhimentoLocacao.objects.get(locacao=locacao)
+        checklist_recolhimento = self.client.get(
+            reverse("locacoes:checklist_recolhimento_cliente", args=[recolhimento.pk]), secure=True,
+        )
+        self.assertContains(checklist_recolhimento, "Não cadastrado")
+        self.assertNotContains(checklist_recolhimento, "Abrir endereço cadastral no mapa")
+        self.assertContains(checklist_recolhimento, "Local do recolhimento")
+        self.assertContains(checklist_recolhimento, "query=Rua%20Checklist%2C%201")
+        self.assertNotContains(checklist_recolhimento, "href=\"tel:")
+        self.assertContains(checklist_recolhimento, "Não informado")
+
+    def test_telefone_ausente_nao_cria_link_tel_e_estado_sem_conferencia_tem_historico_distinto(self):
+        from locacoes.services import historico_operacional_do_dia
+
+        tarefa = self.tarefa()
+        self.confirmar(tarefa, "retirada_cliente")
+        historico = historico_operacional_do_dia(self.hoje)
+        self.assertEqual(len(historico["confirmadas_sem_checklist"]), 1)
+        self.assertEqual(historico["fisicas"], [])
+
+        segunda = self.tarefa()
+        segunda.locacao.pessoa_avulsa_telefone = ""
+        segunda.locacao.save(update_fields=["pessoa_avulsa_telefone"])
+        self.client.post(
+            reverse("locacoes:conferencia_entrega", args=[segunda.pk]),
+            self.dados_conferencia_entrega(), secure=True,
+        )
+        conference = ConferenciaEntregaLocacao.objects.get(locacao=segunda.locacao)
+        response = self.client.get(reverse("locacoes:checklist_entrega_cliente", args=[conference.pk]), secure=True)
+        self.assertNotContains(response, "href=\"tel:")
+        historico = historico_operacional_do_dia(self.hoje)
+        self.assertEqual(len(historico["confirmadas_sem_checklist"]), 1)
+        self.assertEqual(len(historico["fisicas"]), 1)
 
     def test_entrega_resolvida_preserva_alerta_recolhimento_pendente(self):
         from estoque.views import _contexto_alertas_locacoes
@@ -684,6 +956,75 @@ class OperacoesDiretasLocacaoTests(TestCase):
         self.assertEqual(Locacao.disponibilidade_periodo(self.hoje, self.hoje), antes)
         from django.template.loader import render_to_string
         html = render_to_string("estoque/vendas_layout_teste.html", {"locacoes_operacionais": self.painel()})
-        self.assertIn('value="devolucao_cliente"', html)
-        self.assertIn('value="recolhimento_equipe"', html)
-        self.assertIn('data-checklist-frame', html)
+        # The sidebar stays simple; the advanced conference remains in rental details.
+        self.assertNotIn('name="transportador"', html)
+        self.assertNotIn('data-checklist-frame', html)
+        detalhe = self.client.get(reverse("locacoes:detalhe", args=[tarefa.locacao_id]), secure=True)
+        self.assertContains(detalhe, 'data-checklist-local-frame')
+        self.assertContains(detalhe, '?embutido=1')
+
+
+class IntegracaoOperacionalTests(TestCase):
+    setUp = OperacoesDiretasLocacaoTests.setUp
+    setUp_base = OperacoesDiretasLocacaoTests.setUp_base
+    dados_base = OperacoesDiretasLocacaoTests.dados_base
+    criar_locacao = OperacoesDiretasLocacaoTests.criar_locacao
+    colocar_na_rua = OperacoesDiretasLocacaoTests.colocar_na_rua
+    tarefa = OperacoesDiretasLocacaoTests.tarefa
+    painel = OperacoesDiretasLocacaoTests.painel
+    identificacao = OperacoesDiretasLocacaoTests.identificacao
+    recolher = OperacoesDiretasLocacaoTests.recolher
+    dados_conferencia_recolhimento = OperacoesDiretasLocacaoTests.dados_conferencia_recolhimento
+    def test_fluxo_simples_aceita_ativo_sem_habilitacao_de_transporte(self):
+        from estoque.models import Funcionario
+        funcionario = Funcionario.objects.create(nome="Responsavel simples", ativo=True,
+            pode_operar_sistema=False, pode_receber_checklist=False)
+        entrega = self.tarefa()
+        resposta = self.client.post(reverse("locacoes:confirmar_entrega_operacional", args=[entrega.pk]),
+            {"funcionario": funcionario.pk}, secure=True)
+        self.assertEqual(resposta.status_code, 200)
+        recolhimento = entrega.locacao.tarefas_operacionais.get(tipo="recolhimento")
+        resposta = self.client.post(reverse("locacoes:conferencia_recolhimento", args=[recolhimento.pk]),
+            self.dados_conferencia_recolhimento(interface_simplificada="1", funcionario=funcionario.pk), secure=True)
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(entrega.locacao.conferencias_recolhimento.get().responsavel, funcionario.nome)
+        self.assertFalse(entrega.locacao.eventos.filter(tipo="transporte_regularizado").exists())
+
+    def test_marcador_simples_nao_contorna_identificacao_avancada(self):
+        from estoque.models import Funcionario
+        nao_habilitado = Funcionario.objects.create(nome="Sem habilitacao", ativo=True,
+            pode_operar_sistema=False, pode_receber_checklist=False)
+        tarefa = self.tarefa("recolhimento")
+        for extras in ({"transportador": ""}, {"funcionario_conferente": str(nao_habilitado.pk)},
+                       {"modalidade": "", "funcionario_conferente": "", "transportador": ""}):
+            with self.subTest(extras=extras):
+                modalidade = extras.get("modalidade", "recolhimento_equipe")
+                campos = {chave: valor for chave, valor in extras.items() if chave != "modalidade"}
+                resposta = self.recolher(tarefa, modalidade, interface_simplificada="1",
+                    funcionario=str(self.conferente.pk), **campos)
+                self.assertTrue(resposta.context["form"].errors)
+                self.assertFalse(tarefa.locacao.conferencias_recolhimento.exists())
+        tarefa.refresh_from_db()
+        self.assertEqual(tarefa.status, "pendente")
+
+    def test_avancado_preserva_devolvente_distinto_do_conferente(self):
+        tarefa = self.tarefa("recolhimento")
+        resposta = self.recolher(tarefa, "recolhimento_equipe", pessoa_local_nome="Pessoa devolvente")
+        self.assertTrue(resposta.json()["ok"])
+        conferencia = tarefa.locacao.conferencias_recolhimento.get()
+        self.assertEqual(conferencia.pessoa_local_nome, "Pessoa devolvente")
+        self.assertEqual(conferencia.responsavel, self.conferente.nome)
+        self.assertIn("Transportou: " + self.transportador.nome, conferencia.observacao)
+        self.assertEqual(tarefa.locacao.eventos.get(tipo="recolhimento_usuario_confirmou").responsavel, "Sistema")
+
+    def test_detalhe_nao_aceita_regularizacao_sem_campos_avancados(self):
+        tarefa = self.tarefa()
+        url = reverse("locacoes:resolver_tarefa_operacional", args=[tarefa.pk])
+        for dados in ({"responsavel": "Texto livre"}, {"funcionario_registro": str(self.conferente.pk)}):
+            with self.subTest(dados=dados):
+                resposta = self.client.post(url, {"origem": "detalhe", "resultado": "entrega_equipe",
+                    "data_efetiva": self.hoje.isoformat(), "motivo": "Registro esquecido", **dados}, secure=True)
+                self.assertEqual(resposta.status_code, 302)
+                tarefa.refresh_from_db()
+                self.assertEqual(tarefa.status, "pendente")
+                self.assertFalse(tarefa.locacao.eventos.filter(tipo="transporte_regularizado").exists())

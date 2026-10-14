@@ -12,7 +12,6 @@
     <style>
     body[data-sales-offline="true"] .vendas-pendencias-lateral,
     body[data-sales-offline="true"] .cobrancas-vendas-lateral,
-    body[data-sales-offline="true"] #locacoesOperacionaisVenda,
     body[data-sales-offline="true"] #vendaGravadaBloco,
     body[data-sales-offline="true"] #atalho-despesa-global,
     body[data-sales-offline="true"] #revisaoPrecosPosterior,
@@ -625,6 +624,10 @@ select {
 .atalhos-venda.aberto {
     transform: translateX(0);
 }
+.atalhos-venda-toggle,
+.atalhos-venda-painel {
+    box-sizing: border-box;
+}
 .atalhos-venda-toggle {
     width: 42px;
     min-height: 116px;
@@ -673,6 +676,17 @@ select {
 .locacoes-operacionais-venda {
     top: 238px;
 }
+
+.locacoes-operacionais-form { display: grid; gap: 12px; margin-top: 12px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f8fafc; min-width: 0; }
+.locacoes-operacionais-form[hidden], .locacoes-operacionais-campo[hidden] { display: none; }
+.locacoes-operacionais-campo { display: grid; gap: 6px; min-width: 0; }
+.locacoes-operacionais-campo label { font-size: 12px; font-weight: 800; color: #334155; }
+.locacoes-operacionais-campo input, .locacoes-operacionais-campo select, .locacoes-operacionais-campo textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 42px; padding: 8px; border: 1px solid #94a3b8; border-radius: 6px; font: inherit; background: #fff; }
+.locacoes-operacionais-declaracao { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; }
+.locacoes-operacionais-declaracao input { flex: 0 0 auto; margin-top: 3px; }
+.locacoes-operacionais-ajuda { margin: 0; color: #64748b; font-size: 12px; line-height: 1.5; }
+.locacoes-operacionais-form button[type=submit] { min-height: 44px; width: 100%; }
+
 .locacoes-operacionais-venda .atalhos-venda-toggle {
     background: #2563eb;
     border-color: #2563eb;
@@ -2219,13 +2233,24 @@ td:first-child {
     .atalhos-venda {
         top: auto;
         right: 8px;
-        bottom: 10px;
+        bottom: calc(80px + env(safe-area-inset-bottom));
+        align-items: flex-end;
         transform: translateX(calc(100% - 46px));
+    }
+
+    .locacoes-operacionais-venda {
+        bottom: calc(206px + env(safe-area-inset-bottom));
+    }
+
+    .locacoes-operacionais-venda .atalhos-venda-painel {
+        width: min(390px, calc(100vw - 62px));
+        max-height: min(72vh, calc(100dvh - 216px - env(safe-area-inset-bottom)), 520px);
     }
 
     .atalhos-venda-toggle {
         width: 46px;
-        min-height: 104px;
+        height: 116px;
+        min-height: 116px;
         font-size: 12px;
     }
 
@@ -3071,8 +3096,8 @@ td:first-child {
             </div>
             {% endif %}
         </div>
-        <aside class="atalhos-venda" id="atalhosVenda" aria-label="Atalhos da venda">
-            <button type="button" class="atalhos-venda-toggle" id="btnAtalhosVenda" aria-expanded="false" aria-controls="atalhosVendaPainel">Atalhos</button>
+        <aside class="atalhos-venda" id="atalhosVenda" data-sales-navigation aria-label="Atalhos da venda">
+            <button type="button" class="atalhos-venda-toggle" id="btnAtalhosVenda" data-sales-navigation-toggle aria-expanded="false" aria-controls="atalhosVendaPainel">Atalhos</button>
             <div class="atalhos-venda-painel" id="atalhosVendaPainel">
                 <h2 class="atalhos-venda-titulo">Atalhos</h2>
                 <div class="atalhos-venda-lista">
@@ -3089,13 +3114,14 @@ td:first-child {
                 </div>
             </div>
         </aside>
-        <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% elif locacoes_operacionais.advertencia_lateral %}advertencia{% endif %}" id="locacoesOperacionaisVenda" aria-label="Entregas e Recolhimentos">
-            <button type="button" class="atalhos-venda-toggle" id="btnLocacoesOperacionaisVenda" aria-expanded="false" aria-controls="locacoesOperacionaisVendaPainel">
+        <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% elif locacoes_operacionais.advertencia_lateral %}advertencia{% endif %}" id="locacoesOperacionaisVenda" data-sales-navigation aria-label="Entregas e Recolhimentos">
+            <button type="button" class="atalhos-venda-toggle" id="btnLocacoesOperacionaisVenda" data-sales-navigation-toggle aria-expanded="false" aria-controls="locacoesOperacionaisVendaPainel">
                 Entregas e Recolhimentos
                 <span class="locacoes-operacionais-badge">{{ locacoes_operacionais.total }}</span>
             </button>
             <div class="atalhos-venda-painel" id="locacoesOperacionaisVendaPainel">
                 <h2 class="atalhos-venda-titulo">Entregas e Recolhimentos</h2>
+                <p class="locacoes-operacionais-ajuda" data-locacoes-feedback role="status" hidden></p>
                 <div class="locacoes-rapidas-tabs" role="tablist" aria-label="Filtro de entregas e recolhimentos">
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="entrega">Entregas {{ locacoes_operacionais.total_entregas }}</button>
                     <button type="button" class="locacoes-rapidas-tab" data-locacoes-filtro="recolhimento">Recolhimentos {{ locacoes_operacionais.total_recolhimentos }}</button>
@@ -3142,14 +3168,13 @@ td:first-child {
                                 <select
                                     id="locacoes-funcionario-{{ item.tarefa.id }}"
                                     class="locacoes-rapidas-select funcionario-select"
-                                    {% if not item.envio_operacional.tem_funcionario_com_whatsapp %}disabled{% endif %}
+                                    {% if not item.envio_operacional.funcionarios %}disabled{% endif %}
                                 >
                                     {% for funcionario in item.envio_operacional.funcionarios %}
                                         <option
                                             value="{{ funcionario.id }}"
                                             data-nome="{{ funcionario.nome }}"
                                             data-whatsapp-url="{{ funcionario.whatsapp_url }}"
-                                            {% if not funcionario.telefone %}disabled{% endif %}
                                             {% if item.envio_operacional.funcionario_padrao.id == funcionario.id %}selected{% endif %}
                                         >
                                             {{ funcionario.nome }}{% if not funcionario.telefone %} - sem WhatsApp{% endif %}
@@ -3172,49 +3197,48 @@ td:first-child {
                                 >
                                     Enviar checklist pelo WhatsApp
                                 </a>
-                                <button type="button" class="locacoes-rapidas-confirmar">
-                                    Confirmar que o checklist foi enviado
+                                {% if item.tipo == 'entrega' %}
+                                <button type="button" class="locacoes-rapidas-confirmar" data-confirmar-entrega-url="{% url 'locacoes:confirmar_entrega_operacional' item.tarefa.pk %}">
+                                    Confirmar entrega
                                 </button>
-                            </div>
-                            <div class="locacoes-rapidas-confirmado">Checklist enviado</div>
-                            <button type="button" class="btn btn-outline-success" data-abrir-checklist="{% if item.tipo == 'entrega' %}{{ item.conferencia_entrega_url }}{% else %}{{ item.conferencia_recolhimento_url }}{% endif %}?embutido=1">
-                              {% if item.tipo == 'entrega' %}Registrar entrega / retirada{% else %}Conferir devolução / recolhimento{% endif %}
-                            </button>
-                            <div data-checklist-area hidden>
-                              <button type="button" class="btn btn-outline-secondary" data-fechar-checklist>Fechar conferência</button>
-                              <iframe data-checklist-frame title="Conferência de materiais" style="width:100%;height:70vh;border:1px solid #fed7aa;border-radius:8px"></iframe>
+                                {% endif %}
                             </div>
                             <button type="button" class="locacoes-rapidas-resolver"
                                 data-resolver-url="{% url 'locacoes:resolver_tarefa_operacional' item.tarefa.pk %}">
                                 Dar como resolvida
                             </button>
-                            <form data-resolver-form hidden>
-<label class="d-block mt-2">Resultado
-<select class="form-select" name="resultado" required>
-  <option value="">Escolha explicitamente</option>
-  {% if item.tarefa.tipo == 'entrega' %}
-  <option value="entrega_equipe">Entrega realizada pela equipe</option>
-  <option value="retirada_cliente">Material retirado pelo cliente</option>
-  {% else %}
-  <option value="recolhimento_equipe">Recolhimento realizado pela equipe</option>
-  <option value="devolucao_cliente">Cliente devolveu no deposito</option>
-  {% endif %}
-  <option value="tarefa_engano">Tarefa criada por engano</option>
-</select></label>
-<label class="d-block mt-2">Data efetiva da operação <input class="form-control" type="date" name="data_efetiva"></label>
-<label class="d-block mt-2">Funcionário que registra
-<select class="form-select" name="funcionario_registro">
-  <option value="">Selecione quem registrou</option>
-  {% for funcionario in item.funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
-</select></label>
-<label class="d-block mt-2">Quem transportou (quando equipe)
-<select class="form-select" name="transportador">
-  <option value="">Cliente no depósito / selecione a equipe</option>
-  {% for funcionario in item.funcionarios_operacionais %}<option value="{{ funcionario.pk }}">{{ funcionario.nome }}</option>{% endfor %}
-</select></label>
-<label class="d-block mt-2">Motivo <textarea class="form-control" name="motivo" maxlength="500" required></textarea></label>
-<p>Entrega/retirada exige data efetiva e responsável. Recolhimento exige conferência real para devolver materiais.</p>
-<button class="btn btn-primary" type="submit">Salvar regularização</button>
+                            <form class="locacoes-operacionais-form" data-resolver-form hidden>
+                              <p class="locacoes-operacionais-ajuda">Regularização administrativa excepcional. Para uma entrega realizada, use Confirmar entrega.</p>
+                              <div class="locacoes-operacionais-campo">
+                                <label for="locacoes-resultado-{{ item.tarefa.pk }}">Resultado</label>
+                                <select id="locacoes-resultado-{{ item.tarefa.pk }}" name="resultado" required>
+                                  <option value="">Selecione o resultado</option>
+                                  {% if item.tarefa.tipo == 'entrega' %}
+                                  <option value="entrega_equipe">Entrega realizada pela equipe</option>
+                                  <option value="retirada_cliente">Material retirado pelo cliente</option>
+                                  {% endif %}
+                                  <option value="tarefa_engano">Tarefa criada por engano</option>
+                                </select>
+                              </div>
+                              <div class="locacoes-operacionais-campo" data-regularizacao-entrega hidden>
+                                <label for="locacoes-data-{{ item.tarefa.pk }}">Data efetiva da entrega ou retirada</label>
+                                <input id="locacoes-data-{{ item.tarefa.pk }}" type="date" name="data_efetiva" value="{{ item.data_efetiva_padrao|date:'Y-m-d' }}" max="{{ locacoes_operacionais.data|date:'Y-m-d' }}">
+                              </div>
+                              <div class="locacoes-operacionais-campo" data-regularizacao-entrega hidden>
+                                <label for="locacoes-responsavel-{{ item.tarefa.pk }}">Responsável pela entrega ou retirada</label>
+                                <select id="locacoes-responsavel-{{ item.tarefa.pk }}" name="responsavel">
+                                  <option value="">Selecione o responsável</option>
+                                  {% for nome in item.responsaveis_regularizacao %}
+                                  <option value="{{ nome }}" {% if nome == item.responsavel_regularizacao %}selected{% endif %}>{{ nome }}</option>
+                                  {% endfor %}
+                                </select>
+                              </div>
+                              <div class="locacoes-operacionais-campo" data-regularizacao-motivo hidden>
+                                <label for="locacoes-motivo-{{ item.tarefa.pk }}">Motivo da tarefa criada por engano</label>
+                                <textarea id="locacoes-motivo-{{ item.tarefa.pk }}" name="motivo" maxlength="500" rows="3"></textarea>
+                              </div>
+                              <p class="locacoes-operacionais-ajuda">Quem fez o registro e o horário serão salvos automaticamente. O recolhimento continua dependendo da conferência física.</p>
+                              <button type="submit" class="btn btn-primary">Salvar regularização</button>
                             </form>
                             <p class="locacoes-rapidas-alerta" data-resolver-erro role="alert" hidden></p>
                         </article>
@@ -3397,6 +3421,69 @@ td:first-child {
 {{ cliente_inicial|json_script:"clienteInicialVenda" }}
 {{ pedido_importado|json_script:"pedidoImportadoVenda" }}
 {{ venda_edicao|json_script:"vendaEdicaoVenda" }}
+<script>
+// These controls must work before offline modules and sales initialization finish.
+(function () {
+    const atalhosVenda = document.getElementById("atalhosVenda");
+    const btnAtalhosVenda = document.getElementById("btnAtalhosVenda");
+    const locacoesOperacionaisVenda = document.getElementById("locacoesOperacionaisVenda");
+    const btnLocacoesOperacionaisVenda = document.getElementById("btnLocacoesOperacionaisVenda");
+function alternarAtalhosVenda(forcarAberto) {
+    if (!atalhosVenda || !btnAtalhosVenda) return;
+    const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !atalhosVenda.classList.contains("aberto");
+    atalhosVenda.classList.toggle("aberto", abrir);
+    btnAtalhosVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
+}
+
+function alternarLocacoesOperacionaisVenda(forcarAberto) {
+    if (!locacoesOperacionaisVenda || !btnLocacoesOperacionaisVenda) return;
+    const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !locacoesOperacionaisVenda.classList.contains("aberto");
+    locacoesOperacionaisVenda.classList.toggle("aberto", abrir);
+    btnLocacoesOperacionaisVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
+    if (!abrir) {
+        delete locacoesOperacionaisVenda.dataset.filtroManual;
+        document.getElementById("locacoesOperacionaisVendaPainel")?.dispatchEvent(new Event("locacoes-reset"));
+    }
+}
+
+btnAtalhosVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    alternarAtalhosVenda();
+    alternarLocacoesOperacionaisVenda(false);
+});
+
+btnLocacoesOperacionaisVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    alternarLocacoesOperacionaisVenda();
+    alternarAtalhosVenda(false);
+});
+
+atalhosVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+});
+
+locacoesOperacionaisVenda?.addEventListener("click", (event) => {
+    event.stopPropagation();
+});
+
+function fecharLateraisAoClicarFora(event) {
+    if (event.target.closest('[data-sales-navigation]')) return;
+    alternarAtalhosVenda(false);
+    alternarLocacoesOperacionaisVenda(false);
+}
+// Capture before offline guards; pointerdown also fires on disabled fields.
+document.addEventListener("pointerdown", fecharLateraisAoClicarFora, true);
+document.addEventListener("click", fecharLateraisAoClicarFora, true);
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+        alternarAtalhosVenda(false);
+        alternarLocacoesOperacionaisVenda(false);
+    }
+});
+
+})();
+</script>
 <script>
     function mostrarMsgEdicao() {
     const msg = document.getElementById("msgEdicao");
@@ -7025,45 +7112,7 @@ btnConsultarVendas.addEventListener("click", () => {
     window.location.href = "{% url 'estoque:consultar_vendas' %}";
 });
 
-function alternarAtalhosVenda(forcarAberto) {
-    if (!atalhosVenda || !btnAtalhosVenda) return;
-    const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !atalhosVenda.classList.contains("aberto");
-    atalhosVenda.classList.toggle("aberto", abrir);
-    btnAtalhosVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
-}
-
-function alternarLocacoesOperacionaisVenda(forcarAberto) {
-    if (!locacoesOperacionaisVenda || !btnLocacoesOperacionaisVenda) return;
-    const abrir = typeof forcarAberto === "boolean" ? forcarAberto : !locacoesOperacionaisVenda.classList.contains("aberto");
-    locacoesOperacionaisVenda.classList.toggle("aberto", abrir);
-    btnLocacoesOperacionaisVenda.setAttribute("aria-expanded", abrir ? "true" : "false");
-    if (!abrir) {
-        delete locacoesOperacionaisVenda.dataset.filtroManual;
-        document.getElementById("locacoesOperacionaisVendaPainel")?.dispatchEvent(new Event("locacoes-reset"));
-    }
-}
-
-btnAtalhosVenda?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    alternarAtalhosVenda();
-    alternarLocacoesOperacionaisVenda(false);
-});
-
-btnLocacoesOperacionaisVenda?.addEventListener("click", (event) => {
-    event.stopPropagation();
-    alternarLocacoesOperacionaisVenda();
-    alternarAtalhosVenda(false);
-});
-
-atalhosVenda?.addEventListener("click", (event) => {
-    event.stopPropagation();
-});
-
-locacoesOperacionaisVenda?.addEventListener("click", (event) => {
-    event.stopPropagation();
-});
-
-let intervaloLocacoesRapidas;
+let temporizadorLocacoesRapidas;
 function configurarLocacoesRapidas() {
     const painel = document.getElementById("locacoesOperacionaisVendaPainel");
     if (!painel) return;
@@ -7146,8 +7195,8 @@ function configurarLocacoesRapidas() {
         locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);
         locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && advertencia);
     }
-    clearInterval(intervaloLocacoesRapidas);
-    intervaloLocacoesRapidas = setInterval(atualizarAlertaLateral, 1000);
+    clearInterval(temporizadorLocacoesRapidas);
+    temporizadorLocacoesRapidas = setInterval(atualizarAlertaLateral, 1000);
 
     tabs.forEach((tab) => {
         tab.addEventListener("click", () => {
@@ -7164,67 +7213,145 @@ function configurarLocacoesRapidas() {
         const resolver = card.querySelector(".locacoes-rapidas-resolver");
         const erroResolucao = card.querySelector("[data-resolver-erro]");
         const formularioResolucao = card.querySelector("[data-resolver-form]");
-        const areaChecklist = card.querySelector("[data-checklist-area]");
-        const frameChecklist = card.querySelector("[data-checklist-frame]");
-        card.querySelector("[data-abrir-checklist]")?.addEventListener("click", event => {
-            frameChecklist.src = event.currentTarget.dataset.abrirChecklist;
-            areaChecklist.hidden = false;
-            formularioResolucao.hidden = true;
-        });
-        card.querySelector("[data-fechar-checklist]")?.addEventListener("click", () => {
-            areaChecklist.hidden = true; frameChecklist.removeAttribute("src");
+        function mostrarErroOperacional(mensagem, loginNecessario = false) {
+            erroResolucao.textContent = mensagem;
+            if (loginNecessario) {
+                const login = document.createElement('a');
+                login.dataset.operacionalLogin = 'true';
+                login.href = "{% url 'offline_login' %}?next=" + encodeURIComponent(location.pathname + location.search);
+                login.target = '_blank'; login.rel = 'noopener';
+                login.textContent = 'Fazer login';
+                erroResolucao.append(document.createTextNode(' '), login);
+            }
+            erroResolucao.hidden = false;
+        }
+        async function acessoOperacionalDisponivel() {
+            try {
+                // HTML and local metadata may predate login. Consult the actual
+                // session; the POST also enforces authentication and CSRF.
+                const resposta = await fetch('/api/offline/session/', {
+                    cache: 'no-store', credentials: 'same-origin', signal: AbortSignal.timeout(5000),
+                });
+                if (!resposta.ok) throw new Error('session-unavailable');
+                const sessao = await resposta.json();
+                if (sessao.authenticated !== true) {
+                    mostrarErroOperacional("Autentique-se novamente para registrar esta operação. Dados locais preservados.", true);
+                    return false;
+                }
+                erroResolucao.hidden = true;
+                return true;
+            } catch (_) {
+                mostrarErroOperacional("Não foi possível verificar a sessão. Verifique a conexão e tente novamente. Nenhuma alteração foi gravada.");
+                return false;
+            }
+        }
+        async function enviarOperacao(url, campos) {
+            const resposta = await fetch(url, {
+                method: "POST", credentials: "same-origin",
+                headers: {"X-CSRFToken": obterCookie("csrftoken"), "X-Requested-With": "XMLHttpRequest"},
+                body: new URLSearchParams(campos),
+            });
+            const dados = await resposta.json().catch(() => null);
+            if (resposta.status === 401) {
+                const erro = new Error(dados?.erro || "Autentique-se novamente para registrar esta operação. Dados locais preservados.");
+                erro.autenticacaoNecessaria = true;
+                throw erro;
+            }
+            if (resposta.status === 403) throw new Error(dados?.erro || "Sessão ou validação de segurança inválida. Autentique-se novamente e reabra Vendas.");
+            if (!resposta.ok || !dados?.ok) throw new Error(dados?.erro || "Não foi possível registrar a operação. Verifique a tarefa antes de tentar novamente.");
+        }
+        const resultadoRegularizacao = formularioResolucao?.querySelector('[name="resultado"]');
+        const responsavelRegularizacao = formularioResolucao?.querySelector('[name="responsavel"]');
+        function preselecionarResponsavelPorFuncionario() {
+            if (responsavelRegularizacao && !responsavelRegularizacao.value) {
+                const nome = select?.selectedOptions?.[0]?.dataset.nome;
+                if ([...responsavelRegularizacao.options].some(opcao => opcao.value === nome)) responsavelRegularizacao.value = nome;
+            }
+        }
+        function configurarRegularizacao() {
+            if (!formularioResolucao) return;
+            const entregaRealizada = ['entrega_equipe', 'retirada_cliente'].includes(resultadoRegularizacao.value);
+            formularioResolucao.querySelectorAll('[data-regularizacao-entrega]').forEach(campo => {
+                campo.hidden = !entregaRealizada;
+                const controle = campo.querySelector('input, select');
+                controle.required = entregaRealizada;
+                controle.disabled = !entregaRealizada;
+            });
+            const motivo = formularioResolucao.querySelector('[name="motivo"]');
+            const criadaPorEngano = resultadoRegularizacao.value === 'tarefa_engano';
+            motivo.closest('[data-regularizacao-motivo]').hidden = !criadaPorEngano;
+            motivo.required = criadaPorEngano;
+            motivo.disabled = !criadaPorEngano;
+        }
+        resultadoRegularizacao?.addEventListener('change', configurarRegularizacao);
+        select?.addEventListener('change', preselecionarResponsavelPorFuncionario);
+        configurarRegularizacao();
+        confirmar?.addEventListener("click", async () => {
+            if (confirmar.dataset.enviando) return;
+            confirmar.dataset.enviando = 'true'; confirmar.disabled = true;
+            let salvo = false;
+            try {
+                if (!await acessoOperacionalDisponivel()) return;
+                const funcionario = select?.value;
+                if (!funcionario) {
+                    mostrarErroOperacional("Selecione o funcionário responsável pela entrega.");
+                    return;
+                }
+                await enviarOperacao(confirmar.dataset.confirmarEntregaUrl, {funcionario});
+                salvo = true;
+                card.remove();
+                atualizarContadores();
+                const feedback = painel.querySelector('[data-locacoes-feedback]');
+                feedback.hidden = false; feedback.textContent = 'Entrega confirmada.';
+                try {
+                    // Refresh only this panel; retain the sale, drafts and open tab.
+                    const resposta = await fetch('/vendas/', {cache:'no-store', credentials:'same-origin'});
+                    if (!resposta.ok || resposta.redirected) throw new Error('panel-unavailable');
+                    const pagina = new DOMParser().parseFromString(await resposta.text(), 'text/html');
+                    const novoPainel = pagina.getElementById('locacoesOperacionaisVendaPainel');
+                    if (!novoPainel || !pagina.getElementById('offline-global')?.dataset.actor) throw new Error('panel-unavailable');
+                    painel.innerHTML = novoPainel.innerHTML;
+                    configurarLocacoesRapidas();
+                    const status = painel.querySelector('[data-locacoes-feedback]');
+                    status.hidden = false; status.textContent = 'Entrega confirmada.';
+                } catch (_) {
+                    feedback.textContent = 'Entrega confirmada. Reabra Vendas para atualizar os recolhimentos.';
+                }
+            } catch (erro) {
+                mostrarErroOperacional(erro instanceof TypeError ? "Falha de conexão com o servidor. Verifique a tarefa antes de tentar novamente." : erro.message, erro.autenticacaoNecessaria === true);
+            } finally {
+                delete confirmar.dataset.enviando;
+                if (!salvo) confirmar.disabled = false;
+            }
         });
         resolver?.addEventListener("click", () => {
             formularioResolucao.hidden = !formularioResolucao.hidden;
+            if (!formularioResolucao.hidden) void acessoOperacionalDisponivel();
         });
         formularioResolucao?.addEventListener("submit", async (event) => {
             event.preventDefault();
-            const campos = new FormData(formularioResolucao);
-            const entregaRealizada = campos.get("resultado") !== "tarefa_engano";
-            if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("funcionario_registro"))) {
-                erroResolucao.textContent = "Informe data efetiva e responsável pela entrega/retirada.";
-                erroResolucao.hidden = false;
-                return;
-            }
-            if (campos.get("resultado").endsWith("_equipe") && !campos.get("transportador")) {
-                erroResolucao.textContent = "Selecione quem transportou os materiais."; erroResolucao.hidden = false; return;
-            }
-            if (card.dataset.tipo === "recolhimento" && campos.get("resultado") !== "tarefa_engano") {
-                const destino = new URL(card.querySelector("[data-abrir-checklist]").dataset.abrirChecklist, window.location.origin);
-                destino.searchParams.set("modalidade", campos.get("resultado"));
-                destino.searchParams.set("funcionario_conferente", campos.get("funcionario_registro"));
-                destino.searchParams.set("transportador", campos.get("transportador"));
-                destino.searchParams.set("data_efetiva", campos.get("data_efetiva"));
-                destino.searchParams.set("observacao", campos.get("motivo"));
-                frameChecklist.src = destino.href;
-                areaChecklist.hidden = false; formularioResolucao.hidden = true;
-                erroResolucao.hidden = true;
-                return; // Quantities and conditions must be checked before any return is saved.
-            }
-            resolver.disabled = true;
+            if (formularioResolucao.dataset.enviando) return;
             const salvar = formularioResolucao.querySelector("button[type=submit]");
-            salvar.disabled = true;
-            erroResolucao.hidden = true;
-            let operacaoSalva = false;
+            formularioResolucao.dataset.enviando = 'true'; salvar.disabled = true; resolver.disabled = true;
+            let salvo = false;
             try {
-                const resposta = await fetch(resolver.dataset.resolverUrl, {
-                    method: "POST",
-                    headers: {"X-CSRFToken": obterCookie("csrftoken"), "X-Requested-With": "XMLHttpRequest"},
-                    body: new URLSearchParams(campos),
-                });
-                const dados = await resposta.json();
-                if (!resposta.ok || !dados.ok) throw new Error(dados.erro || "Não foi possível resolver a tarefa.");
-                operacaoSalva = true;
-                await atualizarPainelLocacoes();
+                if (!await acessoOperacionalDisponivel()) return;
+                const campos = new FormData(formularioResolucao);
+                const entregaRealizada = campos.get("resultado") !== "tarefa_engano";
+                if (entregaRealizada && (!campos.get("data_efetiva") || !campos.get("responsavel")?.trim())) {
+                    mostrarErroOperacional("Informe data efetiva e responsável pela entrega ou retirada.");
+                    return;
+                }
+                await enviarOperacao(resolver.dataset.resolverUrl, campos);
+                salvo = true; window.location.reload();
             } catch (erro) {
-                erroResolucao.textContent = erro.message || "Não foi possível resolver a tarefa. Tente novamente.";
-                erroResolucao.hidden = false;
-                resolver.disabled = operacaoSalva;
-                salvar.disabled = operacaoSalva;
+                mostrarErroOperacional(erro instanceof TypeError ? "Falha de conexão com o servidor. Verifique a tarefa antes de tentar novamente." : erro.message, erro.autenticacaoNecessaria === true);
+            } finally {
+                delete formularioResolucao.dataset.enviando;
+                if (!salvo) { resolver.disabled = false; salvar.disabled = false; }
             }
         });
         const chaveFuncionario = "locacoes.operacional.funcionario." + (card.dataset.tarefaId || "");
-        const chaveEnviado = "locacoes.operacional.enviado." + (card.dataset.tarefaId || "");
 
         function atualizarEnvio() {
             const opcao = select?.selectedOptions?.[0];
@@ -7252,9 +7379,7 @@ function configurarLocacoesRapidas() {
             const funcionarioSalvo = localStorage.getItem(chaveFuncionario);
             if (funcionarioSalvo && select?.querySelector("option[value='" + funcionarioSalvo + "']")) {
                 select.value = funcionarioSalvo;
-            }
-            if (localStorage.getItem(chaveEnviado) === "1") {
-                card.classList.add("enviado");
+                preselecionarResponsavelPorFuncionario();
             }
         } catch (erro) {}
 
@@ -7266,12 +7391,6 @@ function configurarLocacoesRapidas() {
                 select?.focus();
             }
         });
-        confirmar?.addEventListener("click", () => {
-            card.classList.add("enviado");
-            try {
-                localStorage.setItem(chaveEnviado, "1");
-            } catch (erro) {}
-        });
         atualizarEnvio();
     });
 
@@ -7279,34 +7398,6 @@ function configurarLocacoesRapidas() {
 }
 configurarLocacoesRapidas();
 document.getElementById("locacoesOperacionaisVendaPainel")?.addEventListener("locacoes-reset", event => event.currentTarget.onLocacoesReset?.());
-
-async function atualizarPainelLocacoes() {
-    const resposta = await fetch(window.location.href, {headers:{"X-Requested-With":"XMLHttpRequest"}, cache:"no-store"});
-    if (!resposta.ok || resposta.redirected) throw new Error("Operação salva; atualize o painel para conferir o resultado.");
-    const documento = new DOMParser().parseFromString(await resposta.text(), "text/html");
-    const novo = documento.getElementById("locacoesOperacionaisVendaPainel");
-    if (!novo) throw new Error("Operação salva; atualize o painel para conferir o resultado.");
-    document.getElementById("locacoesOperacionaisVendaPainel").innerHTML = novo.innerHTML;
-    configurarLocacoesRapidas();
-}
-window.addEventListener("message", async event => {
-    const frame = Array.from(document.querySelectorAll("[data-checklist-frame]")).find(frame => frame.contentWindow === event.source);
-    if (event.origin !== window.location.origin || !frame || event.data?.tipo !== "locacao-conferida") return;
-    try { await atualizarPainelLocacoes(); }
-    catch (erro) { const aviso = frame.closest("[data-locacoes-card]").querySelector("[data-resolver-erro]"); aviso.textContent = erro.message; aviso.hidden = false; }
-});
-
-document.addEventListener("click", () => {
-    alternarAtalhosVenda(false);
-    alternarLocacoesOperacionaisVenda(false);
-});
-
-document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-        alternarAtalhosVenda(false);
-        alternarLocacoesOperacionaisVenda(false);
-    }
-});
 
 btnContasReceberVenda?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -9342,8 +9433,8 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="/offline/assets/2-8g-close/app.js"></script>
-<script type="module" src="/offline/assets/2-8f-fix/sales.js"></script>
-<script type="module" src="/offline/assets/2-8g-close/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/2-8g-auth-link/sales.js"></script>
+<script type="module" src="/offline/assets/2-8g-auth-link/sales-draft-ui.js"></script>
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }

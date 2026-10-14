@@ -51,6 +51,11 @@ if (!local) {
     } catch (error) { panels.forEach(p => { p.textContent = error.message; }); }
 }
 for (const panel of panels) {
+    if (panel.dataset.checklistNotes === 'disabled' || document.body.dataset.checklistNotes === 'disabled') {
+        panel.hidden = true;
+        panel.replaceChildren();
+        continue;
+    }
     const kind = panel.dataset.checklistKind || 'observacao_operacional';
     const task = identityMatches(snapshot) && snapshot.tasks.find(t => t.id === panel.dataset.checklistTask && (t.kind || 'observacao_operacional') === kind);
     if (!task) { panel.textContent = 'Observações offline indisponíveis: prepare esta tarefa online com permissão.'; continue; }

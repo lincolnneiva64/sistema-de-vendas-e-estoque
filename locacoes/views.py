@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import prefetch_related_objects
 from django.forms import modelformset_factory
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -382,6 +382,18 @@ def _mensagem_checklist_recolhimento_link_whatsapp(nome_destinatario, checklist_
     return "\n".join(linhas)
 
 
+def _whatsapp_comprovante_recolhimento_url(conferencia, checklist_url):
+    """Share the saved physical conference without recording a send event."""
+    mensagem = "\n\n".join([
+        f"Cliente: {conferencia.locacao.nome_contratante}",
+        f"Data/Hora: {timezone.localtime(conferencia.criado_em):%d/%m/%Y %H:%M}",
+        conferencia.mensagem_whatsapp_snapshot,
+        f"Comprovante do recolhimento:\n{checklist_url}",
+    ])
+    telefone = _telefone_whatsapp_locacao(conferencia.locacao)
+    return f"https://wa.me/{telefone}?{urlencode({'text': mensagem})}"
+
+
 def _whatsapp_checklist_funcionario_url(funcionario, texto):
     telefone = _telefone_funcionario_checklist(funcionario)
     return _whatsapp_web_url(telefone, texto)
@@ -575,6 +587,45 @@ def _responsavel_request(request, fallback=""):
     if usuario is not None and getattr(usuario, "is_authenticated", False):
         return usuario.get_username()
     return fallback or "Sistema"
+
+
+def _dados_contato_locacao(locacao):
+    telefone = str(locacao.telefone_contratante or "").strip()
+    digitos = "".join(caractere for caractere in telefone if caractere.isdigit())
+    telefone_tel = ("+" if telefone.startswith("+") else "") + digitos
+    if locacao.cliente_id and locacao.cliente:
+        campos_endereco = [
+            locacao.cliente.logradouro,
+            locacao.cliente.numero,
+            locacao.cliente.complemento,
+            locacao.cliente.bairro,
+            locacao.cliente.cidade,
+            locacao.cliente.uf,
+            f"CEP {locacao.cliente.cep}" if locacao.cliente.cep else "",
+        ]
+        endereco_cliente = ", ".join(str(campo).strip() for campo in campos_endereco if campo)
+        if locacao.cliente.referencia:
+            endereco_cliente = ", ".join(filter(None, [endereco_cliente, f"Referência: {locacao.cliente.referencia}"]))
+    else:
+        endereco_cliente = str(locacao.endereco_contratante or "").strip()
+    endereco_cliente_mapa = endereco_cliente.strip()
+    endereco_operacao = str(locacao.endereco_entrega or "").strip()
+    return {
+        "cliente_nome_checklist": locacao.nome_contratante,
+        "cliente_whatsapp_contato_url": f"https://wa.me/{_telefone_whatsapp_locacao(locacao)}" if _telefone_whatsapp_locacao(locacao) else "",
+        "cliente_endereco_checklist": endereco_cliente,
+        "cliente_endereco_mapa_url": (
+            f"https://www.google.com/maps/search/?api=1&query={quote(endereco_cliente_mapa)}"
+            if endereco_cliente_mapa else ""
+        ),
+        "cliente_telefone_checklist": telefone,
+        "cliente_tel_url": f"tel:{telefone_tel}" if digitos else "",
+        "local_operacao_checklist": endereco_operacao,
+        "local_operacao_mapa_url": (
+            f"https://www.google.com/maps/search/?api=1&query={quote(endereco_operacao)}"
+            if endereco_operacao else ""
+        ),
+    }
 
 
 def _request_ajax(request):
@@ -1410,13 +1461,11 @@ def detalhe(request, pk):
     recolhimento_existente = locacao.tarefas_operacionais.filter(
         tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
     ).first()
-    pode_regularizar_entrega = (
-        entrega_encerrada is not None
+    pode_regularizar_entrega = bool(
+        entrega_encerrada
         and locacao.status == Locacao.STATUS_RESERVADA
         and not locacao.entrega_confirmada()
-        and not locacao.eventos.filter(
-            tipo__in=["entregue", "checklist_entrega_confirmada"],
-        ).exists()
+        and not locacao.eventos.filter(tipo__in=["entregue", "checklist_entrega_confirmada"]).exists()
         and not entrega_encerrada.confirmado_em
         and not locacao.conferencias_recolhimento.exists()
         and (recolhimento_existente is None or recolhimento_existente.pendente_operacional)
@@ -1432,6 +1481,7 @@ def detalhe(request, pk):
             "tarefas_operacionais": tarefas_ativas_da_locacao(locacao),
             "tarefa_entrega": tarefa_entrega,
             "tarefa_recolhimento": tarefa_recolhimento,
+            "regularizacao_tarefa": entrega_encerrada if pode_regularizar_entrega else None,
             "conferencias_entrega": (
                 locacao.conferencias_entrega.all()
             ),
@@ -1738,6 +1788,7 @@ def conferencia_entrega(request, pk):
         {
             "tarefa": tarefa,
             "locacao": locacao,
+            **_dados_contato_locacao(locacao),
             "form": form,
             "previsto_mesas": form.previsto_mesas,
             "previsto_cadeiras": form.previsto_cadeiras,
@@ -1775,6 +1826,7 @@ def checklist_entrega_cliente(request, pk):
         {
             "conferencia": conferencia,
             "locacao": locacao,
+            **_dados_contato_locacao(locacao),
             "itens_checklist": _itens_checklist_entrega(conferencia),
             "itens_checklist_rota": _itens_checklist_entrega_formato_rota(conferencia),
             "texto_checklist": texto_checklist,
@@ -1882,14 +1934,7 @@ def checklist_recolhimento_cliente(request, pk):
         )
 
     telefone_cliente = _telefone_whatsapp_locacao(locacao)
-    whatsapp_url = _whatsapp_web_url(
-        telefone_cliente,
-        _mensagem_checklist_recolhimento_link_whatsapp(
-            "",
-            checklist_url,
-            locacao,
-        ),
-    ) if telefone_cliente else ""
+    whatsapp_url = _whatsapp_comprovante_recolhimento_url(conferencia, checklist_url)
     recolhido_mesas = (
         conferencia.boa_mesas
         + conferencia.quebrada_mesas
@@ -1910,6 +1955,7 @@ def checklist_recolhimento_cliente(request, pk):
         {
             "conferencia": conferencia,
             "locacao": locacao,
+            **_dados_contato_locacao(locacao),
             "checklist_url": checklist_url,
             "whatsapp_url": whatsapp_url,
             "funcionarios_checklist": funcionarios_checklist,
@@ -1928,6 +1974,18 @@ def checklist_recolhimento_cliente(request, pk):
 
 @xframe_options_sameorigin
 def conferencia_recolhimento(request, pk):
+    # The legacy and simplified payloads represent the same physical operation.
+    # Neither client-controlled fields nor offline state grant write access.
+    if request.method == "POST":
+        if not request.user.is_authenticated:
+            messages.warning(request, "Faça login para confirmar o recolhimento. Dados locais preservados.")
+            return redirect(reverse("offline_login") + "?" + urlencode({"next": request.get_full_path()}))
+        if not request.user.has_perms([
+            "locacoes.add_conferenciarecolhimentolocacao",
+            "locacoes.change_locacao",
+            "locacoes.change_tarefaoperacionallocacao",
+        ]):
+            return HttpResponseForbidden("Você não tem permissão para registrar o recolhimento. Dados locais preservados.")
     tarefa = get_object_or_404(
         TarefaOperacionalLocacao.objects
         .select_related(
@@ -1993,18 +2051,20 @@ def conferencia_recolhimento(request, pk):
             pk=locacao.pk,
         )
 
+    # Rental-detail conferences retain their transport identity requirements.
+    # A client-supplied simple-interface marker cannot relax this route.
+    avancada = request.GET.get("embutido") == "1"
+    simplificada = not avancada and (request.method != "POST" or request.POST.get("interface_simplificada") == "1")
     if request.method == "POST":
         dados_post = request.POST.copy()
-        responsavel = responsavel_checklist or _responsavel_request(
-            request,
-            str(request.POST.get("responsavel") or "").strip()
-            or "Checklist operacional",
-        )
-        dados_post["pessoa_local_nome"] = responsavel
+        responsavel = (responsavel_checklist
+                       or str(request.POST.get("responsavel") or "").strip()
+                       or _responsavel_request(request))
+        dados_post["pessoa_local_nome"] = str(request.POST.get("pessoa_local_nome") or locacao.nome_contratante).strip()
         dados_post["pessoa_local_relacao"] = (
-            ConferenciaEntregaLocacao.RELACAO_FUNCIONARIO
+            request.POST.get("pessoa_local_relacao") or ConferenciaEntregaLocacao.RELACAO_CLIENTE
         )
-        dados_post["pessoa_local_relacao_outro"] = ""
+        dados_post["pessoa_local_relacao_outro"] = request.POST.get("pessoa_local_relacao_outro", "")
         dados_post["responsavel"] = responsavel
         for campo in [
             "perdida_mesas",
@@ -2015,21 +2075,28 @@ def conferencia_recolhimento(request, pk):
             dados_post[campo] = "0"
         form = ConferenciaRecolhimentoLocacaoForm(
             dados_post,
-            locacao=locacao,
-            exigir_identificacao=request.GET.get("embutido") == "1",
+            locacao=locacao, operacional=simplificada, exigir_identificacao=avancada,
         )
 
         if form.is_valid():
             if form.cleaned_data.get("modalidade"):
-                form.cleaned_data["pessoa_local_nome"] = form.cleaned_data["responsavel"]
                 form.cleaned_data["observacao"] += "\nUsuario que registrou: " + _responsavel_request(request)
             try:
-                conferencia = (
-                    ConferenciaRecolhimentoLocacao.registrar(
-                        tarefa=tarefa,
-                        dados=form.cleaned_data,
+                with transaction.atomic():
+                    conferencia = ConferenciaRecolhimentoLocacao.registrar(
+                        tarefa=tarefa, dados=form.cleaned_data,
                     )
-                )
+                    funcionario = form.cleaned_data.get("funcionario")
+                    identificacao_funcionario = f"#{funcionario.pk}: " if funcionario else ""
+                    EventoLocacao.objects.create(
+                        locacao=locacao, tipo="recolhimento_usuario_confirmou",
+                        responsavel=request.user.get_username(),
+                        descricao=(
+                            f"Conferencia #{conferencia.pk}; funcionario {identificacao_funcionario}{conferencia.responsavel}; "
+                            f"usuario #{request.user.pk}: {request.user.get_username()}; "
+                            f"registrado em {conferencia.criado_em.isoformat()}."
+                        ),
+                    )
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
                     for campo, erros in exc.message_dict.items():
@@ -2081,7 +2148,7 @@ def conferencia_recolhimento(request, pk):
                 if (
                     conferencia.situacao
                     == ConferenciaRecolhimentoLocacao.SITUACAO_PARCIAL
-                ):
+                ) and not simplificada:
                     return redirect(
                         reverse(
                             "locacoes:conferencia_recolhimento",
@@ -2089,10 +2156,9 @@ def conferencia_recolhimento(request, pk):
                         )
                     )
 
-                return redirect(
-                    "locacoes:detalhe",
-                    pk=locacao.pk,
-                )
+                if simplificada:
+                    return redirect(reverse("locacoes:conferencia_recolhimento", kwargs={"pk": tarefa.pk}) + "?" + urlencode({"conferencia": conferencia.pk}))
+                return redirect("locacoes:detalhe", pk=locacao.pk)
         else:
             messages.warning(
                 request,
@@ -2103,9 +2169,10 @@ def conferencia_recolhimento(request, pk):
             )
     else:
         form = ConferenciaRecolhimentoLocacaoForm(
-            locacao=locacao,
-            initial=_initial_identificacao_checklist(request, responsavel_checklist),
-            exigir_identificacao=request.GET.get("embutido") == "1",
+            locacao=locacao, operacional=not avancada, exigir_identificacao=avancada,
+            initial=(_initial_identificacao_checklist(request, responsavel_checklist) if avancada else {
+                "funcionario": request.GET.get("funcionario") or Funcionario.objects.filter(ativo=True).order_by("nome").values_list("pk", flat=True).first(),
+            }),
         )
 
     checklist_url = (
@@ -2120,16 +2187,7 @@ def conferencia_recolhimento(request, pk):
     )
     whatsapp_url = ""
     if conferencia_salva:
-        telefone = _telefone_whatsapp_locacao(locacao)
-        if telefone:
-            whatsapp_url = _whatsapp_web_url(
-                telefone,
-                _mensagem_checklist_recolhimento_link_whatsapp(
-                    "",
-                    checklist_url,
-                    locacao,
-                ),
-            )
+        whatsapp_url = _whatsapp_comprovante_recolhimento_url(conferencia_salva, checklist_url)
     funcionarios_checklist = _funcionarios_checklist_locacoes()
     funcionarios_checklist_envio = (
         _funcionarios_checklist_recolhimento_envio(
@@ -2156,6 +2214,9 @@ def conferencia_recolhimento(request, pk):
         {
             "tarefa": tarefa,
             "locacao": locacao,
+            **_dados_contato_locacao(locacao),
+            "data_operacao_checklist": tarefa.data_agendada,
+            "horario_operacao_checklist": tarefa.horario_agendado,
             "form": form,
             "previsto_mesas": form.previsto_mesas,
             "previsto_cadeiras": form.previsto_cadeiras,
@@ -2175,6 +2236,8 @@ def conferencia_recolhimento(request, pk):
 
 @require_POST
 def resolver_tarefa_operacional(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autentique-se novamente para resolver a tarefa. Dados locais preservados."}, status=401)
     tarefa = get_object_or_404(TarefaOperacionalLocacao, pk=pk)
     try:
         resultado = request.POST.get("resultado", "")
@@ -2187,7 +2250,10 @@ def resolver_tarefa_operacional(request, pk):
         responsavel = request.POST.get("responsavel", "")
         funcionario_registro = request.POST.get("funcionario_registro", "")
         transportador = None
-        if funcionario_registro and resultado != "tarefa_engano":
+        regularizacao_avancada = request.POST.get("origem") == "detalhe" or bool(funcionario_registro or request.POST.get("transportador"))
+        if regularizacao_avancada and not str(request.POST.get("motivo") or "").strip():
+            raise ValidationError("Informe o motivo da regularizacao avancada.")
+        if regularizacao_avancada and resultado != "tarefa_engano":
             funcionario = funcionarios_operacionais_locacoes().filter(pk=funcionario_registro).first() if funcionario_registro.isdigit() else None
             if not funcionario:
                 raise ValidationError("Selecione um funcionario habilitado para registrar a operacao.")
@@ -2202,6 +2268,7 @@ def resolver_tarefa_operacional(request, pk):
                 motivo=request.POST.get("motivo", ""),
                 responsavel=responsavel if resultado != "tarefa_engano" else _responsavel_request(request),
                 resultado=resultado, data_efetiva=data_efetiva,
+                registrado_por=_responsavel_request(request),
             )
             if funcionario_registro and resultado != "tarefa_engano":
                 EventoLocacao.objects.create(
@@ -2218,6 +2285,41 @@ def resolver_tarefa_operacional(request, pk):
     if request.POST.get("origem") == "detalhe":
         messages.success(request, "Entrega regularizada sem checklist fisico. Recolhimento mantido pendente.")
         return redirect("locacoes:detalhe", pk=tarefa.locacao_id)
+    return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
+
+
+@require_POST
+def confirmar_entrega_operacional(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autentique-se novamente para confirmar a entrega. Dados locais preservados."}, status=401)
+    tarefa = get_object_or_404(TarefaOperacionalLocacao, pk=pk)
+    funcionario_id = request.POST.get("funcionario", "")
+    funcionario = (Funcionario.objects.filter(pk=funcionario_id, ativo=True).first()
+                   if funcionario_id.isdigit() else None)
+    if not funcionario:
+        return JsonResponse({"ok": False, "erro": "Selecione um funcionario responsavel ativo para confirmar a entrega."}, status=400)
+    try:
+        tarefa.confirmar_entrega_realizada(funcionario, request.user)
+    except ValidationError as exc:
+        return JsonResponse({"ok": False, "erro": "; ".join(exc.messages)}, status=409)
+    return JsonResponse({"ok": True, "tarefa_id": tarefa.pk, "locacao_id": tarefa.locacao_id,
+                         "confirmado_em": tarefa.confirmado_em.isoformat()})
+
+
+@require_POST
+def confirmar_envio_checklist_entrega(request, pk):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "erro": "Autentique-se novamente para confirmar a entrega. Dados locais preservados."}, status=401)
+    tarefa = get_object_or_404(TarefaOperacionalLocacao, pk=pk)
+    if request.POST.get("confirmacao") != "materiais_entregues_checklist_enviado":
+        return JsonResponse({"ok": False, "erro": "Confirme que os materiais ja foram entregues/retirados e que o checklist foi enviado."}, status=400)
+    try:
+        tarefa.confirmar_entrega_checklist_enviado(
+            responsavel=_responsavel_request(request),
+            modalidade=request.POST.get("modalidade", ""),
+        )
+    except ValidationError as exc:
+        return JsonResponse({"ok": False, "erro": "; ".join(exc.messages)}, status=400)
     return JsonResponse({"ok": True, "tarefa_id": tarefa.pk})
 
 
