@@ -1707,6 +1707,12 @@
       display: none;
     }
 
+    .sugestao-salvar-mobile-rodape.sugestao-salvar-edicao-mobile {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
     .sugestao-salvar-mobile-rodape .sugestao-btn {
       width: 100%;
       min-height: 52px;
@@ -2037,6 +2043,7 @@
       </div>
 
       <div class="sugestao-mobile{% if modo_edicao_lista %} sugestao-mobile-edicao-direta{% endif %}" id="mobileSugestaoProdutos">
+        {% if modo_edicao_lista %}<p>Toque em Editar no produto, confirme os valores e use Salvar alterações para gravar a lista.</p>{% endif %}
         {% if linhas %}
         {% for linha in linhas %}
           <article class="sugestao-mobile-card{% if modo_edicao_lista %} item-adicionado-lista{% endif %}" data-produto-id="{{ linha.produto_id }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}"{% if modo_edicao_lista %} data-na-lista="1"{% endif %}>
@@ -2081,7 +2088,7 @@
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}">
               <div class="sugestao-mobile-edit-actions">
                 {% if modo_edicao_lista %}
-                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Confirmar</button>
+                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>
                 {% else %}
                   <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>
                 {% endif %}
@@ -2097,7 +2104,7 @@
       <div class="sugestao-itens-lista-vazia" id="itensListaMobileVazia">Toque em Adicionar à lista nos produtos sugeridos.</div>
         <div id="itensListaMobileLista"></div>
       </section>
-      <div class="sugestao-salvar-mobile-rodape">
+      <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
         {% if not modo_edicao_lista or can_gerar_compra_lista %}
           <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
@@ -3459,7 +3466,7 @@
       : "sugestao-mobile-card";
     const atributosLista = modoEdicaoLista ? ' data-na-lista="1"' : "";
     const botaoAcao = modoEdicaoLista
-      ? '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Confirmar</button>'
+      ? '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>'
       : '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>';
     return `
       <article class="${classesCard}" data-produto-id="${produto.id}" data-sugestao-original="${escapeHtml(produto.sugestao)}"${atributosLista}>
@@ -3907,7 +3914,7 @@
   };
 
   window.sugestaoMobileItemEmEdicaoAberta = function() {
-    if (modoEdicaoLista) return null;
+    if (modoEdicaoLista) return cards().find(card => card.dataset.editando === "1") || null;
     return itemEmEdicao;
   };
 
@@ -3957,7 +3964,7 @@
     card.dataset.naLista = "1";
     card.classList.add("item-adicionado-lista");
     card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input").forEach((campo) => {
-      campo.readOnly = false;
+      campo.readOnly = card.dataset.editando !== "1";
     });
   }
 
@@ -3969,23 +3976,27 @@
 
   function confirmarCardEdicaoDireta(card) {
     if (!card) return;
-    prepararCardEdicaoDireta(card);
-    card.classList.add("item-conferido-lista");
     const botao = card.querySelector(".sugestao-confirmar-card-mobile");
-    if (botao) botao.textContent = "Confirmado";
-
-    const todos = cards().filter((item) => item.dataset.naLista === "1");
-    const indice = todos.indexOf(card);
-    const proximo = indice >= 0 ? todos[indice + 1] : null;
-
-    if (proximo && typeof proximo.scrollIntoView === "function") {
-      proximo.scrollIntoView({ behavior: "smooth", block: "center" });
-      window.setTimeout(function() {
-        const campo = proximo.querySelector(".sugestao-qtd-input, .sugestao-preco-input");
-        campo?.focus({ preventScroll: true });
-        selecionarConteudoCampo(campo);
-      }, 280);
+    const campos = card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input");
+    if (card.dataset.editando !== "1") {
+      card.dataset.editando = "1";
+      campos.forEach(campo => { campo.readOnly = false; });
+      if (botao) botao.textContent = "Confirmar";
+      card.querySelector(".sugestao-qtd-input")?.focus({ preventScroll: true });
+      return;
     }
+    const qtd = numeroValidoObrigatorio(card.querySelector(".sugestao-qtd-input")?.value);
+    const preco = numeroValidoObrigatorio(card.querySelector(".sugestao-preco-input")?.value);
+    if (!qtd.ok || qtd.valor <= 0 || !preco.ok || preco.valor < 0) {
+      alert("Informe quantidade maior que zero e um preco valido.");
+      return;
+    }
+    card.dataset.editando = "0";
+    campos.forEach(campo => { campo.readOnly = true; });
+    card.classList.add("item-conferido-lista");
+    if (botao) botao.textContent = "Editar";
+    if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
+    if (window.atualizarTotalListaPedidoMobile) window.atualizarTotalListaPedidoMobile();
   }
 
   function cards() {
@@ -4396,8 +4407,6 @@
     window.setTimeout(function() {
       if (modoEdicaoLista) {
         card.classList.remove("item-conferido-lista");
-        const botao = card.querySelector(".sugestao-confirmar-card-mobile");
-        if (botao) botao.textContent = "Confirmar";
         atualizarVazio();
         return;
       }
@@ -5219,7 +5228,7 @@
       item.scrollIntoView({ behavior: "smooth", block: "center" });
     }
     window.setTimeout(function() {
-      item?.querySelector(".sugestao-editar-lista-mobile, .sugestao-cancelar-edicao-lista-mobile")?.focus();
+      item?.querySelector(".sugestao-editar-lista-mobile, .sugestao-cancelar-edicao-lista-mobile, .sugestao-confirmar-card-mobile")?.focus();
     }, 150);
   }
 

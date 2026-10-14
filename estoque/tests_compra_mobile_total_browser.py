@@ -160,3 +160,69 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 self.assertTrue(tab.evaluate('[...document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card")].every(c=>c.dataset.naLista!=="1")'))
                 self.assertTrue(tab.evaluate('(()=>{const number=v=>Number(v.includes(",")?v.replace(/\\./g,"").replace(",","."):v);const sum=[...document.querySelectorAll("#tbodySugestaoProdutos .sugestao-total-input")].reduce((s,c)=>s+number(c.value),0);return document.querySelector("[data-total-lista-pedido]").textContent==="R$ "+sum.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})})()'))
             finally:chrome.stop()
+
+
+    def test_saved_desktop_list_mobile_edit_confirm_persist_and_reopen(self):
+        from offline.test_sales_sidebars_browser import SalesSidebarBrowserTests
+        def click(tab, selector):
+            tab.evaluate(f'document.querySelector({selector!r}).scrollIntoView({{block:"center",behavior:"instant"}});true')
+            tab.wait(f'(()=>{{const r=document.querySelector({selector!r}).getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight;}})()')
+            SalesSidebarBrowserTests.click(self, tab, selector)
+        payload = {"fornecedorId": self.supplier.pk, "dataInicio": timezone.localdate().isoformat(), "dataFim": timezone.localdate().isoformat(), "linhas": [
+            {"produtoId": p.pk, "sugestao": "4", "precoCompra": str(p.preco_compra),
+             "precoUnitario": str(p.preco_compra), "total": str(p.preco_compra * 4), "unidade": "PCT"}
+            for p in self.products[:2]]}
+        response = self.client.post(reverse("estoque:compras_lista_fornecedor_gravar"),
+                                    {"lista_payload": json.dumps(payload)})
+        self.assertEqual(response.status_code, 302)
+        saved = ListaCompraFornecedor.objects.get()
+        path = reverse("estoque:compras_lista_fornecedor_editar", args=[saved.pk])
+        before = self.effects()
+        with TemporaryDirectory(prefix="saved-list-mobile-edit-") as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.open_page(chrome, width=1280, path=path)
+                self.assertFalse(tab.evaluate('document.querySelector("#tbodySugestaoProdutos .sugestao-qtd-input").readOnly'))
+                tab.call("Emulation.setDeviceMetricsOverride", {"width":390,"height":844,"deviceScaleFactor":1,"mobile":True})
+                for product, qty, price in [(self.products[0], "2", "50,00"), (self.products[1], "3", "40,00")]:
+                    card = '#mobileSugestaoProdutos [data-produto-id="' + str(product.pk) + '"]'
+                    button = card + " .sugestao-confirmar-card-mobile"
+                    self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")
+                    self.assertTrue(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
+                    click(tab, button)
+                    self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Confirmar")
+                    self.assertFalse(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
+                    tab.evaluate(f'window.editCard=document.querySelector({card!r});editCard.querySelector(".sugestao-qtd-input").value={qty!r};editCard.querySelector(".sugestao-preco-input").value={price!r};editCard.querySelector(".sugestao-preco-input").dispatchEvent(new Event("input",{{bubbles:true}}));true')
+                    click(tab, button)
+                    self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")
+                self.assertEqual(self.total(tab), "R$ 220,00")
+                tab.evaluate('localStorage.setItem("saved-list-preserved","draft");true')
+                click(tab, "#btnSalvarAlteracoesListaMobile")
+                tab.wait('location.pathname.endsWith("/ver/") && document.readyState==="complete"')
+                saved.refresh_from_db()
+                self.assertEqual(saved.total_lista, Decimal("220"))
+                self.assertEqual(list(saved.itens.order_by("produto_id").values_list("quantidade_final","preco_compra","total")),
+                                 [(Decimal("2"),Decimal("50"),Decimal("100")),(Decimal("3"),Decimal("40"),Decimal("120"))])
+                tab = self.open_page(chrome, path=path)
+                self.assertEqual(self.total(tab), "R$ 220,00")
+                self.assertEqual(tab.evaluate('localStorage.getItem("saved-list-preserved")'), "draft")
+                self.assertEqual(self.effects(), before)
+                # The backend restrictions apply to direct POST as well as GET.
+                saved.status = ListaCompraFornecedor.STATUS_CANCELADA
+                saved.save(update_fields=["status"])
+                for method in (self.client.get, self.client.post):
+                    self.assertEqual(method(path, {"lista_payload":json.dumps(payload)}).status_code, 302)
+                saved.refresh_from_db()
+                self.assertEqual(saved.total_lista, Decimal("220"))
+                self.assertEqual(self.effects(), before)
+                saved.status = ListaCompraFornecedor.STATUS_ABERTA
+                saved.save(update_fields=["status"])
+                Compra.objects.create(lista_fornecedor=saved, data_compra=timezone.localdate(), status=Compra.STATUS_FINALIZADA)
+                blocked_before = self.effects()
+                items_before = list(saved.itens.values())
+                for method in (self.client.get, self.client.post):
+                    self.assertEqual(method(path, {"lista_payload":json.dumps(payload)}).status_code, 302)
+                self.assertEqual(list(saved.itens.values()), items_before)
+                self.assertEqual(self.effects(), blocked_before)
+            finally:
+                chrome.stop()
