@@ -1,4 +1,5 @@
 from urllib.parse import quote, urlencode
+import math
 
 from django.conf import settings
 from django.db.models import Q
@@ -540,6 +541,20 @@ def historico_operacional_do_dia(data_referencia):
     }
 
 
+def prazo_operacional_label(horario_ms, agora_ms, *, tarefa_data, hoje):
+    if horario_ms is None:
+        return "Atrasada - sem horario definido" if tarefa_data < hoje else "Sem horario definido"
+    diferenca = (horario_ms - agora_ms) / 1000
+    if diferenca == 0:
+        return "Agora"
+    minutos = math.ceil(diferenca / 60) if diferenca > 0 else math.floor(-diferenca / 60)
+    dias, resto = divmod(minutos, 1440)
+    horas, minutos = divmod(resto, 60)
+    partes = ([f"{dias}d"] if dias else []) + ([f"{horas}h"] if horas else []) + ([f"{minutos}min"] if minutos else [])
+    texto = "".join(partes) or "menos de 1min"
+    return ("Atrasada " if diferenca < 0 else "") + texto
+
+
 def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None):
     data_referencia = data_referencia or timezone.localdate()
     locacoes_com_entrega_atrasada = (
@@ -617,6 +632,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             tarefa, incluir_responsaveis=True,
         )
         itens.append(item)
+        ids_existentes.add(tarefa.pk)
 
     # Recolhimentos parciais continuam visiveis mesmo quando reagendados.
     # O saldo pendente e a nova data permanecem definidos pela conferencia.
@@ -636,90 +652,38 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         item["tipo_label"] = "Recolhimento"
         item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
         item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
-        item["data_label"] = tarefa.data_agendada.strftime("%d/%m")
+        item["data_label"] = "Amanh\u00e3" if tarefa.data_agendada == data_referencia + timedelta(days=1) else tarefa.data_agendada.strftime("%d/%m")
         itens.append(item)
         ids_existentes.add(tarefa.pk)
 
-    # Adiciona somente a PRÓXIMA data futura que contenha tarefas operacionais
-    # (entrega ou recolhimento). Não alterar checklist_operacional_locacoes().
-    tarefas_encerradas = TarefaOperacionalLocacao.objects.filter(
-        status__in=[
-            TarefaOperacionalLocacao.STATUS_CONFIRMADA,
-            TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN,
-        ],
-    )
-    next_entrega_date = (
-        Locacao.objects
-        .filter(
-            data_entrega__gt=data_referencia,
-            status__in=[
-                Locacao.STATUS_RESERVADA,
-                Locacao.STATUS_SAIU_PARA_ENTREGA,
-            ],
+    # Todas as datas futuras; tarefas encerradas nunca voltam ao painel.
+    for tipo, campo_data, status_locacao in (
+        (TarefaOperacionalLocacao.TIPO_ENTREGA, "data_entrega",
+         [Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA]),
+        (TarefaOperacionalLocacao.TIPO_RECOLHIMENTO, "data_prevista_devolucao",
+         [Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO]),
+    ):
+        encerradas = TarefaOperacionalLocacao.objects.filter(tipo=tipo).exclude(
+            status__in=[TarefaOperacionalLocacao.STATUS_PENDENTE,
+                        TarefaOperacionalLocacao.STATUS_PARCIAL,
+                        TarefaOperacionalLocacao.STATUS_NAO_POSSIVEL])
+        locacoes_futuras = (
+            Locacao.objects.select_related("cliente", "faixa_preco").prefetch_related("itens")
+            .filter(**{campo_data + "__gt": data_referencia}, status__in=status_locacao)
+            .exclude(pk__in=encerradas.values("locacao_id"))
         )
-        .order_by("data_entrega")
-        .exclude(pk__in=tarefas_encerradas.filter(tipo=TarefaOperacionalLocacao.TIPO_ENTREGA).values("locacao_id"))
-        .values_list("data_entrega", flat=True)
-        .first()
-    )
-    next_recolhimento_date = (
-        Locacao.objects
-        .filter(
-            data_prevista_devolucao__gt=data_referencia,
-            status__in=[
-                Locacao.STATUS_ENTREGUE,
-                Locacao.STATUS_PENDENTE_DEVOLUCAO,
-            ],
-        )
-        .order_by("data_prevista_devolucao")
-        .exclude(pk__in=tarefas_encerradas.filter(tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO).values("locacao_id"))
-        .values_list("data_prevista_devolucao", flat=True)
-        .first()
-    )
-
-    # Determina a próxima data entre entrega e recolhimento
-    proximas = [d for d in (next_entrega_date, next_recolhimento_date) if d]
-    proxima_data = min(proximas) if proximas else None
-    if proxima_data:
-        # Criar/obter tarefas operacionais para essa data e adicioná-las
-        locacoes_entrega = Locacao.objects.filter(
-            data_entrega=proxima_data,
-            status__in=[Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA],
-        )
-        for locacao in locacoes_entrega:
-            tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_ENTREGA)
-            if tarefa.id in ids_existentes or not tarefa.pendente_operacional:
+        for locacao in locacoes_futuras:
+            tarefa = obter_ou_criar_tarefa_operacional(locacao, tipo)
+            if tarefa.pk in ids_existentes or not tarefa.pendente_operacional:
                 continue
-            item = tarefa_para_item_checklist(tarefa, proxima_data)
-            item["tipo"] = tarefa.tipo
-            item["tipo_label"] = "Entrega"
+            item = tarefa_para_item_checklist(tarefa, data_referencia)
+            item["tipo"] = tipo
+            item["tipo_label"] = "Entrega" if tipo == TarefaOperacionalLocacao.TIPO_ENTREGA else "Recolhimento"
             item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
             item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
-            # marca como futura e define rótulo de data para o template
-            if proxima_data == data_referencia + timedelta(days=1):
-                item["data_label"] = "Amanhã"
-            else:
-                item["data_label"] = proxima_data.strftime("%d/%m")
+            item["data_label"] = "Amanh\u00e3" if tarefa.data_agendada == data_referencia + timedelta(days=1) else tarefa.data_agendada.strftime("%d/%m")
             itens.append(item)
-
-        locacoes_recolhimento = Locacao.objects.filter(
-            data_prevista_devolucao=proxima_data,
-            status__in=[Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO],
-        )
-        for locacao in locacoes_recolhimento:
-            tarefa = obter_ou_criar_tarefa_operacional(locacao, TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
-            if tarefa.id in ids_existentes or not tarefa.pendente_operacional:
-                continue
-            item = tarefa_para_item_checklist(tarefa, proxima_data)
-            item["tipo"] = tarefa.tipo
-            item["tipo_label"] = "Recolhimento"
-            item["materiais_resumo"] = resumo_materiais_compacto(item["materiais"])
-            item["envio_operacional"] = envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=True)
-            if proxima_data == data_referencia + timedelta(days=1):
-                item["data_label"] = "Amanhã"
-            else:
-                item["data_label"] = proxima_data.strftime("%d/%m")
-            itens.append(item)
+            ids_existentes.add(tarefa.pk)
 
     funcionarios_operacionais = list(funcionarios_operacionais_locacoes())
     for item in itens:
@@ -748,7 +712,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         for item in itens
         if item["tipo"] == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
     ]
-    agora = agora or timezone.localtime()
+    agora = timezone.localtime(agora or timezone.now())
     hora_atual = (
         agora.time()
         if checklist["data"] == agora.date()
@@ -784,6 +748,9 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
             ).timestamp() * 1000
             if item["horario"] is not None else None
         )
+        item["prazo_label"] = prazo_operacional_label(
+            item["horario_lateral"], agora.timestamp() * 1000,
+            tarefa_data=item["tarefa"].data_agendada, hoje=data_referencia)
         item["advertencia_lateral"] = (
             item["proxima"]
             and (timezone.datetime.combine(checklist["data"], item["horario"])
@@ -804,7 +771,8 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         "data": checklist["data"],
         "itens": itens,
         "total": sum(not item["entrega_antiga"] for item in itens),
-        "total_entregas": sum(not item["entrega_antiga"] for item in entregas),
+        "total_entregas": len(entregas),
+        "total_pendencias": len(itens),
         "total_recolhimentos": len(recolhimentos),
         "total_entregas_antigas": sum(item["entrega_antiga"] for item in itens),
         "alerta": any(item["vencida"] and not item["entrega_antiga"] for item in itens),

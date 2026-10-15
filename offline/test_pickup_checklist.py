@@ -7,7 +7,7 @@ from unittest import skipUnless
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.test import TestCase, Client
+from django.test import TestCase, Client, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
@@ -25,6 +25,7 @@ class PickupFixture:
         FaixaPrecoLocacao.objects.get_or_create(codigo='centro_perto', defaults={'nome': 'Teste', 'preco_jogo_diaria': '8.00'})
         helper = rental_tests.LocacoesChecklistOperacionalTests()
         helper.setUp()
+        self.helper = helper
         self.rental = helper.colocar_na_rua(helper.criar_locacao(
             data_entrega=helper.hoje - timedelta(days=1),
             data_prevista_devolucao=helper.hoje,
@@ -321,3 +322,77 @@ class PickupChecklistBrowserTests(PickupFixture, StaticLiveServerTestCase):
                 self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
             finally:
                 chrome.stop()
+
+    def test_panel_deadlines_mobile_and_desktop(self):
+        self.client.force_login(self.user)
+        for width in (390, 1280):
+            with self.subTest(width=width), TemporaryDirectory(prefix="panel-deadline-") as profile:
+                chrome = Chrome(CHROME, profile).start()
+                try:
+                    tab = chrome.tab()
+                    tab.call("Emulation.setDeviceMetricsOverride", {"width":width,"height":844,"deviceScaleFactor":1,"mobile":width==390})
+                    tab.call("Network.setCookie", {"name":"sessionid","value":self.client.cookies["sessionid"].value,"url":self.live_server_url})
+                    tab.call("Page.navigate", {"url":self.live_server_url+"/vendas/"})
+                    tab.wait("!!window.salesDraftUI?.ready")
+                    self.click(tab, "#btnLocacoesOperacionaisVenda")
+                    tab.wait('!!document.querySelector("[data-prazo-operacional]")')
+                    self.assertIn('timeZone: "' + timezone.get_current_timezone_name() + '"',
+                                  tab.evaluate("document.documentElement.innerHTML"))
+                    tab.evaluate('window.originalPanelDate=Date;window.panelNow=Date.parse("2026-10-15T12:00:00-03:00");window.Date=class extends originalPanelDate{constructor(...a){super(...(a.length?a:[panelNow]));}static now(){return panelNow;}};window.deadlineCard=document.querySelector("[data-prazo-operacional]").closest("[data-tarefa-id]");deadlineCard.dataset.dataLateral="2026-10-15";true')
+                    for minutes, label in [(330,"5h30min"),(45,"45min"),(20,"20min"),(-20,"Atrasada 20min"),(-180,"Atrasada 3h")]:
+                        tab.evaluate(f'deadlineCard.dataset.horarioLateral=String(panelNow+{minutes}*60000);true')
+                        tab.wait(f'deadlineCard.querySelector("[data-prazo-operacional]").textContent==={label!r}')
+                        self.assertEqual(tab.evaluate('deadlineCard.classList.contains("atrasada")'), minutes < 0)
+                        self.assertEqual(tab.evaluate('deadlineCard.classList.contains("proxima")'), 0 < minutes <= 30)
+                    # Observe only text nodes: unchanged minute labels must not be rewritten.
+                    tab.evaluate('window.deadlineWrites=0;window.deadlineObserver=new MutationObserver(entries=>deadlineWrites+=entries.length);deadlineObserver.observe(deadlineCard.querySelector("[data-prazo-operacional]"),{childList:true,characterData:true,subtree:true});true')
+                    tab.evaluate('await new Promise(resolve=>setTimeout(resolve,2200));true')
+                    self.assertEqual(tab.evaluate("deadlineWrites"),0)
+                    # Cross the scheduled time, then midnight in the operational timezone.
+                    tab.evaluate('deadlineCard.dataset.horarioLateral=String(panelNow+60000);true')
+                    tab.wait('deadlineCard.querySelector("[data-prazo-operacional]").textContent==="1min"')
+                    tab.evaluate('window.panelNow+=120000;true')
+                    tab.wait('deadlineCard.querySelector("[data-prazo-operacional]").textContent==="Atrasada 1min"')
+                    tab.evaluate('window.panelNow=originalPanelDate.parse("2026-10-15T23:59:00-03:00");deadlineCard.dataset.horarioLateral="";true')
+                    tab.wait('!deadlineCard.classList.contains("atrasada")')
+                    tab.evaluate('window.panelNow+=120000;true')
+                    tab.wait('deadlineCard.querySelector("[data-prazo-operacional]").textContent==="Atrasada - sem horario definido"')
+                    self.task.refresh_from_db()
+                    self.assertEqual(self.task.status, "pendente")
+                    self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
+                finally:
+                    chrome.stop()
+
+    def test_counters_match_filters_mobile_and_desktop(self):
+        self.client.force_login(self.user)
+        helper = self.helper
+        old = helper.criar_locacao(data_entrega=helper.hoje-timedelta(days=4))
+        future = helper.criar_locacao(data_entrega=helper.hoje+timedelta(days=20),
+                                      data_prevista_devolucao=helper.hoje+timedelta(days=21))
+        for status in ("confirmada", "resolvida_admin"):
+            rental = helper.criar_locacao(data_entrega=helper.hoje+timedelta(days=10),
+                                          data_prevista_devolucao=helper.hoje+timedelta(days=11))
+            task = obter_ou_criar_tarefa_operacional(rental,"entrega")
+            type(task).objects.filter(pk=task.pk).update(status=status)
+        painel = painel_operacional_rapido_locacoes(RequestFactory().get("/"))
+        expected = {"entrega":2,"recolhimento":1,"tudo":2,"antigas":1}
+        self.assertEqual(painel["total_pendencias"],3)
+        for width in (390,1280):
+            with self.subTest(width=width), TemporaryDirectory(prefix="panel-counters-") as profile:
+                chrome = Chrome(CHROME,profile).start()
+                try:
+                    tab = chrome.tab()
+                    tab.call("Emulation.setDeviceMetricsOverride",{"width":width,"height":844,"deviceScaleFactor":1,"mobile":width==390})
+                    tab.call("Network.setCookie",{"name":"sessionid","value":self.client.cookies["sessionid"].value,"url":self.live_server_url})
+                    tab.call("Page.navigate",{"url":self.live_server_url+"/vendas/"})
+                    tab.wait("!!window.salesDraftUI?.ready")
+                    self.assertEqual(tab.evaluate('document.querySelector(".locacoes-operacionais-badge").textContent.trim()'),"3")
+                    self.click(tab,"#btnLocacoesOperacionaisVenda")
+                    self.assertEqual(tab.evaluate('document.querySelectorAll("[data-locacoes-card]").length'),3)
+                    for name, count in expected.items():
+                        selector = '[data-locacoes-filtro="'+name+'"]'
+                        self.assertTrue(tab.evaluate(f'document.querySelector({selector!r}).textContent.trim().endsWith(" {count}")'))
+                        self.click(tab,selector)
+                        self.assertEqual(tab.evaluate('Array.from(document.querySelectorAll("[data-locacoes-card]")).filter(c=>!c.hidden).length'),count)
+                finally:
+                    chrome.stop()

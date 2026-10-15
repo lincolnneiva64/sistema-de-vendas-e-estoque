@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-{% load l10n static %}
+{% load l10n static tz %}
+{% get_current_timezone as fuso_operacional %}
 <html lang="pt-br">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -3117,7 +3118,7 @@ td:first-child {
         <aside class="atalhos-venda locacoes-operacionais-venda {% if locacoes_operacionais.alerta %}alerta{% elif locacoes_operacionais.advertencia_lateral %}advertencia{% endif %}" id="locacoesOperacionaisVenda" data-sales-navigation aria-label="Entregas e Recolhimentos">
             <button type="button" class="atalhos-venda-toggle" id="btnLocacoesOperacionaisVenda" data-sales-navigation-toggle aria-expanded="false" aria-controls="locacoesOperacionaisVendaPainel">
                 Entregas e Recolhimentos
-                <span class="locacoes-operacionais-badge">{{ locacoes_operacionais.total }}</span>
+                <span class="locacoes-operacionais-badge">{{ locacoes_operacionais.total_pendencias }}</span>
             </button>
             <div class="atalhos-venda-painel" id="locacoesOperacionaisVendaPainel">
                 <h2 class="atalhos-venda-titulo">Entregas e Recolhimentos</h2>
@@ -3149,6 +3150,7 @@ td:first-child {
                                     <div class="locacoes-rapidas-cliente">{{ item.cliente }}</div>
                                     <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
                                     <div class="locacoes-rapidas-meta">Prevista: {{ item.tarefa.data_agendada|date:"d/m/Y" }}{% if item.horario %} às {{ item.horario|time:"H:i" }}{% else %} — sem horário definido{% endif %}</div>
+                                    <div class="locacoes-rapidas-meta" data-prazo-operacional>{{ item.prazo_label }}</div>
                                     <div class="locacoes-rapidas-meta" data-atraso-label {% if not item.vencida %}hidden{% endif %}>Em atraso</div>
                                 </div>
                                 <div class="locacoes-rapidas-hora">
@@ -7162,7 +7164,7 @@ function configurarLocacoesRapidas() {
         });
         const lateral = document.getElementById("locacoesOperacionaisVenda");
         const badge = lateral?.querySelector(".locacoes-operacionais-badge");
-        if (badge) badge.textContent = recentes.length;
+        if (badge) badge.textContent = ativos.length;
         atualizarAlertaLateral();
         aplicarFiltro(filtroAtual);
     }
@@ -7170,7 +7172,7 @@ function configurarLocacoesRapidas() {
     function atualizarAlertaLateral() {
         const agora = new Date();
         const hoje = new Intl.DateTimeFormat("en-CA", {
-            timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+            timeZone: "{{ fuso_operacional|escapejs }}", year: "numeric", month: "2-digit", day: "2-digit",
         }).format(agora);
         const recentes = cards.filter(card => card.isConnected && card.dataset.entregaAntiga !== "1");
         let atrasada = false;
@@ -7193,6 +7195,25 @@ function configurarLocacoesRapidas() {
         cards.forEach(card => {
             const vencida = card.dataset.dataLateral < hoje || (card.dataset.dataLateral === hoje && Number(card.dataset.horarioLateral) > 0 && Number(card.dataset.horarioLateral) <= agora.getTime());
             const label = card.querySelector("[data-atraso-label]"); if (label) label.hidden = !vencida;
+            const prazo = card.querySelector("[data-prazo-operacional]");
+            if (prazo) {
+                const horario = Number(card.dataset.horarioLateral);
+                prazo.classList.toggle("locacoes-rapidas-alerta", vencida);
+                let novoTexto;
+                if (!(horario > 0)) {
+                    novoTexto = vencida ? "Atrasada - sem horario definido" : "Sem horario definido";
+                } else {
+                    const diferenca = horario - agora.getTime();
+                    let minutos = diferenca > 0 ? Math.ceil(diferenca / 60000) : Math.floor(-diferenca / 60000);
+                    const dias = Math.floor(minutos / 1440);
+                    minutos %= 1440;
+                    const horas = Math.floor(minutos / 60);
+                    minutos %= 60;
+                    const texto = (dias ? dias + "d" : "") + (horas ? horas + "h" : "") + (minutos ? minutos + "min" : "");
+                    novoTexto = diferenca === 0 ? "Agora" : (diferenca < 0 ? "Atrasada " : "") + (texto || "menos de 1min");
+                }
+                if (prazo.textContent !== novoTexto) prazo.textContent = novoTexto;
+            }
         });
         locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);
         locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && advertencia);
