@@ -32,7 +32,7 @@ class PainelTodasDatasTests(TestCase):
                          [i["tarefa"].pk for i in painel["itens"]])
 
     def test_prazos_minutos_horas_dias_e_sem_horario(self):
-        for minutos, esperado in [(330,"5h30min"), (45,"45min"), (-20,"Atrasada 20min"),
+        for minutos, esperado in [(3578,"2d 11h 38min"), (330,"5h 30min"), (45,"45min"), (-20,"Atrasada 20min"),
                                   (-180,"Atrasada 3h"), (1440,"1d"), (0,"Agora")]:
             with self.subTest(minutos=minutos):
                 self.assertEqual(prazo_operacional_label(100000000 + minutos*60000,100000000,

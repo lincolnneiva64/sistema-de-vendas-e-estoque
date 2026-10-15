@@ -551,7 +551,7 @@ def prazo_operacional_label(horario_ms, agora_ms, *, tarefa_data, hoje):
     dias, resto = divmod(minutos, 1440)
     horas, minutos = divmod(resto, 60)
     partes = ([f"{dias}d"] if dias else []) + ([f"{horas}h"] if horas else []) + ([f"{minutos}min"] if minutos else [])
-    texto = "".join(partes) or "menos de 1min"
+    texto = " ".join(partes) or "menos de 1min"
     return ("Atrasada " if diferenca < 0 else "") + texto
 
 

@@ -336,10 +336,12 @@ class PickupChecklistBrowserTests(PickupFixture, StaticLiveServerTestCase):
                     tab.wait("!!window.salesDraftUI?.ready")
                     self.click(tab, "#btnLocacoesOperacionaisVenda")
                     tab.wait('!!document.querySelector("[data-prazo-operacional]")')
+                    self.assertTrue(tab.evaluate('(()=>{const p=document.querySelector("[data-prazo-operacional]"),m=p.closest(".locacoes-rapidas-marcador"),d=m?.querySelector(".locacoes-rapidas-hora");return !!m && !!d && p.getBoundingClientRect().top>=d.getBoundingClientRect().bottom && !m.previousElementSibling.querySelector("[data-prazo-operacional]") && m.previousElementSibling.textContent.includes("Prevista:");})()'))
+                    self.assertEqual(tab.evaluate('getComputedStyle(document.querySelector("[data-prazo-operacional]")).color'),"rgb(185, 28, 28)")
                     self.assertIn('timeZone: "' + timezone.get_current_timezone_name() + '"',
                                   tab.evaluate("document.documentElement.innerHTML"))
                     tab.evaluate('window.originalPanelDate=Date;window.panelNow=Date.parse("2026-10-15T12:00:00-03:00");window.Date=class extends originalPanelDate{constructor(...a){super(...(a.length?a:[panelNow]));}static now(){return panelNow;}};window.deadlineCard=document.querySelector("[data-prazo-operacional]").closest("[data-tarefa-id]");deadlineCard.dataset.dataLateral="2026-10-15";true')
-                    for minutes, label in [(330,"5h30min"),(45,"45min"),(20,"20min"),(-20,"Atrasada 20min"),(-180,"Atrasada 3h")]:
+                    for minutes, label in [(3578,"2d 11h 38min"), (330,"5h 30min"),(45,"45min"),(20,"20min"),(-20,"Atrasada 20min"),(-180,"Atrasada 3h")]:
                         tab.evaluate(f'deadlineCard.dataset.horarioLateral=String(panelNow+{minutes}*60000);true')
                         tab.wait(f'deadlineCard.querySelector("[data-prazo-operacional]").textContent==={label!r}')
                         self.assertEqual(tab.evaluate('deadlineCard.classList.contains("atrasada")'), minutes < 0)

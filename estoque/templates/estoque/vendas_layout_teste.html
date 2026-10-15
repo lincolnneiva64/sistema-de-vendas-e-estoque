@@ -813,6 +813,21 @@ select {
     font-weight: 950;
     overflow-wrap: anywhere;
 }
+.locacoes-rapidas-marcador {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    max-width: 140px;
+}
+.locacoes-rapidas-prazo {
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.35;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
 .locacoes-rapidas-hora {
     padding: 4px 7px;
     border-radius: 999px;
@@ -3150,10 +3165,10 @@ td:first-child {
                                     <div class="locacoes-rapidas-cliente">{{ item.cliente }}</div>
                                     <div class="locacoes-rapidas-meta">{{ item.materiais_resumo }}</div>
                                     <div class="locacoes-rapidas-meta">Prevista: {{ item.tarefa.data_agendada|date:"d/m/Y" }}{% if item.horario %} às {{ item.horario|time:"H:i" }}{% else %} — sem horário definido{% endif %}</div>
-                                    <div class="locacoes-rapidas-meta" data-prazo-operacional>{{ item.prazo_label }}</div>
                                     <div class="locacoes-rapidas-meta" data-atraso-label {% if not item.vencida %}hidden{% endif %}>Em atraso</div>
                                 </div>
-                                <div class="locacoes-rapidas-hora">
+                                <div class="locacoes-rapidas-marcador">
+                                  <div class="locacoes-rapidas-hora">
                                     {% if item.vencida %}
                                         Atrasada
                                     {% elif item.data_label %}
@@ -3163,6 +3178,8 @@ td:first-child {
                                     {% else %}
                                         Pendente
                                     {% endif %}
+                                  </div>
+                                  <div class="locacoes-rapidas-prazo" data-prazo-operacional>{{ item.prazo_label }}</div>
                                 </div>
                             </div>
                             <div class="locacoes-rapidas-funcionario" data-envio-operacional>
@@ -7198,7 +7215,6 @@ function configurarLocacoesRapidas() {
             const prazo = card.querySelector("[data-prazo-operacional]");
             if (prazo) {
                 const horario = Number(card.dataset.horarioLateral);
-                prazo.classList.toggle("locacoes-rapidas-alerta", vencida);
                 let novoTexto;
                 if (!(horario > 0)) {
                     novoTexto = vencida ? "Atrasada - sem horario definido" : "Sem horario definido";
@@ -7209,7 +7225,7 @@ function configurarLocacoesRapidas() {
                     minutos %= 1440;
                     const horas = Math.floor(minutos / 60);
                     minutos %= 60;
-                    const texto = (dias ? dias + "d" : "") + (horas ? horas + "h" : "") + (minutos ? minutos + "min" : "");
+                    const texto = [dias ? dias + "d" : "", horas ? horas + "h" : "", minutos ? minutos + "min" : ""].filter(Boolean).join(" ");
                     novoTexto = diferenca === 0 ? "Agora" : (diferenca < 0 ? "Atrasada " : "") + (texto || "menos de 1min");
                 }
                 if (prazo.textContent !== novoTexto) prazo.textContent = novoTexto;
