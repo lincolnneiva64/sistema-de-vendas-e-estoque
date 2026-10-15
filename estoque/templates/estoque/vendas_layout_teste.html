@@ -4650,7 +4650,7 @@ function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
     clienteId.value = cliente.id || "";
     clienteBusca.value = cliente.nome || "";
     guardarClienteSelecionado(cliente);
-    atualizarCabecalhoCliente(cliente);
+    atualizarCabecalhoCliente(cliente, false, carregarDetalheCompleto);
     atualizarPrazoEVencimentoCliente();
     atualizarHistoricoProdutoCliente();
     clienteSugestoesBox.style.display = "none";
@@ -4685,7 +4685,7 @@ window.addEventListener("pageshow", function () {
     }
 });
 
-function atualizarCabecalhoCliente(cliente, previa = false) {
+function atualizarCabecalhoCliente(cliente, previa = false, financeiroPendente = false) {
     if (window.salesOffline.active) {
         clienteResumo.classList.remove('visivel');
         clienteResumo.style.display = 'none';
@@ -4699,7 +4699,11 @@ function atualizarCabecalhoCliente(cliente, previa = false) {
     clienteResumoStatus.className = "cliente-resumo-valor cliente-status " + (cliente.status || "");
     clienteResumoStatusCard?.classList.toggle("oculto", cliente.status === "liberado");
     clienteResumoWhatsapp.textContent = cliente.whatsapp || "-";
-    atualizarResumoFinanceiroCliente(cliente, previa);
+    if (financeiroPendente) {
+        clienteResumoFinanceiro.replaceChildren(criarLinhaFinanceira("", "Carregando informações financeiras..."));
+    } else {
+        atualizarResumoFinanceiroCliente(cliente, previa);
+    }
     clienteResumo.classList.add("visivel");
 }
 
@@ -4955,6 +4959,29 @@ function renderizarClientesDoCache(texto) {
     return true;
 }
 
+async function carregarPreviaFinanceiraCliente(texto, buscaController) {
+    if (!texto || clientesSugestoes.length !== 1 || clienteSelecionadoValido()) return;
+    const id = String(clientesSugestoes[0]?.id || "");
+    if (!/^\d+$/.test(id) || window.salesOffline.active) return;
+    const params = new URLSearchParams({ cliente_id: id, contexto: "venda" });
+    try {
+        const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
+            signal: buscaController.signal,
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        if (!resposta.ok) return;
+        const dados = await resposta.json();
+        if (buscaController.signal.aborted || window.salesOffline.active
+            || clienteSelecionadoValido() || clienteBusca.value.trim() !== texto
+            || clientesSugestoes.length !== 1 || String(clientesSugestoes[0]?.id) !== id) return;
+        const cliente = dados.clientes?.length === 1 ? dados.clientes[0] : null;
+        if (!cliente || String(cliente.id) !== id || !cliente.financeiro) return;
+        atualizarCabecalhoCliente(cliente, true);
+    } catch (erro) {
+        // Uma consulta incompleta nunca substitui o financeiro por valores básicos.
+    }
+}
+
 async function buscarClientes(texto, opcoes = {}) {
     if (window.salesOffline.active) {
         await window.salesOffline.ready;
@@ -4966,9 +4993,8 @@ async function buscarClientes(texto, opcoes = {}) {
     const termoSolicitado = texto.trim();
     const termoNormalizado = normalizarTextoCliente(termoSolicitado);
 
-    if (!opcoes.forcarServidor && renderizarClientesDoCache(termoSolicitado)) {
-        return;
-    }
+    // O cache mantém as sugestões imediatas; a prévia exige consulta atual.
+    if (!opcoes.forcarServidor) renderizarClientesDoCache(termoSolicitado);
 
     if (clienteBuscaAbortController) {
         clienteBuscaAbortController.abort();
@@ -5000,13 +5026,7 @@ async function buscarClientes(texto, opcoes = {}) {
 
         const listaServidor = dados.clientes || [];
         clienteBuscaCache.set(termoNormalizado, listaServidor);
-        if (!clienteSelecionadoValido()) {
-            if (termoSolicitado && listaServidor.length === 1) {
-                atualizarCabecalhoCliente(listaServidor[0], true);
-            } else {
-                suspenderResumoClienteSelecionado();
-            }
-        }
+        if (!clienteSelecionadoValido()) suspenderResumoClienteSelecionado();
 
         if (!termoSolicitado && listaServidor.length) {
             clienteBuscaCache.set("", listaServidor);
@@ -5015,6 +5035,7 @@ async function buscarClientes(texto, opcoes = {}) {
         clientesSugestoes = ordenarClientesAutocomplete(listaServidor, termoSolicitado).slice(0, 30);
         clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
         renderizarSugestoesClientes();
+        await carregarPreviaFinanceiraCliente(termoSolicitado, buscaController);
     } catch (erro) {
         if (buscaController.signal.aborted) return;
         if (erro.name !== "AbortError") {

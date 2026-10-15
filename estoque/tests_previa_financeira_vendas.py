@@ -57,7 +57,8 @@ class PreviaFinanceiraJavascriptTests(SimpleTestCase):
         nomes = [
             "criarLinhaFinanceira", "criarLinkWhatsappCobranca", "atualizarResumoFinanceiroCliente",
             "atualizarCabecalhoCliente", "clienteSelecionadoValido", "preencherResumoCliente",
-            "buscarClientes", "limparClienteSelecionado", "suspenderResumoClienteSelecionado", "renderizarSugestoesClientes",
+            "buscarClientes", "carregarPreviaFinanceiraCliente", "normalizarTextoCliente", "iniciaisCliente",
+            "prioridadeClienteAutocomplete", "ordenarClientesAutocomplete", "limparClienteSelecionado", "suspenderResumoClienteSelecionado", "renderizarSugestoesClientes",
         ]
         funcoes = "\n".join(re.search(r"^(?:async )?function " + nome + r"\([^\n]*\{.*?^\}", template, re.M | re.S)[0] for nome in nomes)
         inicio = template.index('clienteBusca.addEventListener("input",')
@@ -74,11 +75,10 @@ let clienteSelecionado=null, clienteResumoSuspenso=false, clienteIndexAtivo=-1, 
 let clienteBuscaAbortController=null, clienteBuscaTimer=null;
 const clienteBuscaCache=new Map(), clientesAutocompleteUrl='/mock';
 const numeroCliente=Number, formatarMoedaCliente=String, formatarLimiteCliente=String, normalizarStatusCliente=String;
-const normalizarTextoCliente=s=>s.trim().toLowerCase();
 const montarLinkReceberCliente=()=>'/receber', navegarResumoFinanceiroCliente=()=>{}, abrirPreviewCobranca=()=>{};
 const guardarClienteSelecionado=()=>{}, esquecerClienteSelecionado=()=>{}, atualizarPrazoEVencimentoCliente=()=>{};
-const atualizarHistoricoProdutoCliente=()=>{}, ocultarHistoricoProdutoCliente=()=>{}, atualizarClienteSelecionadoDoServidor=()=>{};
-const renderizarClientesDoCache=()=>false, ordenarClientesAutocomplete=x=>x;
+const atualizarHistoricoProdutoCliente=()=>{}, ocultarHistoricoProdutoCliente=()=>{}, atualizarClienteSelecionadoDoServidor=c=>preencherResumoCliente(c);
+const renderizarClientesDoCache=()=>false;
 const focarProximoCampo=()=>{}, tipoVenda={};
 let requests=[];
 window.fetch=(url,opts)=>new Promise(resolve=>requests.push({url,opts,resolve}));
@@ -86,7 +86,16 @@ const cliente=(id,nome)=>({id,nome,financeiro:{contas_abertas_qtd:1,contas_abert
 const a=cliente(1,'Aurora'), b=cliente(2,'Beatriz');
 const assert=(ok,msg)=>{if(!ok)throw Error(msg)};
 const edit=texto=>{clienteBusca.value=texto;clienteBusca.dispatchEvent(new Event('input'));clearTimeout(clienteBuscaTimer)};
-const responder=async(req,clientes)=>{req.resolve({ok:true,json:async()=>({clientes})});await new Promise(r=>setTimeout(r,0))};
+const responder=async(req,clientes,detalhar=true)=>{
+ const antes=requests.length;
+ req.resolve({ok:true,json:async()=>({clientes})});await new Promise(r=>setTimeout(r,0));
+ const detalhe=requests.at(-1);
+ if(detalhar && requests.length>antes && detalhe.url.includes('cliente_id=')) {
+  const id=new URL(detalhe.url,location.href).searchParams.get('cliente_id');
+  detalhe.resolve({ok:true,json:async()=>({clientes:[a,b].filter(c=>String(c.id)===id)})});
+  await new Promise(r=>setTimeout(r,0));
+ }
+};
 '''
         casos = r'''
 (async()=>{try {
@@ -102,7 +111,7 @@ const responder=async(req,clientes)=>{req.resolve({ok:true,json:async()=>({clien
  assert(clienteSelecionadoValido(),'confirmacao por Enter falhou');
  edit('Aur');assert(!clienteSelecionadoValido()&&!clienteId.value,'edicao manteve confirmacao');
  assert(!clienteResumo.classList.contains('visivel'),'edicao manteve previa');
- edit('Aurora');p=buscarClientes('Aurora',{forcarServidor:true});await responder(requests.at(-1),[a,b]);await p;
+ edit('Aurora');p=buscarClientes('Aurora',{forcarServidor:true});await responder(requests.at(-1),[a,{...b,nome:'Aurora Segunda'}]);await p;
  assert(!clienteResumo.classList.contains('visivel'),'varios mostraram previa');
  edit('Aurora');let velha=buscarClientes('Aurora',{forcarServidor:true}), reqVelha=requests.at(-1);
  edit('Beatriz');p=buscarClientes('Beatriz',{forcarServidor:true});await responder(requests.at(-1),[b]);await p;
@@ -127,6 +136,22 @@ const responder=async(req,clientes)=>{req.resolve({ok:true,json:async()=>({clien
  clienteSugestoesBox.querySelector('.cliente-sugestao-item').click();
  await responder(antesConfirmar,[b]);await p;
  assert(clienteSelecionadoValido()&&clienteResumoNome.textContent==='Aurora','resposta alterou confirmacao');
+ edit('Aurora');p=buscarClientes('Aurora',{forcarServidor:true});
+ await responder(requests.at(-1),[{...b,nome:'Outro Cadastro'}, {...a,financeiro:{contas_abertas_qtd:0,contas_abertas_total:'0.00'}}],false);
+ const previaPendente=requests.at(-1);
+ assert(clientesSugestoes.length===1 && clientesSugestoes[0].id===a.id,'filtragem real falhou');
+ assert(previaPendente.url.includes('cliente_id=1'),'nao consultou ID da sugestao visivel');
+ assert(!clienteResumo.classList.contains('visivel'),'mostrou zeros antes do detalhe');
+ edit('Beatriz');await responder(previaPendente,[a]);await p;
+ assert(!clienteResumo.classList.contains('visivel'),'detalhe atrasado substituiu pesquisa');
+ edit('Aurora');p=buscarClientes('Aurora',{forcarServidor:true});
+ await responder(requests.at(-1),[a],false);const falha=requests.at(-1);
+ falha.resolve({ok:false});await p;
+ assert(!clienteResumo.classList.contains('visivel'),'falha exibiu financeiro basico');
+ edit('Aurora');p=buscarClientes('Aurora',{forcarServidor:true});
+ await responder(requests.at(-1),[a],false);const idErrado=requests.at(-1);
+ await responder(idErrado,[b]);await p;
+ assert(!clienteResumo.classList.contains('visivel'),'aceitou detalhe de ID divergente');
  document.body.dataset.result='PASS';
 }catch(e){document.body.dataset.result='FAIL: '+e.message}})();
 '''
