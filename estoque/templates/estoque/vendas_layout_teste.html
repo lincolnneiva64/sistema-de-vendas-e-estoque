@@ -3953,6 +3953,7 @@ let clienteIndexAtivo = -1;
 let clienteSelecionado = null;
 let clienteResumoSuspenso = false;
 let clienteBuscaAbortController = null;
+let clienteBuscaTimer = null;
 let ultimoProdutoLancadoVenda = "";
 let historicoProdutoAbortController = null;
 let vendaGravadaId = null;
@@ -4219,7 +4220,7 @@ function montarLinkReceberCliente(cliente) {
 }
 
 function navegarResumoFinanceiroCliente(e) {
-    const cliente = obterClienteResumoFinanceiro(e.currentTarget.clientePreview);
+    const cliente = clienteSelecionado;
     e.preventDefault();
     e.stopPropagation();
     if (!clienteSelecionadoValido()) return;
@@ -4227,7 +4228,7 @@ function navegarResumoFinanceiroCliente(e) {
     window.location.href = link;
 }
 
-function atualizarResumoFinanceiroCliente(cliente) {
+function atualizarResumoFinanceiroCliente(cliente, previa = false) {
     if (window.salesOffline.active) { clienteResumo.style.display = 'none'; return; }
     if (!clienteResumoFinanceiro) return;
     clienteResumoFinanceiro.innerHTML = "";
@@ -4261,6 +4262,17 @@ function atualizarResumoFinanceiroCliente(cliente) {
     }
     if (credito <= 0 && abertasQtd <= 0 && vencidasQtd <= 0) {
         clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Sem pendencias financeiras."));
+    }
+    if (previa) {
+        clienteResumoFinanceiro.querySelectorAll("a").forEach((link) => {
+            const desabilitado = document.createElement("span");
+            desabilitado.className = link.className;
+            desabilitado.textContent = link.textContent;
+            desabilitado.setAttribute("aria-disabled", "true");
+            desabilitado.style.opacity = "0.65";
+            link.replaceWith(desabilitado);
+        });
+        clienteResumoFinanceiro.appendChild(criarLinhaFinanceira("", "Prévia: confirme o cliente por clique ou Enter para liberar as ações."));
     }
 }
 
@@ -4597,6 +4609,7 @@ function montarItemContaPreviewCobranca(conta) {
 }
 
 function abrirPreviewCobranca(cliente) {
+    if (!clienteSelecionadoValido() || String(cliente.id) !== String(clienteSelecionado.id)) return;
     const financeiro = cliente.financeiro || {};
     const whatsappCobranca = cliente.whatsapp_cobranca || {};
     const abertasQtd = parseInt(financeiro.contas_abertas_qtd || "0", 10) || 0;
@@ -4630,6 +4643,8 @@ function fecharPreviewCobranca() {
 }
 
 function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
+    clearTimeout(clienteBuscaTimer);
+    clienteBuscaAbortController?.abort();
     clienteSelecionado = cliente;
     clienteResumoSuspenso = false;
     clienteId.value = cliente.id || "";
@@ -4670,7 +4685,7 @@ window.addEventListener("pageshow", function () {
     }
 });
 
-function atualizarCabecalhoCliente(cliente) {
+function atualizarCabecalhoCliente(cliente, previa = false) {
     if (window.salesOffline.active) {
         clienteResumo.classList.remove('visivel');
         clienteResumo.style.display = 'none';
@@ -4678,12 +4693,13 @@ function atualizarCabecalhoCliente(cliente) {
     }
     clienteResumo.style.display = '';
     clienteResumoNome.textContent = cliente.nome || "-";
+    if (previa) clienteResumoPrazo.textContent = cliente.prazo ? cliente.prazo + " dias" : "Sem prazo definido";
     clienteResumoLimite.textContent = formatarLimiteCliente(cliente.limite);
     clienteResumoStatus.textContent = normalizarStatusCliente(cliente.status);
     clienteResumoStatus.className = "cliente-resumo-valor cliente-status " + (cliente.status || "");
     clienteResumoStatusCard?.classList.toggle("oculto", cliente.status === "liberado");
     clienteResumoWhatsapp.textContent = cliente.whatsapp || "-";
-    atualizarResumoFinanceiroCliente(cliente);
+    atualizarResumoFinanceiroCliente(cliente, previa);
     clienteResumo.classList.add("visivel");
 }
 
@@ -4854,7 +4870,6 @@ function renderizarSugestoesClientes() {
     }
 }
 
-let clienteBuscaTimer = null;
 const clienteBuscaCache = new Map();
 document.addEventListener('sales-offline-active', async () => {
     clienteBuscaCache.clear();
@@ -4960,11 +4975,12 @@ async function buscarClientes(texto, opcoes = {}) {
     }
 
     clienteBuscaAbortController = new AbortController();
+    const buscaController = clienteBuscaAbortController;
     const params = new URLSearchParams({ q: termoSolicitado, contexto: "venda_rapida" });
 
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
-            signal: clienteBuscaAbortController.signal,
+            signal: buscaController.signal,
             headers: { "X-Requested-With": "XMLHttpRequest" }
         }).catch(erro => {
             if (erro.name !== 'AbortError') window.salesOffline.suspect?.();
@@ -4977,13 +4993,20 @@ async function buscarClientes(texto, opcoes = {}) {
         }
         const dados = await resposta.json();
 
-        if (normalizarTextoCliente(clienteBusca.value) !== termoNormalizado) {
+        if (buscaController.signal.aborted || normalizarTextoCliente(clienteBusca.value) !== termoNormalizado) {
             return;
         }
         if (window.salesOffline.active) return buscarClientes(texto);
 
         const listaServidor = dados.clientes || [];
         clienteBuscaCache.set(termoNormalizado, listaServidor);
+        if (!clienteSelecionadoValido()) {
+            if (termoSolicitado && listaServidor.length === 1) {
+                atualizarCabecalhoCliente(listaServidor[0], true);
+            } else {
+                suspenderResumoClienteSelecionado();
+            }
+        }
 
         if (!termoSolicitado && listaServidor.length) {
             clienteBuscaCache.set("", listaServidor);
@@ -4993,6 +5016,7 @@ async function buscarClientes(texto, opcoes = {}) {
         clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
         renderizarSugestoesClientes();
     } catch (erro) {
+        if (buscaController.signal.aborted) return;
         if (erro.name !== "AbortError") {
             clientesSugestoes = [];
             clienteIndexAtivo = clientesSugestoes.length ? 0 : -1;
@@ -5043,13 +5067,18 @@ precarregarClientesVendaMobile();
 clienteBusca.addEventListener("input", () => {
     const texto = clienteBusca.value.trim();
 
-    if (clienteSelecionado?.id) {
-        if (textoCompativelComClienteSelecionado(texto)) {
-            ativarResumoClienteSelecionado();
-        } else {
-            suspenderResumoClienteSelecionado();
-            clienteId.value = "";
+    clienteBuscaAbortController?.abort();
+    if (window.salesOffline.active) {
+        if (clienteSelecionado?.id) {
+            if (textoCompativelComClienteSelecionado(texto)) {
+                ativarResumoClienteSelecionado();
+            } else {
+                suspenderResumoClienteSelecionado();
+                clienteId.value = "";
+            }
         }
+    } else {
+        limparClienteSelecionado();
     }
 
     if (clienteBuscaTimer) {

@@ -14687,8 +14687,11 @@ def clientes_autocomplete(request):
     clientes = []
     calcular_financeiro_completo = contexto == "venda_detalhe"
 
-    for cliente in clientes_qs[:limite]:
-        if calcular_financeiro_completo:
+    clientes_encontrados = list(clientes_qs[:limite])
+    previa_unica = contexto == "venda_rapida" and bool(termo) and len(clientes_encontrados) == 1
+
+    for cliente in clientes_encontrados:
+        if calcular_financeiro_completo or previa_unica:
             dados_cliente = _resumo_cliente_venda(cliente, hoje)
         else:
             dados_cliente = {
