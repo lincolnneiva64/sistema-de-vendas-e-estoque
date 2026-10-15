@@ -1,3 +1,55 @@
+<style>
+.ps-confirm {
+  width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px);
+  max-height: 90vh; max-height: 90dvh; padding: 0; border: 1px solid #dbe3ef;
+  border-radius: 18px; background: #f8fafc; color: #0f172a;
+  box-sizing: border-box; box-shadow: 0 24px 80px #0f172a40;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+.ps-confirm[open] { display: flex; flex-direction: column; }
+.ps-confirm::backdrop { background: #0f172a80; }
+.ps-confirm *, .ps-confirm *::before, .ps-confirm *::after { box-sizing: border-box; }
+.ps-confirm-header { padding: 22px 24px 18px; border-bottom: 1px solid #e2e8f0; background: #fff; }
+.ps-confirm-title { margin: 0 0 6px; font: 750 22px/1.25 system-ui, sans-serif; color: #0f172a; }
+.ps-confirm-description { margin: 0; color: #475569; font-size: 14px; }
+.ps-confirm-body { min-height: 0; overflow-y: auto; padding: 18px 24px; overscroll-behavior: contain; }
+.ps-confirm-card { min-width: 0; padding: 16px; margin-bottom: 12px; border: 1px solid #dbe3ef; border-radius: 12px; background: #fff; overflow-wrap: anywhere; }
+.ps-confirm-card:last-child { margin-bottom: 0; }
+.ps-confirm-card.is-required { border-color: #93c5fd; box-shadow: inset 3px 0 #2563eb; }
+.ps-confirm-choice { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; margin: 0 0 12px; cursor: pointer; }
+.ps-confirm-choice input { flex: 0 0 20px; width: 20px; height: 20px; margin: 3px 0 0; accent-color: #2563eb; }
+.ps-confirm-choice input:disabled { opacity: 1; }
+.ps-confirm-product { display: grid; gap: 4px; min-width: 0; }
+.ps-confirm-name { font-size: 15px; color: #0f172a; line-height: 1.4; }
+.ps-confirm-badge { justify-self: start; border-radius: 6px; padding: 2px 7px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 650; }
+.is-required .ps-confirm-badge { background: #eff6ff; color: #1d4ed8; }
+.ps-confirm-prices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ps-confirm-price { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; min-width: 0; }
+.ps-confirm-price-title { color: #475569; font-size: 12px; font-weight: 650; margin-bottom: 6px; }
+.ps-confirm-values { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.ps-confirm-before { color: #64748b; }
+.ps-confirm-after { color: #0f172a; font-size: 16px; }
+.ps-confirm-difference { display: block; margin-top: 4px; color: #64748b; font-size: 11px; }
+.ps-confirm-price.is-changed { background: #eff6ff; border-color: #bfdbfe; }
+.ps-confirm-price.is-changed .ps-confirm-after, .ps-confirm-price.is-changed .ps-confirm-difference { color: #1d4ed8; }
+.ps-confirm-details { margin-top: 12px; color: #64748b; font-size: 12px; }
+.ps-confirm-details summary { cursor: pointer; min-height: 32px; padding: 4px 0; font-weight: 600; }
+.ps-confirm-details p { margin: 6px 0; }
+.ps-confirm-footer { flex-shrink: 0; padding: 16px 24px; border-top: 1px solid #e2e8f0; background: #fff; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.ps-confirm .ps-confirm-button { min-height: 44px; padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #334155; font: 650 13px/1.4 system-ui, sans-serif; white-space: normal; cursor: pointer; }
+.ps-confirm .ps-confirm-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.ps-confirm-button:hover { filter: brightness(.96); }
+.ps-confirm :focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+@media (max-width: 480px) {
+  .ps-confirm-header { padding: 16px; }
+  .ps-confirm-title { font-size: 19px; }
+  .ps-confirm-body { padding: 12px; }
+  .ps-confirm-card { padding: 12px; }
+  .ps-confirm-prices { grid-template-columns: minmax(0, 1fr); }
+  .ps-confirm-footer { padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .ps-confirm .ps-confirm-button { width: 100%; }
+}
+</style>
 <script>
 /* One confirmation for an explicit price command, never an automatic propagation. */
 window.notificarPrecosSeletivos = function(mensagem, tipo='info') {
@@ -23,38 +75,61 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
   const revisaoCompra = Array.isArray(comprados);
   const obrigatorios = new Set((comprados || [fonte]).map(String));
   const dialog = document.createElement('dialog');
-  dialog.style.cssText='width:min(94vw,760px);max-height:85vh;overflow:auto;border:1px solid #bbb;border-radius:12px;padding:18px;box-sizing:border-box';
+  dialog.className='ps-confirm';
   dialog.setAttribute('aria-label','Confirmar atualização seletiva de preços');
-  const titulo = document.createElement('h2'); titulo.textContent='Confirmar produtos e preços'; dialog.append(titulo);
+  const cabecalho=document.createElement('header');cabecalho.className='ps-confirm-header';
+  const titulo = document.createElement('h2');titulo.className='ps-confirm-title';titulo.tabIndex=-1; titulo.textContent='Confirmar produtos e pre\u00e7os'; cabecalho.append(titulo);
   const aviso = document.createElement('p');
-  aviso.textContent='Somente os selecionados serão alterados e adotarão os preços canônicos nos pedidos. Custos e estoque permanecem individuais. '+(revisaoCompra?'Os participantes da mesma compra acompanham o reajuste. ':'')+'Confira também os preços efetivos dos pedidos.';
-  dialog.append(aviso);
+  aviso.className='ps-confirm-description';
+  aviso.textContent='Confira os valores e escolha os produtos opcionais. '+(revisaoCompra?'Os participantes da compra s\u00e3o obrigat\u00f3rios.':'O produto iniciador j\u00e1 est\u00e1 selecionado.');
+  cabecalho.append(aviso);dialog.append(cabecalho);
+  const lista=document.createElement('div');lista.className='ps-confirm-body';dialog.append(lista);
   const campos = {preco_vista:'À vista',preco_prazo:'A prazo',preco_vista_fracionado:'À vista fracionado',preco_prazo_fracionado:'A prazo fracionado'};
   const moeda = valor => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(valor || 0));
   const efetivo = p => p.adotado ? p.precos.preco_vista : Number(p.legados.preco_venda_1 || 0) || Number(p.preco_venda || 0);
   grupo.produtos.forEach(p => {
-    const bloco=document.createElement('section');bloco.style.cssText='padding:12px 0;border-bottom:1px solid #ddd';
-    const label=document.createElement('label');label.style.cssText='display:flex;gap:10px;align-items:center;min-height:44px';
+    const bloco=document.createElement('section');bloco.className='ps-confirm-card';
+    const label=document.createElement('label');label.className='ps-confirm-choice';
     const box=document.createElement('input');box.type='checkbox';box.value=p.id;box.checked=obrigatorios.has(String(p.id));box.disabled=box.checked;box.dataset.destinatario='1';
-    const nome=document.createElement('strong');nome.textContent=p.nome+(p.ativo?'':' (inativo)')+(box.checked?(revisaoCompra?' — participante obrigatório':' — produto iniciador'):(revisaoCompra?' — não participou da compra / opcional':' — outro integrante / opcional'));
-    label.append(box,nome);bloco.append(label);
+    bloco.classList.toggle('is-required',box.disabled);
+    const produto=document.createElement('span');produto.className='ps-confirm-product';
+    const nome=document.createElement('strong');nome.className='ps-confirm-name';nome.textContent=p.nome+(p.ativo?'':' (inativo)');
+    const papel=document.createElement('span');papel.className='ps-confirm-badge';
+    papel.textContent=box.disabled?(revisaoCompra?'Participante obrigat\u00f3rio':'Produto iniciador \u00b7 obrigat\u00f3rio'):(revisaoCompra?'N\u00e3o participou da compra \u00b7 opcional':'Outro integrante \u00b7 opcional');
+    produto.append(nome,papel);label.append(box,produto);bloco.append(label);
+    const precos=document.createElement('div');precos.className='ps-confirm-prices';bloco.append(precos);
     const linhasPreco=[];
     Object.entries(campos).forEach(([campo,texto]) => {
       if(!grupo.campos.includes(campo))return;
       const linha=document.createElement('div');
       const antes=p.precos[campo];
       linhasPreco.push({linha,campo,texto,antes});
-      bloco.append(linha);
+      linha.className='ps-confirm-price';precos.append(linha);
     });
-    const pedido=document.createElement('p');bloco.append(pedido);
+    const detalhes=document.createElement('details');detalhes.className='ps-confirm-details';
+    const resumo=document.createElement('summary');resumo.textContent='Pedidos e custos individuais';detalhes.append(resumo);
+    const regra=document.createElement('p');regra.textContent='Nos pedidos, os selecionados adotam os pre\u00e7os can\u00f4nicos. Custos e estoque permanecem individuais.';detalhes.append(regra);
+    const pedido=document.createElement('p');detalhes.append(pedido);bloco.append(detalhes);
     let pedidoFracionado;
     if(p.vende_fracionado){
-      pedidoFracionado=document.createElement('p');bloco.append(pedidoFracionado);
+      pedidoFracionado=document.createElement('p');detalhes.append(pedidoFracionado);
     }
     function atualizarPrevia(){
       linhasPreco.forEach(({linha,campo,texto,antes})=>{
         const depois=box.checked && campo in novos ? novos[campo] : antes;
-        linha.textContent=texto+': '+moeda(antes)+' → '+moeda(depois)+' (diferença '+moeda(Number(depois)-Number(antes))+')';
+        const mudou=moeda(antes)!==moeda(depois);
+        linha.classList.toggle('is-changed',mudou);linha.replaceChildren();
+        const tituloPreco=document.createElement('div');tituloPreco.className='ps-confirm-price-title';tituloPreco.textContent=texto;
+        const valores=document.createElement('div');valores.className='ps-confirm-values';
+        if(mudou){
+          const anterior=document.createElement('span');anterior.className='ps-confirm-before';anterior.textContent=moeda(antes);
+          const seta=document.createElement('span');seta.setAttribute('aria-label','para');seta.textContent='\u2192';
+          valores.append(anterior,seta);
+        }
+        const atual=document.createElement('strong');atual.className='ps-confirm-after';atual.textContent=moeda(depois);valores.append(atual);
+        const diferenca=document.createElement('span');diferenca.className='ps-confirm-difference';
+        diferenca.textContent=mudou?((Number(depois)-Number(antes)>0?'+ ':'')+moeda(Number(depois)-Number(antes))):'Sem altera\u00e7\u00e3o';
+        linha.append(tituloPreco,valores,diferenca);
       });
       const atualEmbalagem=efetivo(p);
       const novoEmbalagem=box.checked ? (novos.preco_vista ?? p.precos.preco_vista) : atualEmbalagem;
@@ -67,12 +142,14 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
     }
     atualizarPrevia();
     box.addEventListener('change',atualizarPrevia);
-    dialog.append(bloco);
+    lista.append(bloco);
   });
   const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent='Voltar sem aplicar';
   const confirmar=document.createElement('button');confirmar.type='button';confirmar.textContent='Confirmar selecionados e preços';
-  [cancelar,confirmar].forEach(b=>b.style.cssText='min-height:44px;margin:12px 8px 0 0');dialog.append(cancelar,confirmar);
-  document.body.append(dialog);dialog.showModal();
+  cancelar.className='btn btn-outline-secondary ps-confirm-button';
+  confirmar.className='btn btn-primary ps-confirm-button ps-confirm-primary';
+  const rodape=document.createElement('footer');rodape.className='ps-confirm-footer';rodape.append(cancelar,confirmar);dialog.append(rodape);
+  document.body.append(dialog);dialog.showModal();titulo.focus({preventScroll:true});lista.scrollTop=0;
   return new Promise((resolve,reject)=>{
     let encerrado=false;
     function fechar(valor){
