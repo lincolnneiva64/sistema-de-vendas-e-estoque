@@ -5217,6 +5217,7 @@ clienteBusca.addEventListener("keydown", (e) => {
 let linhaSelecionada = null;
 let ultimoItemRemovido = null;
 let produtoAutoPreenchidoVenda = false;
+let linhaProdutoIniciadaVenda = false;
 
 function atualizarBotaoEdicaoItemVenda() {
     if (!btnAdicionarItemVenda) return;
@@ -5640,6 +5641,7 @@ function limparCamposProdutoVenda() {
     preco.value = "";
     resetarAutocompleteProduto();
     produtoAutoPreenchidoVenda = false;
+    linhaProdutoIniciadaVenda = false;
     refreshPendingProductLine();
 }
 
@@ -6856,6 +6858,9 @@ function adicionarItemVendaAtual() {
         focarProximoCampo(produtoBusca);
         return false;
     }
+    linhaProdutoIniciadaVenda = true;
+    produtoAutoPreenchidoVenda = false;
+    refreshPendingProductLine();
     if (produtoNome !== produtoValor) {
         mostrarToastVenda(`A busca mostra "${produtoNome}", mas o produto selecionado é "${produtoValor}". Restaure o produto ou cancele a linha antes de continuar.`);
         refreshPendingProductLine();
@@ -6944,6 +6949,7 @@ function adicionarItemVendaAtual() {
         scrollLinhaDentroDaLista(novaLinha, "smooth");
     }
 
+    linhaProdutoIniciadaVenda = false;
     const preencheuProximo = preencherProximoProdutoDepoisDeAdicionar(produtoValor, produtoNome);
 
     if (!preencheuProximo) {
@@ -6962,6 +6968,7 @@ function adicionarItemVendaAtual() {
         focarProximoCampo(produtoBusca);
     }
 
+    refreshPendingProductLine();
     garantirTipoVendaEdicaoConsumoProprio();
     return true;
 }
@@ -8334,18 +8341,20 @@ function aplicarEstadoConferenciaPreco(opt) {
     }
 }
 
+function existeLinhaProdutoPendenteVenda() {
+    const selected = produto.options[produto.selectedIndex];
+    return Boolean(selected?.dataset.produtoId
+        && (linhaProdutoIniciadaVenda || quantidade.value.trim() || linhaSelecionada));
+}
+
 function refreshPendingProductLine() {
     const selected = produto.options[produto.selectedIndex];
-    if (!selected?.dataset.produtoId) {
+    if (!existeLinhaProdutoPendenteVenda()) {
         setPendingProductLineVisible(false);
         return;
     }
     const searchText = produtoBusca.value.trim();
     const mismatch = searchText !== selected.value.trim();
-    if (!quantidade.value.trim() && !linhaSelecionada && !mismatch) {
-        setPendingProductLineVisible(false);
-        return;
-    }
     const quantityText = quantidade.value.trim() || "não informada";
     pendingProductMessage.textContent = mismatch
         ? `Linha pendente: ${selected.value} — quantidade ${quantityText}. O texto da busca não corresponde ao produto selecionado.`
@@ -8544,7 +8553,13 @@ produtoBusca.addEventListener("input", () => {
     filtrarProdutos(texto);
     renderSugestoes();
 });
-quantidade.addEventListener("input", refreshPendingProductLine);
+[quantidade, unidade, preco].forEach((campo) => campo.addEventListener("input", () => {
+    if (produto.options[produto.selectedIndex]?.dataset.produtoId) {
+        linhaProdutoIniciadaVenda = true;
+        produtoAutoPreenchidoVenda = false;
+    }
+    refreshPendingProductLine();
+}));
 produto.addEventListener("change", refreshPendingProductLine);
 produtoBusca.addEventListener("click", () => {
     autocompleteAberto = true;
@@ -8669,8 +8684,7 @@ window.salesDraftBridge = {
         && !['editar', 'pedido_id', 'cliente_id'].some(key => new URL(location.href).searchParams.has(key)),
     capture() {
         const selected = produto.options[produto.selectedIndex];
-        const searchMismatch = selected?.dataset.produtoId && produtoBusca.value.trim() !== selected.value.trim();
-        const lancamento = selected?.dataset.produtoId && (quantidade.value || linhaSelecionada || searchMismatch) ? {
+        const lancamento = existeLinhaProdutoPendenteVenda() ? {
             produto_id:selected.dataset.produtoId, produto_nome:selected.value,
             quantidade:quantidade.value, unidade:unidade.value, preco:preco.value,
             fator:normalizarNumeroVenda(selected.dataset.fator) || '0', unidade1:selected.dataset.unidade1 || '',
@@ -8722,6 +8736,7 @@ window.salesDraftBridge = {
         }
         atualizarTotalGeral();
         if (draft.lancamento) {
+            linhaProdutoIniciadaVenda = true;
             const editor = draft.lancamento;
             if (editor.indice_edicao !== null) tabelaBody.rows[editor.indice_edicao]?.click();
             let option = Array.from(produto.options).find(o => o.dataset.produtoId === editor.produto_id);
