@@ -27,9 +27,9 @@ class ModalPrecosVisualTests(StaticLiveServerTestCase):
         return [list(model.objects.order_by("pk").values()) for model in
                 (Produto, GrupoProdutoVinculado, MembroGrupoProduto, AlteracaoPrecoVinculado, Compra, MovimentoFinanceiro)]
 
-    def open_modal(self, tab, novos, comprados=None):
+    def open_modal(self, tab, novos, comprados=None, fonte=None):
         tab.evaluate("window.modalResult=null;window.modalFailure=null;confirmarPrecosSeletivos(" +
-                     json.dumps(self.url) + "," + str(self.produtos[0].pk) + "," + json.dumps(novos) +
+                     json.dumps(self.url) + "," + str(fonte if fonte is not None else self.produtos[0].pk) + "," + json.dumps(novos) +
                      ("," + json.dumps(comprados) if comprados is not None else "") +
                      ").then(value=>window.modalResult=value).catch(error=>window.modalFailure=error.code);true")
         tab.wait('!!document.querySelector("dialog.ps-confirm[open]")')
@@ -91,6 +91,43 @@ class ModalPrecosVisualTests(StaticLiveServerTestCase):
                     self.assertEqual(tab.evaluate('document.querySelectorAll(".ps-confirm-price.is-changed").length'),0)
                     tab.call("Input.dispatchKeyEvent", {"type":"keyDown","key":"Escape","code":"Escape","windowsVirtualKeyCode":27})
                     tab.wait('window.modalFailure==="PRECOS_SELETIVOS_CANCELADOS"')
+                    self.assertEqual(self.snapshot(),before)
+                finally:
+                    chrome.stop()
+
+    def test_initiator_first_and_optional_order_and_ids_preserved(self):
+        before = self.snapshot()
+        fonte = self.produtos[-1].pk
+        original = self.client.get(self.url).json()["precos_vinculados"]
+        original_ids = [str(p["id"]) for p in original["produtos"]]
+        expected = [str(fonte)] + [pk for pk in original_ids if pk != str(fonte)]
+        for width in (320, 390, 1280):
+            with self.subTest(width=width), tempfile.TemporaryDirectory(prefix="linked-prices-order-") as profile:
+                chrome = Chrome(CHROME,profile).start()
+                try:
+                    tab = chrome.tab()
+                    tab.call("Emulation.setDeviceMetricsOverride",{"width":width,"height":900,"deviceScaleFactor":1,"mobile":width<600})
+                    tab.call("Network.setCookie",{"name":"sessionid","value":self.client.cookies["sessionid"].value,"url":self.live_server_url})
+                    tab.call("Page.navigate",{"url":self.live_server_url+reverse("estoque:produto_editar",args=[fonte])})
+                    tab.wait('typeof confirmarPrecosSeletivos==="function"')
+                    self.open_modal(tab,{"preco_vista":"40.00","preco_prazo":"39.00","preco_vista_fracionado":"8.00"},fonte=fonte)
+                    order = 'Array.from(document.querySelectorAll(".ps-confirm-card [data-destinatario]")).map(b=>b.value)'
+                    self.assertEqual(tab.evaluate(order),expected)
+                    self.assertTrue(tab.evaluate('document.querySelector(".ps-confirm-card input").checked && document.querySelector(".ps-confirm-card input").disabled'))
+                    self.assertEqual(tab.evaluate('document.querySelectorAll(".ps-confirm-card:first-child .is-changed").length'),2)
+                    optional = '.ps-confirm-choice input[value="'+expected[1]+'"]'
+                    for checked in (True,False,True):
+                        self.click(tab,optional)
+                        self.assertEqual(tab.evaluate(order),expected)
+                        self.assertEqual(tab.evaluate(f'document.querySelector({optional!r}).checked'),checked)
+                        self.assertEqual(tab.evaluate(f'document.querySelector({optional!r}).closest(".ps-confirm-card").querySelectorAll(".is-changed").length'),2 if checked else 0)
+                        self.assertEqual(tab.evaluate('document.querySelector(".ps-confirm-card:first-child .ps-confirm-name").textContent'),self.produtos[-1].nome)
+                    self.click(tab,".ps-confirm-primary")
+                    tab.wait("!!window.modalResult")
+                    result = tab.evaluate("modalResult")
+                    self.assertEqual(set(result["ids"]),{str(fonte),expected[1]})
+                    self.assertEqual(result["versao"],original["versao_grupo"])
+                    self.assertEqual(result["assinatura"],original["assinatura_precos"])
                     self.assertEqual(self.snapshot(),before)
                 finally:
                     chrome.stop()

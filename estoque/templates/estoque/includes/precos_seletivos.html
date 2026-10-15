@@ -87,7 +87,11 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
   const campos = {preco_vista:'À vista',preco_prazo:'A prazo',preco_vista_fracionado:'À vista fracionado',preco_prazo_fracionado:'A prazo fracionado'};
   const moeda = valor => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(valor || 0));
   const efetivo = p => p.adotado ? p.precos.preco_vista : Number(p.legados.preco_venda_1 || 0) || Number(p.preco_venda || 0);
-  grupo.produtos.forEach(p => {
+  const produtosApresentacao = [
+    ...grupo.produtos.filter(p => String(p.id) === String(fonte)),
+    ...grupo.produtos.filter(p => String(p.id) !== String(fonte)),
+  ];
+  produtosApresentacao.forEach(p => {
     const bloco=document.createElement('section');bloco.className='ps-confirm-card';
     const label=document.createElement('label');label.className='ps-confirm-choice';
     const box=document.createElement('input');box.type='checkbox';box.value=p.id;box.checked=obrigatorios.has(String(p.id));box.disabled=box.checked;box.dataset.destinatario='1';
