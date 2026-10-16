@@ -225,6 +225,10 @@ def online_sale(request):
 def _operation_result(request, operation_id):
     """Read only: absence is not permission to change the original command."""
     expected = request.GET
+    # Schema-independent guard: also backportable before the additive migration.
+    if expected.get("type") == "venda_local":
+        return JsonResponse({"lookup": "incompativel", "code": "modalidade_incompativel",
+                             "erro": "Consulta local exige autorizacao propria."}, status=409)
     if (expected.get("actor_id") != str(request.user.pk)
             or expected.get("environment_id") != environment_id(request)):
         return JsonResponse({"lookup": "incompativel", "code": "identidade_divergente",
