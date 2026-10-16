@@ -472,14 +472,24 @@
       {% endfor %}
     {% endif %}
 
+    <nav class="nav nav-tabs mb-3" aria-label="Consulta de locações">
+      {% for item in abas %}
+        <a class="nav-link {% if aba == item.valor %}active{% endif %}" href="{{ item.url }}" {% if aba == item.valor %}aria-current="page"{% endif %}>{{ item.rotulo }}</a>
+      {% endfor %}
+    </nav>
     <section class="cardx">
       <h2>Filtros da consulta</h2>
-      <p class="muted">Sem datas selecionadas, mostrando entregas de hoje em diante. Informe datas para consultar outro período.</p>
+      <p class="muted">Operação atual: entregas a partir de {{ marco_operacional|date:"d/m/Y" }}. Pendências recentes continuam visíveis mesmo atrasadas. Canceladas e registros anteriores ficam no Histórico; exceções com atividade operacional são sinalizadas.</p>
       <form method="get" class="filters" id="filtros-locacoes" data-enter-nav>
+        <input type="hidden" name="aba" value="{{ aba }}">
+        <div>
+          <label class="form-label" for="cliente-consulta">Cliente</label>
+          <input id="cliente-consulta" class="form-control" type="search" name="cliente" value="{{ cliente_filtro }}" placeholder="Nome do cliente ou contratante">
+        </div>
         <div>
           <label class="form-label">Status</label>
           <select name="status" class="form-select">
-            <option value="" {% if not status_filtro %}selected{% endif %}>Padrão (sem canceladas)</option>
+            <option value="" {% if not status_filtro %}selected{% endif %}>Todas as situações da aba</option>
             <option value="todos" {% if status_filtro == 'todos' %}selected{% endif %}>Todos</option>
             {% for valor, rotulo in status_opcoes %}
               <option value="{{ valor }}" {% if status_filtro == valor %}selected{% endif %}>{{ rotulo }}</option>
@@ -503,7 +513,7 @@
           <input class="form-control" type="date" name="data_fim" value="{{ data_fim }}">
         </div>
         <div>
-          <a class="btn btn-locacoes w-100" href="{% url 'locacoes:lista' %}" id="limpar-filtros-locacoes">Limpar filtros</a>
+          <a class="btn btn-locacoes w-100" href="{% url 'locacoes:lista' %}?aba={{ aba }}" id="limpar-filtros-locacoes">Limpar filtros</a>
         </div>
       </form>
     </section>
@@ -519,7 +529,7 @@
               <th>Status</th>
               <th>Entrega</th>
               <th>Devolução prevista</th>
-              <th>Pendente/rua</th>
+              <th>Saldo de itens</th>
               <th>Financeiro</th>
               <th>Ações</th>
             </tr>
@@ -533,10 +543,11 @@
                   {% else %}
                     <a href="{% url 'locacoes:detalhe' locacao.id %}">#{{ locacao.id }}</a>
                   {% endif %}
+                  {% if locacao.motivo_consulta %}<small class="d-block {% if locacao.excecao_anterior_marco %}text-danger{% else %}muted{% endif %}">{{ locacao.motivo_consulta }}</small>{% endif %}
                 </td>
                 <td>{{ locacao.nome_contratante }}</td>
                 <td><span class="badge-locacoes">{{ locacao.get_status_display }}</span>
-                  <span class="badge-locacoes {% if locacao.indicador_operacional.atraso %}text-danger{% endif %}">{{ locacao.indicador_operacional.texto }}</span>
+                  {% if not locacao.motivo_consulta or locacao.excecao_anterior_marco %}<span class="badge-locacoes {% if locacao.indicador_operacional.atraso %}text-danger{% endif %}">{{ locacao.indicador_operacional.texto }}</span>{% endif %}
                   {% if locacao.indicador_operacional.data %}<small class="d-block">{{ locacao.indicador_operacional.data|date:"d/m/Y" }}{% if locacao.indicador_operacional.horario %} às {{ locacao.indicador_operacional.horario|time:"H:i" }}{% endif %}</small>{% endif %}
                 </td>
                 <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
@@ -544,6 +555,7 @@
                 <td>
                   {{ locacao.necessidade_pendente_lista.mesas }} mesa(s) /
                   {{ locacao.necessidade_pendente_lista.cadeiras }} cadeira(s)
+                  {% if aba == 'historico' %}<small class="d-block muted">Saldo cadastral; não comprova material na rua.</small>{% endif %}
                 </td>
                 <td>
                   <div class="financeiro-resumo {% if locacao.saldo_devedor > 0 %}com-saldo{% else %}quitada{% endif %} {% if locacao.saldo_vencido_lista %}vencida{% endif %}">
@@ -565,9 +577,13 @@
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_entrega %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id locacao.acoes_consulta.tarefa_entrega.tipo %}">Preparar entrega</a>
+                    {% elif locacao.acoes_consulta.preparar_entrega %}
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id 'entrega' %}">Preparar entrega</a>
                     {% endif %}
                     {% if locacao.acoes_consulta.tarefa_recolhimento %}
                       <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:conferencia_recolhimento' locacao.acoes_consulta.tarefa_recolhimento.id %}">Recolhimento</a>
+                    {% elif locacao.acoes_consulta.preparar_recolhimento %}
+                      <a class="btn btn-outline-success btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id 'recolhimento' %}">Preparar recolhimento</a>
                     {% endif %}
                     {% if locacao.status != 'cancelada' %}
                       <a class="btn btn-outline-warning btn-sm" href="{% url 'locacoes:registrar_pagamento' locacao.id %}">Pagamentos</a>

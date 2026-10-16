@@ -1717,6 +1717,7 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
         response = self.client.get(
             reverse("locacoes:lista"),
             {
+                "aba": "concluidas",
                 "status": Locacao.STATUS_DEVOLVIDA,
                 "financeiro": "com_saldo",
                 "data_inicio": self.hoje.isoformat(),
@@ -1768,7 +1769,8 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
             {"data_inicio": self.hoje.isoformat(), "data_fim": self.hoje.isoformat()},
             secure=True,
         )
-        tarefa = response.context["locacoes"][0].acoes_consulta["tarefa_entrega"]
+        self.assertIsNone(response.context["locacoes"][0].acoes_consulta["tarefa_entrega"])
+        self.assertFalse(locacao.tarefas_operacionais.exists())
 
         self.assertContains(response, "Entregas e Recolhimentos")
         self.assertContains(response, reverse("locacoes:checklist_operacional"))
@@ -1777,12 +1779,12 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
             response,
             reverse(
                 "locacoes:abrir_tarefa_operacional",
-                kwargs={"pk": locacao.pk, "tipo": tarefa.tipo},
+                kwargs={"pk": locacao.pk, "tipo": TarefaOperacionalLocacao.TIPO_ENTREGA},
             ),
         )
         self.assertNotContains(
             response,
-            reverse("locacoes:conferencia_entrega", kwargs={"pk": tarefa.pk}),
+            'href="/locacoes/tarefas-operacionais/',
         )
 
     def test_abrir_tarefa_operacional_mantem_redirect_para_checklist_com_foco(self):

@@ -16,6 +16,7 @@ from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 from urllib.parse import quote, urlencode
 
+from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao
 from .services import funcionarios_operacionais_locacoes, indicador_operacional_locacao
 
 from .forms import (
@@ -107,25 +108,25 @@ def _initial_itens_edicao(locacao):
     return initial
 
 
-def _acoes_locacao(locacao, request=None):
+def _acoes_locacao(locacao, request=None, *, somente_leitura=False):
+    def obter_tarefa(tipo):
+        if not somente_leitura:
+            return obter_ou_criar_tarefa_operacional(locacao, tipo)
+        tarefa = next((t for t in locacao.tarefas_operacionais.all() if t.tipo == tipo), None)
+        return tarefa if tarefa and tarefa.pendente_operacional else None
+
     tarefa_entrega = None
     tarefa_recolhimento = None
     if locacao.status in {
         Locacao.STATUS_RESERVADA,
         Locacao.STATUS_SAIU_PARA_ENTREGA,
     }:
-        tarefa_entrega = obter_ou_criar_tarefa_operacional(
-            locacao,
-            TarefaOperacionalLocacao.TIPO_ENTREGA,
-        )
+        tarefa_entrega = obter_tarefa(TarefaOperacionalLocacao.TIPO_ENTREGA)
     if locacao.status in {
         Locacao.STATUS_ENTREGUE,
         Locacao.STATUS_PENDENTE_DEVOLUCAO,
     }:
-        tarefa_recolhimento = obter_ou_criar_tarefa_operacional(
-            locacao,
-            TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
-        )
+        tarefa_recolhimento = obter_tarefa(TarefaOperacionalLocacao.TIPO_RECOLHIMENTO)
     if tarefa_entrega and tarefa_entrega.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
         tarefa_entrega = None
     if tarefa_recolhimento and tarefa_recolhimento.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
@@ -141,6 +142,12 @@ def _acoes_locacao(locacao, request=None):
         "pode_excluir": locacao.pode_excluir(),
         "impedimentos_exclusao": locacao.impedimentos_exclusao(),
         "tarefa_entrega": tarefa_entrega,
+        "preparar_entrega": somente_leitura and locacao.status in {
+            Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA,
+        } and not any(t.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA for t in locacao.tarefas_operacionais.all()),
+        "preparar_recolhimento": somente_leitura and locacao.status in {
+            Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO,
+        } and not any(t.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO for t in locacao.tarefas_operacionais.all()),
         "tarefa_recolhimento": tarefa_recolhimento,
         "whatsapp_recolhimento": whatsapp_recolhimento,
         "tem_pagamentos": locacao.pagamentos.exists(),
@@ -767,6 +774,10 @@ def _funcionarios_checklist_recolhimento_envio(conferencia, checklist_url, funci
 
 
 def lista(request):
+    aba = request.GET.get("aba", "andamento")
+    if aba not in dict(ABAS):
+        aba = "andamento"
+    cliente = request.GET.get("cliente", "").strip()
     status = request.GET.get("status", "").strip()
     financeiro = request.GET.get("financeiro", "").strip()
     hoje = timezone.localdate()
@@ -800,16 +811,23 @@ def lista(request):
         locacoes_qs = locacoes_qs.filter(data_entrega__gte=data_inicio)
     if data_fim:
         locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
-    if not data_inicio and not data_fim:
-        locacoes_qs = locacoes_qs.filter(data_entrega__gte=hoje)
-        if not status:
-            locacoes_qs = locacoes_qs.exclude(status=Locacao.STATUS_CANCELADA)
+    if cliente:
+        from django.db.models import Q
+        locacoes_qs = locacoes_qs.filter(
+            Q(cliente__nome__icontains=cliente) | Q(pessoa_avulsa_nome__icontains=cliente)
+        )
     if financeiro == "com_saldo":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__gt=Decimal("0.00"))
     elif financeiro == "quitadas":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__lte=Decimal("0.00"))
-    locacoes = list(locacoes_qs.order_by("data_entrega", "horario_entrega", "id"))
-    for locacao in locacoes:
+    locacoes = []
+    for locacao in locacoes_qs.order_by("data_entrega", "horario_entrega", "id"):
+        grupo, motivo, excecao = classificar_locacao(locacao)
+        if grupo != aba:
+            continue
+        locacao.motivo_consulta = motivo
+        locacao.excecao_anterior_marco = excecao
+        locacoes.append(locacao)
         locacao.necessidade_pendente_lista = Locacao.necessidades_itens(
             [
                 {"tipo": item.tipo, "quantidade": item.quantidade_pendente()}
@@ -817,13 +835,19 @@ def lista(request):
             ]
         )
         locacao.indicador_operacional = indicador_operacional_locacao(locacao, hoje)
-        locacao.acoes_consulta = _acoes_locacao(locacao, request=request)
+        locacao.acoes_consulta = _acoes_locacao(locacao, request=request, somente_leitura=True)
         locacao.saldo_vencido_lista = locacao.saldo_vencido_em(hoje)
+    parametros = {key: request.GET[key] for key in ("cliente", "status", "financeiro", "data_inicio", "data_fim") if request.GET.get(key)}
+    abas = [{"valor": valor, "rotulo": rotulo, "url": "?" + urlencode({**parametros, "aba": valor})} for valor, rotulo in ABAS]
     return render(
         request,
         "locacoes/lista.html",
         {
             "locacoes": locacoes,
+            "aba": aba,
+            "abas": abas,
+            "marco_operacional": MARCO_OPERACIONAL,
+            "cliente_filtro": cliente,
             "status_filtro": status,
             "financeiro_filtro": financeiro,
             "data_inicio": data_inicio_texto,

@@ -47,8 +47,8 @@ class ConsultaLocacoesUxTests(TestCase):
     def ids(self, **filtros):
         return [locacao.pk for locacao in self.consultar(**filtros).context["locacoes"]]
 
-    def test_abertura_mostra_hoje_e_futuras(self):
-        self.assertEqual(self.ids(), [self.atual.pk, self.futura.pk, self.distante.pk])
+    def test_abertura_mostra_pendentes_recentes_e_futuras(self):
+        self.assertEqual(self.ids(), [self.passada.pk, self.atual.pk, self.futura.pk, self.distante.pk])
 
     def test_visao_padrao_nao_mostra_canceladas(self):
         cancelada_hoje = self.criar(self.hoje, status=Locacao.STATUS_CANCELADA)
@@ -62,22 +62,22 @@ class ConsultaLocacoesUxTests(TestCase):
 
     def test_status_cancelada_mostra_canceladas(self):
         cancelada = self.criar(self.hoje + timedelta(days=1), status=Locacao.STATUS_CANCELADA)
-        self.assertEqual(self.ids(status=Locacao.STATUS_CANCELADA), [cancelada.pk])
+        self.assertEqual(self.ids(aba="historico", status=Locacao.STATUS_CANCELADA), [cancelada.pk])
 
-    def test_status_todos_mostra_canceladas(self):
+    def test_status_todos_respeita_a_aba(self):
         cancelada = self.criar(self.hoje + timedelta(days=1), status=Locacao.STATUS_CANCELADA)
         response = self.consultar(status="todos")
-        self.assertIn(cancelada.pk, [locacao.pk for locacao in response.context["locacoes"]])
+        self.assertNotIn(cancelada.pk, [locacao.pk for locacao in response.context["locacoes"]])
         self.assertContains(response, '<option value="todos" selected>Todos</option>')
         self.assertIn(self.futura.pk, self.ids(status="todos"))
-        self.assertNotIn(self.passada.pk, self.ids(status="todos"))
+        self.assertIn(self.passada.pk, self.ids(status="todos"))
 
     def test_datas_explicitas_preservam_consulta_de_canceladas(self):
         cancelada = self.criar(self.hoje - timedelta(days=1), status=Locacao.STATUS_CANCELADA)
-        self.assertIn(cancelada.pk, self.ids(data_inicio="2026-10-03", data_fim="2026-10-03"))
+        self.assertIn(cancelada.pk, self.ids(aba="historico", data_inicio="2026-10-03", data_fim="2026-10-03"))
 
-    def test_passadas_fora_da_visao_padrao(self):
-        self.assertNotIn(self.passada.pk, self.ids())
+    def test_atrasadas_recentes_preservadas_na_visao_padrao(self):
+        self.assertIn(self.passada.pk, self.ids())
 
     def test_futura_em_dezembro_sem_limite_de_mes(self):
         self.assertIn(self.distante.pk, self.ids())
@@ -101,34 +101,34 @@ class ConsultaLocacoesUxTests(TestCase):
 
     def test_status_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, status=Locacao.STATUS_ENTREGUE)
-        self.criar(self.hoje - timedelta(days=2), status=Locacao.STATUS_ENTREGUE)
-        self.assertEqual(self.ids(status=Locacao.STATUS_ENTREGUE), [alvo.pk])
+        atrasada = self.criar(self.hoje - timedelta(days=2), status=Locacao.STATUS_ENTREGUE)
+        self.assertEqual(self.ids(status=Locacao.STATUS_ENTREGUE), [atrasada.pk, alvo.pk])
 
     def test_financeiro_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, saldo_devedor=Decimal("10"))
-        self.criar(self.hoje - timedelta(days=2), saldo_devedor=Decimal("10"))
-        self.assertEqual(self.ids(financeiro="com_saldo"), [alvo.pk])
+        atrasada = self.criar(self.hoje - timedelta(days=2), saldo_devedor=Decimal("10"))
+        self.assertEqual(self.ids(financeiro="com_saldo"), [atrasada.pk, alvo.pk])
         self.assertNotIn(alvo.pk, self.ids(financeiro="quitadas"))
 
     def test_limpar_filtros_retorna_visao_padrao(self):
         cancelada = self.criar(self.hoje + timedelta(days=1), status=Locacao.STATUS_CANCELADA)
         response = self.consultar(status="entregue", financeiro="com_saldo", data_inicio="2026-10-03")
-        self.assertContains(response, f'href="{reverse("locacoes:lista")}" id="limpar-filtros-locacoes"')
+        self.assertContains(response, f'href="{reverse("locacoes:lista")}?aba=andamento" id="limpar-filtros-locacoes"')
         response_limpa = self.client.get(reverse("locacoes:lista"), secure=True)
         ids_limpos = [locacao.pk for locacao in response_limpa.context["locacoes"]]
         self.assertNotIn(cancelada.pk, ids_limpos)
-        self.assertNotIn(self.passada.pk, ids_limpos)
+        self.assertIn(self.passada.pk, ids_limpos)
         self.assertIn(self.futura.pk, ids_limpos)
-        self.assertContains(response_limpa, '<option value="" selected>Padrão (sem canceladas)</option>')
+        self.assertContains(response_limpa, '<input type="hidden" name="aba" value="andamento">')
         self.assertEqual(self.ids(status="", financeiro="", data_inicio="", data_fim=""), self.ids())
 
     def test_ordem_cronologica(self):
-        self.assertEqual(self.ids(), [self.atual.pk, self.futura.pk, self.distante.pk])
+        self.assertEqual(self.ids(), [self.passada.pk, self.atual.pk, self.futura.pk, self.distante.pk])
 
     def test_mesmo_dia_ordena_por_horario(self):
         tarde = self.criar(self.hoje, time(16))
         cedo = self.criar(self.hoje, time(7))
-        self.assertEqual(self.ids()[:3], [cedo.pk, self.atual.pk, tarde.pk])
+        self.assertEqual(self.ids()[1:4], [cedo.pk, self.atual.pk, tarde.pk])
 
 
 class FiltrosConsultaFrontendTests(SimpleTestCase):
