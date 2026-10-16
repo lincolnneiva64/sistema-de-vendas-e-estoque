@@ -3504,6 +3504,7 @@
 
   function moverAcoesAdicionar() {
     if (!btnAdicionar) return;
+    btnAdicionar.textContent = compraMobile() ? "Concluir item" : "+ Adicionar item";
 
     if (compraMobile() && acoesAdicionarMobile && btnAdicionar.parentElement !== acoesAdicionarMobile) {
       acoesAdicionarMobile.appendChild(btnAdicionar);
@@ -3646,8 +3647,8 @@
 
     if (compraMobile()) {
       if (!linhaFormularioMobile()) {
-        const primeiraLinha = tabela.querySelector("tbody .linha-item");
-        if (primeiraLinha && linhaSemProduto(primeiraLinha)) {
+        const primeiraLinha = tabela.querySelector("tbody .linha-item[data-item-provisorio='1']") || tabela.querySelector("tbody .linha-item");
+        if (primeiraLinha && (itemProvisorio(primeiraLinha) || linhaSemProduto(primeiraLinha))) {
           moverLinhaParaFormularioMobile(primeiraLinha);
         } else {
           const novaLinha = criarLinhaItem();
@@ -4024,6 +4025,28 @@
     linha.dataset.itemProvisorio = "1";
   }
 
+  function validarConclusaoItem(linha) {
+    const quantidade = linha.querySelector('[name="quantidade[]"]');
+    const preco = campoPrecoUnitario(linha);
+    const valorPreco = centavosMoeda(preco.value);
+    if (!produtoSelecionadoValido(linha)) {
+      focarCampo(linha.querySelector('[name="produto_busca[]"]'));
+      return false;
+    }
+    if (!String(quantidade.value).trim() || numero(quantidade.value) <= 0) {
+      mostrarErroLinhaCompra(linha, "Informe uma quantidade maior que zero.");
+      focarCampo(quantidade);
+      return false;
+    }
+    if (valorPreco === null || valorPreco < 0) {
+      mostrarErroLinhaCompra(linha, "Informe um valor unitario valido.");
+      focarCampo(preco);
+      return false;
+    }
+    mostrarErroLinhaCompra(linha, "");
+    return true;
+  }
+
   function confirmarItemProvisorio(linha) {
     if (!itemProvisorio(linha)) return;
     delete linha.dataset.itemProvisorio;
@@ -4379,8 +4402,6 @@
     fecharSugestoes(linha);
     if (opcoes.provisorio) {
       marcarItemProvisorio(linha);
-    } else {
-      confirmarItemProvisorio(linha);
     }
     limparConferenciaNotaLinha(linha);
     conferenciaPrecosConfirmada = false;
@@ -4707,7 +4728,7 @@
     campoPrecoUnitario(linha).value = "0,00";
     sincronizarPrecoUnitarioLinha(linha);
     linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
-    delete linha.dataset.itemProvisorio;
+    marcarItemProvisorio(linha);
     delete linha.dataset.conferido;
     limparHistoricoProduto(linha);
     fecharSugestoes(linha);
@@ -4831,6 +4852,12 @@
     if (!linha) return;
     cancelarEdicaoItemMobile(linha);
 
+    if (compraMobile() && linhaNoFormularioMobile(linha)) {
+      limparLinhaItem(linha);
+      recalcular();
+      return;
+    }
+
     if (compraMobile() && !linhaNoFormularioMobile(linha)) {
       linha.remove();
       atualizarListaItensMobileVazia();
@@ -4909,6 +4936,9 @@
       return;
     }
 
+    if (!validarConclusaoItem(linha)) return;
+    confirmarItemProvisorio(linha);
+
     const linhas = Array.from(tabela.querySelectorAll("tbody .linha-item"));
     const indiceAtual = linhas.indexOf(linha);
     const proximaLinhaExistente = indiceAtual >= 0 ? linhas[indiceAtual + 1] : null;
@@ -4943,6 +4973,7 @@
   function ligarLinha(linha) {
     if (linha.dataset.linhaLigada === "1") return;
     linha.dataset.linhaLigada = "1";
+    if (linhaSemProduto(linha)) marcarItemProvisorio(linha);
 
     const produto = linha.querySelector('[name="produto_id[]"]');
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
@@ -5023,7 +5054,6 @@
       if (campo.classList.contains("conferencia-nota-checkbox")) return;
       campo.addEventListener("input", function() {
         if (campo !== produtoBusca && campo !== produto) {
-          confirmarItemProvisorio(linha);
           limparConferenciaNotaLinha(linha);
         }
         conferenciaPrecosConfirmada = false;
@@ -5035,7 +5065,6 @@
       });
       campo.addEventListener("change", function() {
         if (campo !== produtoBusca && campo !== produto) {
-          confirmarItemProvisorio(linha);
           limparConferenciaNotaLinha(linha);
         }
         conferenciaPrecosConfirmada = false;
@@ -5094,7 +5123,6 @@
       }
 
       if (!listaAberta && produtoSelecionadoValido(linha)) {
-        confirmarItemProvisorio(linha);
         fecharSugestoes(linha);
         focarCampo(quantidade);
         return;
@@ -5238,6 +5266,7 @@
       const produtoAtual = linhaAtual.querySelector('[name="produto_id[]"]');
       const produtoAtualId = produtoAtual ? produtoAtual.value : "";
 
+      if (!validarConclusaoItem(linhaAtual)) return;
       confirmarItemProvisorio(linhaAtual);
       publicarLinhaMobile(linhaAtual);
       rolarParaItemAdicionadoMobile(linhaAtual);
@@ -7461,6 +7490,8 @@
       const precoOculto = linha.querySelector('input[type="hidden"][name="preco_unitario[]"]');
       const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
       const item = {
+        provisorio: linha.dataset.itemProvisorio === "1",
+        item_edicao_id: linha.querySelector('[name="item_edicao_id[]"]')?.value || "",
         produto_busca: produtoBusca ? produtoBusca.value || "" : "",
         produto_id: produtoId ? produtoId.value || "" : "",
         quantidade: quantidade ? quantidade.value || "" : "",
@@ -7558,6 +7589,11 @@
         ? Array.from(produtoId.options || []).find(function(opt) { return opt.value === String(item.produto_id); })
         : null;
 
+      // Rascunhos antigos nao registravam o estado: preservar os itens existentes.
+      if (item.provisorio === true) linha.dataset.itemProvisorio = "1";
+      else delete linha.dataset.itemProvisorio;
+      const itemEdicaoId = linha.querySelector('[name="item_edicao_id[]"]');
+      if (itemEdicaoId) itemEdicaoId.value = item.item_edicao_id || "";
       if (produtoBusca) produtoBusca.value = item.produto_busca || "";
       if (produtoId) produtoId.value = item.produto_id || "";
       if (quantidade) quantidade.value = item.quantidade || "";
