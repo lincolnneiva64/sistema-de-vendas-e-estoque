@@ -1,5 +1,5 @@
 // Refresh modules inherited from upstream, including independent sales drafts.
-const CACHE = 'offline-pilot-shell-v38-integrated-pickup';
+const CACHE = 'offline-pilot-shell-v40-piloto-integrado';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/assets/2-8h-pickup/checklist.js');
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
@@ -12,6 +12,9 @@ ASSETS.push(...['sales.js','sales-drafts.js','sales-draft-ui.js','sales-stock.js
 ASSETS.push('/offline/assets/2-8g-sidebar/sales.js', '/offline/assets/2-8g-sidebar/sales-draft-ui.js');
 ASSETS.push('/offline/assets/2-8g-rental-actions/sales.js', '/offline/assets/2-8g-rental-actions/sales-draft-ui.js');
 ASSETS.push('/offline/assets/2-8g-auth-link/sales.js', '/offline/assets/2-8g-auth-link/sales-draft-ui.js');
+ASSETS.push(...['app.js', 'sales.js', 'sales-draft-ui.js'].map(file => '/offline/assets/2-8i-local-auth/' + file));
+ASSETS.push(...['app.js','core.js','sales.js','sales-draft-ui.js'].map(file => '/offline/assets/local-controlled-v1/' + file));
+ASSETS.push('/offline/assets/2-8h-inventario/sales.js');
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);

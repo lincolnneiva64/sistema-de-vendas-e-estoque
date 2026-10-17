@@ -306,6 +306,17 @@ async function prepare() {
     } catch (error) { message('Não foi possível preparar os dados: ' + error.message); }
     finally { preparing = false; await render(); }
 }
+function publishSessionStatus(data) {
+    const status = {authenticated: data.authenticated, actor_id: data.actor_id,
+        environment_id: communicationScope().environment_id};
+    window.salesSessionStatus = status;
+    document.dispatchEvent(new CustomEvent('sales-session-status', {detail: status}));
+    const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-session') : null;
+    // A successful response can predate a login in another tab. Ownership
+    // changes are announced only by the fresh page's sales-identity record.
+    if (status.authenticated === false) channel?.postMessage(status);
+    channel?.close();
+}
 function checkSession() {
     sessionPending = performSessionCheck(++sessionGeneration);
     return sessionPending;
@@ -319,13 +330,8 @@ async function performSessionCheck(generation) {
         const data = await response.json();
         if (generation !== sessionGeneration) return sessionPending;
         authenticated = data.authenticated === true && data.can_prepare === true;
-        if (data.authenticated === false) {
-            await repo.put('metadata', {key: 'sales-identity', actor_id: '', environment_id: healthEnvironment});
-            if ('BroadcastChannel' in window) {
-                const identityChannel = new BroadcastChannel('sales-identity');
-                identityChannel.postMessage('changed'); identityChannel.close();
-            }
-        }
+        // Authentication loss must not replace the owner of existing drafts.
+        publishSessionStatus(data);
         if (!login || !status) return authenticated;
         login.hidden = data.authenticated === true;
         status.textContent = data.authenticated
@@ -508,7 +514,7 @@ async function start() {
         if(!identity?.actor_id || !device?.id)throw new Error('Identidade local indisponível.');
         return {repo,scope:{...identity,device_id:device.id}};
     });
-    if (globalIndicator && !window.salesOffline?.shell && !document.getElementById('revision-form')) {
+    if (globalIndicator?.dataset.actor && !window.localSalesContext && !window.salesOffline?.shell && !document.getElementById('revision-form')) {
         await repo.put('metadata', {key: 'sales-identity', actor_id: globalIndicator.dataset.actor,
             environment_id: globalIndicator.dataset.environment});
         if ('BroadcastChannel' in window) {

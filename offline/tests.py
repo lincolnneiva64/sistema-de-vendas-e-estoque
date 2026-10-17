@@ -104,7 +104,7 @@ class OfflineAPITests(TestCase):
     def test_login_and_session_preparation(self):
         anonymous = Client()
         self.assertEqual(anonymous.get('/api/offline/session/').json(), {
-            'authenticated': False, 'can_prepare': False, 'username': '',
+            'authenticated': False, 'actor_id': '', 'can_prepare': False, 'username': '',
         })
         self.assertEqual(anonymous.get('/offline/login/?next=/offline/').status_code, 200)
         response = anonymous.post('/offline/login/', {'username': self.user.username, 'password': 'test-only'})

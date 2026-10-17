@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from inventario.rastreabilidade import contexto_venda, identificar
 
 from ..models import Cliente, ItemVenda, ItemVendaRemovido, Produto, SeparacaoVenda, Venda
 
@@ -30,6 +31,7 @@ class ResultadoVenda:
     produtos_estoque_atualizados_ids: set[int]
 
 
+@contexto_venda
 def criar_ou_atualizar_venda(*, usuario, dados):
     """Valida dados estruturados e grava nova venda ou edição atomicamente.
 
@@ -884,6 +886,7 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                             quantidade=produto_bloqueado.quantidade,
                             atualizado_em=timezone.now(),
                         )
+                        identificar(produto_bloqueado.pk, estoque_disponivel, produto_bloqueado.quantidade, "venda")
                         produtos_estoque_atualizados_ids.add(produto_bloqueado.pk)
 
                     if quantidade_pendente_base > 0:

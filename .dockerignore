@@ -11,3 +11,15 @@ db.sqlite3.bkp
 db_backup_antes_migrar_render.sqlite3
 staticfiles
 .chrome-codex-profile-*
+.env
+.env.*
+!.env.example
+secrets
+.worktrees
+*.dump
+*.log
+dados.json
+inventario/demo_access.py
+inventario/demo_local.py
+inventario/demo_distribuicao.py
+inventario/tests_demo_access.py

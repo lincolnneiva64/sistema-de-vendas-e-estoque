@@ -17,7 +17,7 @@ if (state.shell) {
     scope = await repo?.get('metadata', 'sales-identity');
     if (scope?.environment_id !== indicator?.dataset.environment) scope = null;
 }
-else await repo?.put('metadata', {key: 'sales-identity', ...scope});
+else if (scope) await repo?.put('metadata', {key: 'sales-identity', ...scope});
 const banner = document.createElement('div');
 banner.id = 'sales-offline-notice'; banner.setAttribute('role', 'status');
 banner.style.cssText = 'padding:6px 12px;background:#fff4d6;color:#624800;font-size:12px;overflow-wrap:anywhere;flex-shrink:0';
@@ -88,19 +88,63 @@ state.clients = async term => {
 };
 const identityChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-identity') : null;
 async function checkIdentity() {
+    if (!scope) return; // An anonymous normal page owns no authenticated draft.
     const current = await repo?.get('metadata', 'sales-identity');
+    const session = window.salesSessionStatus;
+    if (scope && session?.authenticated === true && session.environment_id === scope.environment_id
+        && session.actor_id && session.actor_id !== scope.actor_id) {
+        blockIdentity(); return;
+    }
+    if (scope && (current?.actor_id !== scope.actor_id || current?.environment_id !== scope.environment_id)) {
+        blockIdentity(); return;
+    }
+    if (!state.shell && !state.active && (session?.authenticated === false || state.authenticationRequired)) {
+        state.authenticationRequired = true;
+        banner.hidden = false;
+        banner.replaceChildren(document.createTextNode('Sess\u00e3o ausente ou expirada. Entre novamente com seu usu\u00e1rio. Rascunho preservado. '));
+        const login = document.createElement('a');
+        login.id = 'sales-session-login'; login.textContent = 'Fazer login';
+        login.href = '/offline/login/?next=' + encodeURIComponent(location.pathname + location.search);
+        login.target = '_blank'; login.rel = 'noopener';
+        const reopen = document.createElement('a'); reopen.textContent = 'Reabrir Vendas ap\u00f3s entrar';
+        reopen.href = location.pathname + location.search;
+        reopen.addEventListener('click', async event => {
+            event.preventDefault(); await window.salesDraftUI?.flush(); location.assign(reopen.href);
+        });
+        banner.append(login, document.createTextNode(' · '), reopen);
+        disableSalesFields();
+        return;
+    }
     if (current?.actor_id === scope?.actor_id && current?.environment_id === scope?.environment_id) return;
+    if (!scope) return;
+    blockIdentity();
+}
+function disableSalesFields() {
+    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
+        if (!field.matches('[data-sales-navigation-toggle]') && !field.closest(rentalActions)) field.disabled = true;
+    }
+}
+function blockIdentity() {
+    // Freeze autosave synchronously before clearing the old user's assembly.
+    state.identityBlocked = true;
+    document.dispatchEvent(new Event('sales-identity-blocked'));
     scope = null;
     document.getElementById('tabelaProdutos').replaceChildren();
     document.getElementById('clienteBusca').value = '';
     document.getElementById('clienteId').value = '';
     banner.hidden = false;
     banner.textContent = 'Identidade mudou. Reabra Vendas após autenticar-se. Montagem anterior preservada no dispositivo.';
-    for (const field of document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')) {
-        // Rental forms enforce server authentication independently of the sale.
-        if (!field.matches('[data-sales-navigation-toggle]') && !field.closest(rentalActions)) field.disabled = true;
-    }
+    disableSalesFields();
 }
+function sessionStatus(status) {
+    if (status?.environment_id !== indicator?.dataset.environment) return;
+    window.salesSessionStatus = status;
+    void checkIdentity();
+}
+document.addEventListener('sales-session-status', event => sessionStatus(event.detail));
+const sessionChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-session') : null;
+if (sessionChannel) sessionChannel.onmessage = event => sessionStatus(event.data);
+if (window.salesSessionStatus) sessionStatus(window.salesSessionStatus);
 if (identityChannel) identityChannel.onmessage = checkIdentity;
 window.addEventListener('focus', checkIdentity);
 state.ready = state.active ? state.activate() : Promise.resolve();

@@ -1,0 +1,5 @@
+.card.produto-conferido{background:#f1faf4;border-color:#8bb99a}
+.estado-produto{font-weight:700;color:#17633b}
+.estado-produto:empty,.quantidade-confirmada:empty{display:none}
+.quantidade-confirmada{font-weight:600;overflow-wrap:anywhere}
+.produto-pendente .estado-produto{padding:12px;border-left:4px solid #bd820a;background:#fff3cc;color:#704c04}

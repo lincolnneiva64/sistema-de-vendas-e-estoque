@@ -23,7 +23,7 @@ from .models import EncerramentoVendaOffline
 @never_cache
 def versioned_asset(request, filename):
     # A distinct path bypasses older workers that ignore static query versions.
-    allowed = {"app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
+    allowed = {"local-sales.js", "app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
                "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js"}
@@ -77,6 +77,7 @@ def session(request):
     authenticated = request.user.is_authenticated
     return JsonResponse({
         "authenticated": authenticated,
+        "actor_id": str(request.user.pk) if authenticated else "",
         "can_prepare": authenticated and request.user.has_perm("offline.registrar_observacao"),
         "username": request.user.get_username() if authenticated else "",
     })
@@ -184,6 +185,9 @@ def sale_closure_result(request, operation_id):
 @require_GET
 @never_cache
 def online_sale_result(request, operation_id):
+    if request.headers.get("X-Local-Sales") == "1":
+        from .local_sales import lookup
+        return lookup(request, operation_id)
     if not request.user.is_authenticated:
         return JsonResponse({"erro": "Autentique-se para consultar a venda."}, status=401)
     if request.GET.get("type") != "criar_venda":
@@ -194,6 +198,9 @@ def online_sale_result(request, operation_id):
 @require_POST
 @never_cache
 def online_sale(request):
+    if request.headers.get("X-Local-Sales") == "1":
+        from .local_sales import submit
+        return submit(request)
     # Same authenticated actor as the ordinary sale; no pilot permission added.
     if not request.user.is_authenticated:
         return JsonResponse({"erro": "Autentique-se para gravar a venda."}, status=401)
@@ -240,7 +247,7 @@ def _operation_result(request, operation_id):
     if operation is None:
         return JsonResponse({"lookup": "nao_encontrada", "operation_id": str(operation_id),
                              "hash": expected.get("hash")})
-    compatible = (operation.actor_id == request.user.pk
+    compatible = (operation.origin == "authenticated" and operation.actor_id == request.user.pk
                   and operation.environment_id == environment_id(request)
                   and operation.type == expected.get("type")
                   and str(operation.device_id) == expected.get("device_id")

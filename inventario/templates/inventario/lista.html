@@ -1,0 +1,22 @@
+{% extends 'inventario/base.html' %}{% block content %}
+<h1>Conferências de estoque</h1><p>Selecione os produtos, distribua a contagem e acompanhe a revisão.</p>
+<section aria-label="Resumo das conferências" class="grid" id="resumo-conferencias">
+<div class="card"><span>Conferências em andamento</span><strong data-indicador="conferencias" style="display:block;font-size:1.8rem">{{ resumo.conferencias }}</strong></div>
+<div class="card"><span>Produtos aguardando OK</span><strong data-indicador="aguardando_ok" style="display:block;font-size:1.8rem">{{ resumo.aguardando_ok }}</strong></div>
+<div class="card"><span>Produtos com divergências</span><strong data-indicador="divergencias" style="display:block;font-size:1.8rem">{{ resumo.divergencias }}</strong></div>
+<div class="card"><span>Recontagens pendentes</span><strong data-indicador="recontagens" style="display:block;font-size:1.8rem">{{ resumo.recontagens }}</strong></div>
+</section>
+<p class="muted">Conferências em andamento ainda não foram finalizadas e enviadas. Produtos contados por conferência, somente na última rodada; recontagens pendentes também aguardam OK.</p>
+{% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
+{% if pode_criar %}<details class="card"><summary>Nova conferência</summary><form method="post">{% csrf_token %}
+<label>Título<input name="titulo" maxlength="160" required></label>
+<label>Selecionar por<select name="criterio"><option value="categoria">Categoria</option><option value="fornecedor">Fornecedor vinculado</option><option value="manual">Produtos selecionados</option></select></label>
+<div class="grid"><label>Categoria<select name="categoria"><option value="">Selecione</option>{% for categoria in categorias %}<option>{{ categoria }}</option>{% endfor %}</select></label>
+<label>Fornecedor<select name="fornecedor"><option value="">Selecione</option>{% for fornecedor in fornecedores %}<option value="{{ fornecedor.pk }}">{{ fornecedor.nome }}</option>{% endfor %}</select></label></div>
+<details><summary>Seleção manual de produtos</summary><label>Filtrar produtos<input type="search" id="busca-produtos" placeholder="Nome ou código"></label>
+{% for produto in produtos %}<label class="produto-selecao"><input type="checkbox" name="produtos" value="{{ produto.pk }}"> {{ produto.nome }} · {{ produto.codigo|default:'' }}</label>{% endfor %}</details>
+<p class="muted">Será usado apenas o critério escolhido. A seleção e as regras de conversão ficam congeladas.</p><button>Criar conferência</button></form></details>{% endif %}
+{% for inventario in inventarios %}<article class="card"><h2><a href="{% url 'inventario:detalhe' inventario.pk %}">{{ inventario.titulo }}</a></h2><p>{{ inventario.get_criterio_display }} · Criada em {{ inventario.criado_em|date:'d/m/Y H:i' }} · {% if inventario.finalizada_em %}Finalizada e enviada em {{ inventario.finalizada_em|date:'d/m/Y H:i:s' }}{% else %}Em andamento{% endif %}</p></article>{% empty %}<p>Nenhuma conferência criada.</p>{% endfor %}
+{% endblock %}{% block head %}<style>
+#resumo-conferencias{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0 8px}#resumo-conferencias .card{margin:0;padding:12px 14px}#resumo-conferencias span{font-size:.9rem}
+</style>{% endblock %}{% block scripts %}{% load static %}<script src="{% static 'inventario/selecao.js' %}" defer></script>{% endblock %}

@@ -88,6 +88,8 @@ def conferir_ou_ajustar_estoque(
         usuario=usuario if getattr(usuario, "is_authenticated", False) else None,
         operador_nome=_nome_operador(usuario),
     )
+    from inventario.rastreabilidade import identificar
+    identificar(produto.pk, estoque_antes, estoque_depois, "ajuste_manual", f"Movimentação manual #{historico.pk}")
     return {
         "produto": produto,
         "historico": historico,

@@ -24,22 +24,23 @@ def command_hash(command):
     return hashlib.sha256(encoded).hexdigest()
 
 
-def validate_command(data, user, environment):
+def validate_command(data, user, environment, *, local_owner=None):
     if not isinstance(data, dict) or set(data) != COMMAND_KEYS | {"payload_hash"}:
         raise ValidationError("Formato de operacao invalido.")
     command = {key: data[key] for key in COMMAND_KEYS}
     for key in ("operation_id", "device_id"):
         if not isinstance(command[key], str) or str(UUID(command[key])) != command[key]:
             raise ValidationError("UUID invalido.")
-    if command["actor_id"] != str(user.pk):
+    if command["actor_id"] != ("local:" + local_owner if local_owner else str(user.pk)):
         raise ValidationError("A operacao pertence a outro usuario.")
     if command["environment_id"] != environment:
         raise ValidationError("Ambiente incorreto.")
     sale_note = command["type"] == "observacao_entrega_venda"
+    sale_local = local_owner is not None and command["type"] == "venda_local"
     sale_create = command["type"] == SALE_OPERATION_TYPE
-    if command["type"] not in {OPERATION_TYPE, "observacao_entrega_venda", SALE_OPERATION_TYPE} or type(command["schema_version"]) is not int or command["schema_version"] != 1:
+    if (local_owner is not None and not sale_local) or (not sale_local and command["type"] not in {OPERATION_TYPE, "observacao_entrega_venda", SALE_OPERATION_TYPE}) or type(command["schema_version"]) is not int or command["schema_version"] != 1:
         raise ValidationError("Protocolo de operacao incompativel.")
-    if sale_create:
+    if sale_create or sale_local:
         if command["aggregate_id"] != command["operation_id"]:
             raise ValidationError("Identidade da nova venda invalida.")
     elif not isinstance(command["aggregate_id"], str) or not command["aggregate_id"].isdigit() or len(command["aggregate_id"]) > 18:
@@ -50,8 +51,12 @@ def validate_command(data, user, environment):
     if created is None or timezone.is_naive(created):
         raise ValidationError("Data invalida.")
     payload = command["payload"]
-    if sale_create:
-        validate_sale_payload(payload)
+    if sale_create or sale_local:
+        if sale_local:
+            from .local_sales import validate_payload
+            validate_payload(payload)
+        else:
+            validate_sale_payload(payload)
         if data["payload_hash"] != command_hash(command):
             raise ValidationError("Hash do comando invalido.")
         return command
@@ -73,13 +78,19 @@ def validate_command(data, user, environment):
 
 
 @transaction.atomic
-def process_operation(command, user):
+def process_operation(command, user, *, local_owner=None):
     digest = command_hash(command)
+    if local_owner and (command["type"] != "venda_local" or command["actor_id"] != "local:" + local_owner):
+        raise ValidationError("Modalidade local invalida.")
+    if not local_owner and command["type"] == "venda_local":
+        raise ValidationError("Operacao local exige autorizacao propria.")
     # get_or_create uses the database UNIQUE constraint to arbitrate concurrent inserts.
     operation, created = OperacaoSincronizacao.objects.get_or_create(
         operation_id=command["operation_id"],
         defaults={
-            "device_id": command["device_id"], "actor": user,
+            "device_id": command["device_id"], "actor": user if user.is_authenticated else None,
+            "origin": "local" if local_owner else "authenticated", "local_owner": local_owner or "",
+            "declared_operator": command["payload"]["dados"]["operador"] if local_owner else "",
             "environment_id": command["environment_id"], "type": command["type"],
             "schema_version": command["schema_version"], "aggregate_id": command["aggregate_id"],
             "payload": command["payload"], "payload_hash": digest, "comando": command,
@@ -88,11 +99,15 @@ def process_operation(command, user):
     )
     if not created:
         operation = OperacaoSincronizacao.objects.select_for_update().get(pk=operation.pk)
-        if operation.actor_id != user.pk or operation.payload_hash != digest or operation.comando != command:
+        owner_matches = (operation.origin == "local" and operation.local_owner == local_owner) if local_owner else (operation.origin == "authenticated" and operation.actor_id == user.pk)
+        if not owner_matches or operation.payload_hash != digest or operation.comando != command:
             return {"operation_id": command["operation_id"], "status": "conflito", "hash": digest,
                     "code": "uuid_comando_divergente", "erro": "UUID ja utilizado com outro conteudo."}, 409
         return operation.resultado, 409 if operation.status == "conflito" else 200
 
+    if local_owner:
+        from .local_sales import execute_local_sale
+        return _process_sale_creation(operation, command, user, digest, executor=execute_local_sale)
     if command["type"] == SALE_OPERATION_TYPE:
         return _process_sale_creation(operation, command, user, digest)
 
@@ -126,7 +141,8 @@ def process_operation(command, user):
     return result, 200 if compatible else 409
 
 
-def _process_sale_creation(operation, command, user, digest):
+def _process_sale_creation(operation, command, user, digest, executor=None):
+    executor = executor or execute_sale
     revision = command["payload"].get("revisao")
     revision_error = None
     if revision:
@@ -160,7 +176,7 @@ def _process_sale_creation(operation, command, user, digest):
         with transaction.atomic():
             if revision_error:
                 raise ErroGravarVenda(revision_error)
-            sale = execute_sale(command["payload"], user).venda
+            sale = executor(command["payload"], user).venda
     except ErroGravarVenda as exc:
         sale = None
         error = exc.mensagem

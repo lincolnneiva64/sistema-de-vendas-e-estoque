@@ -346,6 +346,8 @@ def salvar_edicao(request, compra_id):
         for pk, delta in deltas.items():
             if delta:
                 Produto.objects.filter(pk=pk).update(quantidade=(produtos[pk].quantidade or Decimal("0")) + delta, atualizado_em=timezone.now())
+                from inventario.rastreabilidade import identificar
+                identificar(pk, produtos[pk].quantidade, (produtos[pk].quantidade or Decimal("0")) + delta, "edicao_compra", f"Compra #{compra.pk}")
         for item, linha in planos:
             if item is None:
                 item = ItemCompra(compra=compra)

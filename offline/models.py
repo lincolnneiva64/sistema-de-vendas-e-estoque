@@ -5,7 +5,7 @@ from django.db import models
 class OperacaoSincronizacao(models.Model):
     operation_id = models.UUIDField(unique=True)
     device_id = models.UUIDField()
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT)
     environment_id = models.CharField(max_length=160)
     type = models.CharField(max_length=60)
     schema_version = models.PositiveSmallIntegerField()
@@ -20,7 +20,17 @@ class OperacaoSincronizacao(models.Model):
     concluido_em = models.DateTimeField(null=True)
     erro = models.TextField(blank=True)
 
+    origin = models.CharField(max_length=16, default="authenticated", db_default="authenticated")
+    local_owner = models.CharField(max_length=64, default="", db_default="", blank=True)
+    declared_operator = models.CharField(max_length=140, default="", db_default="", blank=True)
+
     class Meta:
+        constraints = [models.CheckConstraint(
+            condition=((models.Q(origin="authenticated", actor__isnull=False, local_owner="") & ~models.Q(type="venda_local"))
+                       | (models.Q(origin="local", type="venda_local", local_owner__regex=r"^[0-9a-f]{64}$")
+                          & ~models.Q(declared_operator=""))),
+            name="offline_operation_principal_valid",
+        )]
         permissions = [("registrar_observacao", "Preparar e sincronizar observacoes offline")]
 
 

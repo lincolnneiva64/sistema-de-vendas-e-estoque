@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Autorizar conferência de estoque</title></head>
+<body><main style="max-width:32rem;margin:3rem auto;padding:1rem;font-family:system-ui">
+{% if form %}
+<h1>Autorizar conferência de estoque</h1>
+<p>Informe uma conta autorizada para consultar ou corrigir estoque por 15 minutos. A venda permanece aberta na outra aba e seu operador não será alterado.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button type="submit">Autorizar estoque</button></form>
+{% else %}
+<h1>Identidade confirmada</h1>
+<p>Volte à aba de Vendas e clique em “Consultar novamente”. Confirme ou corrija somente após conferir os dados.</p>
+<p>Se a ação continuar bloqueada, solicite ao responsável a permissão correspondente.</p>
+{% endif %}
+</main></body></html>

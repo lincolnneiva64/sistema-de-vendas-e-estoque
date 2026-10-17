@@ -2,6 +2,7 @@ import json
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -16,6 +17,8 @@ class EstoqueManualEndpointTests(TestCase):
             password="senha-teste",
         )
         self.client.force_login(self.usuario)
+        self.usuario.user_permissions.add(*Permission.objects.filter(content_type__app_label="estoque",
+            codename__in=["view_produto", "change_produto", "add_movimentacaoestoquemanual"]))
         self.produto = self._produto("Produto Endpoint", quantidade=Decimal("4.000"))
 
     def _produto(self, nome, quantidade=Decimal("1.000"), ativo=True, excluido=False, conferido=False):
@@ -57,7 +60,7 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertFalse(dados["produto"]["estoque_conferido"])
         self.assertIsNone(dados["produto"]["estoque_conferido_em"])
 
-    def test_get_consulta_produto_com_operador_da_tela_vendas_sem_login_django(self):
+    def test_get_consulta_produto_recusa_nome_de_operador_sem_login_django(self):
         self.client.logout()
         operador = Funcionario.objects.create(
             nome="Operador Vendas Estoque",
@@ -70,8 +73,8 @@ class EstoqueManualEndpointTests(TestCase):
             HTTP_X_OPERADOR_VENDA=operador.nome,
         )
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(resposta.json()["produto"]["id"], self.produto.id)
+        self.assertEqual(resposta.status_code, 403)
+        self.assertNotIn("produto", resposta.json())
 
     def test_get_consulta_produto_sem_operador_retorna_json_403_sem_redirect(self):
         self.client.logout()
@@ -142,7 +145,7 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertEqual(dados["produto"]["ultima_movimentacao"]["tipo"], "conferencia")
         self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 1)
 
-    def test_post_confirmacao_com_operador_da_tela_vendas_sem_login_django(self):
+    def test_post_confirmacao_recusa_nome_de_operador_sem_login_django(self):
         self.client.logout()
         operador = Funcionario.objects.create(
             nome="Operador Confirmacao Vendas",
@@ -155,11 +158,9 @@ class EstoqueManualEndpointTests(TestCase):
             HTTP_X_OPERADOR_VENDA=operador.nome,
         )
 
-        self.assertEqual(resposta.status_code, 200)
-        historico = MovimentacaoEstoqueManual.objects.get()
-        self.assertIsNone(historico.usuario)
-        self.assertEqual(historico.operador_nome, operador.nome)
-        self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["operador"], operador.nome)
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
+        self._assert_produto_sem_conferencia(self.produto, Decimal("4.000"))
 
     def test_post_ajuste_positivo(self):
         resposta = self.client.post(
@@ -174,7 +175,7 @@ class EstoqueManualEndpointTests(TestCase):
         self.assertEqual(resposta.json()["produto"]["estoque_atual"], "8.250")
         self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["diferenca"], "4.250")
 
-    def test_post_corrigir_com_operador_da_tela_vendas_sem_login_django(self):
+    def test_post_corrigir_recusa_nome_de_operador_sem_login_django(self):
         self.client.logout()
         operador = Funcionario.objects.create(
             nome="Operador Correcao Vendas",
@@ -193,13 +194,9 @@ class EstoqueManualEndpointTests(TestCase):
             HTTP_X_OPERADOR_VENDA=operador.nome,
         )
 
-        self.assertEqual(resposta.status_code, 200)
-        self.produto.refresh_from_db()
-        historico = MovimentacaoEstoqueManual.objects.get()
-        self.assertEqual(self.produto.quantidade, Decimal("9.000"))
-        self.assertIsNone(historico.usuario)
-        self.assertEqual(historico.operador_nome, operador.nome)
-        self.assertEqual(resposta.json()["produto"]["ultima_movimentacao"]["operador"], operador.nome)
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
+        self._assert_produto_sem_conferencia(self.produto, Decimal("4.000"))
 
     def test_post_com_operador_nao_autorizado_retorna_json_403_sem_alterar(self):
         self.client.logout()

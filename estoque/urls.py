@@ -1,10 +1,13 @@
 from django.urls import path
+from . import autorizacao_estoque
 from . import views
 from . import views_grupos_produtos
 
 app_name = "estoque"
 
 urlpatterns = [
+    path("conferencia-estoque/autorizar/", autorizacao_estoque.autorizar, name="conferencia_estoque_autorizar"),
+    path("conferencia-estoque/autorizada/", autorizacao_estoque.autorizada, name="conferencia_estoque_autorizada"),
     path("produtos/grupos/", views_grupos_produtos.grupos_lista, name="grupos_produtos_lista"),
     path("produtos/grupos/criar/", views_grupos_produtos.grupos_criar, name="grupos_produtos_criar"),
     path("produtos/grupos/<int:grupo_id>/", views_grupos_produtos.grupos_detalhe, name="grupos_produtos_detalhe"),

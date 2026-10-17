@@ -1886,6 +1886,9 @@ align-items: center;
     <section class="produtos-nav-card" aria-labelledby="produtos-nav-admin">
       <h4 class="produtos-nav-titulo" id="produtos-nav-admin">Administracao</h4>
       <div class="produtos-topo-acoes">
+        {% if perms.inventario.gerenciar_inventario or perms.inventario.revisar_inventario or perms.inventario.aprovar_ajuste %}
+        <a href="{% url 'inventario:lista' %}" class="btn-acao-principal-painel" id="btnConferenciaEstoqueProdutos">Conferência de Estoque</a>
+        {% endif %}
         <a href="{% url 'estoque:lixeira' %}" class="btn-tarja btn-tarja-perigo">
           Ver Lixeira
         </a>

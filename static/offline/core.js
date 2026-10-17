@@ -253,9 +253,9 @@ export function validReceipt(result, operation, httpStatus) {
         || !result || typeof result !== 'object' || result.operation_id !== operation.operation_id || result.hash !== operation.payload_hash) return false;
     if (httpStatus !== undefined && !((httpStatus === 200 && result.status === 'confirmada') || (httpStatus === 409 && result.status === 'conflito'))) return false;
     const completed = typeof result.completed_at === 'string' && Number.isFinite(Date.parse(result.completed_at));
-    if (operation.type === 'criar_venda' && (!completed || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(result.completed_at))) return false;
+    if (['criar_venda','venda_local'].includes(operation.type) && (!completed || !/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(result.completed_at))) return false;
     return result.status === 'conflito'
-        ? operation.type !== 'criar_venda' || (result.record_id === null && typeof result.erro === 'string' && !!result.erro.trim())
+        ? !['criar_venda','venda_local'].includes(operation.type) || (result.record_id === null && typeof result.erro === 'string' && !!result.erro.trim())
         : result.status === 'confirmada' && Number.isSafeInteger(result.record_id) && result.record_id > 0 && completed;
 }
 

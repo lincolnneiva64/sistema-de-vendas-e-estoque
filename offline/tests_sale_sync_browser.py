@@ -497,7 +497,7 @@ class SaleSyncBrowserTests(StaticLiveServerTestCase):
                 self.reload(tab)
                 tab.evaluate('window.core=await import("/offline/assets/2-8f/core.js");window.repo=new core.Repository(await core.openDB());true')
                 self.assertTrue(tab.evaluate('typeof core.Repository.prototype.diagnose==="function" && typeof core.Repository.prototype.updateAttempt==="function"'))
-                self.assertTrue(tab.evaluate('[...document.scripts].some(s=>s.src.includes("/offline/assets/2-8g-close/app.js"))'))
+                self.assertTrue(tab.evaluate('[...document.scripts].some(s=>s.src.includes("/offline/assets/local-controlled-v1/app.js"))'))
                 self.assertTrue(tab.evaluate('performance.getEntriesByType("resource").some(e=>e.name.includes("/offline/assets/2-8f/core.js"))'))
                 self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].status'),'pendente')
             finally:

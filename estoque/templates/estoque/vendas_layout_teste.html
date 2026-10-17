@@ -7,6 +7,8 @@
     <meta charset="UTF-8">
     <title>Vendas - Layout Teste</title>
     <script>window.salesOffline = {shell: {{ offline_sales_shell|yesno:'true,false' }}, active: {{ offline_sales_shell|yesno:'true,false' }}};</script>
+    {{ local_sales_context|json_script:"local-sales-context" }}
+    <script>window.localSalesContext = JSON.parse(document.getElementById('local-sales-context').textContent);</script>
     <script>window.salesDraftReady = new Promise(resolve => { window.salesDraftResolve = resolve; });</script>
     {% csrf_token %}
 
@@ -3013,6 +3015,11 @@ td:first-child {
                 <button type="button" id="btnCancelarConferenciaEstoque" class="modal-conferencia-estoque-btn secundario">Fechar</button>
             </div>
             <div id="modalConferenciaEstoqueFeedback" class="modal-conferencia-estoque-feedback" aria-live="polite"></div>
+            <div id="autorizacaoConferenciaEstoque" hidden>
+                <a href="{% url 'estoque:conferencia_estoque_autorizar' %}" target="_blank" rel="noopener">Autorizar em outra aba</a>
+                <button type="button" id="consultarConferenciaNovamente">Consultar novamente</button>
+                <p>A venda pode continuar sem essa autorização. Nenhuma correção será reenviada automaticamente.</p>
+            </div>
         </div>
     </div>
 </div>
@@ -3104,6 +3111,9 @@ td:first-child {
             <div class="atalhos-venda-painel" id="atalhosVendaPainel">
                 <h2 class="atalhos-venda-titulo">Atalhos</h2>
                 <div class="atalhos-venda-lista">
+            {% if perms.inventario.gerenciar_inventario or perms.inventario.revisar_inventario or perms.inventario.aprovar_ajuste %}
+            <a href="{% url 'inventario:lista' %}" id="btnConferenciaEstoqueVendas" class="acao-venda-btn secundaria">Conferência de Estoque</a>
+            {% endif %}
             <a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Consultar Pedidos</a>
         <a href="/compras/" class="acao-venda-btn secundaria">Consultar Compras</a>
             <a href="{% url 'estoque:receber_cliente_escolher' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Receber contas do cliente</a>
@@ -3685,6 +3695,9 @@ const conferenciaEstoqueContador = document.getElementById("conferenciaEstoqueCo
 let conferenciaEstoqueProdutoAtualId = "";
 let conferenciaEstoqueOptionAtual = null;
 let conferenciaEstoqueRequisicaoEmAndamento = false;
+let conferenciaEstoquePermissoes = {confirmar: false, corrigir: false};
+const autorizacaoConferenciaEstoque = document.getElementById("autorizacaoConferenciaEstoque");
+const consultarConferenciaNovamente = document.getElementById("consultarConferenciaNovamente");
 let conferenciaEstoqueToqueAbriu = false;
 
 // ===== BLOQUEIO PRODUTO ESTOQUE ZERADO NA VENDA NORMAL - CHATGPT 2026-06-21 =====
@@ -4629,7 +4642,15 @@ function fecharPreviewCobranca() {
     cobrancaVisualUrl = "";
 }
 
-function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
+// A detail refresh must not replace payment terms chosen after it started.
+let clienteDetalheRequisicao = 0, condicoesPagamentoRevisao = 0;
+for (const campo of [tipoVenda, vencimentoVenda]) {
+    for (const evento of ['input', 'change']) {
+        campo.addEventListener(evento, () => { condicoesPagamentoRevisao++; });
+    }
+}
+
+function preencherResumoCliente(cliente, carregarDetalheCompleto = false, preservarCondicoesPagamento = false) {
     clearTimeout(clienteBuscaTimer);
     clienteBuscaAbortController?.abort();
     clienteSelecionado = cliente;
@@ -4638,7 +4659,7 @@ function preencherResumoCliente(cliente, carregarDetalheCompleto = false) {
     clienteBusca.value = cliente.nome || "";
     guardarClienteSelecionado(cliente);
     atualizarCabecalhoCliente(cliente, false, carregarDetalheCompleto);
-    atualizarPrazoEVencimentoCliente();
+    if (!preservarCondicoesPagamento) atualizarPrazoEVencimentoCliente();
     atualizarHistoricoProdutoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
@@ -5038,6 +5059,9 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase, preservarMonta
     if (!clienteBase?.id) return;
 
     const clienteIdSolicitado = String(clienteBase.id);
+    const requisicao = ++clienteDetalheRequisicao;
+    const revisaoInicial = condicoesPagamentoRevisao;
+    const pagamentoInicial = tipoVenda.value, vencimentoInicial = vencimentoVenda.value;
     const params = new URLSearchParams({ cliente_id: clienteIdSolicitado, contexto: "venda" });
     try {
         const resposta = await fetch(clientesAutocompleteUrl + "?" + params.toString(), {
@@ -5048,6 +5072,8 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase, preservarMonta
         if (window.salesOffline.active) return;
         if (
             clienteAtualizado
+            && requisicao === clienteDetalheRequisicao
+            && String(clienteAtualizado.id) === clienteIdSolicitado
             && clienteSelecionado?.id
             && !clienteResumoSuspenso
             && String(clienteSelecionado.id) === clienteIdSolicitado
@@ -5055,7 +5081,12 @@ async function atualizarClienteSelecionadoDoServidor(clienteBase, preservarMonta
             if (preservarMontagem) {
                 clienteSelecionado = {...clienteAtualizado, nome:clienteSelecionado.nome, prazo:clienteSelecionado.prazo};
                 atualizarCabecalhoCliente(clienteSelecionado);
-            } else preencherResumoCliente(clienteAtualizado);
+            } else {
+                const condicoesAlteradas = condicoesPagamentoRevisao !== revisaoInicial
+                    || tipoVenda.value !== pagamentoInicial
+                    || vencimentoVenda.value !== vencimentoInicial;
+                preencherResumoCliente(clienteAtualizado, false, condicoesAlteradas);
+            }
         }
     } catch (erro) {
     }
@@ -6089,6 +6120,10 @@ async function lerJsonConferenciaEstoque(resposta, mensagemPadrao) {
                 : mensagemPadrao);
         }
         const erroDados = await resposta.json();
+        if (erroDados.autorizacao_necessaria) {
+            conferenciaEstoquePermissoes = {confirmar: false, corrigir: false};
+            if (autorizacaoConferenciaEstoque) autorizacaoConferenciaEstoque.hidden = false;
+        }
         throw new Error(erroDados.mensagem || mensagemPadrao);
     }
     if (!contentType.includes("application/json")) {
@@ -6121,6 +6156,9 @@ function bloquearAcoesConferenciaEstoque(bloquear) {
     ].forEach((botao) => {
         if (botao) botao.disabled = bloquear;
     });
+    if (btnConfirmarConferenciaEstoque) btnConfirmarConferenciaEstoque.disabled = bloquear || !conferenciaEstoquePermissoes.confirmar;
+    if (btnCorrigirConferenciaEstoque) btnCorrigirConferenciaEstoque.disabled = bloquear || !conferenciaEstoquePermissoes.corrigir;
+    if (consultarConferenciaNovamente) consultarConferenciaNovamente.disabled = bloquear;
 }
 
 function alternarFocoAcoesConferenciaEstoque(evento) {
@@ -6181,6 +6219,8 @@ function renderizarHistoricoConferenciaEstoque(movimentacao) {
 function renderizarModalConferenciaEstoque(dados) {
     const produtoDados = dados?.produto;
     if (!produtoDados) return;
+    conferenciaEstoquePermissoes = dados.permissoes || {confirmar: false, corrigir: false};
+    if (autorizacaoConferenciaEstoque) autorizacaoConferenciaEstoque.hidden = !!(conferenciaEstoquePermissoes.confirmar && conferenciaEstoquePermissoes.corrigir);
     conferenciaEstoqueProdutoAtualId = String(produtoDados.id);
     conferenciaEstoqueOptionAtual = atualizarOptionConferenciaEstoque(produtoDados) || conferenciaEstoqueOptionAtual;
     if (modalConferenciaEstoqueProduto) modalConferenciaEstoqueProduto.textContent = produtoDados.nome || "Produto";
@@ -6201,6 +6241,8 @@ function abrirModalConferenciaEstoque(opt) {
     const produtoId = opt?.dataset?.produtoId;
     if (!produtoId || !modalConferenciaEstoque || conferenciaEstoqueRequisicaoEmAndamento) return;
     conferenciaEstoqueOptionAtual = opt;
+    conferenciaEstoquePermissoes = {confirmar: false, corrigir: false};
+    if (autorizacaoConferenciaEstoque) autorizacaoConferenciaEstoque.hidden = true;
     conferenciaEstoqueProdutoAtualId = String(produtoId);
     modalConferenciaEstoque.classList.add("ativo");
     modalConferenciaEstoque.setAttribute("aria-hidden", "false");
@@ -6232,6 +6274,10 @@ function abrirModalConferenciaEstoque(opt) {
         .finally(() => {
             bloquearAcoesConferenciaEstoque(false);
         });
+}
+
+if (consultarConferenciaNovamente) {
+    consultarConferenciaNovamente.addEventListener("click", () => abrirModalConferenciaEstoque(conferenciaEstoqueOptionAtual));
 }
 
 function fecharModalConferenciaEstoque() {
@@ -7040,7 +7086,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     const envioProtegido = window.salesDraftBridge?.eligible === true;
     try {
         let retorno;
-        if (envioProtegido) {
+        if (window.localSalesContext) {
+            retorno = await window.localSales.submit(dadosVenda);
+            if (!retorno) return;
+        } else if (envioProtegido) {
             retorno = await window.salesDraftUI.submitOnline(dadosVenda.origem_recebimento, obterCookie("csrftoken"));
             if (!retorno) return;
         } else {
@@ -7093,6 +7142,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             marcarVendaEdicaoComoSalva();
         } else {
             limparVendaAposGravacao();
+            await window.localSales?.afterSuccess();
         }
     } catch (erro) {
         if (vendaSalvaComSucesso) {
@@ -7518,6 +7568,7 @@ btnNovaVenda.addEventListener("click", async () => {
         : "Deseja limpar toda a venda atual?";
     const confirmou = await confirmarAcaoVenda(mensagem, { focoInicial: "confirmar" });
     if (!confirmou) return;
+    if (window.localSalesContext) { await window.localSales.startNew(); return; }
 
     if (vendaEdicaoVenda?.id) {
         sairModoEdicaoParaNovaVenda();
@@ -7559,6 +7610,7 @@ btnNovaVendaEdicao?.addEventListener("click", async () => {
         { focoInicial: "confirmar" }
     );
     if (!confirmou) return;
+    if (window.localSalesContext) { await window.localSales.startNew(); return; }
     sairModoEdicaoParaNovaVenda();
 });
 
@@ -8669,6 +8721,7 @@ atualizarTotalGeral();
 
 // A narrow bridge reuses the existing renderer without persisting HTML or finance.
 window.salesDraftBridge = {
+    getData: coletarDadosVenda,
     ensureNewDate() {
         if (dataVendaEscolhidaExplicitamente || dataVenda.value === dataLocalHojeInput()) return;
         const vencimentoAutomatico = vencimentoVenda.value === calcularVencimentoCliente();
@@ -9531,9 +9584,13 @@ const operador = buscarCampoOperadorVenda();
 
 {% include "estoque/includes/atalho_despesa_global.html" %}
 {% include "estoque/includes/revisao_precos_posterior.html" %}
-<script type="module" src="/offline/assets/2-8g-close/app.js"></script>
-<script type="module" src="/offline/assets/2-8g-auth-link/sales.js"></script>
-<script type="module" src="/offline/assets/2-8g-auth-link/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/local-controlled-v1/app.js"></script>
+{% if local_sales_context %}
+<script type="module" src="/offline/assets/local-controlled-v1/local-sales.js"></script>
+{% else %}
+<script type="module" src="/offline/assets/local-controlled-v1/sales.js"></script>
+<script type="module" src="/offline/assets/local-controlled-v1/sales-draft-ui.js"></script>
+{% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>
     .offline-commercial { width:100%; box-sizing:border-box; border-top:1px solid #dbe3ed; padding-top:8px; overflow-wrap:anywhere; }

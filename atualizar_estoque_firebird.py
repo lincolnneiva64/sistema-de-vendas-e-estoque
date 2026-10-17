@@ -329,8 +329,11 @@ def aplicar(comparacao):
             if (produto.codigo_legado or "").strip() != item["produto"].codigo_legado.strip():
                 raise ValueError(f"codigo divergente no produto {produto.id}")
             if produto.quantidade != esperados[produto.id]:
+                estoque_antes = produto.quantidade
                 produto.quantidade = esperados[produto.id]
                 produto.save(update_fields=["quantidade"])
+                from inventario.rastreabilidade import identificar
+                identificar(produto.pk, estoque_antes, produto.quantidade, "sincronizacao_firebird", "Aplicação do motor de sincronização")
 
         for produto in Produto.objects.filter(id__in=ids):
             if produto.quantidade != esperados[produto.id]:

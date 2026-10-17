@@ -1,4 +1,4 @@
-import '/offline/assets/2-8g-auth-link/sales.js';
+import '/offline/assets/local-controlled-v1/sales.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
@@ -57,6 +57,7 @@ nextSale.addEventListener('click', () => { void window.salesDraftUI.startNextSal
 document.getElementById('layout-vendas').prepend(box);
 box.hidden = !bridge.eligible;
 let repo, scope, revision = 0, saved = '', activeDraftId = null, blocked = false, suppress = true, ignoreReset = false;
+document.addEventListener('sales-identity-blocked', () => { blocked = true; clearTimeout(timer); });
 let timer, pending = Promise.resolve(), submitted = null;
 let replaceConfirmed = false;
 let preparedSubmission = false;
@@ -370,7 +371,7 @@ function schedule(delay = 250) {
 function flush() {
     offlineActions();
     clearTimeout(timer);
-    if (suppress || ignoreReset || blocked || queueBlocked || !scope || !bridge.eligible) return pending;
+    if (suppress || ignoreReset || blocked || window.salesOffline.identityBlocked || queueBlocked || !scope || !bridge.eligible) return pending;
     if (!saved && meaningful(bridge.capture())) {
         bridge.ensureNewDate?.();
         dateNote.textContent = 'Data da nova montagem: ' + bridge.capture().data_venda + '.'; dateNote.hidden = false;
@@ -379,7 +380,7 @@ function flush() {
     if (fingerprint === saved || (!saved && !meaningful(assembly))) return pending;
     message.textContent = 'Salvando rascunho local…';
     pending = pending.then(async () => {
-        if (blocked || fingerprint === saved) return;
+        if (blocked || window.salesOffline.identityBlocked || fingerprint === saved) return;
         try {
             const result = await saveDraft(repo, scope, assembly, revision, replaceConfirmed);
             replaceConfirmed = false;
@@ -411,13 +412,23 @@ function resetVisual() {
 async function checkIdentity() {
     if (!scope || !repo) return false;
     const identity = await repo.get('metadata', 'sales-identity'), device = await repo.get('metadata', 'device');
-    if (identity?.actor_id !== scope.actor_id || identity?.environment_id !== scope.environment_id || device?.id !== scope.device_id) {
+    const session = window.salesSessionStatus;
+    const differentUser = session?.authenticated === true && session.environment_id === scope.environment_id
+        && session.actor_id && session.actor_id !== scope.actor_id;
+    const differentIdentity = differentUser || identity?.actor_id !== scope.actor_id || identity?.environment_id !== scope.environment_id;
+    if (differentIdentity || device?.id !== scope.device_id) {
         blocked = true; clearTimeout(timer); resetVisual();
         completionGeneration++;
-        message.textContent = 'Identidade mudou. Rascunho anterior preservado e montagem limpa.';
+        message.textContent = differentIdentity
+            ? 'Identidade mudou. Rascunho anterior preservado e montagem limpa.'
+            : 'Dispositivo local mudou. Rascunho anterior preservado e montagem bloqueada.';
         setDiscardEnabled(false);
         officialLink.hidden = true;
         diagnostics.replaceChildren();
+        return false;
+    }
+    if (!window.salesOffline.active && (session?.authenticated === false || window.salesOffline.authenticationRequired)) {
+        message.textContent = 'Sess\u00e3o ausente ou expirada. Entre novamente e reabra Vendas. Rascunho preservado.';
         return false;
     }
     return true;
@@ -630,6 +641,10 @@ window.salesDraftUI = {
         finally { suppress = false; }
     },
     async beforeSubmit() {
+        if (window.salesOffline.identityBlocked) return false;
+        if (document.getElementById('offline-global')?.dataset.actor && !window.salesOffline.active && (window.salesSessionStatus?.authenticated === false || window.salesOffline.authenticationRequired)) {
+            bridge.error('Entre novamente e reabra Vendas antes de gravar. Rascunho preservado.'); return false;
+        }
         if (!bridge.eligible) return true;
         await flush();
         let record = null;
@@ -763,6 +778,9 @@ if (operationChannel) operationChannel.onmessage = event => {
         && event.data.environment === scope.environment_id) void refreshCompletion().catch(showError);
 };
 const identityChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-identity') : null;
+document.addEventListener('sales-session-status', () => { void checkIdentity(); });
+const sessionChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-session') : null;
+if (sessionChannel) sessionChannel.onmessage = () => { void checkIdentity(); };
 if (identityChannel) identityChannel.onmessage = () => { void checkIdentity(); };
 if (channel) channel.onmessage = async event => {
     const update = event.data;

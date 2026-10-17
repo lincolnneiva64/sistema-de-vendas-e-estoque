@@ -42,12 +42,14 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const cache=await caches.open('offline-pilot-shell-v31-isolated-sales-drafts');
-                    return keys.includes('offline-pilot-shell-v31-isolated-sales-drafts')
+                    const current=keys.find(key=>key === 'offline-pilot-shell-v40-piloto-integrado');
+                    if(!current)return false;
+                    const cache=await caches.open(current);
+                    return keys.includes(current)
                         && !keys.includes('offline-pilot-shell-v30-admin-close')
                         && !!(await cache.match('/offline/vendas-shell/'))
                         && !!(await cache.match('/offline/assets/2-8g-close/sales-closures.js'))
-                        && !!(await cache.match('/offline/assets/2-8g-close/sales-draft-ui.js'));
+                        && !!(await cache.match('/offline/assets/2-8i-local-auth/sales-draft-ui.js'));
                 })()""")
                 self.assertTrue(cache_has_sales_shell)
 
@@ -147,7 +149,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate('unidade.value="CX";unidade.dispatchEvent(new Event("change",{bubbles:true}));true')
                 tab.evaluate('quantidade.value="11";document.getElementById("btnAdicionarItemVenda").click();true')
                 self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'),0)
-                self.assertIn('Estoque local insuficiente',tab.evaluate('document.getElementById("sales-draft-status").textContent'))
+                self.assertIn('Estoque local insuficiente',tab.evaluate('vendaErroMensagem.textContent'))
                 tab.evaluate('quantidade.value="10";document.getElementById("btnAdicionarItemVenda").click();true')
                 tab.wait('document.querySelectorAll("#tabelaProdutos tr").length===1')
                 self.assertIn('240', tab.evaluate('totalGeral.textContent'))

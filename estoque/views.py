@@ -19,6 +19,7 @@ from pathlib import Path
 from datetime import date, timedelta
 from types import SimpleNamespace
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core import signing
 from django.db import IntegrityError, transaction
@@ -28,6 +29,7 @@ from django.db.models.functions import Coalesce
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse, urlsplit, urlunsplit
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
 from .models import GrupoProdutoVinculado
@@ -59,6 +61,7 @@ from .services.sincronizacao_firebird import (
 )
 from .services.vendas import ErroGravarVenda, criar_ou_atualizar_venda
 from .services.estoque_manual import conferir_ou_ajustar_estoque
+from inventario.rastreabilidade import identificar, referenciar_venda
 from .services.separacao_vendas import (
     consolidar_alteracoes_fisicas_apos_separacao,
     criar_ou_obter_separacao_venda,
@@ -7429,11 +7432,12 @@ def _produto_conferencia_estoque_payload(produto):
     }
 
 
-def _estado_conferencia_estoque_payload(produto):
+def _estado_conferencia_estoque_payload(produto, usuario):
     return {
         "sucesso": True,
         "produto": _produto_conferencia_estoque_payload(produto),
         "conferencia": _contadores_conferencia_estoque(),
+        "permissoes": {acao: usuario.has_perms(permissoes) for acao, permissoes in _PERMISSOES_CONFERENCIA_ESTOQUE.items()},
     }
 
 
@@ -7461,37 +7465,25 @@ def _status_erro_conferencia_estoque(exc):
     return 400
 
 
-def _operador_conferencia_estoque(request, dados=None):
-    if getattr(request.user, "is_authenticated", False):
-        return request.user, request.user.get_username(), None
+_PERMISSOES_CONFERENCIA_ESTOQUE = {
+    "consultar": ("estoque.view_produto",),
+    "confirmar": ("estoque.view_produto", "estoque.add_movimentacaoestoquemanual"),
+    "corrigir": ("estoque.view_produto", "estoque.change_produto", "estoque.add_movimentacaoestoquemanual"),
+}
 
-    operador = (
-        request.headers.get("X-Operador-Venda")
-        or request.headers.get("X-Operador-Estoque")
-        or request.GET.get("operador")
-        or ""
-    ).strip()
-    if dados is not None and not operador:
-        operador = str(dados.get("operador") or "").strip()
 
-    if not operador:
-        return None, "", JsonResponse(
-            {"sucesso": False, "mensagem": "Selecione um operador autorizado para consultar o estoque."},
-            status=403,
-        )
-
-    funcionario = Funcionario.objects.filter(
-        nome=operador,
-        ativo=True,
-        pode_operar_sistema=True,
-    ).first()
-    if not funcionario:
-        return None, "", JsonResponse(
-            {"sucesso": False, "mensagem": "Operador nao autorizado para consultar o estoque."},
-            status=403,
-        )
-
-    return None, funcionario.nome, None
+def _operador_conferencia_estoque(request, *, acao="consultar"):
+    from .autorizacao_estoque import usuario_estoque
+    usuario = usuario_estoque(request)
+    if (usuario is None
+            or not usuario.has_perms(_PERMISSOES_CONFERENCIA_ESTOQUE[acao])):
+        return None, "", JsonResponse({
+            "sucesso": False,
+            "mensagem": "Autorizacao necessaria para esta acao de estoque. Entre com uma conta com permissao; a venda pode continuar normalmente.",
+            "autorizacao_necessaria": True,
+        }, status=403)
+    # A selected employee name is attribution in Sales, never a credential here.
+    return usuario, usuario.get_username(), None
 
 
 def _registrar_operador_conferencia_estoque(resultado, operador_nome):
@@ -7501,9 +7493,10 @@ def _registrar_operador_conferencia_estoque(resultado, operador_nome):
         historico.save(update_fields=["operador_nome"])
 
 
+@never_cache
 @require_GET
 def conferencia_estoque_produto(request, produto_id):
-    _usuario, _operador_nome, resposta_operador = _operador_conferencia_estoque(request)
+    usuario, _operador_nome, resposta_operador = _operador_conferencia_estoque(request)
     if resposta_operador:
         return resposta_operador
 
@@ -7513,12 +7506,13 @@ def conferencia_estoque_produto(request, produto_id):
             {"sucesso": False, "mensagem": "Produto inexistente, inativo ou excluido."},
             status=404,
         )
-    return JsonResponse(_estado_conferencia_estoque_payload(produto))
+    return JsonResponse(_estado_conferencia_estoque_payload(produto, usuario))
 
 
+@never_cache
 @require_POST
 def conferencia_estoque_confirmar(request, produto_id):
-    usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request)
+    usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request, acao="confirmar")
     if resposta_operador:
         return resposta_operador
 
@@ -7535,16 +7529,17 @@ def conferencia_estoque_confirmar(request, produto_id):
         )
 
     _registrar_operador_conferencia_estoque(resultado, operador_nome)
-    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
+    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"], usuario))
 
 
+@never_cache
 @require_POST
 def conferencia_estoque_corrigir(request, produto_id):
+    usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request, acao="corrigir")
+    if resposta_operador:
+        return resposta_operador
     try:
         dados = _json_request_data(request)
-        usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request, dados)
-        if resposta_operador:
-            return resposta_operador
 
         resultado = conferir_ou_ajustar_estoque(
             produto_id,
@@ -7561,7 +7556,7 @@ def conferencia_estoque_corrigir(request, produto_id):
         )
 
     _registrar_operador_conferencia_estoque(resultado, operador_nome)
-    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"]))
+    return JsonResponse(_estado_conferencia_estoque_payload(resultado["produto"], usuario))
 
 
 def _ultimas_compras_produtos_para_lista_fornecedor(produto_ids, limite=3):
@@ -11486,6 +11481,7 @@ def compras_nova(request):
                     produto = Produto.objects.select_for_update().get(pk=item["produto"].pk)
                     produto.quantidade = Decimal(str(produto.quantidade or "0")) + item["quantidade"]
                     produto.save(update_fields=["quantidade", "atualizado_em"])
+                    identificar(produto.pk, produto.quantidade - item["quantidade"], produto.quantidade, "compra", f"Compra #{compra.pk}")
 
                     ProdutoFornecedor.objects.update_or_create(
                         produto=produto,
@@ -12089,6 +12085,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
 
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
             produto.save(update_fields=["quantidade", "atualizado_em"])
+            identificar(produto.pk, produto.quantidade - item.quantidade, produto.quantidade, "compra", f"Compra #{compra.pk}")
             _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids, compra=compra)
             if compra.fornecedor_id:
                 ProdutoFornecedor.objects.update_or_create(
@@ -13193,6 +13190,7 @@ def compra_corrigir_itens(request, pk):
                         raise ValueError(f"A correcao deixaria o estoque de {produto.nome} negativo.")
                     produto.quantidade = estoque_novo
                     produto.save(update_fields=["quantidade", "atualizado_em"])
+                    identificar(produto.pk, estoque_novo - delta, estoque_novo, "edicao_compra", f"Compra #{compra.pk}")
 
                 for item, remover, quantidade, preco, subtotal in planos_existentes:
                     if remover:
@@ -13804,6 +13802,7 @@ def _compra_excluir_transacional(request, pk):
 
                 produto.quantidade = novo_estoque
                 produto.save(update_fields=["quantidade", "atualizado_em"])
+                identificar(produto.pk, quantidade_atual, novo_estoque, "estorno_compra", f"Compra #{compra.pk}")
 
         if compra.status == Compra.STATUS_FINALIZADA:
             for item in itens:
@@ -16144,6 +16143,7 @@ def revisao_precos_posterior_salvar(request):
 
 
 def vendas(request):
+    from offline.local_sales import page_context
     produtos = Produto.objects.filter(excluido=False, ativo=True).order_by('nome')
     conferencia_estoque_contador = _contadores_conferencia_estoque()
     cliente_inicial = None
@@ -16303,6 +16303,7 @@ def vendas(request):
 
     return render(request, 'estoque/vendas_layout_teste.html', {
         **contexto_rascunho,
+        'local_sales_context': page_context(request),
         'avisos_visitas_fornecedores': avisos_visitas_fornecedores,
         'avisos_visitas_fornecedores_painel': avisos_visitas_fornecedores_painel,
         'pendencias_vendas_qtd': pendencias_vendas_qtd,
@@ -22116,6 +22117,7 @@ def _baixar_estoque_produto(
         quantidade=produto.quantidade,
         atualizado_em=timezone.now(),
     )
+    identificar(produto.pk, estoque_atual, produto.quantidade, "venda")
     print(
         "[venda estoque baixa]",
         f"produto={produto.nome}",
@@ -22158,6 +22160,7 @@ def _devolver_estoque_produto(
         quantidade=produto.quantidade,
         atualizado_em=timezone.now(),
     )
+    identificar(produto.pk, estoque_atual, produto.quantidade, "devolucao_venda")
     return estoque_atual, produto.quantidade
 
 
@@ -22500,6 +22503,9 @@ def _sincronizar_despesas_consumo_proprio(venda):
 
 @require_POST
 def gravar_venda(request):
+    from offline.local_sales import permitted
+    if permitted(request):
+        return JsonResponse({"sucesso": False, "mensagem": "Use o envio protegido de Vendas; envio legado local bloqueado."}, status=409)
     try:
         dados = json.loads(request.body.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -26918,6 +26924,7 @@ def _registrar_evento_venda(
 ):
     if not venda:
         return None
+    referenciar_venda(venda)
     usuario_texto = usuario if usuario is not None else (venda.operador or "")
     return EventoVenda.objects.create(
         venda=venda,
