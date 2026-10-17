@@ -702,7 +702,7 @@ select {
 .locacoes-operacionais-venda.alerta .atalhos-venda-toggle {
     background: #dc2626;
     border-color: #dc2626;
-    animation: locacoesOperacionaisPulso 315s ease-in-out infinite;
+    animation: locacoesOperacionaisPulso 1.5s ease-in-out infinite;
 }
 .locacoes-operacionais-badge {
     display: inline-flex;
@@ -722,25 +722,12 @@ select {
     color: #991b1b;
 }
 @keyframes locacoesOperacionaisPulso {
-    0%, 0.95%, 1.90%, 2.86%, 3.81%, 4.76% {
-        box-shadow: 0 10px 24px rgba(220, 38, 38, 0.24);
-        filter: brightness(1);
-        transform: scale(1);
-    }
-
-    0.48%, 1.43%, 2.38%, 3.33%, 4.29% {
-        box-shadow:
-            0 0 0 10px rgba(239, 68, 68, 0.28),
-            0 10px 42px rgba(220, 38, 38, 0.85);
-        filter: brightness(1.55);
-        transform: scale(1.085);
-    }
-
-    4.77%, 100% {
-        box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18);
-        filter: brightness(1);
-        transform: scale(1);
-    }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); }
+    50% { box-shadow: 0 0 0 9px rgba(220,38,38,.15); filter: brightness(1.18); }
+}
+.locacoes-operacionais-venda .locacoes-rapidas-card.entrega-hoje {
+    border: 3px solid #dc2626;
+    box-shadow: 0 0 0 1px #dc2626;
 }
 .locacoes-rapidas-tabs {
     display: grid;
@@ -3147,7 +3134,7 @@ td:first-child {
                 <div class="locacoes-rapidas-lista" data-locacoes-lista>
                     {% for item in locacoes_operacionais.itens %}
                         <article
-                            class="locacoes-rapidas-card {% if item.vencida %}atrasada{% elif item.advertencia_lateral %}proxima{% endif %}"
+                            class="locacoes-rapidas-card {% if item.entrega_hoje %}entrega-hoje{% endif %} {% if item.vencida %}atrasada{% elif item.advertencia_lateral %}proxima{% endif %}"
                             data-locacoes-card
                             data-tipo="{{ item.tipo }}"
                             data-tarefa-id="{{ item.tarefa.id }}"
@@ -7251,8 +7238,16 @@ function configurarLocacoesRapidas() {
         const recentes = cards.filter(card => card.isConnected && card.dataset.entregaAntiga !== "1");
         let atrasada = false;
         let advertencia = false;
+        let entregaUrgente = false;
         recentes.forEach(card => {
             const data = card.dataset.dataLateral;
+            const entregaHoje = card.dataset.tipo === "entrega" && data === hoje;
+            if (entregaHoje) {
+                card.classList.add("entrega-hoje");
+                advertencia = true;
+                const prazoEntrega = Number(card.dataset.horarioLateral);
+                if (prazoEntrega > 0 && prazoEntrega - agora.getTime() <= 60 * 60 * 1000) entregaUrgente = true;
+            } else card.classList.remove("entrega-hoje");
             const horario = Number(card.dataset.horarioLateral);
             if (data < hoje || (data === hoje && horario > 0 && horario <= agora.getTime())) {
                 card.classList.add("atrasada");
@@ -7288,8 +7283,8 @@ function configurarLocacoesRapidas() {
                 if (prazo.textContent !== novoTexto) prazo.textContent = novoTexto;
             }
         });
-        locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada);
-        locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && advertencia);
+        locacoesOperacionaisVenda?.classList.toggle("alerta", atrasada || entregaUrgente);
+        locacoesOperacionaisVenda?.classList.toggle("advertencia", !atrasada && !entregaUrgente && advertencia);
     }
     clearInterval(temporizadorLocacoesRapidas);
     temporizadorLocacoesRapidas = setInterval(atualizarAlertaLateral, 1000);

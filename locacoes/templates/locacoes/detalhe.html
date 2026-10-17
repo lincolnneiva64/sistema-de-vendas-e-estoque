@@ -75,7 +75,7 @@
         <div><strong>Contratante</strong><br>{{ locacao.nome_contratante }}</div>
         <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} às {{ locacao.horario_entrega|time:"H:i" }}</div>
         <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} às {{ locacao.horario_evento|time:"H:i" }}</div>
-        <div><strong>Devolução prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</div>
+        <div><strong>Devolução prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}{% if locacao.horario_previsto_devolucao %} às {{ locacao.horario_previsto_devolucao|time:"H:i" }}{% else %} (sem horario: fim do dia){% endif %}</div>
         <div><strong>Localidade/preço</strong><br>{{ locacao.faixa_preco_nome_snapshot }}</div>
         <div><strong>Endereço da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
         <div><strong>Total</strong><br>R$ {{ locacao.total|floatformat:2 }}</div>

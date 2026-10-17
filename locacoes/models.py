@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, time
 
 from decimal import Decimal
 
@@ -315,6 +315,7 @@ class Locacao(models.Model):
     endereco_entrega = models.TextField()
     data_entrega = models.DateField()
     horario_entrega = models.TimeField()
+    horario_previsto_devolucao = models.TimeField(null=True, blank=True)
     data_evento = models.DateField()
     horario_evento = models.TimeField()
     data_prevista_devolucao = models.DateField()
@@ -441,39 +442,51 @@ class Locacao(models.Model):
         data_prevista_devolucao,
         excluir_id=None,
         locacoes_rua=None,
+        horario_entrega=None,
+        horario_previsto_devolucao=None,
     ):
-        locacoes_reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA).filter(
-            cls.periodo_conflita_q(data_entrega, data_prevista_devolucao)
-        )
-        if locacoes_rua is None:
-            locacoes_rua = cls.locacoes_com_material_na_rua().filter(
-                data_entrega__lte=data_prevista_devolucao,
-            )
-            if excluir_id:
-                locacoes_rua = locacoes_rua.exclude(pk=excluir_id)
-        else:
-            locacoes_rua = [
-                locacao
-                for locacao in locacoes_rua
-                if (
-                    locacao.data_entrega <= data_prevista_devolucao
-                    and (not excluir_id or locacao.pk != excluir_id)
-                )
-            ]
-        if excluir_id:
-            locacoes_reservadas = locacoes_reservadas.exclude(pk=excluir_id)
+        inicio, fim = cls.intervalo_reserva(data_entrega, data_prevista_devolucao,
+                                            horario_entrega, horario_previsto_devolucao)
+        agora = timezone.localtime()
+        eventos = []
+        reservadas = cls.objects.filter(status=cls.STATUS_RESERVADA,
+                                        data_entrega__lte=data_prevista_devolucao).prefetch_related("itens")
+        rua = locacoes_rua if locacoes_rua is not None else cls.locacoes_com_material_na_rua()
+        for locacao in [*reservadas, *rua]:
+            if excluir_id and locacao.pk == excluir_id:
+                continue
+            comeco, termino = cls.intervalo_reserva(
+                locacao.data_entrega, locacao.data_prevista_devolucao,
+                locacao.horario_entrega, locacao.horario_previsto_devolucao)
+            na_rua = locacao.status != cls.STATUS_RESERVADA
+            # Previsao futura permite planejamento; atraso nao confirmado bloqueia
+            # indefinidamente, sem registrar uma devolucao fisica ficticia.
+            if termino <= agora:
+                termino = max(fim, agora) if na_rua else termino
+            if comeco >= fim or termino <= inicio:
+                continue
+            quantidade = (cls.material_pendente_na_rua(locacao) if na_rua else
+                          cls.necessidades_quantidades_contratadas(locacao.quantidades_contratadas()))
+            eventos.append((max(comeco, inicio), 1, quantidade))
+            eventos.append((min(termino, fim), -1, quantidade))
+        atual = {"mesas": 0, "cadeiras": 0}
+        pico = atual.copy()
+        # Intervalos [inicio, fim): devolucoes liberam antes de entregas simultaneas.
+        for instante, sinal, quantidade in sorted(eventos, key=lambda e: (e[0], e[1])):
+            for chave in atual:
+                atual[chave] += sinal * quantidade[chave]
+                pico[chave] = max(pico[chave], atual[chave])
+        return pico
 
-        mesas = 0
-        cadeiras = 0
-        for item in ItemLocacao.objects.filter(locacao__in=locacoes_reservadas):
-            necessidade = item.necessidade_estoque()
-            mesas += necessidade["mesas"]
-            cadeiras += necessidade["cadeiras"]
-        for locacao in locacoes_rua:
-            pendente = cls.material_pendente_na_rua(locacao)
-            mesas += pendente["mesas"]
-            cadeiras += pendente["cadeiras"]
-        return {"mesas": mesas, "cadeiras": cadeiras}
+    @staticmethod
+    def intervalo_reserva(data_entrega, data_devolucao, horario_entrega=None, horario_devolucao=None):
+        def horario(valor, padrao):
+            return time.fromisoformat(valor) if isinstance(valor, str) and valor else valor or padrao
+        inicio = timezone.make_aware(datetime.combine(data_entrega, horario(horario_entrega, time.min)))
+        fim = timezone.make_aware(datetime.combine(data_devolucao, horario(horario_devolucao, time.max)))
+        if fim <= inicio:
+            raise ValidationError("A devolucao prevista deve ser posterior ao horario da entrega.")
+        return inicio, fim
 
     @classmethod
     def locacoes_com_material_na_rua(cls, prefetch=True):
@@ -623,16 +636,17 @@ class Locacao(models.Model):
                 "cadeiras": cadeiras,
             }
 
-        disponibilidade = cls.disponibilidade_periodo(
-            data_referencia,
-            data_prevista_devolucao or data_referencia,
-            excluir_id=excluir_id,
-            configuracao=configuracao,
-            locacoes_rua=locacoes_rua,
-        )
+        # Material ainda na rua nao e estoque fisicamente disponivel agora.
+        rua_total = {"mesas": 0, "cadeiras": 0}
+        for locacao in locacoes_rua:
+            pendente = cls.material_pendente_na_rua(locacao)
+            for chave in rua_total:
+                rua_total[chave] += pendente[chave]
+        reservas = cls.reservados_no_periodo(data_referencia,
+            data_prevista_devolucao or data_referencia, excluir_id=excluir_id, locacoes_rua=[])
         estoque_agora = linha(
-            disponibilidade["disponivel_mesas"],
-            disponibilidade["disponivel_cadeiras"],
+            int(configuracao.total_mesas or 0) - rua_total["mesas"] - reservas["mesas"],
+            int(configuracao.total_cadeiras or 0) - rua_total["cadeiras"] - reservas["cadeiras"],
         )
         # Entregas ainda comprometidas no dia civil atual, sem inferir
         # execucao a partir do status de tarefas administrativas.
@@ -676,6 +690,8 @@ class Locacao(models.Model):
         excluir_id=None,
         configuracao=None,
         locacoes_rua=None,
+        horario_entrega=None,
+        horario_previsto_devolucao=None,
     ):
         configuracao = configuracao or ConfiguracaoLocacao.obter()
         reservado = cls.reservados_no_periodo(
@@ -683,6 +699,8 @@ class Locacao(models.Model):
             data_prevista_devolucao,
             excluir_id=excluir_id,
             locacoes_rua=locacoes_rua,
+            horario_entrega=horario_entrega,
+            horario_previsto_devolucao=horario_previsto_devolucao,
         )
         saldo_mesas = int(configuracao.total_mesas or 0)
         saldo_cadeiras = int(configuracao.total_cadeiras or 0)
@@ -787,29 +805,32 @@ class Locacao(models.Model):
         return not self.impedimentos_exclusao()
 
     @classmethod
-    def validar_disponibilidade(cls, data_entrega, data_prevista_devolucao, itens, excluir_id=None):
+    def validar_disponibilidade(cls, data_entrega, data_prevista_devolucao, itens, excluir_id=None, horario_entrega=None, horario_previsto_devolucao=None):
         necessidade = cls.necessidades_itens(itens)
-        disponibilidade = cls.disponibilidade_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id)
+        disponibilidade = cls.disponibilidade_periodo(data_entrega, data_prevista_devolucao, excluir_id=excluir_id, horario_entrega=horario_entrega, horario_previsto_devolucao=horario_previsto_devolucao)
         erros = []
         if necessidade["mesas"] > disponibilidade["disponivel_mesas"]:
-            erros.append("Mesas indisponiveis no periodo informado.")
+            erros.append(f"Mesas indisponiveis no periodo informado: {disponibilidade['disponivel_mesas']} disponiveis.")
         if necessidade["cadeiras"] > disponibilidade["disponivel_cadeiras"]:
-            erros.append("Cadeiras indisponiveis no periodo informado.")
+            erros.append(f"Cadeiras indisponiveis no periodo informado: {disponibilidade['disponivel_cadeiras']} disponiveis.")
         if erros:
             raise ValidationError(erros)
         return {**disponibilidade, "solicitado_mesas": necessidade["mesas"], "solicitado_cadeiras": necessidade["cadeiras"]}
 
     @classmethod
+    @transaction.atomic
     def criar_reserva(cls, dados, itens, responsavel=""):
         itens_validos = [item for item in itens if int(item.get("quantidade") or 0) > 0]
         if not itens_validos:
             raise ValidationError("Inclua pelo menos um item na locacao.")
 
         diarias = cls.calcular_diarias(dados["data_entrega"], dados["data_prevista_devolucao"])
-        cls.validar_disponibilidade(dados["data_entrega"], dados["data_prevista_devolucao"], itens_validos)
 
         with transaction.atomic():
             configuracao = ConfiguracaoLocacao.obter()
+            ConfiguracaoLocacao.objects.select_for_update().get(pk=configuracao.pk)
+            cls.validar_disponibilidade(dados["data_entrega"], dados["data_prevista_devolucao"], itens_validos,
+                horario_entrega=dados.get("horario_entrega"), horario_previsto_devolucao=dados.get("horario_previsto_devolucao"))
             locacao = cls.objects.create(
                 cliente=dados.get("cliente"),
                 tipo_pessoa=dados["tipo_pessoa"],
@@ -819,6 +840,7 @@ class Locacao(models.Model):
                 endereco_entrega=dados["endereco_entrega"],
                 data_entrega=dados["data_entrega"],
                 horario_entrega=dados["horario_entrega"],
+                horario_previsto_devolucao=dados.get("horario_previsto_devolucao"),
                 data_evento=dados["data_evento"],
                 horario_evento=dados["horario_evento"],
                 data_prevista_devolucao=dados["data_prevista_devolucao"],
@@ -877,14 +899,12 @@ class Locacao(models.Model):
             dados["data_entrega"],
             dados["data_prevista_devolucao"],
         )
-        self.validar_disponibilidade(
-            dados["data_entrega"],
-            dados["data_prevista_devolucao"],
-            itens_validos,
-            excluir_id=self.pk,
-        )
-
         with transaction.atomic():
+            configuracao = ConfiguracaoLocacao.obter()
+            ConfiguracaoLocacao.objects.select_for_update().get(pk=configuracao.pk)
+            self.validar_disponibilidade(dados["data_entrega"], dados["data_prevista_devolucao"], itens_validos,
+                excluir_id=self.pk, horario_entrega=dados.get("horario_entrega"),
+                horario_previsto_devolucao=dados.get("horario_previsto_devolucao"))
             locacao = Locacao.objects.select_for_update().get(pk=self.pk)
             if not locacao.pode_editar_amplamente():
                 raise ValidationError(
@@ -899,6 +919,7 @@ class Locacao(models.Model):
             locacao.endereco_entrega = dados["endereco_entrega"]
             locacao.data_entrega = dados["data_entrega"]
             locacao.horario_entrega = dados["horario_entrega"]
+            locacao.horario_previsto_devolucao = dados.get("horario_previsto_devolucao")
             locacao.data_evento = dados["data_evento"]
             locacao.horario_evento = dados["horario_evento"]
             locacao.data_prevista_devolucao = dados["data_prevista_devolucao"]
@@ -955,6 +976,7 @@ class Locacao(models.Model):
                 "endereco_entrega",
                 "data_entrega",
                 "horario_entrega",
+                "horario_previsto_devolucao",
                 "data_evento",
                 "horario_evento",
                 "data_prevista_devolucao",

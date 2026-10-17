@@ -162,6 +162,7 @@ class LocacaoForm(forms.Form):
     )
     data_entrega = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_entrega = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
+    horario_previsto_devolucao = forms.TimeField(required=False, widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
     data_evento = forms.DateField(widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}))
     horario_evento = forms.TimeField(widget=forms.TimeInput(attrs={"class": "form-control", "type": "time"}))
     data_prevista_devolucao = forms.DateField(

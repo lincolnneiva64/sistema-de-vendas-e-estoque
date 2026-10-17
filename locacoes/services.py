@@ -51,7 +51,7 @@ def indicador_operacional_locacao(locacao, hoje=None):
 def dados_agendamento_tarefa(locacao, tipo):
     if tipo == TarefaOperacionalLocacao.TIPO_ENTREGA:
         return locacao.data_entrega, locacao.horario_entrega
-    return locacao.data_prevista_devolucao, None
+    return locacao.data_prevista_devolucao, locacao.horario_previsto_devolucao
 
 
 def whatsapp_web_url(telefone, texto=""):
@@ -758,6 +758,14 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
                  ).total_seconds() <= 30 * 60
         )
 
+        item["entrega_hoje"] = (
+            item["tipo"] == TarefaOperacionalLocacao.TIPO_ENTREGA
+            and item["tarefa"].data_agendada == agora.date())
+        item["alerta_lateral"] = item["vencida"] or (
+            item["entrega_hoje"] and item["proxima"])
+        if item["entrega_hoje"]:
+            item["advertencia_lateral"] = True
+
     itens.sort(key=lambda item: (
         0 if item["vencida"] else (1 if item["tarefa"].data_agendada == data_referencia else 2),
         item["tarefa"].data_agendada,
@@ -775,6 +783,7 @@ def painel_operacional_rapido_locacoes(request, data_referencia=None, agora=None
         "total_pendencias": len(itens),
         "total_recolhimentos": len(recolhimentos),
         "total_entregas_antigas": sum(item["entrega_antiga"] for item in itens),
-        "alerta": any(item["vencida"] and not item["entrega_antiga"] for item in itens),
-        "advertencia_lateral": any(item["advertencia_lateral"] and not item["entrega_antiga"] for item in itens),
+        "alerta": any(item["alerta_lateral"] and not item["entrega_antiga"] for item in itens),
+        "advertencia_lateral": (not any(item["alerta_lateral"] and not item["entrega_antiga"] for item in itens)
+                                and any(item["advertencia_lateral"] and not item["entrega_antiga"] for item in itens)),
     }

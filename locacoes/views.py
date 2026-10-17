@@ -74,6 +74,7 @@ def _initial_locacao_edicao(locacao):
         "endereco_entrega": locacao.endereco_entrega,
         "data_entrega": locacao.data_entrega,
         "horario_entrega": locacao.horario_entrega,
+        "horario_previsto_devolucao": locacao.horario_previsto_devolucao,
         "data_evento": locacao.data_evento,
         "horario_evento": locacao.horario_evento,
         "data_prevista_devolucao": locacao.data_prevista_devolucao,
@@ -862,11 +863,12 @@ def lista(request):
     )
 
 
-def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens, excluir_id=None):
+def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens, excluir_id=None, horario_entrega=None, horario_previsto_devolucao=None):
     if not data_entrega or not data_prevista_devolucao:
         return None
     try:
         diarias = Locacao.calcular_diarias(data_entrega, data_prevista_devolucao)
+        Locacao.intervalo_reserva(data_entrega, data_prevista_devolucao, horario_entrega, horario_previsto_devolucao)
     except ValidationError:
         return None
     necessidade = Locacao.necessidades_itens(itens)
@@ -874,6 +876,8 @@ def _contexto_disponibilidade(data_entrega, data_prevista_devolucao, itens, excl
         data_entrega,
         data_prevista_devolucao,
         excluir_id=excluir_id,
+        horario_entrega=horario_entrega,
+        horario_previsto_devolucao=horario_previsto_devolucao,
     )
     return {
         **disponibilidade,
@@ -972,7 +976,13 @@ def _quadro_disponibilidade_locacao(
     }
 
 
-def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jogos=0, mesas_avulsas=0, cadeiras_avulsas=0, excluir_id=None):
+def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jogos=0, mesas_avulsas=0, cadeiras_avulsas=0, excluir_id=None, horario_entrega=None, horario_previsto_devolucao=None):
+    if data_entrega and data_prevista_devolucao:
+        try:
+            Locacao.intervalo_reserva(data_entrega, data_prevista_devolucao, horario_entrega, horario_previsto_devolucao)
+        except (ValidationError, ValueError) as exc:
+            return {"status": "incompleto", "quadro": None,
+                    "mensagem": "; ".join(exc.messages) if isinstance(exc, ValidationError) else "Horario invalido."}
     configuracao = ConfiguracaoLocacao.obter()
     locacoes_rua = (
         _locacoes_rua_disponibilidade(excluir_id=excluir_id)
@@ -1010,21 +1020,14 @@ def _avaliar_disponibilidade_dinamica(data_entrega, data_prevista_devolucao, jog
     if cadeiras_avulsas:
         itens.append({"tipo": ItemLocacao.TIPO_CADEIRA_AVULSA, "quantidade": cadeiras_avulsas})
 
-    try:
-        Locacao.calcular_diarias(data_entrega, data_prevista_devolucao)
-    except ValidationError as exc:
-        return {
-            "status": "incompleto",
-            "mensagem": "; ".join(exc.messages),
-            "quadro": quadro,
-        }
-
     disponibilidade = Locacao.disponibilidade_periodo(
         data_entrega,
         data_prevista_devolucao,
         excluir_id=excluir_id,
         configuracao=configuracao,
         locacoes_rua=locacoes_rua,
+        horario_entrega=horario_entrega,
+        horario_previsto_devolucao=horario_previsto_devolucao,
     )
     necessidade = Locacao.necessidades_itens(itens)
     disponivel_mesas = disponibilidade["disponivel_mesas"]
@@ -1151,6 +1154,8 @@ def disponibilidade_dinamica(request):
     resultado = _avaliar_disponibilidade_dinamica(
         data_entrega,
         data_prevista_devolucao,
+        horario_entrega=request.GET.get("horario_entrega") or None,
+        horario_previsto_devolucao=request.GET.get("horario_previsto_devolucao") or None,
         jogos=request.GET.get("jogos"),
         mesas_avulsas=request.GET.get("mesas_avulsas"),
         cadeiras_avulsas=request.GET.get("cadeiras_avulsas"),
@@ -1217,6 +1222,8 @@ def nova(request):
                 locacao_form.cleaned_data["data_entrega"],
                 locacao_form.cleaned_data["data_prevista_devolucao"],
                 itens,
+                horario_entrega=locacao_form.cleaned_data.get("horario_entrega"),
+                horario_previsto_devolucao=locacao_form.cleaned_data.get("horario_previsto_devolucao"),
             )
             resumo_valores = _resumo_valores_locacao(
                 locacao_form.cleaned_data["data_entrega"],
@@ -1372,6 +1379,8 @@ def editar(request, pk):
                 locacao_form.cleaned_data["data_prevista_devolucao"],
                 itens,
                 excluir_id=locacao.pk,
+                horario_entrega=locacao_form.cleaned_data.get("horario_entrega"),
+                horario_previsto_devolucao=locacao_form.cleaned_data.get("horario_previsto_devolucao"),
             )
             resumo_valores = _resumo_valores_locacao(
                 locacao_form.cleaned_data["data_entrega"],
@@ -1434,6 +1443,8 @@ def editar(request, pk):
                 for item in locacao.itens.all()
             ],
             excluir_id=locacao.pk,
+            horario_entrega=locacao.horario_entrega,
+            horario_previsto_devolucao=locacao.horario_previsto_devolucao,
         )
 
     return render(
@@ -1471,6 +1482,8 @@ def detalhe(request, pk):
         locacao.data_entrega,
         locacao.data_prevista_devolucao,
         excluir_id=locacao.pk,
+        horario_entrega=locacao.horario_entrega,
+        horario_previsto_devolucao=locacao.horario_previsto_devolucao,
     )
     acoes_locacao = _acoes_locacao(locacao, request=request)
     tarefa_entrega = acoes_locacao["tarefa_entrega"]

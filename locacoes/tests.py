@@ -4152,7 +4152,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
         self.assertTrue(checklist_atrasada["alerta"])
         self.assertEqual(checklist_atrasada["grupos"]["devolucoes_atrasadas"][0]["locacao"].id, atrasada.id)
 
-    def test_painel_rapido_nao_alerta_antes_do_horario(self):
+    def test_painel_rapido_alerta_uma_hora_antes_sem_marcar_vencida(self):
         self.criar_locacao(horario_entrega=time(4, 10))
         request = self.factory.get("/", secure=True, HTTP_HOST="testserver")
         agora = timezone.make_aware(datetime.combine(self.hoje, time(4, 9)))
@@ -4163,7 +4163,7 @@ class LocacoesChecklistOperacionalTests(TestCase):
             agora=agora,
         )
 
-        self.assertFalse(painel["alerta"])
+        self.assertTrue(painel["alerta"])
         self.assertFalse(painel["itens"][0]["vencida"])
 
     def test_painel_rapido_alerta_no_horario_exato(self):

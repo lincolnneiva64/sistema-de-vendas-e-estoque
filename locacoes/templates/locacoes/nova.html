@@ -740,6 +740,10 @@
             <label class="form-label">Data prevista de devolução</label>
             {{ locacao_form.data_prevista_devolucao }}
             {{ locacao_form.data_prevista_devolucao.errors }}
+            <label for="id_horario_previsto_devolucao">Horario previsto de devolucao (opcional)</label>
+            {{ locacao_form.horario_previsto_devolucao }}
+            {{ locacao_form.horario_previsto_devolucao.errors }}
+            <small>Sem horario: considera o fim do dia. Previsoes nao confirmam recolhimento.</small>
           </div>
           <div>
             <label class="form-label">Observacao</label>
@@ -1111,6 +1115,8 @@
         "id_preco_cadeira_avulsa_diaria",
       ].map((id) => document.getElementById(id)).filter(Boolean);
       const camposDisponibilidade = [
+        "id_horario_entrega",
+        "id_horario_previsto_devolucao",
         "id_data_entrega",
         "id_data_prevista_devolucao",
         "id_jogos",
@@ -1440,6 +1446,8 @@
 
       function parametrosDisponibilidade() {
         const params = new URLSearchParams({
+          horario_entrega: document.getElementById("id_horario_entrega")?.value || "",
+          horario_previsto_devolucao: document.getElementById("id_horario_previsto_devolucao")?.value || "",
           data_entrega:
             document.getElementById("id_data_entrega")?.value || "",
           data_prevista_devolucao:

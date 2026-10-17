@@ -163,13 +163,14 @@ class ResolucaoAdministrativaTests(TestCase):
         self.assertFalse(item["vencida"])
         self.assertEqual(item["data_label"], "Amanhã")
 
-    def test_aba_lateral_janela_de_trinta_minutos(self):
+    def test_aba_lateral_rosa_no_dia_e_vermelha_sessenta_minutos_antes(self):
         from django.template.loader import render_to_string
         self.tarefa(horario_entrega=time(10, 30))
         antiga = self.tarefa(data_entrega=self.hoje - timedelta(days=1))
         antiga.resolver_administrativamente("Já realizada")
-        for hora, estado in ((time(9, 59), "normal"), (time(10, 0), "advertencia"),
-                             (time(10, 12), "advertencia"), (time(10, 29), "advertencia"),
+        for hora, estado in ((time(7, 0), "advertencia"), (time(9, 29), "advertencia"),
+                             (time(9, 30), "alerta"), (time(10, 0), "alerta"),
+                             (time(10, 12), "alerta"), (time(10, 29), "alerta"),
                              (time(10, 30), "alerta"), (time(10, 31), "alerta")):
             with self.subTest(hora=hora):
                 painel = self.painel(hora)
@@ -181,6 +182,26 @@ class ResolucaoAdministrativaTests(TestCase):
                 self.assertEqual("alerta" in classes, estado == "alerta")
                 self.assertEqual("advertencia" in classes, estado == "advertencia")
                 self.assertNotIn(antiga.pk, [i["tarefa"].pk for i in painel["itens"]])
+
+    def test_moldura_somente_entrega_de_hoje_e_limpeza_apos_resolucao(self):
+        import re
+        from django.template.loader import render_to_string
+        hoje = self.tarefa(horario_entrega=time(10, 30))
+        futura = self.tarefa(data_entrega=self.hoje + timedelta(days=1))
+        recolhimento = self.tarefa("recolhimento", data_entrega=self.hoje - timedelta(days=1),
+                                  data_prevista_devolucao=self.hoje)
+        painel = self.painel()
+        for tarefa, destaque in [(hoje, True), (futura, False), (recolhimento, False)]:
+            item = next(i for i in painel["itens"] if i["tarefa"].pk == tarefa.pk)
+            self.assertEqual(item["entrega_hoje"], destaque)
+            html = render_to_string("estoque/vendas_layout_teste.html", {"locacoes_operacionais": {"itens": [item]}})
+            classes = re.search(r'class="(locacoes-rapidas-card[^"\n]*)"', html)[1].split()
+            self.assertEqual("entrega-hoje" in classes, destaque)
+        hoje.resolver_administrativamente("Entrega resolvida", "Roseli")
+        painel = self.painel()
+        self.assertNotIn(hoje.pk, [i["tarefa"].pk for i in painel["itens"]])
+        self.assertFalse(painel["alerta"])
+        self.assertFalse(painel["advertencia_lateral"])
 
     def test_aba_lateral_futura_nao_adverte(self):
         self.tarefa(data_entrega=self.hoje + timedelta(days=1), horario_entrega=time(10, 30))
