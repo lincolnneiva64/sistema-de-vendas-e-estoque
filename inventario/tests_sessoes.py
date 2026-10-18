@@ -72,7 +72,7 @@ class SessoesSeparadasTests(TestCase):
         self.assertNotIn('_auth_user_id', self.client.session)
         self.assertFalse(self.client.get('/api/offline/session/').json()['authenticated'])
         self.assertEqual(self.client.get(self.mobile).status_code, 200)
-        self.assertEqual(self.client.get(reverse('inventario:lista')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('inventario:lista')).status_code, 302)
         self.assertEqual(self.client.get(reverse('estoque:conferencia_estoque_produto', args=[self.produto.pk])).status_code, 403)
         self.assertEqual(self.client.get('/vendas/').status_code, 200)
 

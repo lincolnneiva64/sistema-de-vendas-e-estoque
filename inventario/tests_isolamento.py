@@ -16,7 +16,7 @@ class IsolamentoTests(TestCase):
         self.rodada = self.inventario.itens.get().rodadas.get()
         self.acesso, self.token = services.gerar_acesso(self.gestor, self.inventario.pk, self.funcionario.pk, [self.rodada.pk])
 
-    def test_contagem_preserva_login_comercial_sem_liberar_administracao_inventario(self):
+    def test_contagem_preserva_login_e_gestao_apenas_com_permissao_propria(self):
         self.client.force_login(self.gestor)
         sessao_antes = self.client.session.session_key
         self.assertEqual(self.client.post(reverse("inventario:convite", args=[self.token])).status_code, 302)
@@ -25,12 +25,14 @@ class IsolamentoTests(TestCase):
         urls = [reverse("inventario:lista"), reverse("inventario:detalhe", args=[self.inventario.pk]),
             reverse("inventario:relatorio", args=[self.inventario.pk])]
         for url in urls:
-            for method in ("get", "post"):
-                with self.subTest(url=url, method=method):
-                    resposta = getattr(self.client, method)(url, {"operador": self.funcionario.nome,
-                        "novo_estoque": "99", "motivo": "Não deve executar"}, HTTP_X_OPERADOR_VENDA=self.funcionario.nome)
-                    self.assertEqual(resposta.status_code, 403)
-                    self.assertNotIn("esperado", resposta.content.decode())
+            self.assertEqual(self.client.get(url).status_code, 200)
+        anonimo = Client()
+        anonimo.post(reverse("inventario:convite", args=[self.token]))
+        for url in urls:
+            esperado = 302 if url == reverse("inventario:lista") else 403
+            self.assertEqual(anonimo.get(url).status_code, esperado)
+            esperado_post = 405 if url == reverse("inventario:relatorio", args=[self.inventario.pk]) else esperado
+            self.assertEqual(anonimo.post(url, {"acao": "recontar", "rodada": self.rodada.pk}).status_code, esperado_post)
         self.assertEqual(self.client.get(reverse("inventario:mobile")).status_code, 200)
         for url in ("/vendas/", "/compras/", "/", "/locacoes/"):
             self.assertEqual(self.client.get(url).status_code, 200)

@@ -3111,9 +3111,7 @@ td:first-child {
             <div class="atalhos-venda-painel" id="atalhosVendaPainel">
                 <h2 class="atalhos-venda-titulo">Atalhos</h2>
                 <div class="atalhos-venda-lista">
-            {% if perms.inventario.gerenciar_inventario or perms.inventario.revisar_inventario or perms.inventario.aprovar_ajuste %}
             <a href="{% url 'inventario:lista' %}" id="btnConferenciaEstoqueVendas" class="acao-venda-btn secundaria">Conferência de Estoque</a>
-            {% endif %}
             <a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Consultar Pedidos</a>
         <a href="/compras/" class="acao-venda-btn secundaria">Consultar Compras</a>
             <a href="{% url 'estoque:receber_cliente_escolher' %}" id="btnContasReceberVenda" class="acao-venda-btn secundaria">Receber contas do cliente</a>

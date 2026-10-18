@@ -5,6 +5,7 @@ from decimal import Decimal
 from functools import wraps
 
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.db.models import Count, F, Q, OuterRef, Subquery
 from django.http import HttpResponse, JsonResponse
@@ -56,6 +57,7 @@ def resumo_inicial():
 
 
 @privado
+@login_required(login_url="inventario:login")
 @require_http_methods(["GET", "POST"])
 def lista(request):
     gestor(request)

@@ -2,7 +2,6 @@
 import time
 
 from django.conf import settings
-from django.http import JsonResponse
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.http import http_date
 
@@ -33,19 +32,6 @@ class AcessoLimitadoMiddleware:
             patch_vary_headers(response, ("Cookie",))
         return response
 
-    def process_view(self, request, view_func, view_args, view_kwargs):
-        match = request.resolver_match
-        # The counting credential must never restrict commercial routes or grant
-        # administrative privileges. Its restrictions apply only inside inventory.
-        if not match or match.namespace != "inventario":
-            return None
-        sessao = request.inventario_session
-        if not sessao or "inventario_acesso" not in sessao:
-            return None
-        if match.url_name in {
-            "convite", "mobile", "contar", "sinalizar", "finalizar",
-        }:
-            return None
-        response = JsonResponse({"erro": "Acesso limitado à contagem de inventário."}, status=403)
-        patch_cache_control(response, private=True, no_store=True)
-        return response
+    # Management views require the commercial user's own inventory permissions.
+    # Counting views independently validate the opaque counting session and access.
+    # Neither credential blocks the other context or grants its permissions.

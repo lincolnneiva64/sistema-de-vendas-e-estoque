@@ -233,7 +233,7 @@ class CicloVidaTests(CicloFixture, TestCase):
         self.assertEqual(client.post(finalizar, {"versao": self.versao()}).status_code, 403)
         self.assertEqual(client.post(finalizar, {"versao": self.versao(), "csrfmiddlewaretoken": csrf}).status_code, 200)
         self.assertEqual(client.post(contar, {"acao": "ok", "versao": 2, "embalagens": "9", "csrfmiddlewaretoken": csrf}).status_code, 409)
-        self.assertEqual(client.get(reverse("inventario:lista")).status_code, 403)
+        self.assertEqual(client.get(reverse("inventario:lista")).status_code, 302)
         resposta = client.get(reverse("inventario:mobile"))
         self.assertContains(resposta, "Conferência finalizada e enviada")
         self.assertNotContains(resposta, "Referência")

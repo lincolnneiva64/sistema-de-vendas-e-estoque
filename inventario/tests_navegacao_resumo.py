@@ -78,22 +78,27 @@ class NavegacaoResumoTests(NavegacaoResumoFixture, TestCase):
             for url, botao in [(reverse("estoque:home"), "btnConferenciaEstoqueProdutos"), (reverse("estoque:vendas"), "btnConferenciaEstoqueVendas")]:
                 resposta = client.get(url)
                 self.assertEqual(resposta.status_code, 200)
-                if permissao:
+                if permissao or botao == "btnConferenciaEstoqueVendas":
                     self.assertContains(resposta, 'id="' + botao + '"')
                     self.assertContains(resposta, 'href="' + lista + '"')
                 else:
                     self.assertNotContains(resposta, 'id="' + botao + '"')
             self.assertEqual(client.get(lista).status_code, 200 if permissao else 403)
         anonimo = Client()
-        self.assertEqual(anonimo.get(lista, {"operador": self.funcionario.nome}).status_code, 403)
+        self.assertEqual(anonimo.get(lista, {"operador": self.funcionario.nome}).status_code, 302)
         for url, botao in [(reverse("estoque:home"), "btnConferenciaEstoqueProdutos"), (reverse("estoque:vendas"), "btnConferenciaEstoqueVendas")]:
-            self.assertNotContains(anonimo.get(url), 'id="' + botao + '"')
+            if botao == "btnConferenciaEstoqueVendas":
+                self.assertContains(anonimo.get(url), 'id="' + botao + '"')
+            else:
+                self.assertNotContains(anonimo.get(url), 'id="' + botao + '"')
 
     def test_link_limitado_nao_acessa_resumo_detalhes_relatorio_ou_acoes(self):
         self.client.post(reverse("inventario:convite", args=[self.token]))
         for url in (reverse("inventario:lista"), reverse("inventario:detalhe", args=[self.inventario.pk]), reverse("inventario:relatorio", args=[self.inventario.pk])):
-            self.assertEqual(self.client.get(url).status_code, 403)
-            self.assertEqual(self.client.post(url, {"acao": "recontar", "rodada": self.rodadas[0].pk}).status_code, 403)
+            esperado = 302 if url == reverse("inventario:lista") else 403
+            self.assertEqual(self.client.get(url).status_code, esperado)
+            esperado_post = 405 if url == reverse("inventario:relatorio", args=[self.inventario.pk]) else esperado
+            self.assertEqual(self.client.post(url, {"acao": "recontar", "rodada": self.rodadas[0].pk}).status_code, esperado_post)
         resposta = self.client.get(reverse("inventario:mobile"))
         self.assertEqual(resposta.status_code, 200)
         self.assertNotContains(resposta, "data-indicador")
@@ -102,9 +107,9 @@ class NavegacaoResumoTests(NavegacaoResumoFixture, TestCase):
     def test_autorizacao_curta_de_estoque_nao_libera_administracao(self):
         self.assertEqual(self.client.post(reverse("estoque:conferencia_estoque_autorizar"),
             {"username": self.usuario.username, "password": "teste"}).status_code, 302)
-        self.assertEqual(self.client.get(reverse("inventario:lista")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("inventario:lista")).status_code, 302)
         self.assertNotContains(self.client.get(reverse("estoque:home")), 'id="btnConferenciaEstoqueProdutos"')
-        self.assertNotContains(self.client.get(reverse("estoque:vendas")), 'id="btnConferenciaEstoqueVendas"')
+        self.assertContains(self.client.get(reverse("estoque:vendas")), 'id="btnConferenciaEstoqueVendas"')
 
     def test_permissao_de_revisao_nao_permite_criar_conferencia(self):
         usuario = get_user_model().objects.create_user("somente-revisao")
