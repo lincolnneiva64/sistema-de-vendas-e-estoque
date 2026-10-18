@@ -140,9 +140,13 @@ class MobileProtecaoBrowserTests(PrepararContagem, StaticLiveServerTestCase):
     def test_falha_de_rede_nao_bloqueia_digitacao_nem_confirma_guardado(self):
         with self.navegador() as tab:
             self.preencher(tab, 6)
-            tab.evaluate("window.fetch=async()=>{throw new TypeError('offline')}; document.querySelector('[value=salvar]').click(); true")
+            tab.evaluate("window.realFetch=fetch;window.fetch=async()=>{throw new TypeError('offline')}; document.querySelector('[value=salvar]').click(); true")
             tab.wait("document.querySelector('.mensagem').textContent.includes('Sem confirmação')")
             self.assertFalse(tab.evaluate("document.querySelector('[name=embalagens]').readOnly"))
+            self.assertTrue(tab.evaluate("document.querySelector('[value=salvar]').disabled"))
+            tab.evaluate("window.fetch=window.realFetch;document.querySelector('#verificar-acesso').click();true")
+            tab.wait("document.querySelector('#mensagem-acesso').textContent.includes('consultados no servidor')")
             self.assertFalse(tab.evaluate("document.querySelector('[value=salvar]').disabled"))
+            self.assertEqual(tab.evaluate("document.querySelector('[name=embalagens]').value"), '6')
         self.rodada.refresh_from_db()
         self.assertEqual(self.rodada.versao, 0)

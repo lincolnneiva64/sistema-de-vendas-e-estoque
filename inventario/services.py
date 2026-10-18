@@ -12,6 +12,7 @@ from django.utils import timezone
 from estoque.models import Funcionario, Produto, ProdutoFornecedor, MovimentacaoEstoqueManual
 from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
 from .conversao import converter, decimal_entrada, snapshot
+from .erros import ErroAcesso
 from .rastreabilidade import ORIGENS
 from .models import (Inventario, ItemInventario, RodadaContagem, AcessoInventario, AtribuicaoContagem,
                      SequenciaEstoque, MovimentoObservado, ConciliacaoMovimento, DecisaoAjuste, EventoInventario, SinalizacaoFisica, ConfirmacaoContagem)
@@ -37,7 +38,7 @@ def bloquear_inventario_acesso(acesso_id):
 def validar_escrita(inventario, acesso, token_hash=None):
     validar_acesso(acesso)
     if token_hash is not None and not secrets.compare_digest(acesso.token_hash, token_hash):
-        raise PermissionDenied("Acesso renovado. Solicite o novo link.")
+        raise ErroAcesso("credencial_renovada", "Acesso renovado. Abra o novo link em outra aba deste navegador e volte para verificar o acesso nesta tela.")
     if acesso.ciclo != inventario.ciclo:
         raise PermissionDenied("Este acesso pertence a um ciclo anterior. Solicite um novo link.")
     if inventario.finalizada_em:
@@ -138,8 +139,14 @@ def acesso_token(token):
 
 
 def validar_acesso(acesso):
-    if not acesso or acesso.revogado_em or acesso.expira_em <= timezone.now() or not Funcionario.objects.filter(pk=acesso.funcionario_id, ativo=True).exists():
-        raise PermissionDenied("Acesso vencido, revogado ou indisponível. Solicite um novo acesso ao responsável.")
+    if not acesso:
+        raise ErroAcesso("acesso_indisponivel", "Acesso indisponível. Solicite orientação ao responsável.")
+    if acesso.revogado_em:
+        raise ErroAcesso("acesso_revogado", "Acesso revogado. Solicite um novo acesso ao responsável.")
+    if acesso.expira_em <= timezone.now():
+        raise ErroAcesso("acesso_expirado", "Acesso expirado. Solicite um novo link ao responsável.")
+    if not Funcionario.objects.filter(pk=acesso.funcionario_id, ativo=True).exists():
+        raise ErroAcesso("funcionario_inativo", "Funcionário inativo. Solicite orientação ao responsável.")
 
 
 @transaction.atomic
@@ -255,7 +262,7 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
     inventario, acesso = bloquear_inventario_acesso(acesso_id)
     validar_acesso(acesso)
     if token_hash is not None and not secrets.compare_digest(acesso.token_hash, token_hash):
-        raise PermissionDenied("Acesso renovado. Solicite o novo link.")
+        raise ErroAcesso("credencial_renovada", "Acesso renovado. Abra o novo link em outra aba deste navegador e volte para verificar o acesso nesta tela.")
     if acesso.ciclo != inventario.ciclo:
         raise PermissionDenied("Acesso de ciclo anterior. Solicite novo link.")
     try:

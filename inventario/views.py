@@ -1,4 +1,5 @@
 import csv
+import secrets
 from urllib.parse import urlencode
 from uuid import uuid4
 from decimal import Decimal
@@ -7,6 +8,7 @@ from functools import wraps
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.middleware.csrf import get_token
 from django.db.models import Count, F, Q, OuterRef, Subquery
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,6 +20,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
 from . import services, sessoes
+from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
 from .rastreabilidade import ORIGENS
@@ -223,20 +226,30 @@ def convite(request, token):
 
 
 def acesso_sessao(request):
-    acesso = AcessoInventario.objects.filter(pk=request.inventario_session.get("inventario_acesso"),
-        token_hash=request.inventario_session.get("inventario_token_hash", "")).first()
+    acesso_id = request.inventario_session.get("inventario_acesso")
+    if not acesso_id:
+        raise ErroAcesso("sessao_ausente", "Sessão de contagem ausente ou expirada. Abra o link vigente em outra aba deste mesmo navegador e volte para verificar o acesso nesta tela.")
+    acesso = AcessoInventario.objects.filter(pk=acesso_id).first()
     services.validar_acesso(acesso)
+    if not secrets.compare_digest(acesso.token_hash, request.inventario_session.get("inventario_token_hash", "")):
+        raise ErroAcesso("credencial_renovada", "Este acesso foi renovado. Abra o novo link em outra aba deste mesmo navegador e volte para verificar o acesso nesta tela.")
     return acesso
 
 
 def payload_cego(rodada):
     cadastro = rodada.item.cadastro
+    # A concurrent OK may commit after this round was read. Keep the history
+    # consistent with the version being returned; a stale write still gets 409.
+    ultimo = rodada.confirmacoes.filter(versao_entrada__lt=rodada.versao).order_by("-versao_entrada").first()
     return {"id": rodada.pk, "nome": cadastro["nome"], "codigo": cadastro["codigo"], "base": cadastro["base"],
         "secundaria": cadastro["secundaria"], "fracionado": cadastro["fracionado"],
         "passo": "0.001" if cadastro["continua"] else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
         "embalagens": entrada(rodada.embalagens, cadastro["continua"]),
         "avulsos": entrada(rodada.avulsos, cadastro["secundaria_continua"]), "versao": rodada.versao,
         "guardado": rodada.versao > 0,
+        "ultimo_ok": {"embalagens": entrada(ultimo.embalagens, cadastro["continua"]),
+                      "avulsos": entrada(ultimo.avulsos, cadastro["secundaria_continua"]),
+                      "ok_em": ultimo.ok_em.isoformat()} if ultimo else None,
         "conferido": rodada.ok_em is not None, "ok_em": rodada.ok_em.isoformat() if rodada.ok_em else None}
 
 
@@ -248,8 +261,12 @@ def mobile(request):
     estado = estado_conferencia(acesso)
     if acesso.ciclo != acesso.inventario.ciclo:
         rodadas = rodadas.none()
+    produtos = [dict(payload_cego(r), chave_sinalizacao=str(uuid4())) for r in rodadas]
+    if "application/json" in request.headers.get("Accept", ""):
+        return JsonResponse({"produtos": produtos, "conferencia": estado, "csrf": get_token(request),
+                             "acesso_id": acesso.pk})
     return render(request, "inventario/mobile.html", {"funcionario": acesso.funcionario_nome, "conferencia": estado,
-        "produtos": [dict(payload_cego(r), chave_sinalizacao=str(uuid4())) for r in rodadas]})
+        "produtos": produtos, "acesso_id": acesso.pk})
 
 
 def estado_conferencia(acesso):

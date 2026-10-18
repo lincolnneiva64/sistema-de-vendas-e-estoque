@@ -2,19 +2,37 @@
 import time
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.http import http_date
 
 from . import sessoes
+from .erros import ErroAcesso, RespostaCsrfInventario, resposta
 
 
 class AcessoLimitadoMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def process_exception(self, request, exception):
+        if isinstance(exception, ErroAcesso):
+            return resposta(request, exception.codigo, str(exception))
+        match = request.resolver_match
+        if (isinstance(exception, PermissionDenied) and match and match.namespace == "inventario"
+                and match.url_name in {"convite", "mobile", "contar", "sinalizar", "finalizar"}):
+            return resposta(request, "acesso_negado", str(exception))
+
     def __call__(self, request):
         sessoes.preparar(request)
         response = self.get_response(request)
+        match = request.resolver_match
+        if (response.status_code == 403 and match and match.namespace == "inventario"
+                and request.method not in {"GET", "HEAD", "OPTIONS", "TRACE"}
+                and not getattr(request, "csrf_processing_done", False)):
+            csrf = RespostaCsrfInventario(lambda req: response)
+            recusa = csrf.process_view(request, match.func, match.args, match.kwargs)
+            if recusa is not None:
+                response = recusa
         sessao = request.inventario_session
         if request.path_info.startswith(sessoes.CAMINHO):
             patch_vary_headers(response, ("Cookie",))
