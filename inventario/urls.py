@@ -4,6 +4,7 @@ from . import views
 
 app_name = "inventario"
 urlpatterns = [
+    path("sessao/<int:inventario_id>/historico/<int:rodada_id>/", views.historico_produto, name="historico_produto"),
     path("", views.lista, name="lista"),
     path("entrar/", LoginView.as_view(template_name="inventario/login.html", next_page="inventario:lista"), name="login"),
     path("sessao/<int:inventario_id>/", views.detalhe, name="detalhe"),

@@ -1,0 +1,1 @@
+{% if pagina.has_other_pages %}<nav aria-label="Paginação {{ parametro }}"><p>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} | {{ pagina.paginator.count }} registros</p>{% if pagina.has_previous %}<a href="{{ pagina.anterior_url }}">Anterior</a>{% endif %} {% if pagina.has_next %}<a href="{{ pagina.proxima_url }}">Próxima</a>{% endif %}</nav>{% endif %}

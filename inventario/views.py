@@ -200,6 +200,16 @@ def csv_seguro(valor):
 
 @privado
 @require_http_methods(["GET"])
+def historico_produto(request, inventario_id, rodada_id):
+    gestor(request)
+    from .historico import investigar
+    rodada = get_object_or_404(RodadaContagem.objects.select_related('item__inventario'),
+                              pk=rodada_id, item__inventario_id=inventario_id)
+    return render(request, 'inventario/historico.html', investigar(rodada, request.GET))
+
+
+@privado
+@require_http_methods(["GET"])
 def relatorio(request, inventario_id):
     gestor(request)
     inventario = get_object_or_404(Inventario, pk=inventario_id)
