@@ -1,0 +1,24 @@
+<section class="filtros-extrato" aria-label="Intervalo da investigação" data-compra="{{ compra.compra_id }}">
+<form method="get">
+<input type="hidden" name="visual" value="{{ visual }}">
+<label class="modo-periodo">Período investigado<select name="periodo">
+<option value="ultima" {% if periodo == 'ultima' %}selected{% endif %}>Última compra até a conferência</option>
+<option value="tres_compras" {% if periodo == 'tres_compras' %}selected{% endif %}>Última compra e duas anteriores</option>
+<option value="personalizado" {% if periodo == 'personalizado' %}selected{% endif %}>Período personalizado</option>
+<option value="compra" {% if periodo == 'compra' %}selected{% endif %}>Investigar uma compra específica</option>
+<option value="completo" {% if periodo == 'completo' %}selected{% endif %}>Histórico completo disponível</option>
+</select></label>
+<label>Compra de referência<select name="compra">{% if compra %}<option value="{{ compra.compra_id }}" selected>Compra #{{ compra.compra_id }} · {{ compra.compra.estoque_entrada_realizada_em|date:'d/m/Y H:i' }} · Selecionada</option>{% else %}<option value="">Nenhuma compra com recebimento datado</option>{% endif %}{% for opcao in compras %}{% if opcao.compra_id != compra.compra_id %}<option value="{{ opcao.compra_id }}">Compra #{{ opcao.compra_id }} · {{ opcao.compra.estoque_entrada_realizada_em|date:'d/m/Y H:i' }}</option>{% endif %}{% endfor %}</select></label>
+<label>Investigar até<select name="intervalo"><option value="conferencia">Referência da conferência</option><option value="entre_compras" {% if intervalo == 'entre_compras' %}selected{% endif %}>Próxima compra (compra específica)</option></select></label>
+<input type="hidden" name="compras_pagina" value="{{ compras.number }}">
+<label>Data inicial<input type="date" name="data_inicial" value="{{ data_inicial }}"></label>
+<label>Data final<input type="date" name="data_final" value="{{ data_final }}"></label>
+<button>Consultar intervalo</button>
+</form>
+<p class="ajuda-periodo">Trocar a compra ativa o modo de compra específica. As datas se aplicam ao período personalizado.</p>
+{% include 'inventario/historico_paginacao.html' with pagina=compras parametro='compras_pagina' %}
+{% if erro_periodo %}<p class="erro" role="alert">{{ erro_periodo }}</p>{% else %}
+<p class="recorte">{{ inicio|date:'d/m/Y H:i' }} <span aria-hidden="true">→</span> {{ fim|date:'d/m/Y H:i' }} <span class="muted">· Fim exclusivo nos registros com horário</span></p>
+{% endif %}
+{% if aviso_periodo %}<p class="aviso-periodo">{{ aviso_periodo }}</p>{% endif %}
+</section>

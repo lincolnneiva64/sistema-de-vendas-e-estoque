@@ -80,6 +80,31 @@ class HistoricoFixture:
 
 
 class HistoricoTests(HistoricoFixture, TestCase):
+    def test_atalho_visivel_por_produto_preserva_investigacao(self):
+        from .models import RodadaContagem
+        outro = produto(nome='Outro produto fictício')
+        inv = services.criar_inventario(self.gestor, 'Navegação fictícia', 'manual',
+                                       [self.produto.pk, outro.pk])
+        resposta = self.client.get(reverse('inventario:detalhe', args=[inv.pk]))
+        self.assertContains(resposta, 'class="evolucao-estoque"', count=2)
+        for rodada in RodadaContagem.objects.filter(item__inventario=inv):
+            destino = reverse('inventario:historico_produto', args=[inv.pk, rodada.pk])
+            self.assertContains(resposta, f'class="evolucao-estoque" href="{destino}"')
+            self.assertEqual(self.client.get(destino).context['rodada'].pk, rodada.pk)
+        self.assertContains(resposta, 'class="historico-comercial"', count=2)
+        self.assertContains(resposta, 'data-detalhe=', count=2)
+
+    def test_comparacao_apresenta_sinal_sem_mudar_valores_do_ok(self):
+        for contado, sinal, classe in ((12, '+2', 'sobra'), (8, '-2', 'falta'), (10, '0', '')):
+            with self.subTest(contado=contado):
+                self.rodada.contado_base = contado
+                self.rodada.save(update_fields=['contado_base'])
+                resposta = self.client.get(self.url)
+                self.assertEqual(resposta.context['diferenca'], contado-10)
+                self.assertContains(resposta, f'class="comparacao {classe}"')
+                self.assertContains(resposta, f'<dd>{sinal} <small>')
+                self.assertContains(resposta, 'Valores registrados no OK de')
+
     def test_extrato_unico_cronologico_fontes_e_saldos_nao_presumidos(self):
         venda = self.venda()
         MovimentoObservado.objects.create(produto=self.produto, sequencia=1, antes=30, depois=130,
@@ -199,9 +224,9 @@ class HistoricoTests(HistoricoFixture, TestCase):
     def test_historico_incompleto_sem_compra_datada(self):
         Compra.objects.filter(pk=self.compra.pk).update(estoque_entrada_realizada_em=None)
         resposta = self.client.get(self.url)
-        self.assertIsNone(resposta.context['inicio'])
+        self.assertEqual(resposta.context['inicio'], self.agora-timedelta(days=30))
         self.assertEqual(resposta.context['vendas'].paginator.count, 0)
-        self.assertContains(resposta, 'nenhuma compra')
+        self.assertContains(resposta, 'Nenhuma compra')
 
     def test_movimentos_consumo_estorno_ajuste_desconhecido_sem_duplicar(self):
         for seq, origem in enumerate(('compra', 'venda', 'consumo_proprio', 'devolucao_venda', 'estorno_compra', 'ajuste_manual', 'nao_identificada'), 1):
@@ -262,6 +287,10 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
         self.rodada.ok_em = data + timedelta(days=4)
         self.rodada.esperado = 11
         self.rodada.contado_base = 10
+        self.rodada.contado = 10
+        # The panel also validates the OK chain; this synthetic OK needs its
+        # sequence reference, normally populated by salvar_contagem().
+        self.rodada.sequencia_ok = 0
         self.rodada.save()
         anterior = Venda.objects.create(data_venda=(data-timedelta(days=1)).date())
         Venda.objects.filter(pk=anterior.pk).update(criado_em=data-timedelta(days=1))
@@ -291,29 +320,70 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                 tab.call('Network.enable')
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': self.client.cookies['sessionid'].value,
                                                'url': self.live_server_url})
-                for largura, altura in ((1366, 1000), (390, 844), (320, 800)):
-                    tab.call('Emulation.setDeviceMetricsOverride', {'width': largura, 'height': altura,
-                        'deviceScaleFactor': 1, 'mobile': largura < 768})
-                    tab.call('Page.navigate', {'url': self.live_server_url + self.url})
-                    tab.wait("document.querySelectorAll('table tr[data-registro]').length === 6")
-                    tab.wait("getComputedStyle(document.querySelector('.extrato-cartao')).borderRadius === '12px'")
+                for visual in ('a', 'b'):
+                    for largura, altura in ((1366, 1000), (390, 844), (320, 800)):
+                        tab.call('Emulation.setDeviceMetricsOverride', {'width': largura, 'height': altura,
+                            'deviceScaleFactor': 1, 'mobile': largura < 768})
+                        painel = reverse('inventario:detalhe', args=[self.inv.pk])
+                        self.assertEqual(self.client.get(painel).status_code, 200)
+                        tab.call('Page.navigate', {'url': self.live_server_url + painel})
+                        try:
+                            tab.wait("!!document.querySelector('.evolucao-estoque') && window.inventarioRevisaoPronta === true")
+                        except AssertionError:
+                            self.fail(str(tab.evaluate("({url:location.href,html:document.body.innerText.slice(0,2000),scripts:[...document.scripts].map(s=>s.src)})")))
+                        self.assertTrue(tab.evaluate("[...document.querySelectorAll('.detalhe-produto')].every(e=>!e.open)"))
+                        self.assertTrue(tab.evaluate("!document.querySelector('.evolucao-estoque').closest('details')"))
+                        self.assertTrue(tab.evaluate("document.querySelector('.evolucao-estoque').getBoundingClientRect().width > 0"))
+                        self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                        destino = Path('artifacts/extrato')
+                        destino.mkdir(parents=True, exist_ok=True)
+                        (destino / f'acesso-direto-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',
+                            {'format': 'png', 'captureBeyondViewport': True})['data']))
+                        tab.evaluate("document.querySelector('.evolucao-estoque').click(); true")
+                        tab.wait("document.querySelectorAll('table tr[data-registro]').length === 6")
+                        self.assertTrue(tab.evaluate("!!document.querySelector('.visual-b')"))
+                        if visual == 'a':
+                            tab.evaluate("document.querySelector('.alternativas-extrato a:not([aria-current])').click(); true")
+                            tab.wait("!!document.querySelector('.visual-a')")
+                        tab.wait("getComputedStyle(document.querySelector('.extrato-cartao')).borderRadius === '12px'")
+                        tab.wait("document.querySelector('[name=data_inicial]').closest('label').hidden")
+                        self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('table').length"), 1)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('table thead th').length"), 5)
+                        self.assertTrue(tab.evaluate("document.querySelector('[data-registro^=registro-cancelamento-] .saldo').textContent.includes('Não disponível')"))
+                        self.assertTrue(tab.evaluate("!!document.querySelector('[data-registro^=registro-cancelamento-] a[href*=vendas]')"))
+                        self.assertTrue(tab.evaluate("document.querySelector('table').textContent.toLowerCase().includes('segunda-feira')"))
+                        self.assertTrue(tab.evaluate("document.querySelector('.movimento-compra td.saldo').textContent.includes('Reconstruído e corroborado')"))
+                        self.assertTrue(tab.evaluate("[...document.querySelectorAll('.movimento-venda td.saldo')].every(e=>e.textContent.includes('Snapshot registrado'))"))
+                        self.assertTrue(tab.evaluate("document.querySelector('.movimento-pendente td.saldo').textContent.includes('Não disponível')"))
+                        self.assertTrue(tab.evaluate("!!document.querySelector('.comparacao.falta .diferenca-final')"))
+                        self.assertTrue(tab.evaluate("[...document.querySelectorAll('details')].every(e=>!e.open)"))
+                        self.assertTrue(tab.evaluate("[...document.querySelectorAll('td.numero')].every(e=>e.scrollWidth<=e.clientWidth)"))
+                        self.assertEqual(tab.evaluate("getComputedStyle(document.querySelector('td.saldo')).textAlign"), 'right')
+                        if largura == 1366:
+                            self.assertLess(tab.evaluate("document.querySelector('.movimento-venda').getBoundingClientRect().height"), 100 if visual == 'a' else 140)
+                        tab.evaluate("document.querySelector('.movimento-venda details').open=true; true")
+                        self.assertTrue(tab.evaluate("document.querySelector('.movimento-venda details').textContent.includes('Item de venda #')"))
+                        self.assertTrue(tab.evaluate("document.querySelector('.movimento-venda details').getBoundingClientRect().height > 40"))
+                        tab.evaluate("document.querySelector('.movimento-venda details').open=false; true")
+                        cores = tab.evaluate("['.movimento-compra .entrada','.movimento-venda .saida','.diferenca-final'].map(s=>getComputedStyle(document.querySelector(s)).color)")
+                        self.assertEqual(len(set(cores)), 3)
+                        (destino / f'extrato-{visual}-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',
+                            {'format': 'png', 'captureBeyondViewport': True})['data']))
+                for largura, altura in ((1366,1000),(390,844),(320,800)):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width':largura,'height':altura,'deviceScaleFactor':1,'mobile':largura<768})
+                    tab.call('Page.navigate', {'url':self.live_server_url+self.url})
+                    tab.wait("!!document.querySelector('[name=periodo]')")
+                    tab.evaluate("document.querySelector('[name=periodo]').value='personalizado'; document.querySelector('[name=periodo]').dispatchEvent(new Event('change')); true")
+                    self.assertTrue(tab.evaluate("!document.querySelector('[name=data_inicial]').closest('label').hidden && document.querySelector('[name=compra]').closest('label').hidden"))
+                    tab.evaluate("document.querySelector('[name=data_inicial]').value='2026-10-12'; document.querySelector('[name=data_final]').value='2026-10-14'; document.querySelector('[name=data_final]').dispatchEvent(new Event('change')); true")
+                    tab.evaluate("document.querySelector('form button').click(); true")
+                    tab.wait("new URL(location.href).searchParams.get('periodo') === 'personalizado' && document.querySelector('[name=periodo]')?.value === 'personalizado'")
                     self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
-                    self.assertEqual(tab.evaluate("document.querySelectorAll('table').length"), 1)
-                    self.assertEqual(tab.evaluate("document.querySelectorAll('table thead th').length"), 5)
-                    self.assertTrue(tab.evaluate("document.querySelector('[data-registro^=registro-cancelamento-] .saldo').textContent.includes('Não disponível')"))
-                    self.assertTrue(tab.evaluate("!!document.querySelector('[data-registro^=registro-cancelamento-] a[href*=vendas]')"))
-                    self.assertTrue(tab.evaluate("document.querySelector('table').textContent.toLowerCase().includes('segunda-feira')"))
-                    self.assertTrue(tab.evaluate("document.querySelector('.movimento-compra td.saldo').textContent.includes('Reconstruído e corroborado')"))
-                    self.assertTrue(tab.evaluate("[...document.querySelectorAll('.movimento-venda td.saldo')].every(e=>e.textContent.includes('Snapshot registrado'))"))
-                    self.assertTrue(tab.evaluate("document.querySelector('.movimento-pendente td.saldo').textContent.includes('Não disponível')"))
-                    self.assertTrue(tab.evaluate("!!document.querySelector('.comparacao.falta .diferenca-final')"))
-                    self.assertTrue(tab.evaluate("[...document.querySelectorAll('details')].every(e=>!e.open)"))
-                    cores = tab.evaluate("['.movimento-compra .entrada','.movimento-venda .saida','.diferenca-final'].map(s=>getComputedStyle(document.querySelector(s)).color)")
-                    self.assertEqual(len(set(cores)), 3)
-                    destino = Path('artifacts/extrato')
-                    destino.mkdir(parents=True, exist_ok=True)
-                    (destino / f'extrato-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',
-                        {'format': 'png', 'captureBeyondViewport': True})['data']))
+                    self.assertTrue(tab.evaluate("document.querySelector('.comparacao').textContent.includes('16/10/2026')"))
+                    (destino / f'periodos-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'format':'png','captureBeyondViewport':True})['data']))
+                tab.call('Page.navigate', {'url':self.live_server_url+self.url})
+                tab.wait("!!document.querySelector('.extrato-cartao')")
                 # Follow each document link in the same authenticated browser.
                 for seletor, prefixo, titulo, conteudo in (('.movimento-compra a', '/compras/', 'Compra #', '.nota-compra-wrap'),
                                                           ('.movimento-venda a', '/vendas/', 'Venda #', '.pagina')):
@@ -343,17 +413,17 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         'deviceScaleFactor': 1, 'mobile': largura < 768})
                     tab.call('Page.navigate', {'url': self.live_server_url + self.url})
                     conferir(self.compra, 1)
-                    tab.evaluate("document.querySelector('nav a[href*=compras_pagina]').click(); true")
+                    tab.evaluate("document.querySelector('.filtros-extrato nav a[href*=compras_pagina]').click(); true")
                     conferir(self.compra, 2)
                     # Submit without changing the selection: the original bug silently changed it.
                     tab.evaluate("document.querySelector('form button').click(); true")
                     tab.wait("new URL(location.href).searchParams.get('compra') === '" + str(self.compra.pk) + "'")
                     conferir(self.compra, 2)
-                    tab.evaluate(f"document.querySelector('select[name=compra]').value='{antigas[-1].pk}'; document.querySelector('form button').click(); true")
+                    tab.evaluate(f"document.querySelector('select[name=compra]').value='{antigas[-1].pk}'; document.querySelector('select[name=compra]').dispatchEvent(new Event('change')); document.querySelector('form button').click(); true")
                     conferir(antigas[-1], 2)
-                    tab.evaluate("document.querySelector('nav a[href*=compras_pagina]').click(); true")
+                    tab.evaluate("document.querySelector('.filtros-extrato nav a[href*=compras_pagina]').click(); true")
                     conferir(antigas[-1], 1)
-                    tab.evaluate(f"document.querySelector('select[name=compra]').value='{self.compra.pk}'; document.querySelector('form button').click(); true")
+                    tab.evaluate(f"document.querySelector('select[name=compra]').value='{self.compra.pk}'; document.querySelector('select[name=compra]').dispatchEvent(new Event('change')); document.querySelector('form button').click(); true")
                     conferir(self.compra, 1)
             finally:
                 chrome.stop()

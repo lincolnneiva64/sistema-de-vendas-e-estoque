@@ -20,7 +20,8 @@ COLUNAS = ('pk', 'dia', 'instante', 'fonte', 'documento', 'quantidade', 'unidade
            'pessoa', 'cancelada', 'origem', 'antes', 'depois', 'referencia', 'devolvido')
 
 
-def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim):
+def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim, produto_id=None):
+    produto_id = produto_id or (selecionada.produto_id if selecionada else None)
     decimal = DecimalField(max_digits=12, decimal_places=3)
 
     def normalizar(qs, fonte, dia, instante, **campos):
@@ -55,8 +56,8 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     # Its current items do not prove the quantity/unit physically returned.
     devolucoes = ItemVenda.objects.none()
     sem_data = False
-    if selecionada and inicio:
-        todos = ItemVenda.objects.filter(produto_id=selecionada.produto_id)
+    if produto_id and inicio:
+        todos = ItemVenda.objects.filter(produto_id=produto_id)
         primeiro = todos.filter(venda_id=OuterRef('venda_id')).order_by('pk').values('pk')[:1]
         devolucoes = todos.filter(pk=Subquery(primeiro),
             venda__estoque_devolvido_cancelamento_em__gte=inicio,
@@ -104,8 +105,8 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         if linha['cancelada']:
             linha['nota'] += ' · Cancelada atualmente'
         linha['detalhe_id'] = f"registro-{fonte}-{linha['pk']}"
-    if selecionada:
-        analisar(selecionada.produto_id, pagina, fim)
+    if produto_id:
+        analisar(produto_id, pagina, fim)
     for sentido, numero in (('anterior', pagina.number - 1), ('proxima', pagina.number + 1)):
         consulta = params.copy()
         consulta['extrato_pagina'] = numero

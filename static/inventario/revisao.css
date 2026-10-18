@@ -86,3 +86,7 @@ main:has(.painel-inventario){max-width:1360px}
  .titulo-tabela{padding:18px 16px 10px}.nota-saldos{padding-left:16px;padding-right:16px}
  .detalhe-produto{padding:8px 12px}.detalhe-produto>summary{line-height:1.5}.conteudo-produto{overflow-wrap:anywhere}
 }
+/* Direct access to the statement without opening investigation panels. */
+.tabela-resumo .evolucao-estoque{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 10px;border:1px solid #bbd6d0;border-radius:6px;background:#edf7f3;color:#14634f;font-size:12px;font-weight:700;text-decoration:none;white-space:normal;line-height:1.4}
+.tabela-resumo .evolucao-estoque:hover{background:#dfeee8}
+.tabela-resumo .evolucao-estoque:focus-visible{outline:2px solid #116f60;outline-offset:3px}
