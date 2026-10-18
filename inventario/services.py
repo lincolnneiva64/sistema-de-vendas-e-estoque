@@ -108,8 +108,16 @@ def gerar_acesso(usuario, inventario_id, funcionario_id, rodada_ids, horas=24):
         raise ValueError("Seleção de produtos inválida.")
     rodadas = list(RodadaContagem.objects.select_for_update().filter(pk__in=ids, item__inventario=inventario,
                     encerrada_em__isnull=True).order_by("pk"))
-    if not ids or len(rodadas) != len(ids) or not 1 <= int(horas) <= 168:
-        raise ValueError("Seleção ou validade inválida.")
+    if not ids:
+        raise ValueError("Selecione pelo menos um produto disponível para atribuir.")
+    if len(rodadas) != len(ids):
+        raise ValueError("Há produtos indisponíveis na seleção. Atualize a página.")
+    try:
+        horas = int(horas)
+    except (TypeError, ValueError):
+        raise ValueError("Informe uma validade inteira entre 1 e 168 horas.")
+    if not 1 <= horas <= 168:
+        raise ValueError("Informe uma validade inteira entre 1 e 168 horas.")
     if AtribuicaoContagem.objects.filter(rodada__in=rodadas).exists():
         raise ValueError("Contagem já atribuída. Reabra em nova rodada para redistribuir.")
     token = secrets.token_urlsafe(32)

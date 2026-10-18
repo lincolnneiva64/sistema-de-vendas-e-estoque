@@ -118,7 +118,7 @@ def linhas_revisao(inventario):
 def detalhe(request, inventario_id):
     gestor(request)
     inventario = get_object_or_404(Inventario, pk=inventario_id)
-    erro, link, whatsapp_url, destinatario = "", "", "", ""
+    erro, link, whatsapp_url, destinatario, sucesso = "", "", "", "", ""
     if request.method == "POST":
         try:
             acao = request.POST.get("acao")
@@ -127,8 +127,9 @@ def detalhe(request, inventario_id):
                 get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario=inventario)
             if acao == "acesso":
                 acesso, token = services.gerar_acesso(request.user, inventario.pk, request.POST.get("funcionario"),
-                    request.POST.getlist("rodadas"), int(request.POST.get("horas", 24)))
+                    request.POST.getlist("rodadas"), request.POST.get("horas", 24))
                 link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
+                sucesso = "Atribuição concluída. Copie o link abaixo e entregue ao funcionário."
             elif acao == "reabrir_conferencia":
                 services.reabrir_conferencia(request.user, inventario.pk, request.POST.get("motivo", ""))
             elif acao in {"revogar", "renovar"}:
@@ -138,6 +139,7 @@ def detalhe(request, inventario_id):
                 else:
                     acesso, token = services.renovar_acesso(request.user, acesso.pk)
                     link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
+                    sucesso = "Acesso renovado. O link anterior foi invalidado; copie o novo link abaixo."
             elif acao == "recontar":
                 services.recontar(request.user, rodada_id, request.POST.get("motivo", ""))
             elif acao == "conciliar":
@@ -157,7 +159,7 @@ def detalhe(request, inventario_id):
                 raise ValueError("Ação inválida.")
             if not link:
                 return redirect("inventario:detalhe", inventario.pk)
-        except (ValueError, ObjectDoesNotExist) as exc:
+        except (ValueError, ObjectDoesNotExist, PermissionDenied) as exc:
             erro = str(exc)
     if link:
         destinatario = acesso.funcionario_nome
@@ -175,7 +177,8 @@ def detalhe(request, inventario_id):
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
-        "erro": erro, "link": link, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
+        "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
+        "rodadas_disponiveis": RodadaContagem.objects.filter(item__inventario=inventario, encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),
         "pode_gerenciar": request.user.has_perm("inventario.gerenciar_inventario"),
         "pode_revisar": request.user.has_perm("inventario.revisar_inventario"),
