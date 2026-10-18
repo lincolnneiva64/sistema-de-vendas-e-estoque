@@ -228,7 +228,7 @@ class CicloVidaTests(CicloFixture, TestCase):
         for versao, numero in [(0, "6"), (1, "8")]:
             resposta = client.post(contar, {"acao": "ok", "versao": versao, "embalagens": numero, "avulsos": "", "csrfmiddlewaretoken": csrf})
             self.assertEqual(resposta.status_code, 200)
-            self.assertEqual(set(resposta.json()["produto"]), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo", "passo_avulsos", "embalagens", "avulsos", "versao", "conferido", "ok_em"})
+            self.assertEqual(set(resposta.json()["produto"]), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo", "passo_avulsos", "embalagens", "avulsos", "versao", "guardado", "conferido", "ok_em"})
         finalizar = reverse("inventario:finalizar")
         self.assertEqual(client.post(finalizar, {"versao": self.versao()}).status_code, 403)
         self.assertEqual(client.post(finalizar, {"versao": self.versao(), "csrfmiddlewaretoken": csrf}).status_code, 200)

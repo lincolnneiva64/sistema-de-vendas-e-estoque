@@ -47,19 +47,21 @@ class InventarioBrowserTests(StaticLiveServerTestCase):
         except AssertionError:
             self.fail(str(tab.evaluate("({url:location.href, body:document.body.innerText.slice(0,4000)})")))
 
-    def test_link_limitado_nao_acessa_outros_endpoints_no_chrome(self):
+    def test_link_limitado_preserva_vendas_e_nega_ajustes_e_gestao(self):
         with TemporaryDirectory(prefix="inventario-chrome-isolamento-") as profile:
             chrome = Chrome(CHROME, profile).start()
             try:
                 tab = chrome.tab()
                 self.abrir(tab)
-                urls = ["/vendas/", "/verificar-produto/", "/api/offline/snapshot/comercial/",
+                self.assertEqual(tab.evaluate("(async()=>{return (await fetch('/vendas/')).status})()"), 200)
+                corrigir = reverse("estoque:conferencia_estoque_corrigir", args=[self.produto.pk])
+                urls = [
                     reverse("estoque:conferencia_estoque_produto", args=[self.produto.pk]),
-                    reverse("estoque:conferencia_estoque_corrigir", args=[self.produto.pk]),
+                    corrigir,
                     reverse("inventario:detalhe", args=[self.inventario.pk])]
                 resultados = tab.evaluate("(async()=>{const urls=" + json.dumps(urls) + ";return await Promise.all(urls.map(async url=>{const r=await fetch(url);return {status:r.status,body:await r.text()}}))})()")
-                self.assertTrue(all(r["status"] == 403 for r in resultados), resultados)
-                resultado = tab.evaluate("(async()=>{const t=document.querySelector('[name=csrfmiddlewaretoken]').value;const r=await fetch(" + json.dumps(urls[4]) + ",{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':t,'X-Operador-Venda':'Operador'},body:JSON.stringify({operador:'Operador',novo_estoque:'99'})});return r.status})()")
+                self.assertEqual([r["status"] for r in resultados], [403, 405, 403])
+                resultado = tab.evaluate("(async()=>{const t=document.querySelector('[name=csrfmiddlewaretoken]').value;const r=await fetch(" + json.dumps(corrigir) + ",{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':t,'X-Operador-Venda':'Operador'},body:JSON.stringify({operador:'Operador',novo_estoque:'99'})});return r.status})()")
                 self.assertEqual(resultado, 403)
                 self.produto.refresh_from_db()
                 self.assertEqual(self.produto.quantidade, 10)

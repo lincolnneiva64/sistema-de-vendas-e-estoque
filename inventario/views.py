@@ -16,7 +16,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
-from . import services
+from . import services, sessoes
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
 from .rastreabilidade import ORIGENS
@@ -215,19 +215,14 @@ def relatorio(request, inventario_id):
 def convite(request, token):
     acesso = services.acesso_token(token)
     if request.method == "POST":
-        # Do not retain a prior manager login or commercial permissions in the
-        # employee's browser. The invitation establishes only a limited session.
-        from django.contrib.auth import logout
-        logout(request)
-        request.session["inventario_acesso"] = acesso.pk
-        request.session["inventario_token_hash"] = acesso.token_hash
+        sessoes.estabelecer(request, acesso)
         return redirect("inventario:mobile")
     return render(request, "inventario/convite.html", {"funcionario": acesso.funcionario_nome})
 
 
 def acesso_sessao(request):
-    acesso = AcessoInventario.objects.filter(pk=request.session.get("inventario_acesso"),
-        token_hash=request.session.get("inventario_token_hash", "")).first()
+    acesso = AcessoInventario.objects.filter(pk=request.inventario_session.get("inventario_acesso"),
+        token_hash=request.inventario_session.get("inventario_token_hash", "")).first()
     services.validar_acesso(acesso)
     return acesso
 
@@ -269,7 +264,7 @@ def estado_conferencia(acesso):
 def finalizar(request):
     acesso = acesso_sessao(request)
     try:
-        services.finalizar_conferencia(acesso.pk, request.POST.get("versao"), token_hash=request.session.get("inventario_token_hash", ""))
+        services.finalizar_conferencia(acesso.pk, request.POST.get("versao"), token_hash=request.inventario_session.get("inventario_token_hash", ""))
         if "text/html" in request.headers.get("Accept", ""):
             return redirect("inventario:mobile")
         estado = estado_conferencia(acesso)
@@ -286,7 +281,7 @@ def sinalizar(request, rodada_id):
     acesso = acesso_sessao(request)
     try:
         services.sinalizar_fisico(rodada_id, request.POST.get("descricao"), request.POST.get("chave"),
-            acesso_id=acesso.pk, token_hash=request.session.get("inventario_token_hash", ""))
+            acesso_id=acesso.pk, token_hash=request.inventario_session.get("inventario_token_hash", ""))
         if "text/html" in request.headers.get("Accept", ""):
             return redirect("inventario:mobile")
         return JsonResponse({"mensagem": "Sinalização enviada ao responsável. O estoque não foi alterado."})
@@ -307,7 +302,7 @@ def contar(request, rodada_id):
             raise ValueError("Ação inválida.")
         rodada = services.salvar_contagem(acesso.pk, rodada_id, request.POST.get("versao", "-1"),
             request.POST.get("embalagens"), request.POST.get("avulsos"), confirmar=acao == "ok",
-            token_hash=request.session.get("inventario_token_hash", ""))
+            token_hash=request.inventario_session.get("inventario_token_hash", ""))
         if "text/html" in request.headers.get("Accept", ""):
             return redirect("inventario:mobile")
         return JsonResponse({"produto": payload_cego(rodada), "conferencia": estado_conferencia(acesso),
