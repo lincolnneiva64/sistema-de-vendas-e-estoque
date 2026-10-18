@@ -9,6 +9,7 @@ from django.utils import timezone
 from estoque.models import ItemCompra, ItemVenda, ItemVendaRemovido
 from .models import MovimentoObservado
 from .rastreabilidade import ORIGENS
+from .extrato import cronologia
 
 
 def investigar(rodada, params):
@@ -50,6 +51,7 @@ def investigar(rodada, params):
     for movimento in pagina_movimentos:
         movimento.rotulo = ORIGENS.get(movimento.origem, ORIGENS['nao_identificada'])
     contexto = dict(rodada=rodada, item=item, referencia=referencia, inicio=inicio, fim=fim,
+                extrato=cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim),
                 compra=selecionada, compras=opcoes,
                 itens_compra=(compras.filter(compra_id=selecionada.compra_id).order_by().values('unidade')
                               .annotate(total=Sum('quantidade'))) if selecionada else [],
