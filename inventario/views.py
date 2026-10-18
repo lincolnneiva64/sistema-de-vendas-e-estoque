@@ -23,6 +23,7 @@ from . import services, sessoes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
+from .painel import resumo_painel
 from .rastreabilidade import ORIGENS
 
 
@@ -175,6 +176,7 @@ def detalhe(request, inventario_id):
             whatsapp_url = "https://web.whatsapp.com/send?" + urlencode({"phone": telefone, "text": "Conferência de Estoque — " + inventario.titulo + "\nAbra no navegador do celular:\n" + link})
     inventario.refresh_from_db()
     linhas = linhas_revisao(inventario)
+    resumo = resumo_painel(linhas)
     acessos = list(inventario.acessos.select_related("funcionario"))
     for acesso in acessos:
         atuais = acesso.atribuicoes.filter(rodada__encerrada_em__isnull=True)
@@ -182,6 +184,7 @@ def detalhe(request, inventario_id):
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
+        "resumo_painel": resumo, "consultado_em": timezone.now(),
         "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
         "rodadas_disponiveis": RodadaContagem.objects.filter(item__inventario=inventario, encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),

@@ -117,7 +117,7 @@ class AtalhoBrowserTests(PrepararAtalho, StaticLiveServerTestCase):
             vendas.evaluate("document.querySelector('#btnAtalhosVenda').click(); document.querySelector('#btnConferenciaEstoqueVendas').click(); true")
             vendas.wait("location.pathname === '/inventario/entrar/' && !!document.querySelector('[name=password]')")
             vendas.evaluate("document.querySelector('[name=username]').value='gestor-atalho'; document.querySelector('[name=password]').value='teste'; document.querySelector('form button').click(); true")
-            vendas.wait("location.pathname === '/inventario/' && document.body.textContent.includes('Conferência fictícia')")
+            vendas.wait("location.pathname === '/inventario/' && document.body?.textContent.includes('Conferência fictícia')")
             self.assertEqual(contagem.evaluate("(async()=>{return (await fetch('/inventario/contagem/')).status})()"), 200)
             self.assertEqual(vendas.evaluate("(async()=>{return (await fetch('/vendas/')).status})()"), 200)
             self.assertEqual(vendas.evaluate("(async()=>{return (await fetch('/compras/')).status})()"), 200)
@@ -130,7 +130,7 @@ class AtalhoBrowserTests(PrepararAtalho, StaticLiveServerTestCase):
             antes = {c['name']: c['value'] for c in vendas.call('Network.getCookies', {'urls': [self.live_server_url + '/inventario/']})['cookies']}
             self.assertIn(sessoes.COOKIE, antes)
             vendas.evaluate("document.querySelector('#btnAtalhosVenda').click(); document.querySelector('#btnConferenciaEstoqueVendas').click(); true")
-            vendas.wait("location.pathname === '/inventario/' && document.body.textContent.includes('Conferência fictícia')")
+            vendas.wait("location.pathname === '/inventario/' && document.body?.textContent.includes('Conferência fictícia')")
             depois = {c['name']: c['value'] for c in vendas.call('Network.getCookies', {'urls': [self.live_server_url + '/inventario/']})['cookies']}
             self.assertEqual(depois['sessionid'], antes['sessionid'])
             self.assertEqual(depois[sessoes.COOKIE], antes[sessoes.COOKIE])
