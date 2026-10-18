@@ -3,3 +3,5 @@
 .estado-produto:empty,.quantidade-confirmada:empty{display:none}
 .quantidade-confirmada{font-weight:600;overflow-wrap:anywhere}
 .produto-pendente .estado-produto{padding:12px;border-left:4px solid #bd820a;background:#fff3cc;color:#704c04}
+.guardar-contagem:not(:disabled){background:#0b5d50;border:2px solid #06483d;box-shadow:0 3px 7px #06483d33;font-weight:750}
+form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344c45}

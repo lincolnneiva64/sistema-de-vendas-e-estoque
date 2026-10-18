@@ -8,6 +8,7 @@ function aplicarEstadoConferencia(estado) {
     if (!estado.pode_escrever) {
         conferenciaBloqueada = true;
         document.querySelectorAll('form.contagem fieldset, form.sinalizacao fieldset').forEach(campo => { campo.disabled = true; });
+        document.querySelectorAll('[data-editar-contagem]').forEach(botao => { botao.hidden = true; });
         document.querySelectorAll('form.contagem .mensagem').forEach(mensagem => {
             mensagem.textContent = 'Contagem enviada. Correções exigem recontagem autorizada.';
         });
@@ -25,6 +26,19 @@ document.querySelectorAll('form.contagem').forEach(form => {
     form.dataset.confirmado = form.querySelector('.mensagem').dataset.confirmado;
     const cartao = form.closest('article');
     let jaConfirmado = form.dataset.confirmado === 'true';
+    let protegido = form.querySelector('.mensagem').dataset.guardado === 'true';
+    const editar = form.querySelector('[data-editar-contagem]');
+    const atualizarEdicao = () => {
+        const ocupado = enviando || finalizando || conferenciaBloqueada;
+        [form.elements.embalagens, form.elements.avulsos].filter(Boolean).forEach(campo => {
+            campo.readOnly = protegido || ocupado;
+        });
+        form.querySelector('[value=salvar]').disabled = ocupado || protegido;
+        form.querySelector('[value=ok]').disabled = ocupado || (protegido && form.dataset.confirmado === 'true');
+        editar.hidden = !protegido || conferenciaBloqueada;
+        editar.disabled = ocupado;
+        editar.textContent = form.dataset.confirmado === 'true' ? 'Recontar produto' : 'Continuar contagem';
+    };
     const atualizarVisual = confirmado => {
         cartao.classList.toggle('produto-conferido', confirmado);
         cartao.classList.toggle('produto-pendente', !confirmado && jaConfirmado);
@@ -40,7 +54,20 @@ document.querySelectorAll('form.contagem').forEach(form => {
         }
     };
     atualizarVisual(form.dataset.confirmado === 'true');
+    atualizarEdicao();
+    editar.addEventListener('click', () => {
+        if (enviando || conferenciaBloqueada || finalizando) return;
+        protegido = false;
+        form.dataset.confirmado = 'false';
+        atualizarVisual(false);
+        atualizarEdicao();
+        form.querySelector('.mensagem').textContent = jaConfirmado
+            ? 'Corrija o total contado e confirme o OK novamente antes de enviar.'
+            : 'Continue a contagem. Guarde novamente ou confirme o OK quando terminar.';
+        form.elements.embalagens.focus();
+    });
     form.addEventListener('input', () => {
+        if (protegido || enviando || conferenciaBloqueada || finalizando) return;
         form.dataset.confirmado = 'false';
         atualizarVisual(false);
         form.querySelector('.mensagem').textContent = 'Alterações ainda não confirmadas. Dê OK novamente antes de enviar.';
@@ -50,12 +77,13 @@ document.querySelectorAll('form.contagem').forEach(form => {
         if (enviando || conferenciaBloqueada || finalizando) return;
         const acao = event.submitter?.value;
         if (!acao) return;
+        if (protegido && (acao === 'salvar' || form.dataset.confirmado === 'true')) return;
         const mensagem = form.querySelector('.mensagem');
         const dados = new FormData(form);
         dados.set('acao', acao);
         enviando = true;
         requisicoesPendentes++;
-        form.querySelectorAll('button').forEach(button => { button.disabled = true; });
+        atualizarEdicao();
         mensagem.textContent = 'Enviando…';
         try {
             const response = await fetch(form.action, {method: 'POST', body: dados, headers: {Accept: 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
@@ -67,6 +95,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
             if (form.elements.avulsos) form.elements.avulsos.value = resultado.produto.avulsos;
             form.dataset.confirmado = String(resultado.produto.conferido);
             jaConfirmado = jaConfirmado || resultado.produto.conferido;
+            protegido = true;
             atualizarVisual(resultado.produto.conferido);
             form.dataset.valoresSalvos = valores();
             aplicarEstadoConferencia(resultado.conferencia);
@@ -76,7 +105,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
         } finally {
             enviando = false;
             requisicoesPendentes--;
-            if (!conferenciaBloqueada) form.querySelectorAll('button').forEach(button => { button.disabled = false; });
+            atualizarEdicao();
         }
     });
 });

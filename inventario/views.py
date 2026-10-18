@@ -239,6 +239,7 @@ def payload_cego(rodada):
         "passo": "0.001" if cadastro["continua"] else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
         "embalagens": entrada(rodada.embalagens, cadastro["continua"]),
         "avulsos": entrada(rodada.avulsos, cadastro["secundaria_continua"]), "versao": rodada.versao,
+        "guardado": rodada.versao > 0,
         "conferido": rodada.ok_em is not None, "ok_em": rodada.ok_em.isoformat() if rodada.ok_em else None}
 
 
@@ -310,7 +311,7 @@ def contar(request, rodada_id):
         if "text/html" in request.headers.get("Accept", ""):
             return redirect("inventario:mobile")
         return JsonResponse({"produto": payload_cego(rodada), "conferencia": estado_conferencia(acesso),
-            "mensagem": "Produto conferido. Você pode corrigir e dar OK novamente antes de enviar sua atribuição." if rodada.ok_em else "Progresso salvo no servidor. Confirme o OK antes do envio."})
+            "mensagem": "Produto conferido. Use Recontar produto para corrigir antes do envio final." if rodada.ok_em else "Contagem guardada. Confirme o OK ou use Continuar contagem para editar."})
     except (ValueError, ObjectDoesNotExist) as exc:
         if "text/html" in request.headers.get("Accept", ""):
             return render(request, "inventario/erro_contagem.html", {"erro": str(exc)}, status=409)
