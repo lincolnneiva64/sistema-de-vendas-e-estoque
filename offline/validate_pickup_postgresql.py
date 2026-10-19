@@ -89,9 +89,18 @@ def main():
             def teardown_databases(self, old_config, **kwargs):
                 pass
         labels = sys.argv[1:] or ["offline.test_pickup_session", "offline.test_pickup_checklist", "offline.test_pickup_recovery", "offline.test_pickup_links"]
+        from django.db.migrations.executor import MigrationExecutor
+        original_migrate = MigrationExecutor.migrate
+        def restricted_migrate(executor, targets, plan=None, **kwargs):
+            target = ('locacoes', '0017_autorizacao_recolhimento')
+            if (labels == ['offline.test_publicacao_recolhimento'] and targets == [target]
+                    and plan is not None and len(plan) == 1 and not plan[0][1]
+                    and (plan[0][0].app_label, plan[0][0].name) == target and not kwargs):
+                return original_migrate(executor, targets, plan=plan)
+            raise RuntimeError('Migrations proibidas nesta validação: somente a 0017 no teste de publicação é permitida.')
         with (root / "tests.log").open("w", encoding="utf-8") as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
             with patch('django.db.migrations.executor.MigrationExecutor.migrate',
-                       side_effect=RuntimeError('Migrations proibidas nesta validação.')):
+                       autospec=True, side_effect=restricted_migrate):
                 result = OfflineTestRunner(verbosity=2, interactive=False).run_tests(labels)
         estado.update(failures=result, port=port)
     except Exception:

@@ -1,5 +1,44 @@
 # Publicação e reversão do recolhimento individual
 
+## Atualização: publicação controlada pelo build
+
+Por autorização posterior do usuário, o `build.sh` agora chama
+`python -u manage.py publicar_recolhimento` depois de instalar dependências e antes
+de coletar estáticos. Esta etapa substitui a aplicação manual da 0017 descrita no
+roteiro histórico abaixo. O Build Command continua `bash build.sh`; o Start Command
+e o Gunicorn não são alterados. Não há nova migration nem novo ajuste no Render.
+
+O comando consulta o plano **completo** em transação somente leitura. Se houver
+qualquer migration pendente diferente da 0017, dependência não aplicada, histórico
+inconsistente ou conflito, encerra com erro antes de gravar no banco. O `errexit`
+do build impede a publicação da candidata. Se não houver pendências, libera o build
+sem gravar. Se houver somente a 0017, revalida sob lock transacional, aplica apenas
+esse plano explícito e cria as permissões padrão, sem atribuí-las a usuários.
+DDL, histórico da migration e permissões pertencem à mesma transação e são
+revertidos juntos se houver falha. Os limites de espera são 5s por lock e 60s por
+comando SQL. O lock transacional é compatível com pooling de transações.
+
+Nos logs aparecem `Plano completo de migrations pendentes:`, a lista de operações
+e a liberação ou motivo do bloqueio. Após aplicação, outra tentativa não reaplica
+a 0017. Se a coleta de estáticos falhar depois, o banco fica preparado e a próxima
+tentativa segue sem repetir a migration. Esta trava é específica desta publicação;
+outras migrations futuras precisam de revisão e ajuste explícito da trava.
+
+Validação: **7 testes aprovados em PostgreSQL 17.11 descartável**: aplicação e
+repetição sem efeito, outras pendências, dependência 0016 ausente, já aplicada,
+outra pendência com a 0017 aplicada, rollback após DDL e builds concorrentes.
+As recusas e tentativas sem efeito compararam todas as linhas e tabelas antes e
+depois, sem mudanças. A aplicação comparou todos os registros comerciais e
+confirmou que não houve concessão automática de permissão. O cluster foi encerrado.
+Comando reproduzível:
+
+```sh
+python -m offline.validate_pickup_postgresql offline.test_publicacao_recolhimento
+```
+
+Não foi executado build contra produção, deploy no Render ou acesso ao Neon pelo
+agente. O commit usa `[skip render]`; a publicação será manual pelo usuário.
+
 Este roteiro descreve ações futuras e separadamente autorizadas. O commit/push
 não executa migration no Neon nem deploy no Render. O commit usa `[skip render]`,
 marcador documentado pelo Render para não iniciar auto-deploy por esse push.
