@@ -25,6 +25,7 @@ from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste,
 from .apresentacao import entrada, quantidade
 from .painel import resumo_painel
 from .rastreabilidade import ORIGENS
+from .titulos import preparar_titulos
 
 
 def privado(view):
@@ -76,9 +77,12 @@ def lista(request):
             erro = str(exc)
     produtos = services.produtos_disponiveis_para_inventario().order_by("nome")
     inventarios = Inventario.objects.order_by('-criado_em', '-pk')
+    em_andamento = list(inventarios.filter(finalizada_em__isnull=True))
+    finalizados = list(inventarios.filter(finalizada_em__isnull=False))
+    preparar_titulos(em_andamento + finalizados)
     return render(request, "inventario/lista.html", {
-        "em_andamento": inventarios.filter(finalizada_em__isnull=True),
-        "finalizados": inventarios.filter(finalizada_em__isnull=False), "erro": erro,
+        "em_andamento": em_andamento,
+        "finalizados": finalizados, "erro": erro,
         "categorias": produtos.exclude(categoria__isnull=True).exclude(categoria="").values_list("categoria", flat=True).distinct().order_by("categoria"),
         "fornecedores": Fornecedor.objects.filter(produtos_vinculados__ativo=True).distinct().order_by("nome"),
         "produtos": produtos, "resumo": resumo_inicial(), "pode_criar": request.user.has_perm("inventario.gerenciar_inventario")})
