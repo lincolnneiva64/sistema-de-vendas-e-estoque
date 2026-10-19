@@ -9,7 +9,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import connection, transaction
 from django.utils import timezone
 
-from estoque.models import Funcionario, Produto, ProdutoFornecedor
+from estoque.models import Fornecedor, Funcionario, Produto, ProdutoFornecedor
 from .conversao import converter, decimal_entrada, snapshot
 from .erros import ErroAcesso
 from .rastreabilidade import ORIGENS
@@ -58,11 +58,9 @@ def produtos_disponiveis_para_inventario():
 
 
 @transaction.atomic
-def criar_inventario(usuario, titulo, criterio, selecionados):
+def criar_inventario(usuario, titulo=None, criterio=None, selecionados=None):
     permitir(usuario, "gerenciar_inventario")
-    titulo = str(titulo or "").strip()
-    if not titulo or len(titulo) > 160:
-        raise ValueError("Informe um título de até 160 caracteres.")
+    # Keep the legacy argument for callers, but never trust a client-supplied title.
     produtos = produtos_disponiveis_para_inventario()
     if criterio == "categoria":
         categoria = str(selecionados or "").strip()
@@ -70,9 +68,16 @@ def criar_inventario(usuario, titulo, criterio, selecionados):
             raise ValueError("Selecione uma categoria.")
         produtos = produtos.filter(categoria=categoria)
         filtro = {"categoria": categoria}
+        descricao = categoria
     elif criterio == "fornecedor":
-        produtos = produtos.filter(pk__in=ProdutoFornecedor.objects.filter(fornecedor_id=selecionados, ativo=True).values("produto_id"))
-        filtro = {"fornecedor_id": str(selecionados)}
+        try:
+            fornecedor_id = int(selecionados)
+        except (TypeError, ValueError):
+            raise ValueError("Selecione um fornecedor válido.")
+        fornecedor = Fornecedor.objects.get(pk=fornecedor_id)
+        produtos = produtos.filter(pk__in=ProdutoFornecedor.objects.filter(fornecedor=fornecedor, ativo=True).values("produto_id"))
+        filtro = {"fornecedor_id": str(fornecedor.pk)}
+        descricao = fornecedor.nome.strip()
     elif criterio == "manual":
         try:
             ids = {int(pk) for pk in selecionados}
@@ -82,12 +87,19 @@ def criar_inventario(usuario, titulo, criterio, selecionados):
         if produtos.count() != len(ids):
             raise ValueError("Há produtos indisponíveis na seleção.")
         filtro = {"produto_ids": sorted(ids)}
+        descricao = "Produtos selecionados"
     else:
         raise ValueError("Critério inválido.")
     produtos = list(produtos.select_for_update().order_by("pk"))
     if not produtos:
         raise ValueError("Nenhum produto disponível para esse critério.")
-    inventario = Inventario.objects.create(titulo=titulo, criterio=criterio, filtro=filtro, criado_por=usuario)
+    if not descricao:
+        raise ValueError("A seleção não possui nome válido para a conferência.")
+    inventario = Inventario.objects.create(titulo="Conferência", criterio=criterio, filtro=filtro, criado_por=usuario)
+    inventario.titulo = f"Conferência nº {inventario.pk} — {descricao}"
+    if len(inventario.titulo) > Inventario._meta.get_field('titulo').max_length:
+        raise ValueError("O nome selecionado excede o limite do título da conferência (160 caracteres).")
+    inventario.save(update_fields=['titulo'])
     for produto in produtos:
         item = ItemInventario.objects.create(inventario=inventario, produto=produto, cadastro=snapshot(produto), custo_base=produto.preco_compra)
         RodadaContagem.objects.create(item=item, numero=1)

@@ -1,0 +1,6 @@
+<article class="card conferencia-lista {% if not inventario.finalizada_em %}conferencia-andamento{% endif %}" data-conferencia="{{ inventario.pk }}">
+<h3><a href="{% url 'inventario:detalhe' inventario.pk %}">{{ inventario.titulo }}</a></h3>
+<p class="situacao">{% if inventario.finalizada_em %}Finalizada{% else %}Em andamento{% endif %}</p>
+<p>Criada em <time datetime="{{ inventario.criado_em|date:'c' }}">{{ inventario.criado_em|date:'d/m/Y H:i:s' }}</time></p>
+{% if inventario.finalizada_em %}<p>Finalizada em <time datetime="{{ inventario.finalizada_em|date:'c' }}">{{ inventario.finalizada_em|date:'d/m/Y H:i:s' }}</time></p>{% endif %}
+</article>

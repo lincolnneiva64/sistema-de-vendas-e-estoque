@@ -1,4 +1,4 @@
-{% extends 'inventario/base.html' %}{% block content %}
+{% extends 'inventario/base.html' %}{% load tz i18n %}{% block content %}{% language 'pt-br' %}{% timezone 'America/Belem' %}
 <h1>Conferências de estoque</h1><p>Selecione os produtos, distribua a contagem e acompanhe a revisão.</p>
 <section aria-label="Resumo das conferências" class="grid" id="resumo-conferencias">
 <div class="card"><span>Conferências em andamento</span><strong data-indicador="conferencias" style="display:block;font-size:1.8rem">{{ resumo.conferencias }}</strong></div>
@@ -9,14 +9,18 @@
 <p class="muted">Conferências em andamento ainda não foram finalizadas e enviadas. Produtos contados por conferência, somente na última rodada; recontagens pendentes também aguardam OK.</p>
 {% if erro %}<p class="erro" role="alert">{{ erro }}</p>{% endif %}
 {% if pode_criar %}<details class="card"><summary>Nova conferência</summary><form method="post">{% csrf_token %}
-<label>Título<input name="titulo" maxlength="160" required></label>
+<p class="muted">O título será gerado automaticamente com o número da conferência e a seleção escolhida.</p>
 <label>Selecionar por<select name="criterio"><option value="categoria">Categoria</option><option value="fornecedor">Fornecedor vinculado</option><option value="manual">Produtos selecionados</option></select></label>
 <div class="grid"><label>Categoria<select name="categoria"><option value="">Selecione</option>{% for categoria in categorias %}<option>{{ categoria }}</option>{% endfor %}</select></label>
 <label>Fornecedor<select name="fornecedor"><option value="">Selecione</option>{% for fornecedor in fornecedores %}<option value="{{ fornecedor.pk }}">{{ fornecedor.nome }}</option>{% endfor %}</select></label></div>
 <details><summary>Seleção manual de produtos</summary><label>Filtrar produtos<input type="search" id="busca-produtos" placeholder="Nome ou código"></label>
 {% for produto in produtos %}<label class="produto-selecao"><input type="checkbox" name="produtos" value="{{ produto.pk }}"> {{ produto.nome }} · {{ produto.codigo|default:'' }}</label>{% endfor %}</details>
 <p class="muted">Será usado apenas o critério escolhido. A seleção e as regras de conversão ficam congeladas.</p><button>Criar conferência</button></form></details>{% endif %}
-{% for inventario in inventarios %}<article class="card"><h2><a href="{% url 'inventario:detalhe' inventario.pk %}">{{ inventario.titulo }}</a></h2><p>{{ inventario.get_criterio_display }} · Criada em {{ inventario.criado_em|date:'d/m/Y H:i' }} · {% if inventario.finalizada_em %}Finalizada e enviada em {{ inventario.finalizada_em|date:'d/m/Y H:i:s' }}{% else %}Em andamento{% endif %}</p></article>{% empty %}<p>Nenhuma conferência criada.</p>{% endfor %}
-{% endblock %}{% block head %}<style>
+<section aria-labelledby="titulo-em-andamento" id="conferencias-em-andamento"><h2 id="titulo-em-andamento">Conferências em andamento</h2>
+{% for inventario in em_andamento %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência em andamento.</p>{% endfor %}</section>
+<section aria-labelledby="titulo-historico" id="historico-conferencias"><h2 id="titulo-historico">Histórico de conferências finalizadas</h2>
+{% for inventario in finalizados %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência finalizada.</p>{% endfor %}</section>
+{% endtimezone %}{% endlanguage %}{% endblock %}{% block head %}<style>
 #resumo-conferencias{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0 8px}#resumo-conferencias .card{margin:0;padding:12px 14px}#resumo-conferencias span{font-size:.9rem}
+.conferencia-lista{overflow-wrap:anywhere}.conferencia-lista h3{font-size:1.15rem;margin:8px 0 12px}.conferencia-lista p{margin:6px 0}.conferencia-andamento{border-left:4px solid #18796c}.conferencia-lista .situacao{font-weight:650;color:#17634f}#historico-conferencias{margin-top:36px;border-top:1px solid #c4d5da;padding-top:16px}
 </style>{% endblock %}{% block scripts %}{% load static %}<script src="{% static 'inventario/selecao.js' %}" defer></script>{% endblock %}

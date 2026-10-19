@@ -70,12 +70,15 @@ def lista(request):
         try:
             criterio = request.POST.get("criterio")
             selecionados = request.POST.getlist("produtos") if criterio == "manual" else request.POST.get(criterio or "")
-            inventario = services.criar_inventario(request.user, request.POST.get("titulo"), criterio, selecionados)
+            inventario = services.criar_inventario(request.user, None, criterio, selecionados)
             return redirect("inventario:detalhe", inventario.pk)
         except (ValueError, ObjectDoesNotExist) as exc:
             erro = str(exc)
     produtos = services.produtos_disponiveis_para_inventario().order_by("nome")
-    return render(request, "inventario/lista.html", {"inventarios": Inventario.objects.order_by("-pk"), "erro": erro,
+    inventarios = Inventario.objects.order_by('-criado_em', '-pk')
+    return render(request, "inventario/lista.html", {
+        "em_andamento": inventarios.filter(finalizada_em__isnull=True),
+        "finalizados": inventarios.filter(finalizada_em__isnull=False), "erro": erro,
         "categorias": produtos.exclude(categoria__isnull=True).exclude(categoria="").values_list("categoria", flat=True).distinct().order_by("categoria"),
         "fornecedores": Fornecedor.objects.filter(produtos_vinculados__ativo=True).distinct().order_by("nome"),
         "produtos": produtos, "resumo": resumo_inicial(), "pode_criar": request.user.has_perm("inventario.gerenciar_inventario")})
