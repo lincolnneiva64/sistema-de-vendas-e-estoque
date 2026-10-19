@@ -3,7 +3,6 @@
 {% block head %}<link rel="stylesheet" href="{% static 'inventario/historico.css' %}">{% if visual == 'b' %}<link rel="stylesheet" href="{% static 'inventario/historico_b.css' %}">{% endif %}{% endblock %}
 {% block content %}{% include 'inventario/navegacao.html' with conferencia_id=item.inventario_id tela="Extrato" %}{% language 'pt-br' %}
 <div class="extrato-pagina visual-{{ visual }}">
-<a class="voltar" href="{% url 'inventario:detalhe' item.inventario_id %}#detalhe-{{ item.pk }}">← Voltar à conferência</a>
 <div class="extrato-cabecalho"><div><p class="sobretitulo">INVESTIGAR PRODUTO · CONFERÊNCIA Nº {{ item.inventario_id }}</p><h1>Extrato de estoque</h1><h2>{{ item.cadastro.nome }}</h2><p class="muted">Histórico de compras, vendas e movimentações · Rodada {{ rodada.numero }}</p></div><span class="somente-leitura">Somente consulta</span></div>
 <nav class="alternativas-extrato" aria-label="Comparar apresentações">{% for opcao in visuais %}<a href="{{ opcao.url }}" {% if opcao.valor == visual %}aria-current="page"{% endif %}>{{ opcao.rotulo }}</a>{% endfor %}</nav>
 {% include 'inventario/historico_filtros.html' %}

@@ -489,7 +489,7 @@ class AjustesBrowserTests(AjustesFixture, StaticLiveServerTestCase):
                 tab.wait("!!document.querySelector('a[href$=\"/ajustes/\"]')")
                 tab.evaluate("document.querySelector('a[href$=\"/ajustes/\"]').click(); true")
                 tab.wait("!!document.querySelector('.lista-ajustes')")
-                self.assertTrue(tab.evaluate(f"!!document.querySelector('main>a[href=\"{conferencia}\"]')"))
+                self.assertTrue(tab.evaluate(f"!!document.querySelector('.navegacao-contextual a[href=\"{conferencia}\"]')"))
                 destino=Path('artifacts/ajustes');destino.mkdir(parents=True,exist_ok=True)
                 for largura,altura in ((1366,1000),(390,844),(320,800)):
                     tab.call('Emulation.setDeviceMetricsOverride',{'width':largura,'height':altura,'deviceScaleFactor':1,'mobile':largura<768})
