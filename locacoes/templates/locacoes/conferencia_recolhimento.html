@@ -9,10 +9,10 @@
 
   <title>Checklist de recolhimento</title>
 
-  <link
+  {% if not autorizacao_individual %}<link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
     rel="stylesheet"
-  >
+  >{% endif %}
 
   <style>
     :root {
@@ -361,6 +361,14 @@
       {% endfor %}
     {% endif %}
 
+    {% if not request.user.is_authenticated and not conferencia_salva and not autorizacao_individual %}
+      <div class="alert alert-warning" role="status">
+        Você abriu o checklist para consulta. Para confirmar o recolhimento,
+        entre com sua conta habitual neste navegador antes de preencher.
+        <a href="{% url 'offline_login' %}?next={{ request.get_full_path|urlencode }}">Entrar com a conta existente</a>
+      </div>
+    {% endif %}
+
     <section class="cardx">
       <h2>Locacao</h2>
 
@@ -419,6 +427,7 @@
           {% else %}
           {% include "locacoes/includes/operacao_identificacao.html" %}
           {% endif %}
+          <input type="hidden" name="confirmacao_token" value="{{ confirmacao_token }}">
 
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
@@ -430,7 +439,11 @@
             <div class="campo-inteiro">
               {% if form.operacional %}
               <label class="form-label" for="id_funcionario">Funcionário responsável</label>
-              {{ form.funcionario }}
+              {% if autorizacao_individual %}
+                <strong>{{ autorizacao_individual.funcionario.nome }}</strong>
+                <input id="id_funcionario" type="hidden" name="funcionario" value="{{ autorizacao_individual.funcionario_id }}">
+                <p>Autorizado pelo depósito para este recolhimento. Confira os dados antes de confirmar.</p>
+              {% else %}{{ form.funcionario }}{% endif %}
               {% for erro in form.funcionario.errors %}<div class="erro">{{ erro }}</div>{% endfor %}
               {% endif %}
             </div>
@@ -778,10 +791,26 @@
         });
 
       atualizarResultado();
+      let confirmando = false;
+      botao?.form?.addEventListener('submit', function (event) {
+        if (event.defaultPrevented) return;
+        if (confirmando) { event.preventDefault(); return; }
+        confirmando = true;
+        botao.disabled = true;
+        botao.textContent = 'Confirmando recolhimento...';
+      });
+      window.addEventListener('pageshow', function () {
+        confirmando = false;
+        if (botao) botao.textContent = 'Confirmar recolhimento';
+        atualizarResultado();
+      });
+      if (botao) botao.dataset.confirmacaoPronta = 'true';
     })();
   </script>
 <section data-checklist-task="{{ tarefa.pk }}" data-checklist-notes="disabled" hidden></section>
+{% if not autorizacao_individual %}
 {% include 'locacoes/includes/offline_checklist.html' with notes_disabled=True %}
 {% include "locacoes/includes/checklist_embutido.html" %}
+{% endif %}
 </body>
 </html>

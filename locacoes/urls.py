@@ -1,11 +1,14 @@
 from django.urls import path
 
 from . import views
+from . import pickup_links
 
 
 app_name = "locacoes"
 
 urlpatterns = [
+    path('tarefas-operacionais/<int:pk>/autorizar-recolhimento/', pickup_links.manage, name='autorizar_recolhimento'),
+    path('recolhimento-individual/<str:token>/', pickup_links.individual, name='recolhimento_individual'),
     path("", views.lista, name="lista"),
     path("nova/", views.nova, name="nova"),
     path("configuracoes/", views.configuracoes, name="configuracoes"),

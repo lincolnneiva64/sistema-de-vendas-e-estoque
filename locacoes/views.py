@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.contrib import messages
+from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import prefetch_related_objects
@@ -13,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from urllib.parse import quote, urlencode
 
@@ -49,6 +51,7 @@ from .models import (
     PagamentoLocacao,
     TarefaOperacionalLocacao,
 )
+from .pickup_security import failure, PICKUP_PERMISSIONS
 from estoque.models import Funcionario
 from .services import (
     checklist_operacional_locacoes,
@@ -476,6 +479,8 @@ def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
             "telefone": telefone,
             "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
             "whatsapp_url": (
+                reverse('locacoes:autorizar_recolhimento', args=[tarefa.pk]) + '?' + urlencode({'funcionario': funcionario.pk})
+                if tarefa.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO else
                 _whatsapp_tarefa_operacional_funcionario_url(
                     telefone,
                     mensagem_funcionario,
@@ -564,10 +569,8 @@ def _whatsapp_recolhimento_context(request, tarefa):
         "checklist_url": checklist_url,
         "mensagem": mensagem,
         "funcionario": funcionario,
-        "whatsapp_url": _whatsapp_checklist_funcionario_url(
-            funcionario,
-            mensagem,
-        ) if funcionario else _whatsapp_web_url("", mensagem),
+        "whatsapp_url": reverse('locacoes:autorizar_recolhimento', args=[tarefa.pk])
+                        + ('?' + urlencode({'funcionario': funcionario.pk}) if funcionario else ''),
     }
 
 
@@ -1873,6 +1876,9 @@ def checklist_entrega_cliente(request, pk):
 
 
 def checklist_recolhimento_cliente(request, pk):
+    pode_operar = request.user.is_authenticated and request.user.has_perms(PICKUP_PERMISSIONS)
+    if request.method == 'POST' and not pode_operar:
+        return HttpResponseForbidden('Este comprovante é somente para consulta. Operações internas exigem autorização própria.')
     conferencia = get_object_or_404(
         ConferenciaRecolhimentoLocacao.objects.select_related(
             "locacao",
@@ -1992,6 +1998,7 @@ def checklist_recolhimento_cliente(request, pk):
         {
             "conferencia": conferencia,
             "locacao": locacao,
+            "pode_operar_checklist": pode_operar,
             **_dados_contato_locacao(locacao),
             "checklist_url": checklist_url,
             "whatsapp_url": whatsapp_url,
@@ -2010,21 +2017,24 @@ def checklist_recolhimento_cliente(request, pk):
 
 
 @xframe_options_sameorigin
+@never_cache
+@transaction.atomic
 def conferencia_recolhimento(request, pk):
+    grant = getattr(request, 'pickup_grant', None)
     # The legacy and simplified payloads represent the same physical operation.
     # Neither client-controlled fields nor offline state grant write access.
-    if request.method == "POST":
+    if request.method == "POST" and grant is None:
         if not request.user.is_authenticated:
-            messages.warning(request, "Faça login para confirmar o recolhimento. Dados locais preservados.")
-            return redirect(reverse("offline_login") + "?" + urlencode({"next": request.get_full_path()}))
-        if not request.user.has_perms([
-            "locacoes.add_conferenciarecolhimentolocacao",
-            "locacoes.change_locacao",
-            "locacoes.change_tarefaoperacionallocacao",
-        ]):
+            return failure(request, "Sua sessão expirou ou não está disponível neste navegador. "
+                           "Esta tentativa não registrou o recolhimento.", 401)
+        if not request.user.has_perms(PICKUP_PERMISSIONS):
             return HttpResponseForbidden("Você não tem permissão para registrar o recolhimento. Dados locais preservados.")
+    tarefas = TarefaOperacionalLocacao.objects.all()
+    if request.method == "POST":
+        # Serialize the form baseline check and the physical write, including partial pickups.
+        tarefas = tarefas.select_for_update(of=("self",))
     tarefa = get_object_or_404(
-        TarefaOperacionalLocacao.objects
+        tarefas
         .select_related(
             "locacao",
             "locacao__cliente",
@@ -2038,12 +2048,50 @@ def conferencia_recolhimento(request, pk):
         tipo=TarefaOperacionalLocacao.TIPO_RECOLHIMENTO,
     )
     locacao = tarefa.locacao
+    latest = tarefa.conferencias_recolhimento.order_by('-pk').first()
+    baseline = latest.pk if latest else None
+    token_data = {'task': tarefa.pk, 'baseline': baseline}
+    recovery_fields = None
+    if (request.method == 'GET' and request.GET.get('retomar') == '1'
+            and request.user.is_authenticated and request.user.has_perms(PICKUP_PERMISSIONS)):
+        import time
+        draft = request.session.get('pickup_recovery', {})
+        if draft.get('path') == request.path:
+            request.session.pop('pickup_recovery', None)
+            try:
+                fields = draft['fields']
+                original = signing.loads(fields.get('confirmacao_token', ''), salt='pickup-confirmation')
+                if time.time() - draft.get('saved_at', 0) > 1800:
+                    raise signing.BadSignature('Draft expired')
+                if original == token_data:
+                    recovery_fields = fields
+                    messages.info(request, 'Campos recuperados. Revise os dados e confirme quando estiver pronto.')
+                elif latest:
+                    messages.info(request, 'O checklist já foi atualizado. Consulte o comprovante antes de qualquer nova operação.')
+                    return redirect(reverse('locacoes:conferencia_recolhimento', kwargs={'pk': tarefa.pk})
+                                    + '?' + urlencode({'conferencia': latest.pk}))
+            except (signing.BadSignature, KeyError, TypeError):
+                messages.warning(request, 'O rascunho expirou ou não pôde ser validado. Confira o histórico e preencha novamente.')
+    if request.method == 'POST':
+        token = request.POST.get('confirmacao_token')
+        try:
+            original = signing.loads(token or '', salt='pickup-confirmation')
+        except signing.BadSignature:
+            return failure(request, 'A confirmação está inválida. Reabra o checklist e confira o histórico.', 400)
+        if original.get('task') != tarefa.pk:
+            return failure(request, 'A confirmação não corresponde a este checklist.', 400)
+        if original.get('baseline') != baseline:
+            if latest is None:
+                return failure(request, 'O histórico mudou. Reabra o checklist antes de confirmar.', 409)
+            messages.info(request, 'O checklist já foi atualizado. Nenhum novo recolhimento foi registrado nesta tentativa.')
+            return redirect(reverse('locacoes:conferencia_recolhimento', kwargs={'pk': tarefa.pk})
+                            + '?' + urlencode({'conferencia': latest.pk}))
     if tarefa.status == TarefaOperacionalLocacao.STATUS_RESOLVIDA_ADMIN:
         messages.info(request, "Esta tarefa foi resolvida administrativamente.")
         return redirect("locacoes:detalhe", pk=locacao.pk)
-    responsavel_checklist = _nome_funcionario_checklist_por_id(
+    responsavel_checklist = (grant.funcionario.nome if grant else _nome_funcionario_checklist_por_id(
         request.GET.get("funcionario")
-    )
+    ))
 
     conferencia_salva = None
     conferencia_id = request.GET.get(
@@ -2090,10 +2138,12 @@ def conferencia_recolhimento(request, pk):
 
     # Rental-detail conferences retain their transport identity requirements.
     # A client-supplied simple-interface marker cannot relax this route.
-    avancada = request.GET.get("embutido") == "1"
-    simplificada = not avancada and (request.method != "POST" or request.POST.get("interface_simplificada") == "1")
+    avancada = grant is None and request.GET.get("embutido") == "1"
+    simplificada = bool(grant) or (not avancada and (request.method != "POST" or request.POST.get("interface_simplificada") == "1"))
     if request.method == "POST":
         dados_post = request.POST.copy()
+        if grant:
+            dados_post['funcionario'] = str(grant.funcionario_id)
         responsavel = (responsavel_checklist
                        or str(request.POST.get("responsavel") or "").strip()
                        or _responsavel_request(request))
@@ -2125,15 +2175,21 @@ def conferencia_recolhimento(request, pk):
                     )
                     funcionario = form.cleaned_data.get("funcionario")
                     identificacao_funcionario = f"#{funcionario.pk}: " if funcionario else ""
+                    actor = (f'funcionario #{grant.funcionario_id} via autorizacao #{grant.pk}'
+                             if grant else request.user.get_username())
                     EventoLocacao.objects.create(
                         locacao=locacao, tipo="recolhimento_usuario_confirmou",
-                        responsavel=request.user.get_username(),
+                        responsavel=actor,
                         descricao=(
-                            f"Conferencia #{conferencia.pk}; funcionario {identificacao_funcionario}{conferencia.responsavel}; "
-                            f"usuario #{request.user.pk}: {request.user.get_username()}; "
+                            f"Conferencia #{conferencia.pk}; funcionario {identificacao_funcionario}{conferencia.responsavel}; " +
+                            (f"autorizacao #{grant.pk}; emitida por usuario #{grant.emitida_por_id}; " if grant
+                             else f"usuario #{request.user.pk}: {request.user.get_username()}; ") +
                             f"registrado em {conferencia.criado_em.isoformat()}."
                         ),
                     )
+                    if grant:
+                        grant.conferencia = conferencia
+                        grant.save(update_fields=['conferencia'])
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
                     for campo, erros in exc.message_dict.items():
@@ -2158,6 +2214,8 @@ def conferencia_recolhimento(request, pk):
                     ),
                 )
             else:
+                if grant:
+                    return redirect('locacoes:checklist_recolhimento_cliente', pk=conferencia.pk)
                 if request.GET.get("embutido") == "1":
                     return JsonResponse({"ok": True, "tarefa_id": tarefa.pk,
                                          "parcial": conferencia.situacao == ConferenciaRecolhimentoLocacao.SITUACAO_PARCIAL})
@@ -2207,8 +2265,8 @@ def conferencia_recolhimento(request, pk):
     else:
         form = ConferenciaRecolhimentoLocacaoForm(
             locacao=locacao, operacional=not avancada, exigir_identificacao=avancada,
-            initial=(_initial_identificacao_checklist(request, responsavel_checklist) if avancada else {
-                "funcionario": request.GET.get("funcionario") or Funcionario.objects.filter(ativo=True).order_by("nome").values_list("pk", flat=True).first(),
+            initial=recovery_fields or (_initial_identificacao_checklist(request, responsavel_checklist) if avancada else {
+                "funcionario": grant.funcionario_id if grant else request.GET.get("funcionario") or Funcionario.objects.filter(ativo=True).order_by("nome").values_list("pk", flat=True).first(),
             }),
         )
 
@@ -2252,6 +2310,8 @@ def conferencia_recolhimento(request, pk):
             "tarefa": tarefa,
             "locacao": locacao,
             **_dados_contato_locacao(locacao),
+            "confirmacao_token": signing.dumps(token_data, salt='pickup-confirmation'),
+            "autorizacao_individual": grant,
             "data_operacao_checklist": tarefa.data_agendada,
             "horario_operacao_checklist": tarefa.horario_agendado,
             "form": form,

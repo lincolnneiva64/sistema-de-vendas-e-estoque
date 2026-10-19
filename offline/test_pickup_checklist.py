@@ -48,6 +48,7 @@ class PickupChecklistTests(PickupFixture, TestCase):
     def setUp(self):
         self.seed()
         self.client.force_login(self.user)
+        self.payload['confirmacao_token'] = self.client.get(self.url).context['confirmacao_token']
 
     def test_complete_audit_receipt_duplicates_and_counters(self):
         finance = list(MovimentoFinanceiro.objects.values())
@@ -91,6 +92,7 @@ class PickupChecklistTests(PickupFixture, TestCase):
         self.assertEqual(panel['total_recolhimentos'], 1)
         page = self.client.get(self.url)
         self.assertEqual(page.context['pendente_cadeiras'], 2)
+        self.payload['confirmacao_token'] = page.context['confirmacao_token']
         self.client.post(self.url, {**self.payload, 'boa_mesas': '0', 'boa_cadeiras': '2'})
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, 'confirmada')
@@ -125,7 +127,7 @@ class PickupChecklistTests(PickupFixture, TestCase):
 
     def test_security_and_conditional_validation(self):
         anonymous = Client()
-        self.assertIn('/offline/login/', anonymous.post(self.url, self.payload).url)
+        self.assertEqual(anonymous.post(self.url, self.payload).status_code, 401)
         secured = Client(enforce_csrf_checks=True); secured.force_login(self.user)
         self.assertEqual(secured.post(self.url, self.payload).status_code, 403)
         for override in ({'funcionario': '999999'}, {'boa_cadeiras': '5'},
@@ -150,8 +152,8 @@ class PickupChecklistTests(PickupFixture, TestCase):
             if marker is not None:
                 payload['interface_simplificada'] = marker
             response = anonymous.post(self.url, payload)
-            self.assertEqual(response.status_code, 302)
-            self.assertIn('/offline/login/', response.url)
+            self.assertEqual(response.status_code, 401)
+            self.assertNotIn('Location', response.headers)
             self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
             self.assertEqual(list(EventoLocacao.objects.values()), before)
         self.task.refresh_from_db(); self.rental.refresh_from_db()
@@ -192,7 +194,8 @@ class PickupChecklistTests(PickupFixture, TestCase):
         Session.objects.filter(session_key=self.client.cookies['sessionid'].value).update(
             expire_date=timezone.now() - timedelta(seconds=1))
         response = self.client.post(self.url, self.legacy_payload())
-        self.assertIn('/offline/login/', response.url)
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn('Location', response.headers)
         self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
 
 

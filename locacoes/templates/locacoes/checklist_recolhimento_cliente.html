@@ -309,7 +309,7 @@
       </div>
     </section>
 
-    <section class="envio-operacional">
+    {% if pode_operar_checklist %}<section class="envio-operacional">
       {% if evento_envio_checklist %}
         <div class="envio-confirmado">
           <h2>&#10004; Checklist enviado</h2>
@@ -380,6 +380,8 @@
       {% endif %}
     </section>
 
+    {% endif %}
+    <p role="status">Recolhimento registrado. Este comprovante pode ser compartilhado com o cliente.</p>
     <div class="acoes">
       <button class="btn btn-outline-primary btn-doc" id="copiar-checklist" type="button">
         Copiar checklist

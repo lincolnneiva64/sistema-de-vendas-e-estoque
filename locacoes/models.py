@@ -4,6 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -2756,6 +2757,21 @@ class ItemLocacao(models.Model):
         for campo, valor in incrementos.items():
             setattr(self, campo, getattr(self, campo) + valor)
         self.save(update_fields=["devolvida_boa", "quebrada", "perdida", "descartada"])
+
+
+class AutorizacaoRecolhimento(models.Model):
+    """Revocable bearer capability for exactly one physical pickup conference."""
+    tarefa = models.ForeignKey(TarefaOperacionalLocacao, on_delete=models.PROTECT, related_name='autorizacoes_recolhimento')
+    funcionario = models.ForeignKey('estoque.Funcionario', on_delete=models.PROTECT)
+    emitida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    criada_em = models.DateTimeField(auto_now_add=True)
+    expira_em = models.DateTimeField()
+    revogada_em = models.DateTimeField(null=True, blank=True)
+    conferencia = models.OneToOneField(ConferenciaRecolhimentoLocacao, on_delete=models.PROTECT, null=True, blank=True)
+
+    class Meta:
+        permissions = [('autorizar_recolhimento', 'Pode autorizar links individuais de recolhimento')]
 
 
 class EventoLocacao(models.Model):

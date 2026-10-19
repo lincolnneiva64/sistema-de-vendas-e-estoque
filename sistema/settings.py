@@ -118,6 +118,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'sistema.urls'
+CSRF_FAILURE_VIEW = 'locacoes.pickup_security.csrf_failure'
 OFFLINE_ENVIRONMENT_ID = config("OFFLINE_ENVIRONMENT_ID", default="").strip()
 
 TEMPLATES = [

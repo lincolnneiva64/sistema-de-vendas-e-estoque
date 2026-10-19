@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Confirmação do recolhimento</title></head>
+<body><main style="max-width:560px;margin:24px auto;padding:16px;font-family:system-ui">
+<h1>Recolhimento não confirmado nesta tentativa</h1>
+<p role="alert">{{ explanation }}</p>
+<p>Se houve uma confirmação anterior, consulte o histórico. Não repita um recolhimento já registrado.</p>
+<p><a href="{{ return_url }}">Voltar ao checklist e consultar o histórico</a></p>
+{% if draft_saved %}<p>Os campos desta tentativa foram guardados temporariamente na sessão deste navegador.</p>{% endif %}
+<p><a href="{{ login_url }}">Restabelecer a sessão existente</a></p>
+<p>Use sua conta habitual. Após entrar, o checklist será reaberto para revisar os campos. Nenhuma operação será reenviada automaticamente. Retome em até 30 minutos, no mesmo navegador, sem apagar os cookies.</p>
+</main></body></html>

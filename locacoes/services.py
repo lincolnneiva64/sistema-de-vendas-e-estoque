@@ -126,7 +126,11 @@ def envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=Fals
             "nome": funcionario.nome,
             "telefone": telefone,
             "telefone_exibicao": funcionario.telefone_whatsapp or telefone,
-            "whatsapp_url": whatsapp_web_url(telefone, mensagem) if telefone else "",
+            "whatsapp_url": (
+                reverse('locacoes:autorizar_recolhimento', args=[tarefa.pk]) + '?' + urlencode({'funcionario': funcionario.pk})
+                if tarefa.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO
+                else whatsapp_web_url(telefone, mensagem) if telefone else ""
+            ),
         })
     funcionario_padrao = next(
         (funcionario for funcionario in funcionarios if funcionario["telefone"]),

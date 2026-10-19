@@ -1,9 +1,11 @@
 import os
+import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.conf import settings
 from django.test import Client
 
 from .browser_support import Chrome
@@ -64,6 +66,10 @@ class ChecklistNavigationTests(StaticLiveServerTestCase):
                 self.assertTrue(tab.evaluate('(await (await fetch("/offline/assets/2-8g-close/sales-drafts.js")).text()).includes("legacyDraftKey")'))
                 self.assertEqual(tab.evaluate('await upgradeRepo.get("metadata","cache-upgrade-draft")'), {'key':'cache-upgrade-draft', 'text':'rascunho preservado'})
                 self.assertEqual(tab.evaluate('await (await (await caches.open("preserved-test-cache")).match("/keep")).text()'), 'preserved')
-                self.assertTrue(tab.evaluate('(await caches.keys()).includes("offline-pilot-shell-v38-integrated-pickup")'))
+                # The remote base already advanced the shell version. Check its current
+                # cache while still asserting removal of the old shell and retention of drafts.
+                worker_source = (settings.BASE_DIR / 'static/offline/service-worker.js').read_text(encoding='utf-8-sig')
+                current_cache = re.search(r"const CACHE = '([^']+)';", worker_source).group(1)
+                self.assertTrue(tab.evaluate('(await caches.keys()).includes(' + repr(current_cache) + ')'))
             finally:
                 chrome.stop()
