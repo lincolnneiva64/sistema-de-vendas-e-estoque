@@ -7,6 +7,7 @@ from functools import wraps
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.middleware.csrf import get_token
 from django.db.models import Count, F, Q, OuterRef, Subquery
@@ -19,6 +20,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
+from .conversao import converter
 from . import services, sessoes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
@@ -171,6 +173,7 @@ def detalhe(request, inventario_id):
             else:
                 raise ValueError("Ação inválida.")
             if not link:
+                messages.success(request, "Conferência atualizada com sucesso.")
                 return redirect("inventario:detalhe", inventario.pk)
         except (ValueError, ObjectDoesNotExist, PermissionDenied) as exc:
             erro = str(exc)
@@ -273,7 +276,15 @@ def payload_cego(rodada):
     # A concurrent OK may commit after this round was read. Keep the history
     # consistent with the version being returned; a stale write still gets 409.
     ultimo = rodada.confirmacoes.filter(versao_entrada__lt=rodada.versao).order_by("-versao_entrada").first()
-    return {"id": rodada.pk, "nome": cadastro["nome"], "codigo": cadastro["codigo"], "base": cadastro["base"],
+    total = ""
+    exibir_total = cadastro["base"] == "PCT" and cadastro["secundaria"] == "KG" and cadastro["fracionado"]
+    if exibir_total:
+        try:
+            total = format(converter(cadastro, rodada.embalagens, rodada.avulsos)[3], ".3f").replace(".", ",")
+        except ValueError:
+            pass
+    return {"total_convertido": total, "exibir_total": exibir_total,
+        "id": rodada.pk, "nome": cadastro["nome"], "codigo": cadastro["codigo"], "base": cadastro["base"],
         "secundaria": cadastro["secundaria"], "fracionado": cadastro["fracionado"],
         "passo": "0.001" if cadastro["continua"] else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
         "embalagens": entrada(rodada.embalagens, cadastro["continua"]),
@@ -298,7 +309,7 @@ def mobile(request):
         return JsonResponse({"produtos": produtos, "conferencia": estado, "csrf": get_token(request),
                              "acesso_id": acesso.pk})
     return render(request, "inventario/mobile.html", {"funcionario": acesso.funcionario_nome, "conferencia": estado,
-        "produtos": produtos, "acesso_id": acesso.pk})
+        "produtos": produtos, "acesso_id": acesso.pk, "conferencia_id": acesso.inventario_id})
 
 
 def estado_conferencia(acesso):
@@ -362,3 +373,18 @@ def contar(request, rodada_id):
         if "text/html" in request.headers.get("Accept", ""):
             return render(request, "inventario/erro_contagem.html", {"erro": str(exc)}, status=409)
         return JsonResponse({"erro": str(exc)}, status=409)
+
+
+@privado
+@require_http_methods(["GET"])
+def previa_conversao(request, rodada_id):
+    """Read-only preview using the same frozen rules as the persisted count."""
+    acesso = acesso_sessao(request)
+    rodada = get_object_or_404(RodadaContagem.objects.select_related("item"),
+        pk=rodada_id, atribuicao__acesso=acesso, encerrada_em__isnull=True,
+        item__inventario__ciclo=acesso.ciclo)
+    try:
+        total = converter(rodada.item.cadastro, request.GET.get("embalagens"), request.GET.get("avulsos"))[3]
+        return JsonResponse({"total": format(total, ".3f").replace(".", ",")})
+    except ValueError as exc:
+        return JsonResponse({"erro": str(exc)}, status=400)

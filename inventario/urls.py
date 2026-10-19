@@ -15,6 +15,7 @@ urlpatterns = [
     path("acesso/<str:token>/", views.convite, name="convite"),
     path("contagem/", views.mobile, name="mobile"),
     path("contagem/finalizar/", views.finalizar, name="finalizar"),
+    path("contagem/<int:rodada_id>/conversao/", views.previa_conversao, name="previa_conversao"),
     path("contagem/<int:rodada_id>/", views.contar, name="contar"),
     path("contagem/<int:rodada_id>/sinalizar/", views.sinalizar, name="sinalizar"),
 ]

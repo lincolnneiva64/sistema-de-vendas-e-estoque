@@ -1,4 +1,4 @@
-{% extends 'inventario/base.html' %}{% load l10n static i18n %}{% block head %}<link rel="stylesheet" href="{% static 'inventario/revisao.css' %}">{% endblock %}{% block content %}{% language 'pt-br' %}
+{% extends 'inventario/base.html' %}{% load l10n static i18n %}{% block head %}<link rel="stylesheet" href="{% static 'inventario/revisao.css' %}">{% endblock %}{% block content %}{% include 'inventario/navegacao.html' with conferencia_id=inventario.pk %}{% language 'pt-br' %}
 <div class="painel-inventario">
 <a class="voltar-painel" href="{% url 'inventario:lista' %}">← Conferências</a>
 <div class="cabecalho-painel"><div><p class="sobretitulo">CONFERÊNCIA DE ESTOQUE · Nº {{ inventario.pk }}</p><h1>{{ inventario.titulo }}</h1><p class="muted">Criada em {{ inventario.criado_em|date:'d/m/Y H:i' }} · Ciclo {{ inventario.ciclo }}</p></div><a class="exportar-painel" href="{% url 'inventario:relatorio' inventario.pk %}">Exportar relatório CSV ↗</a></div>

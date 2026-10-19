@@ -3,6 +3,13 @@ let requisicoesPendentes = 0;
 let finalizando = false;
 let verificando = false;
 const recuperarFormularios = new Map();
+function ocupado(botao, texto) {
+    const anterior = botao.textContent;
+    botao.textContent = texto;
+    botao.setAttribute('aria-busy', 'true');
+    return () => { botao.textContent = anterior; botao.removeAttribute('aria-busy'); };
+}
+
 async function lerResposta(response) {
     if (!response.headers.get('content-type')?.includes('application/json')) {
         throw new Error('Resposta inesperada do servidor (HTTP ' + response.status + '). Use Verificar acesso e último OK; preserve esta tela.');
@@ -37,6 +44,45 @@ document.querySelectorAll('form.contagem').forEach(form => {
     form.dataset.valoresSalvos = valores();
     form.dataset.confirmado = form.querySelector('.mensagem').dataset.confirmado;
     const cartao = form.closest('article');
+    const quadro = form.querySelector('[data-conversao-url]');
+    let consulta;
+    let sequenciaConversao = 0;
+    function totalServidor(produto) {
+        if (!quadro) return;
+        sequenciaConversao++;
+        consulta?.abort();
+        quadro.querySelector('output').textContent = produto.total_convertido ? produto.total_convertido + ' PCT' : '—';
+        quadro.querySelector('[data-erro-conversao]').textContent = '';
+        quadro.removeAttribute('aria-busy');
+    }
+    async function atualizarTotal() {
+        if (!quadro) return;
+        consulta?.abort();
+        const atual = ++sequenciaConversao;
+        consulta = new AbortController();
+        const principal = form.elements.embalagens.value;
+        const avulsos = form.elements.avulsos.value;
+        const output = quadro.querySelector('output');
+        const erro = quadro.querySelector('[data-erro-conversao]');
+        erro.textContent = '';
+        if (!principal || !avulsos) { output.textContent = '—'; quadro.removeAttribute('aria-busy'); return; }
+        output.textContent = 'Calculando...';
+        quadro.setAttribute('aria-busy', 'true');
+        try {
+            const url = new URL(quadro.dataset.conversaoUrl, location.href);
+            url.search = new URLSearchParams({embalagens: principal, avulsos});
+            const resultado = await lerResposta(await fetch(url, {credentials:'same-origin', cache:'no-store', headers:{Accept:'application/json'}, signal:consulta.signal}));
+            if (atual === sequenciaConversao) output.textContent = resultado.total + ' PCT';
+        } catch (falha) {
+            if (atual !== sequenciaConversao || falha.name === 'AbortError') return;
+            output.textContent = '—';
+            erro.textContent = falha instanceof TypeError ? 'Sem conexão para calcular. Confira o total após guardar a contagem.' : falha.message;
+        } finally {
+            if (atual === sequenciaConversao) quadro.removeAttribute('aria-busy');
+        }
+    }
+    form.addEventListener('input', atualizarTotal);
+
     let jaConfirmado = form.dataset.confirmado === 'true';
     let protegido = form.querySelector('.mensagem').dataset.guardado === 'true';
     const editar = form.querySelector('[data-editar-contagem]');
@@ -121,12 +167,14 @@ document.querySelectorAll('form.contagem').forEach(form => {
         const dados = new FormData(form);
         dados.set('acao', acao);
         enviando = true;
+        const restaurar = ocupado(event.submitter, acao === 'salvar' ? 'Salvando...' : 'Confirmando...');
         requisicoesPendentes++;
         atualizarEdicao();
         mensagem.textContent = pendencia() + ' Enviando…';
         try {
             const response = await fetch(form.action, {method: 'POST', body: dados, headers: {Accept: 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
             const resultado = await lerResposta(response);
+            totalServidor(resultado.produto);
             form.elements.versao.value = resultado.produto.versao;
             form.elements.embalagens.value = resultado.produto.embalagens;
             if (form.elements.avulsos) form.elements.avulsos.value = resultado.produto.avulsos;
@@ -147,6 +195,8 @@ document.querySelectorAll('form.contagem').forEach(form => {
         } finally {
             enviando = false;
             requisicoesPendentes--;
+            restaurar();
+            atualizarVisual(form.dataset.confirmado === 'true');
             atualizarEdicao();
         }
     });
@@ -163,6 +213,7 @@ document.querySelectorAll('form.sinalizacao').forEach(form => {
         const button = form.querySelector('button');
         const mensagem = form.querySelector('.mensagem-sinalizacao');
         button.disabled = true;
+        const restaurar = ocupado(button, 'Enviando...');
         let concluido = false;
         try {
             const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {Accept: 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
@@ -175,6 +226,7 @@ document.querySelectorAll('form.sinalizacao').forEach(form => {
         } finally {
             enviando = false;
             requisicoesPendentes--;
+            restaurar();
             if (!concluido && !conferenciaBloqueada) button.disabled = false;
         }
     });
@@ -184,7 +236,7 @@ const finalizarConferencia = document.querySelector('#finalizar-conferencia');
 if (finalizarConferencia) finalizarConferencia.addEventListener('submit', async event => {
     event.preventDefault();
     const mensagem = finalizarConferencia.querySelector('.mensagem-finalizacao');
-    if (conferenciaBloqueada || requisicoesPendentes || verificando) {
+    if (conferenciaBloqueada || finalizando || requisicoesPendentes || verificando) {
         mensagem.textContent = 'Aguarde as gravações em andamento antes de finalizar.';
         return;
     }
@@ -200,6 +252,8 @@ if (finalizarConferencia) finalizarConferencia.addEventListener('submit', async 
     const campos = [...document.querySelectorAll('form.contagem fieldset, form.sinalizacao fieldset')].map(campo => [campo, campo.disabled]);
     campos.forEach(([campo]) => { campo.disabled = true; });
     finalizarConferencia.querySelector('button').disabled = true;
+    const restaurar = ocupado(finalizarConferencia.querySelector('button'), 'Confirmando envio...');
+    mensagem.textContent = 'Confirmando envio...';
     try {
         const resposta = await fetch(finalizarConferencia.action, {method: 'POST', body: dados,
             headers: {Accept: 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
@@ -211,6 +265,7 @@ if (finalizarConferencia) finalizarConferencia.addEventListener('submit', async 
     } finally {
         requisicoesPendentes--;
         finalizando = false;
+        restaurar();
         if (!conferenciaBloqueada) {
             campos.forEach(([campo, desabilitado]) => { campo.disabled = desabilitado; });
             finalizarConferencia.querySelector('button').disabled = false;
@@ -227,6 +282,7 @@ if (verificarAcesso) verificarAcesso.addEventListener('click', async () => {
     }
     verificando = true;
     verificarAcesso.disabled = true;
+    const restaurar = ocupado(verificarAcesso, 'Verificando...');
     mensagem.textContent = 'Consultando o acesso e o último OK no servidor…';
     // Freeze edits while consulting the server, without discarding the draft.
     const campos = [...document.querySelectorAll('form fieldset')].map(campo => [campo, campo.disabled]);
@@ -257,6 +313,7 @@ if (verificarAcesso) verificarAcesso.addEventListener('click', async () => {
     } finally {
         verificando = false;
         verificarAcesso.disabled = false;
+        restaurar();
         if (!conferenciaBloqueada) campos.forEach(([campo, disabled]) => { campo.disabled = disabled; });
     }
 });

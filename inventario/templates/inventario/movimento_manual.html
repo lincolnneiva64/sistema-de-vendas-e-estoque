@@ -1,6 +1,6 @@
 {% extends 'inventario/base.html' %}{% load i18n %}
 {% block title %}Registro manual #{{ movimento.pk }}{% endblock %}
-{% block content %}{% language 'pt-br' %}
+{% block content %}{% include 'inventario/navegacao.html' with conferencia_id=rodada.item.inventario_id tela="Registro manual" %}{% language 'pt-br' %}
 <a href="{% url 'inventario:historico_produto' rodada.item.inventario_id rodada.pk %}?periodo=completo">← Voltar ao extrato completo</a>
 <section class="card"><p class="muted">Somente consulta · Registro original de estoque manual</p>
 <h1>Registro manual #{{ movimento.pk }}</h1><h2>{{ rodada.item.cadastro.nome }}</h2>

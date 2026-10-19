@@ -5,3 +5,5 @@
 .produto-pendente .estado-produto{padding:12px;border-left:4px solid #bd820a;background:#fff3cc;color:#704c04}
 .guardar-contagem:not(:disabled){background:#0b5d50;border:2px solid #06483d;box-shadow:0 3px 7px #06483d33;font-weight:750}
 form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344c45}
+
+.total-convertido{display:flex;flex-direction:column;gap:8px;padding:16px;margin:16px 0;background:#eaf4f2;border:1px solid #8eb7ad;border-radius:10px}.total-convertido output{font-size:1.6rem;font-weight:750;color:#124f44}.total-convertido small{color:#704c04}

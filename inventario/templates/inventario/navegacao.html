@@ -1,0 +1,2 @@
+<nav class="navegacao-contextual" aria-label="Navegação da conferência"><a href="{% url 'estoque:home' %}">Início do estoque</a>{% if conferencia_id %}<a href="{% url 'inventario:lista' %}">Todas as conferências</a>{% endif %}{% if conferencia_id and tela %}<a href="{% url 'inventario:detalhe' conferencia_id %}">Voltar à conferência</a>{% endif %}</nav>
+<p class="caminho">Estoque &gt; Conferências{% if conferencia_id %} &gt; Conferência nº {{ conferencia_id }}{% endif %}{% if tela %} &gt; {{ tela }}{% endif %}</p>

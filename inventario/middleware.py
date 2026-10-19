@@ -19,7 +19,7 @@ class AcessoLimitadoMiddleware:
             return resposta(request, exception.codigo, str(exception))
         match = request.resolver_match
         if (isinstance(exception, PermissionDenied) and match and match.namespace == "inventario"
-                and match.url_name in {"convite", "mobile", "contar", "sinalizar", "finalizar"}):
+                and match.url_name in {"convite", "mobile", "contar", "sinalizar", "finalizar", "previa_conversao"}):
             return resposta(request, "acesso_negado", str(exception))
 
     def __call__(self, request):

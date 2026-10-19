@@ -1,7 +1,7 @@
 {% extends 'inventario/base.html' %}{% load static i18n %}
 {% block title %}Conferir e atualizar estoque · {{ inventario.titulo }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{% static 'inventario/ajustes.css' %}">{% endblock %}
-{% block content %}{% language 'pt-br' %}
+{% block content %}{% include 'inventario/navegacao.html' with conferencia_id=inventario.pk tela="Ajustes" %}{% language 'pt-br' %}
 <a href="{% url 'inventario:detalhe' inventario.pk %}">← Conferência nº {{ inventario.pk }}</a>
 <div class="cabecalho-ajustes"><div><p class="muted">CONFERÊNCIA FÍSICA</p><h1>Conferir e atualizar estoque</h1><p>{{ inventario.titulo }}</p></div></div>
 <p class="aviso bloqueio-tecnico">{% if not habilitado %}<strong>Aplicação real desabilitada no servidor.</strong> Prévia disponível; o estoque não será alterado.{% else %}Confira os saldos e confirme a atualização. A confirmação registra sua autorização.{% endif %}</p>

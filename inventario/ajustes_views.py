@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import OuterRef, Subquery
@@ -33,6 +34,7 @@ def painel(request, inventario_id):
                     confirmacao=request.POST.get('confirmacao') == 'sim')
             else:
                 raise ValueError('Ação inválida.')
+            messages.success(request, 'Operação de ajuste concluída. Confira os resultados e a auditoria abaixo.')
             return redirect('inventario:ajustes', inventario.pk)
         except PermissionDenied:
             raise

@@ -1,4 +1,4 @@
-{% extends 'inventario/base.html' %}{% load tz i18n %}{% block content %}{% language 'pt-br' %}{% timezone 'America/Belem' %}
+{% extends 'inventario/base.html' %}{% load tz i18n %}{% block content %}{% include 'inventario/navegacao.html'  %}{% language 'pt-br' %}{% timezone 'America/Belem' %}
 <h1>Conferências de estoque</h1><p>Selecione os produtos, distribua a contagem e acompanhe a revisão.</p>
 <section aria-label="Resumo das conferências" class="grid" id="resumo-conferencias">
 <div class="card"><span>Conferências em andamento</span><strong data-indicador="conferencias" style="display:block;font-size:1.8rem">{{ resumo.conferencias }}</strong></div>
