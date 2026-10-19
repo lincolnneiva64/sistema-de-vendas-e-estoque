@@ -223,3 +223,51 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
             decisao=decisao.pk, operacao=str(registro.pk), lote=str(lote), diferenca=str(registro.diferenca))
         resultados.append(registro)
     return resultados
+
+
+def previa_atualizacao(inventario_id, linhas):
+    return token(dict(tipo='atualizacao', inventario=inventario_id,
+        rodadas=[dict(rodada=l['rodada'].pk, assinatura=l['assinatura']) for l in linhas]))
+
+
+@transaction.atomic
+def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
+    """One explicit authorization; approval and application commit together."""
+    services.permitir(usuario, 'aprovar_ajuste')
+    verificar_execucao()
+    if not confirmacao:
+        raise ValueError('Confirmação expressa de atualização obrigatória.')
+    observacao = str(observacao or '').strip()
+    if len(observacao) > 4000:
+        raise ValueError('Observação deve ter até 4000 caracteres.')
+    dados = ler_token(previa)
+    entradas = dados.get('rodadas')
+    if (dados.get('tipo') != 'atualizacao' or dados.get('inventario') != inventario_id
+            or not isinstance(entradas, list) or not 1 <= len(entradas) <= 500
+            or any(not isinstance(e, dict) or not isinstance(e.get('rodada'), int)
+                   or not isinstance(e.get('assinatura'), str) for e in entradas)
+            or len({e['rodada'] for e in entradas}) != len(entradas)):
+        raise ValueError('Prévia de atualização inválida.')
+    travadas = bloquear(inventario_id, [e['rodada'] for e in entradas])
+    propostas = {p.rodada_id: p for p in PropostaAjuste.objects.filter(
+        rodada_id__in=[r.pk for r, _ in travadas], estado='aplicado')}
+    if propostas:
+        if len(propostas) == len(entradas) and all(
+                propostas[e['rodada']].assinatura == e['assinatura'] for e in entradas):
+            return list(AplicacaoAjuste.objects.filter(proposta__in=propostas.values()).order_by('proposta__rodada_id'))
+        raise ValueError('Seleção parcialmente atualizada. Confira os resultados e confirme uma nova seleção.')
+    assinaturas = {e['rodada']: e['assinatura'] for e in entradas}
+    propostas = []
+    for rodada, produto in travadas:
+        atual = avaliar(rodada, produto, travar_documentos=True)
+        if (atual['bloqueio'] or atual['estado'] not in ('Pendente de revisão', 'Aprovado')
+                or atual.get('assinatura') != assinaturas[rodada.pk]):
+            raise ValueError(atual['bloqueio'] or 'Dados alterados. Confira os saldos e confirme novamente.')
+        proposta = decidir(usuario, inventario_id, rodada.pk, atual['token'],
+            observacao or 'Atualização de estoque confirmada pelo gestor.',
+            confirmacao=True)
+        EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao='confirmado_gestor',
+            dados=dict(confirmacao_fisica=proposta.confirmacao_id, observacao=observacao,
+                       assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica'))
+        propostas.append(proposta)
+    return aplicar(usuario, inventario_id, previa_aplicacao(inventario_id, propostas), confirmacao=True)

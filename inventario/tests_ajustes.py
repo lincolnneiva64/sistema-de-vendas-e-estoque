@@ -234,13 +234,13 @@ class PreparacaoTests(AjustesFixture, TestCase):
         conferir_ou_ajustar_estoque(self.produto.pk, 'ajuste', 10, 'Entrada teste')
         self.assertTrue(self.avaliar()['bloqueio'])
 
-    def test_resumo_lote_mostra_somente_aprovados_aptos(self):
+    def test_resumo_lote_inclui_pendentes_aptos_sem_aprovacao_separada(self):
         p = self.aprovar(); r2 = self.segunda()
         r = self.client.get(self.url, {'confirmar':'todos'})
-        self.assertEqual(r.context['resumo']['aptos'], 1)
+        self.assertEqual(r.context['resumo']['aptos'], 2)
         self.assertEqual(r.context['resumo']['pendentes'], 1)
-        self.assertEqual(len(r.context['confirmacoes']), 1)
-        self.assertContains(r, 'todos os selecionados ou nenhum')
+        self.assertEqual(len(r.context['confirmacoes']), 2)
+        self.assertContains(r, 'por inteiro ou nenhuma alteração')
 
 
 @skipUnless(connection.vendor == 'postgresql', 'PostgreSQL descartável obrigatório')
@@ -502,7 +502,7 @@ class AjustesBrowserTests(AjustesFixture, StaticLiveServerTestCase):
                     (destino/f'ajustes-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',{'format':'png','captureBeyondViewport':True})['data']))
             finally: chrome.stop()
 
-    def test_aprovar_e_aplicar_individual_pelo_navegador_descartavel(self):
+    def test_atualizar_individual_pelo_navegador_descartavel(self):
         with TemporaryDirectory(prefix='ajustes-fluxo-') as profile:
             chrome=Chrome(CHROME,profile).start()
             try:
@@ -510,17 +510,53 @@ class AjustesBrowserTests(AjustesFixture, StaticLiveServerTestCase):
                 tab.call('Network.setCookie',{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url})
                 tab.call('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True})
                 tab.call('Page.navigate',{'url':self.live_server_url+self.url})
-                tab.wait("!!document.querySelector('.revisar-proposta')")
-                tab.evaluate("document.querySelector('.revisar-proposta').open=true; document.querySelector('textarea').value='Evidência física fictícia validada no navegador'; document.querySelector('[name=revisao_fisica]').checked=true; document.querySelector('[name=acao][value=aprovar]').click(); true")
-                tab.wait("!!document.querySelector('[data-estado=Aprovado]')")
+                tab.wait("!!document.querySelector('.proposta-ajuste .button')")
                 self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
-                tab.evaluate("document.querySelector('a[href*=confirmar]').click();true")
+                tab.evaluate("document.querySelector('.proposta-ajuste .button').click();true")
                 tab.wait("!!document.querySelector('#confirmar-aplicacao button:disabled')")
                 with override_settings(INVENTARIO_AJUSTES_HABILITADOS=True):
-                    tab.call('Page.navigate',{'url':self.live_server_url+self.url+'?confirmar=todos'})
+                    tab.call('Page.navigate',{'url':self.live_server_url+self.url+'?confirmar='+str(self.rodada.pk)})
                     tab.wait("!!document.querySelector('#confirmar-aplicacao button:not(:disabled)')")
-                    tab.evaluate("document.querySelector('[name=confirmacao]').checked=true; document.querySelector('#confirmar-aplicacao button').click();true")
+                    destino=Path('artifacts/ajustes');destino.mkdir(parents=True,exist_ok=True)
+                    tab.evaluate("document.querySelector('#confirmar-aplicacao').scrollIntoView(); true")
+                    (destino/'confirmacao-individual-mobile.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',{'format':'png'})['data']))
+                    tab.evaluate("document.querySelector('#confirmar-aplicacao button').click();true")
                     tab.wait("!!document.querySelector('[data-estado=Aplicado]')")
                 self.assertEqual(AplicacaoAjuste.objects.count(),1)
                 self.assertEqual(self.fresca().item.produto.quantidade,8)
             finally: chrome.stop()
+
+
+    def test_lote_desktop_duplo_clique_confirmacao_unica(self):
+        self._confirmar_lote(1366, 1000)
+
+    def test_lote_mobile_duplo_clique_confirmacao_unica(self):
+        self._confirmar_lote(390, 844)
+
+    @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
+    def _confirmar_lote(self, largura, altura):
+        self.segunda()
+        with TemporaryDirectory(prefix='ajustes-lote-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab()
+                tab.call('Network.enable')
+                tab.call('Network.setCookie', {'name': 'sessionid',
+                    'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url})
+                tab.call('Emulation.setDeviceMetricsOverride', dict(width=largura, height=altura,
+                    deviceScaleFactor=1, mobile=largura < 768))
+                tab.call('Page.navigate', {'url': self.live_server_url+self.url+'?confirmar=todos'})
+                tab.wait("!!document.querySelector('#confirmar-aplicacao button:not(:disabled)')")
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#confirmar-aplicacao li').length"), 2)
+                self.assertFalse(tab.evaluate("!!document.querySelector('input[type=checkbox]')"))
+                destino = Path('artifacts/ajustes'); destino.mkdir(parents=True, exist_ok=True)
+                tab.evaluate("document.querySelector('#confirmar-aplicacao').scrollIntoView(); true")
+                (destino/f'confirmacao-lote-{largura}.png').write_bytes(base64.b64decode(
+                    tab.call('Page.captureScreenshot', {'format':'png'})['data']))
+                tab.evaluate("document.querySelector('#confirmar-aplicacao button').click(); document.querySelector('#confirmar-aplicacao button')?.click(); true")
+                tab.wait("document.querySelectorAll('[data-estado=Aplicado]').length===2")
+                self.assertEqual(AplicacaoAjuste.objects.count(), 2)
+                self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 2)
+                self.assertEqual(EventoAjuste.objects.filter(acao='confirmado_gestor').count(), 2)
+            finally:
+                chrome.stop()
