@@ -15,7 +15,6 @@ from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
                      PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado)
 
 SALT = 'inventario-ajustes-v1'
-CONFERENCIAS_PRESERVADAS = frozenset({1})
 
 
 def assinatura(dados):
@@ -35,7 +34,7 @@ def ler_token(valor):
         raise ValueError('Prévia inválida ou expirada. Prepare novamente os ajustes.')
 
 
-def avaliar(rodada, produto=None):
+def avaliar(rodada, produto=None, travar_documentos=False):
     """Read-only preview; equality of balances alone never establishes continuity."""
     produto = produto or rodada.item.produto
     item = rodada.item
@@ -49,8 +48,8 @@ def avaliar(rodada, produto=None):
     resultado['movimentos'] = movimentos
     resultado['posteriores'] = [m for m in movimentos if m.sequencia > (rodada.sequencia_ok or 0)]
     try:
-        if item.inventario_id in CONFERENCIAS_PRESERVADAS:
-            raise ValueError('Conferência nº 1 preservada: somente consulta; nenhuma aprovação ou aplicação.')
+        # All conferences use the same evidence checks for preparation/approval.
+        # Actual execution remains separately guarded in aplicar().
         if DecisaoAjuste.objects.filter(item=item).exists():
             resultado['estado'] = 'Aplicado'
             return resultado
@@ -62,23 +61,24 @@ def avaliar(rodada, produto=None):
         if not confirmacao or any(getattr(confirmacao, campo) != getattr(rodada, campo)
                 for campo in ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')):
             raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
-        sequencia = services.validar_cadeia(rodada, produto)
-        # Observer rows do not freeze the historical unit. Free-text reconciliation
-        # cannot establish it. Remain blocked even if the numeric chain closes.
-        if movimentos:
-            raise ValueError('Movimentações entre confirmações ou após o OK sem unidade histórica congelada. '
-                             'Conciliação textual não basta para aplicar; solicite nova contagem após os lançamentos.')
+        from .conciliacao_documental import conciliar
+        documentos = conciliar(rodada, movimentos, travar=travar_documentos)
+        resultado['documentos'] = documentos
+        sequencia = services.validar_cadeia(rodada, produto,
+            documentos={d['observador'] for d in documentos})
         diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal('.001'))
         resultante = produto.quantidade + diferenca
         resultado.update(diferenca=diferenca, resultante=resultante)
         if diferenca == 0:
-            raise ValueError('Sem diferença a aplicar.')
+            resultado.update(estado='Sem ajuste', bloqueio='Sem diferença a aplicar.')
+            return resultado
         if not Decimal(0) <= resultante < Decimal('1000000000'):
             raise ValueError('Saldo proposto fora dos limites do estoque.')
         dados = dict(inventario=item.inventario_id, item=item.pk, produto=produto.pk,
             rodada=rodada.pk, versao=rodada.versao, confirmacao=confirmacao.pk,
             ok_em=rodada.ok_em.isoformat(), esperado=str(rodada.esperado), contado=str(rodada.contado_base),
             cadastro=item.cadastro, sequencia=sequencia, atual=str(produto.quantidade),
+            documentos=documentos,
             diferenca=str(diferenca), resultante=str(resultante),
             sinais=list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
         resultado.update(evidencia=dados, assinatura=assinatura(dados))
@@ -122,7 +122,7 @@ def decidir(usuario, inventario_id, rodada_id, previa, justificativa, aprovar=Tr
     if dados.get('tipo') != 'preparacao' or dados.get('rodada') != rodada_id:
         raise ValueError('Prévia não pertence a esta rodada.')
     rodada, produto = bloquear(inventario_id, [rodada_id])[0]
-    avaliacao = avaliar(rodada, produto)
+    avaliacao = avaliar(rodada, produto, travar_documentos=True)
     if avaliacao['bloqueio'] or avaliacao.get('assinatura') != dados.get('assinatura'):
         raise ValueError(avaliacao['bloqueio'] or 'Dados alterados desde a preparação. Prepare novamente.')
     existente = PropostaAjuste.objects.filter(rodada=rodada, assinatura=dados['assinatura']).first()
@@ -174,8 +174,6 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     dados = ler_token(previa)
     if dados.get('tipo') != 'aplicacao' or dados.get('inventario') != inventario_id or not dados.get('propostas'):
         raise ValueError('Prévia de aplicação inválida.')
-    if inventario_id in CONFERENCIAS_PRESERVADAS:
-        raise ValueError('Conferência nº 1 preservada.')
     Inventario.objects.select_for_update().get(pk=inventario_id)
     verificar_limite(inventario_id)
     propostas = list(PropostaAjuste.objects.filter(pk__in=dados['propostas'],
@@ -191,7 +189,7 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     avaliacoes = []
     for rodada, produto in travadas:
         proposta = por_rodada[rodada.pk]
-        atual = avaliar(rodada, produto)
+        atual = avaliar(rodada, produto, travar_documentos=True)
         if atual['bloqueio'] or atual.get('assinatura') != proposta.assinatura or assinatura(proposta.evidencia) != proposta.assinatura:
             raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
         avaliacoes.append((proposta, rodada, produto, atual))

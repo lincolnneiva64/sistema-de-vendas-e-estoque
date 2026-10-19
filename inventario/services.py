@@ -397,7 +397,7 @@ def conciliar(usuario, rodada_id, movimento_id, referencia):
     return conciliacao
 
 
-def validar_cadeia(rodada, produto):
+def validar_cadeia(rodada, produto, documentos=()):
     verificar_observador()
     if not rodada.ok_em or rodada.encerrada_em:
         raise ValueError("Confirme uma rodada ativa antes da revisão.")
@@ -416,7 +416,7 @@ def validar_cadeia(rodada, produto):
             raise ValueError("Histórico descontínuo. Revisão técnica e recontagem necessárias.")
         if movimento.origem not in ORIGENS or movimento.origem == "nao_identificada":
             raise ValueError("Movimento digital sem origem rastreável. Exige revisão técnica e recontagem; aprovação bloqueada.")
-        if movimento.pk not in conciliados:
+        if movimento.pk not in conciliados and movimento.pk not in documentos:
             raise ValueError("Há movimento entre confirmações ou após o último OK sem conciliação física comprovada.")
         saldo, proxima = movimento.depois, proxima + 1
         saldos[movimento.sequencia] = movimento.depois

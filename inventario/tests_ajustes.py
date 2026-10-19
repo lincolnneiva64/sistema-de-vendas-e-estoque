@@ -168,10 +168,35 @@ class PreparacaoTests(AjustesFixture, TestCase):
         p.refresh_from_db();self.assertEqual(p.estado,'aprovado')
         self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
 
-    def test_conferencia_um_intocavel(self):
-        # Move this synthetic item only to demonstrate the explicit #1 guard.
+    def test_conferencia_um_prepara_aprova_sem_alterar_ok_ou_estoque(self):
         self.rodada.item.inventario_id = 1; self.rodada.item.save(update_fields=['inventario'])
-        self.assertIn('nº 1 preservada', self.avaliar()['bloqueio'])
+        antes = list(ConfirmacaoContagem.objects.values())
+        a = self.avaliar()
+        self.assertFalse(a['bloqueio'])
+        self.assertEqual(a['resultante'], 8)
+        p = ajustes.decidir(self.usuario, 1, self.rodada.pk, a['token'],
+                            'Revisão gerencial fictícia', confirmacao=True)
+        self.assertEqual(p.estado, 'aprovado')
+        self.assertEqual(antes, list(ConfirmacaoContagem.objects.values()))
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, 10)
+        self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
+        with self.assertRaisesMessage(ValueError, 'desabilitada'):
+            ajustes.aplicar(self.usuario, 1, ajustes.previa_aplicacao(1, [p]), True)
+
+    def test_conferencia_um_movimento_posterior_nao_e_liberado_pelo_numero(self):
+        self.rodada.item.inventario_id = 1; self.rodada.item.save(update_fields=['inventario'])
+        Produto.objects.filter(pk=self.produto.pk).update(quantidade=9)
+        self.assertTrue(self.avaliar()['bloqueio'])
+        self.assertFalse(PropostaAjuste.objects.exists())
+
+    def test_conferencia_um_previa_antiga_recusada_apos_movimento(self):
+        self.rodada.item.inventario_id = 1; self.rodada.item.save(update_fields=['inventario'])
+        a = self.avaliar()
+        Produto.objects.filter(pk=self.produto.pk).update(quantidade=9)
+        with self.assertRaises(ValueError):
+            ajustes.decidir(self.usuario, 1, self.rodada.pk, a['token'],
+                            'Prévia desatualizada', confirmacao=True)
         self.assertFalse(PropostaAjuste.objects.exists())
 
     def test_cadastro_modificado_bloqueia_sem_converter(self):
