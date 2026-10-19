@@ -135,22 +135,27 @@ class ConcorrenciaPostgresqlTests(TransactionTestCase):
         self.assertEqual((movimento.sequencia, movimento.antes, movimento.depois), (1, 10, 9))
 
     @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
-    def test_dupla_aprovacao_concorrente_idempotente(self):
+    def test_legado_recusa_duas_aprovacoes_concorrentes(self):
         rodada = services.salvar_contagem(self.acesso.pk, self.rodada.pk, 0, "8", "0", True)
         services.revisar(self.usuario, rodada.pk, "Corte físico comprovado")
         barreira = Barrier(2)
         def aprovar():
             usuario = get_user_model().objects.get(pk=self.usuario.pk)
             barreira.wait(10)
-            return services.aprovar(usuario, rodada.pk, "Falta aprovada").pk
+            try:
+                services.aprovar(usuario, rodada.pk, "Falta aprovada")
+            except ValueError as exc:
+                return str(exc)
+            raise AssertionError("Fluxo antigo não pode aplicar ajustes")
         with ThreadPoolExecutor(max_workers=2) as executor:
             resultados = [executor.submit(self.executar, aprovar) for _ in range(2)]
             ids = [r.result(20) for r in resultados]
         self.assertEqual(ids[0], ids[1])
-        self.assertEqual(DecisaoAjuste.objects.count(), 1)
-        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 1)
+        self.assertIn("Fluxo antigo desativado", ids[0])
+        self.assertEqual(DecisaoAjuste.objects.count(), 0)
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 0)
         self.produto.refresh_from_db()
-        self.assertEqual(self.produto.quantidade, 8)
+        self.assertEqual(self.produto.quantidade, 10)
 
     def test_sinalizacao_concorrente_idempotente_preserva_saldo(self):
         chave, barreira = uuid4(), Barrier(2)

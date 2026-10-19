@@ -1,0 +1,227 @@
+"""Conservative adjustment proposals. All stock writes use one guarded entry point."""
+import hashlib
+import json
+from decimal import Decimal
+from uuid import uuid4
+
+from django.conf import settings
+from django.core import signing
+from django.db import connection, transaction
+
+from estoque.models import Produto, MovimentacaoEstoqueManual
+from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
+from . import services
+from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
+                     PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado)
+
+SALT = 'inventario-ajustes-v1'
+CONFERENCIAS_PRESERVADAS = frozenset({1})
+
+
+def assinatura(dados):
+    return hashlib.sha256(json.dumps(dados, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def token(dados):
+    return signing.dumps(dados, salt=SALT, compress=True)
+
+
+def ler_token(valor):
+    if not isinstance(valor, str) or not valor or len(valor) > 100000:
+        raise ValueError('Prévia ausente ou inválida. Prepare novamente os ajustes.')
+    try:
+        return signing.loads(valor, salt=SALT, max_age=1200)
+    except signing.BadSignature:
+        raise ValueError('Prévia inválida ou expirada. Prepare novamente os ajustes.')
+
+
+def avaliar(rodada, produto=None):
+    """Read-only preview; equality of balances alone never establishes continuity."""
+    produto = produto or rodada.item.produto
+    item = rodada.item
+    resultado = dict(rodada=rodada, produto=produto, unidade=item.cadastro.get('base', ''),
+                     esperado=rodada.esperado, contado=rodada.contado_base if rodada.ok_em else None,
+                     atual=produto.quantidade, diferenca=None, resultante=None,
+                     estado='Pendente de revisão', bloqueio='', evidencia=None)
+    if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None:
+        resultado['diferenca'] = rodada.contado_base - rodada.esperado
+    movimentos = list(services.movimentos_relevantes(rodada)) if rodada.ok_em else []
+    resultado['movimentos'] = movimentos
+    resultado['posteriores'] = [m for m in movimentos if m.sequencia > (rodada.sequencia_ok or 0)]
+    try:
+        if item.inventario_id in CONFERENCIAS_PRESERVADAS:
+            raise ValueError('Conferência nº 1 preservada: somente consulta; nenhuma aprovação ou aplicação.')
+        if DecisaoAjuste.objects.filter(item=item).exists():
+            resultado['estado'] = 'Aplicado'
+            return resultado
+        if (not rodada.ok_em or rodada.esperado is None or rodada.contado_base is None
+                or rodada.sequencia_ok is None or rodada.encerrada_em
+                or item.rodadas.filter(numero__gt=rodada.numero).exists()):
+            raise ValueError('Confirmação física ausente, alterada ou substituída por recontagem.')
+        confirmacao = rodada.confirmacoes.order_by('-versao_entrada').first()
+        if not confirmacao or any(getattr(confirmacao, campo) != getattr(rodada, campo)
+                for campo in ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')):
+            raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
+        sequencia = services.validar_cadeia(rodada, produto)
+        # Observer rows do not freeze the historical unit. Free-text reconciliation
+        # cannot establish it. Remain blocked even if the numeric chain closes.
+        if movimentos:
+            raise ValueError('Movimentações entre confirmações ou após o OK sem unidade histórica congelada. '
+                             'Conciliação textual não basta para aplicar; solicite nova contagem após os lançamentos.')
+        diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal('.001'))
+        resultante = produto.quantidade + diferenca
+        resultado.update(diferenca=diferenca, resultante=resultante)
+        if diferenca == 0:
+            raise ValueError('Sem diferença a aplicar.')
+        if not Decimal(0) <= resultante < Decimal('1000000000'):
+            raise ValueError('Saldo proposto fora dos limites do estoque.')
+        dados = dict(inventario=item.inventario_id, item=item.pk, produto=produto.pk,
+            rodada=rodada.pk, versao=rodada.versao, confirmacao=confirmacao.pk,
+            ok_em=rodada.ok_em.isoformat(), esperado=str(rodada.esperado), contado=str(rodada.contado_base),
+            cadastro=item.cadastro, sequencia=sequencia, atual=str(produto.quantidade),
+            diferenca=str(diferenca), resultante=str(resultante),
+            sinais=list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
+        resultado.update(evidencia=dados, assinatura=assinatura(dados))
+        resultado['token'] = token(dict(tipo='preparacao', rodada=rodada.pk, assinatura=resultado['assinatura']))
+        proposta = PropostaAjuste.objects.filter(rodada=rodada, assinatura=resultado['assinatura']).first()
+        resultado['proposta'] = proposta
+        if proposta:
+            resultado['estado'] = proposta.get_estado_display()
+    except ValueError as exc:
+        resultado.update(estado='Bloqueado', bloqueio=str(exc))
+    return resultado
+
+
+def bloquear(inventario_id, rodada_ids):
+    """Consistent lock order, including product locks held through commit."""
+    Inventario.objects.select_for_update().get(pk=inventario_id)
+    verificar_limite(inventario_id)
+    referencias = list(RodadaContagem.objects.filter(pk__in=rodada_ids,
+        item__inventario_id=inventario_id).values('pk', 'item_id', 'item__produto_id'))
+    if len(referencias) != len(set(rodada_ids)):
+        raise ValueError('Proposta fora da conferência.')
+    list(ItemInventario.objects.select_for_update().filter(pk__in=[r['item_id'] for r in referencias]).order_by('pk'))
+    rodadas = list(RodadaContagem.objects.select_for_update(of=('self',)).select_related('item__produto')
+        .filter(pk__in=rodada_ids).order_by('pk'))
+    produtos = {p.pk: p for p in Produto.objects.select_for_update()
+                .filter(pk__in=[r['item__produto_id'] for r in referencias]).order_by('pk')}
+    return [(r, produtos[r.item.produto_id]) for r in rodadas]
+
+
+def verificar_limite(inventario_id):
+    if ItemInventario.objects.filter(inventario_id=inventario_id).count() > 500:
+        raise ValueError('Mais de 500 produtos: aprovação e aplicação bloqueadas. Divida a revisão em conferências menores.')
+
+
+@transaction.atomic
+def decidir(usuario, inventario_id, rodada_id, previa, justificativa, aprovar=True, confirmacao=False):
+    services.permitir(usuario, 'aprovar_ajuste')
+    if not confirmacao or not str(justificativa or '').strip() or len(str(justificativa)) > 4000:
+        raise ValueError('Confirme a revisão física e informe evidências e justificativa.')
+    dados = ler_token(previa)
+    if dados.get('tipo') != 'preparacao' or dados.get('rodada') != rodada_id:
+        raise ValueError('Prévia não pertence a esta rodada.')
+    rodada, produto = bloquear(inventario_id, [rodada_id])[0]
+    avaliacao = avaliar(rodada, produto)
+    if avaliacao['bloqueio'] or avaliacao.get('assinatura') != dados.get('assinatura'):
+        raise ValueError(avaliacao['bloqueio'] or 'Dados alterados desde a preparação. Prepare novamente.')
+    existente = PropostaAjuste.objects.filter(rodada=rodada, assinatura=dados['assinatura']).first()
+    if existente:
+        if existente.estado == 'aprovado' and not aprovar:
+            existente.estado = 'rejeitado'
+            existente.save(update_fields=['estado'])
+            EventoAjuste.objects.create(proposta=existente, usuario=usuario, acao='rejeitado',
+                                       dados=dict(justificativa=justificativa.strip()))
+            return existente
+        if existente.estado != ('aprovado' if aprovar else 'rejeitado'):
+            raise ValueError('Decisão já registrada. Uma proposta rejeitada exige nova confirmação física.')
+        return existente
+    proposta = PropostaAjuste.objects.create(rodada=rodada,
+        confirmacao_id=avaliacao['evidencia']['confirmacao'], assinatura=dados['assinatura'],
+        evidencia=avaliacao['evidencia'], justificativa=justificativa.strip(),
+        estado='aprovado' if aprovar else 'rejeitado', autorizado_por=usuario)
+    EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao=proposta.estado,
+        dados=dict(evidencia=proposta.evidencia, justificativa=proposta.justificativa))
+    return proposta
+
+
+def previa_aplicacao(inventario_id, propostas):
+    return token(dict(tipo='aplicacao', inventario=inventario_id,
+                      propostas=sorted(str(p.pk) for p in propostas)))
+
+
+def verificar_execucao():
+    if not getattr(settings, 'INVENTARIO_AJUSTES_HABILITADOS', False):
+        raise ValueError('Aplicação real desabilitada no servidor. Aprovar não altera estoque.')
+    if connection.vendor != 'postgresql':
+        raise ValueError('Aplicação exige PostgreSQL e bloqueios transacionais.')
+    with connection.cursor() as cursor:
+        cursor.execute("""SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal
+            AND tgenabled IN ('O','A') AND (tgname, tgrelid) IN (
+            ('inventario_aplicacao_imutavel', 'inventario_aplicacaoajuste'::regclass),
+            ('inventario_evento_ajuste_imutavel', 'inventario_eventoajuste'::regclass),
+            ('inventario_proposta_congelada', 'inventario_propostaajuste'::regclass))""")
+        if cursor.fetchone()[0] != 3:
+            raise ValueError('Proteções da auditoria indisponíveis. Aplicação bloqueada.')
+
+
+@transaction.atomic
+def aplicar(usuario, inventario_id, previa, confirmacao=False):
+    services.permitir(usuario, 'aprovar_ajuste')
+    verificar_execucao()  # Before any stock write, including retries.
+    if not confirmacao:
+        raise ValueError('Confirmação expressa de aplicação obrigatória.')
+    dados = ler_token(previa)
+    if dados.get('tipo') != 'aplicacao' or dados.get('inventario') != inventario_id or not dados.get('propostas'):
+        raise ValueError('Prévia de aplicação inválida.')
+    if inventario_id in CONFERENCIAS_PRESERVADAS:
+        raise ValueError('Conferência nº 1 preservada.')
+    Inventario.objects.select_for_update().get(pk=inventario_id)
+    verificar_limite(inventario_id)
+    propostas = list(PropostaAjuste.objects.filter(pk__in=dados['propostas'],
+        rodada__item__inventario_id=inventario_id).order_by('rodada_id'))
+    if len(propostas) != len(dados['propostas']):
+        raise ValueError('Proposta indisponível ou fora da conferência.')
+    if all(p.estado == 'aplicado' for p in propostas):
+        return list(AplicacaoAjuste.objects.filter(proposta__in=propostas).order_by('proposta__rodada_id'))
+    if any(p.estado != 'aprovado' for p in propostas):
+        raise ValueError('Lote alterado ou parcialmente executado anteriormente. Consulte o resultado e prepare nova prévia.')
+    travadas = bloquear(inventario_id, [p.rodada_id for p in propostas])
+    por_rodada = {p.rodada_id: p for p in propostas}
+    avaliacoes = []
+    for rodada, produto in travadas:
+        proposta = por_rodada[rodada.pk]
+        atual = avaliar(rodada, produto)
+        if atual['bloqueio'] or atual.get('assinatura') != proposta.assinatura or assinatura(proposta.evidencia) != proposta.assinatura:
+            raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
+        avaliacoes.append((proposta, rodada, produto, atual))
+    lote = uuid4()
+    resultados = []
+    for proposta, rodada, produto, atual in avaliacoes:
+        # The product remains locked; no other transaction can change it between
+        # this read and the stock service's UPDATE. Always current + difference.
+        resultado = conferir_ou_ajustar_estoque(produto.pk, MovimentacaoEstoqueManual.TIPO_AJUSTE,
+            novo_estoque=atual['resultante'], motivo=proposta.justificativa,
+            observacao=f'Conferência {inventario_id}; proposta {proposta.pk}; lote {lote}', usuario=usuario)
+        if not MovimentoObservado.objects.filter(produto=produto,
+                sequencia=atual['evidencia']['sequencia'] + 1,
+                antes=resultado['estoque_antes'], depois=resultado['estoque_depois'],
+                origem='ajuste_manual', referencia=f"Movimentação manual #{resultado['historico'].pk}").exists():
+            raise ValueError('Movimento do observador não confirmado. Operação integralmente revertida.')
+        decisao = DecisaoAjuste.objects.create(item=rodada.item, rodada=rodada,
+            movimentacao=resultado['historico'], diferenca=atual['diferenca'],
+            justificativa=proposta.justificativa, aprovado_por=usuario)
+        registro = AplicacaoAjuste.objects.create(proposta=proposta, decisao=decisao, usuario=usuario,
+            lote=lote, antes=resultado['estoque_antes'], diferenca=resultado['diferenca'],
+            depois=resultado['estoque_depois'], unidade=atual['unidade'],
+            evidencia=dict(preparacao=proposta.evidencia, autorizado_por=proposta.autorizado_por_id,
+                           justificativa=proposta.justificativa))
+        proposta.estado = 'aplicado'
+        proposta.save(update_fields=['estado'])
+        EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao='aplicado',
+            dados=dict(operacao=str(registro.pk), lote=str(lote), antes=str(registro.antes),
+                       diferenca=str(registro.diferenca), depois=str(registro.depois)))
+        services.evento(rodada.item.inventario, 'ajuste_aplicado', usuario, rodada=rodada,
+            decisao=decisao.pk, operacao=str(registro.pk), lote=str(lote), diferenca=str(registro.diferenca))
+        resultados.append(registro)
+    return resultados

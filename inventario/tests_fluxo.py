@@ -109,7 +109,10 @@ class FluxoTests(TestCase):
         response = self.client.post(reverse("inventario:contar", args=[self.rodada.pk]),
             {"acao": "ok", "versao": 0, "embalagens": 8, "avulsos": 0})
         self.assertEqual(set(response.json()["produto"]), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo",
-            "passo_avulsos", "embalagens", "avulsos", "versao", "conferido", "ok_em"})
+            "passo_avulsos", "embalagens", "avulsos", "versao", "conferido", "ok_em", "guardado", "ultimo_ok"})
+        self.assertIsInstance(response.json()["produto"]["guardado"], bool)
+        self.assertEqual(set(response.json()["produto"]["ultimo_ok"]), {"embalagens", "avulsos", "ok_em"})
+        self.assertEqual(self.client.get(reverse("inventario:ajustes", args=[self.inventario.pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse("inventario:detalhe", args=[self.inventario.pk])).status_code, 403)
         self.assertIn("no-store", html["Cache-Control"])
         self.assertEqual(html["Referrer-Policy"], "same-origin")
@@ -250,7 +253,7 @@ class FluxoTests(TestCase):
         self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
 
     @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
-    def test_aprovacao_exige_revisao_e_preserva_movimentos_idempotente(self):
+    def test_legado_nao_contorna_aprovacao_separada_mesmo_com_revisao(self):
         rodada = self.ok()
         with self.assertRaises(ValueError):
             services.aprovar(self.usuario, rodada.pk, "Aprovar")
@@ -259,12 +262,12 @@ class FluxoTests(TestCase):
             _baixar_estoque_produto(self.produto.pk, 1, unidade="CX")
         services.conciliar(self.usuario, rodada.pk, services.posteriores(rodada).get().pk, "Venda e retirada após OK documentadas")
         services.revisar(self.usuario, rodada.pk, "Corte físico verificado")
-        decisao = services.aprovar(self.usuario, rodada.pk, "Falta aprovada")
-        repetida = services.aprovar(self.usuario, rodada.pk, "Falta aprovada")
-        self.assertEqual(decisao.pk, repetida.pk)
+        for _ in range(2):
+            with self.assertRaisesMessage(ValueError, "Fluxo antigo desativado"):
+                services.aprovar(self.usuario, rodada.pk, "Falta aprovada")
         self.produto.refresh_from_db()
-        self.assertEqual(self.produto.quantidade, 7)
-        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 1)
+        self.assertEqual(self.produto.quantidade, 9)
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 0)
         self.assertFalse(MovimentoFinanceiro.objects.exists())
         self.assertFalse(Venda.objects.exists())
         self.assertFalse(Compra.objects.exists())
@@ -278,11 +281,11 @@ class FluxoTests(TestCase):
             services.aprovar(self.usuario, rodada.pk, "Aprovar")
 
     @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
-    def test_rollback_aprovacao_reverte_saldo_historico_e_observador(self):
+    def test_legado_bloqueia_antes_de_criar_decisao(self):
         rodada = self.ok()
         services.revisar(self.usuario, rodada.pk, "Corte físico")
         with patch("inventario.services.DecisaoAjuste.objects.create", side_effect=RuntimeError("Falha simulada")):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaisesMessage(ValueError, "Fluxo antigo desativado"):
                 services.aprovar(self.usuario, rodada.pk, "Aprovar")
         self.produto.refresh_from_db()
         self.assertEqual(self.produto.quantidade, 10)

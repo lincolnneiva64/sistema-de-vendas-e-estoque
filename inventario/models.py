@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from uuid import uuid4
 
 
 class Inventario(models.Model):
@@ -149,3 +150,55 @@ class SinalizacaoFisica(models.Model):
     resolvida_em = models.DateTimeField(null=True)
     resolvida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, related_name="sinalizacoes_inventario_resolvidas")
     evidencia = models.TextField(blank=True)
+
+
+class PropostaAjuste(models.Model):
+    """Approval freezes evidence, never a stock write. No delete/admin endpoint."""
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    rodada = models.ForeignKey(RodadaContagem, on_delete=models.PROTECT, related_name="propostas")
+    confirmacao = models.ForeignKey(ConfirmacaoContagem, on_delete=models.PROTECT)
+    assinatura = models.CharField(max_length=64)
+    evidencia = models.JSONField()
+    justificativa = models.TextField()
+    estado = models.CharField(max_length=12, choices=[("aprovado", "Aprovado"), ("rejeitado", "Rejeitado"), ("aplicado", "Aplicado")])
+    autorizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["rodada", "assinatura"], name="inventario_proposta_evidencia_unica")]
+
+
+class RegistroImutavel(models.Model):
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("Registro de auditoria imutável. Use uma movimentação compensatória.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("A auditoria não pode ser apagada.")
+
+
+class AplicacaoAjuste(RegistroImutavel):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    proposta = models.OneToOneField(PropostaAjuste, on_delete=models.PROTECT, related_name="aplicacao")
+    decisao = models.OneToOneField(DecisaoAjuste, on_delete=models.PROTECT)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    aplicado_em = models.DateTimeField(auto_now_add=True)
+    lote = models.UUIDField()
+    antes = models.DecimalField(max_digits=12, decimal_places=3)
+    diferenca = models.DecimalField(max_digits=12, decimal_places=3)
+    depois = models.DecimalField(max_digits=12, decimal_places=3)
+    unidade = models.CharField(max_length=20)
+    evidencia = models.JSONField()
+
+
+class EventoAjuste(RegistroImutavel):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    proposta = models.ForeignKey(PropostaAjuste, on_delete=models.PROTECT, related_name="eventos_ajuste")
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    acao = models.CharField(max_length=20)
+    dados = models.JSONField(default=dict)
+    criado_em = models.DateTimeField(auto_now_add=True)

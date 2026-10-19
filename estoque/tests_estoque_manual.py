@@ -193,6 +193,7 @@ class EstoqueManualServiceTests(TestCase):
     def test_venda_normal_baixa_estoque_sem_historico_manual(self):
         produto = Produto.objects.create(
             nome="Produto Venda Normal",
+            unidade_compra="UN",
             preco_compra=Decimal("10.00"),
             preco_vista=Decimal("15.00"),
             preco_prazo=Decimal("16.00"),
@@ -210,7 +211,7 @@ class EstoqueManualServiceTests(TestCase):
                     "produto_nome": produto.nome,
                     "quantidade": "2",
                     "unidade": "un",
-                    "preco_unitario": "2.00",
+                    "preco_unitario": "15.00",
                 }],
             }),
             content_type="application/json",

@@ -78,6 +78,14 @@ class PostgreSQLSemMigrationsRunner(DiscoverRunner):
                 WHEN (OLD.quantidade IS DISTINCT FROM NEW.quantidade)
                 EXECUTE FUNCTION public.inventario_observar_quantidade_fn();
             """)
+        # Same immutable audit constraints as the pending migration, installed
+        # directly only on this identity-checked disposable database.
+        from importlib import import_module
+        with connection.cursor() as cursor:
+            cursor.execute(import_module('inventario.migrations.0007_auditoria_ajuste_imutavel').SQL)
+        # Baseline fixtures normally supplied by locacoes.0001 RunPython. The
+        # guarded schema-only bootstrap intentionally does not run that migration.
+        import_module('locacoes.migrations.0001_initial').criar_configuracoes_iniciais(apps, None)
         from django.core.management.sql import emit_post_migrate_signal
         emit_post_migrate_signal(verbosity=0, interactive=False, db="default")
         return []

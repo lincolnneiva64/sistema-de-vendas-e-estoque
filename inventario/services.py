@@ -9,8 +9,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import connection, transaction
 from django.utils import timezone
 
-from estoque.models import Funcionario, Produto, ProdutoFornecedor, MovimentacaoEstoqueManual
-from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
+from estoque.models import Funcionario, Produto, ProdutoFornecedor
 from .conversao import converter, decimal_entrada, snapshot
 from .erros import ErroAcesso
 from .rastreabilidade import ORIGENS
@@ -508,27 +507,4 @@ def aprovar(usuario, rodada_id, justificativa):
     # Deliberately disabled in normal settings. Enabling requires a later reviewed release.
     if not getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False):
         raise ValueError("Aplicação de ajustes desabilitada. Aguarde revisão e autorização posterior.")
-    if not str(justificativa).strip():
-        raise ValueError("Justificativa obrigatória.")
-    referencia = RodadaContagem.objects.get(pk=rodada_id)
-    item = ItemInventario.objects.select_for_update().get(pk=referencia.item_id)
-    rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
-    decisao = DecisaoAjuste.objects.filter(item=item).first()
-    if decisao:
-        if decisao.rodada_id != rodada.pk:
-            raise ValueError("Outra rodada já foi aprovada.")
-        return decisao
-    produto = Produto.objects.select_for_update().get(pk=item.produto_id)
-    atual = validar_cadeia(rodada, produto)
-    if rodada.revisao_sequencia is None or rodada.revisao_sequencia != atual or rodada.revisao_por_id is None:
-        raise ValueError("Revisão ausente ou desatualizada. Revise novamente.")
-    diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal("0.001"))
-    novo = produto.quantidade + diferenca
-    if novo < 0 or novo >= Decimal("1000000000"):
-        raise ValueError("A diferença deixaria o saldo fora dos limites. Solicite recontagem.")
-    resultado = conferir_ou_ajustar_estoque(produto.pk, MovimentacaoEstoqueManual.TIPO_AJUSTE,
-        novo_estoque=novo, motivo=justificativa, observacao=f"Inventário {item.inventario_id}; rodada {rodada.pk}", usuario=usuario)
-    decisao = DecisaoAjuste.objects.create(item=item, rodada=rodada, movimentacao=resultado["historico"],
-        diferenca=diferenca, justificativa=justificativa, aprovado_por=usuario)
-    evento(item.inventario, "ajuste_aplicado", usuario, rodada=rodada, decisao=decisao.pk, diferenca=str(diferenca))
-    return decisao
+    raise ValueError("Fluxo antigo desativado. Use Ajustes de estoque: aprove a proposta e confirme a aplicação separadamente.")

@@ -1,4 +1,4 @@
-"""Run reliability tests on a NEW local cluster, without migrations or production access."""
+"""Run tests on a NEW guarded local cluster. Any migration tests stay disposable."""
 import contextlib
 import json
 import os
@@ -70,6 +70,18 @@ def main():
         os.environ["DJANGO_SETTINGS_MODULE"] = "inventario.test_settings_confiabilidade_pg"
         import django
         django.setup()
+        # Most suites use schema_editor only. Migration audit tests deliberately
+        # exercise the executor on this same guarded disposable database; record
+        # those attempts instead of reporting a hard-coded "not executed".
+        from django.db.migrations.executor import MigrationExecutor
+        real_apply_migration = MigrationExecutor.apply_migration
+
+        def recorded_apply_migration(executor, project_state, migration, *args, **kwargs):
+            state['migrations_executed'] = True
+            state.setdefault('migration_attempts', []).append(f'{migration.app_label}.{migration.name}')
+            return real_apply_migration(executor, project_state, migration, *args, **kwargs)
+
+        MigrationExecutor.apply_migration = recorded_apply_migration
         from .test_runner_confiabilidade import PostgreSQLSemMigrationsRunner
         labels = sys.argv[1:] or ["inventario.tests_ciclo_vida.CicloConcorrenciaTests",
                                  "inventario.tests_confiabilidade"]
