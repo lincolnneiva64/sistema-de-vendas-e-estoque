@@ -355,7 +355,7 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         tab.wait("document.querySelector('[name=data_inicial]').closest('label').hidden")
                         self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
                         self.assertEqual(tab.evaluate("document.querySelectorAll('table').length"), 1)
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('table thead th').length"), 5)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('table thead th').length"), 4)
                         self.assertTrue(tab.evaluate("document.querySelector('[data-registro^=registro-cancelamento-] .saldo').textContent.includes('Não disponível')"))
                         self.assertTrue(tab.evaluate("!!document.querySelector('[data-registro^=registro-cancelamento-] a[href*=vendas]')"))
                         self.assertTrue(tab.evaluate("document.querySelector('table').textContent.toLowerCase().includes('segunda-feira')"))

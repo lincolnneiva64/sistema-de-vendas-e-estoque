@@ -67,3 +67,20 @@
  .tabela-extrato td.saldo>strong{font-size:22px}
  .comparacao{padding:16px 14px}.comparacao dl{gap:8px}
 }
+/* One movement column; evidence stays in the operation cell. */
+.movimentos-periodo thead th:first-child{width:20%}
+.movimentos-periodo thead th:nth-child(2){width:34%}
+.movimentos-periodo thead th:nth-child(3){width:25%}
+.movimentos-periodo thead th:last-child{width:21%}
+.tabela-extrato .fluxo{font-weight:700;font-size:16px;line-height:1.4}
+.tabela-extrato .fluxo .entrada{color:#225fc0}
+.tabela-extrato .fluxo .saida{color:#b02d35}
+.tabela-extrato td.fluxo:before{content:none}
+@media(min-width:701px){
+ .tabela-extrato.movimentos-periodo td.fluxo{text-align:center}
+}
+@media(max-width:700px){
+ .movimentos-periodo tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ .movimentos-periodo tr>td.fluxo{grid-column:1;grid-row:3;text-align:left}
+ .movimentos-periodo tr>td.saldo{grid-column:2;grid-row:3}
+}
