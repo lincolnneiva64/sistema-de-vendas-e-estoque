@@ -94,8 +94,12 @@ INSTALLED_APPS = [
 
 ]
 
-# Deliberately requires a later reviewed release to enable real inventory adjustments.
-INVENTARIO_AJUSTES_HABILITADOS = False
+# Disabled by default; enabling requires an explicitly authorized environment change.
+# Only the exact string "True" enables execution; all other values fail closed.
+# This switch never applies stock adjustments by itself.
+INVENTARIO_AJUSTES_HABILITADOS = (
+    config("INVENTARIO_AJUSTES_HABILITADOS", default="False") == "True"
+)
 INVENTARIO_PRODUTOS_EXCLUIDOS_PILOTO = (501,)
 
 
