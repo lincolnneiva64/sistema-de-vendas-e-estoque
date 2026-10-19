@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.test import TestCase
+from django.utils import timezone
 from estoque.models import (EdicaoCompra, EventoVenda, ItemCompra, ItemVenda,
                             ItemVendaRemovido, MovimentacaoEstoqueManual, Venda)
 from .models import MovimentoObservado
@@ -19,7 +20,7 @@ class SaldosHistoricosTests(HistoricoFixture, TestCase):
 
     def venda_snapshot(self, dia, antes, movimento, depois, unidade='CX'):
         instante = self.inicio + timedelta(days=dia)
-        venda = Venda.objects.create(data_venda=instante.date())
+        venda = Venda.objects.create(data_venda=timezone.localtime(instante).date())
         Venda.objects.filter(pk=venda.pk).update(criado_em=instante, atualizado_em=instante)
         return ItemVenda.objects.create(venda=venda, produto=self.produto, quantidade=movimento,
             unidade=unidade, estoque_antes=antes, estoque_movimentado=movimento,

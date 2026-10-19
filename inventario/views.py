@@ -200,6 +200,18 @@ def csv_seguro(valor):
 
 @privado
 @require_http_methods(["GET"])
+def movimento_manual(request, inventario_id, rodada_id, movimento_id):
+    gestor(request)
+    from estoque.models import MovimentacaoEstoqueManual
+    rodada = get_object_or_404(RodadaContagem.objects.select_related('item__inventario'),
+        pk=rodada_id, item__inventario_id=inventario_id)
+    movimento = get_object_or_404(MovimentacaoEstoqueManual, pk=movimento_id,
+        produto_id=rodada.item.produto_id)
+    return render(request, 'inventario/movimento_manual.html', {'rodada':rodada,'movimento':movimento})
+
+
+@privado
+@require_http_methods(["GET"])
 def historico_produto(request, inventario_id, rodada_id):
     gestor(request)
     from .historico import investigar

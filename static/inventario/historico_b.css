@@ -11,6 +11,12 @@
 .visual-b .tabela-extrato tr.movimento-compra:before{background:#258557}
 .visual-b .tabela-extrato tr.movimento-venda:before{background:#3978c9}
 .visual-b .tabela-extrato tr.movimento-pendente:before{background:#bf911f}
+.visual-b .tabela-extrato tr.movimento-manual:before{background:#8254ad}
+.visual-b .tabela-extrato tr.movimento-manual{background:#f7f2fc}
+.visual-b .movimento-manual .movimento a{color:#704494}
+.visual-b .tabela-extrato .movimento-manual .movimento{border-left:0}
+.visual-b .comparacao{margin:18px 20px 20px 30px;border-left:3px solid #547b81;position:relative}
+.visual-b .comparacao:before{content:'';position:absolute;left:-21px;top:20px;width:10px;height:10px;border-radius:50%;background:#547b81;border:2px solid #edf3f5}
 .visual-b .tabela-extrato td,.visual-b .tabela-extrato tbody th{padding:0;border:0;min-width:0}
 .visual-b .tabela-extrato tr>td:first-child{grid-column:1;grid-row:1/3;font-weight:650;border-right:1px solid #d8e3e8;padding-right:12px}
 .visual-b .tabela-extrato tr>th{grid-column:2/4;grid-row:1}
@@ -22,11 +28,24 @@
 .visual-b .tabela-extrato .saldo strong{font-size:29px}
 .visual-b .tabela-extrato .movimento-compra .movimento,.visual-b .tabela-extrato .movimento-venda .movimento,.visual-b .tabela-extrato .movimento-pendente .movimento{border-left:0}
 .visual-b .tabela-extrato .vazio{grid-column:1/-1!important;grid-row:1!important;border:0!important}
+/* Typographic refinement: stronger hierarchy within the existing card grid. */
+.visual-b .tabela-extrato tr>td:first-child{font-size:15px;font-weight:750;line-height:1.4}
+.visual-b .tabela-extrato tr>td:first-child small{font-size:12px;font-weight:550;color:#465e6d;line-height:1.35}
+.visual-b .movimento a,.visual-b .movimento>strong{font-size:16px;font-weight:800;line-height:1.3}
+.visual-b .tabela-extrato .entrada,.visual-b .tabela-extrato .saida{font-size:17px;font-weight:750;line-height:1.35}
+.visual-b .tabela-extrato td.numero:before{font-size:12px;font-weight:650;color:#405b6b;line-height:1.3}
+.visual-b .tabela-extrato .numero small{font-size:12px;color:#4b6575}
+.visual-b .tabela-extrato .saldo .origem-saldo{font-size:12px;font-weight:550;line-height:1.3;color:#415f73}
+.visual-b .tabela-extrato .saldo .sequencia-interrompida{font-size:11px;font-weight:650;color:#735008;line-height:1.3}
+.visual-b .comparacao dt{font-size:14px;font-weight:650;color:#435d6c;line-height:1.35}
+.visual-b .comparacao-titulo p,.visual-b .comparacao .rodape{font-weight:500;color:#465f6e}
+.visual-b .comparacao .diferenca-final dt{color:inherit}
 @media(min-width:701px){
  .visual-b .tabela-extrato td.entrada:before,.visual-b .tabela-extrato td.saida:before{display:inline;margin-right:6px}
  .visual-b .tabela-extrato td.entrada small,.visual-b .tabela-extrato td.saida small{display:inline;margin-left:4px}
 }
 @media(max-width:700px){
+ .visual-b .comparacao{margin:14px 10px 14px 22px}
  .visual-b .tabela-extrato tbody{padding:4px 10px 4px 22px}
  .visual-b .tabela-extrato tbody:before{left:10px}
  .visual-b .tabela-extrato tr{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.25fr);gap:5px 5px;padding:10px;margin:8px 0}

@@ -5,7 +5,7 @@ from django.db.models import Min
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from estoque.models import ItemVenda, ItemVendaRemovido
+from estoque.models import ItemVenda, ItemVendaRemovido, MovimentacaoEstoqueManual
 from .models import MovimentoObservado
 
 
@@ -44,7 +44,8 @@ def selecionar(params, referencia, selecionada, documentos, produto_id):
             (ItemVenda.objects.filter(produto_id=produto_id), 'venda__criado_em'),
             (ItemVenda.objects.filter(produto_id=produto_id), 'venda__estoque_devolvido_cancelamento_em'),
             (ItemVendaRemovido.objects.filter(produto_id=produto_id), 'criado_em'),
-            (MovimentoObservado.objects.filter(produto_id=produto_id), 'registrado_em'))
+            (MovimentoObservado.objects.filter(produto_id=produto_id), 'registrado_em'),
+            (MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id), 'criado_em'))
         for qs, campo in fontes:
             valor = qs.filter(**{campo+'__lte': referencia}).aggregate(inicio=Min(campo))['inicio']
             if valor:

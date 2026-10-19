@@ -63,7 +63,7 @@ class HistoricoFixture:
         self.client.force_login(self.gestor)
 
     def venda(self, **kwargs):
-        venda = Venda.objects.create(data_venda=self.inicio.date()+timedelta(days=1), operador='Operador teste', **kwargs)
+        venda = Venda.objects.create(data_venda=timezone.localtime(self.inicio).date()+timedelta(days=1), operador='Operador teste', **kwargs)
         Venda.objects.filter(pk=venda.pk).update(criado_em=self.inicio+timedelta(days=1))
         return ItemVenda.objects.create(venda=venda, produto=self.produto, quantidade=3, unidade='KG', preco_unitario=0, valor_total=0)
 
@@ -313,6 +313,12 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
         Venda.objects.filter(pk=antiga.pk).update(criado_em=data-timedelta(days=5))
         ItemVenda.objects.create(venda=antiga, produto=self.produto, quantidade=1,
             unidade='CX', preco_unitario=0, valor_total=0)
+        from estoque.models import MovimentacaoEstoqueManual
+        manual = MovimentacaoEstoqueManual.objects.create(produto=self.produto, tipo='ajuste',
+            estoque_antes=13, estoque_depois=12, diferenca=-1, motivo='Ajuste ficticio documentado')
+        MovimentacaoEstoqueManual.objects.filter(pk=manual.pk).update(criado_em=data+timedelta(days=2,hours=4))
+        MovimentoObservado.objects.create(produto=self.produto,sequencia=2,antes=13,depois=12,
+            registrado_em=data+timedelta(days=2,hours=4),origem='ajuste_manual',referencia=f'Movimentação manual #{manual.pk}')
         with TemporaryDirectory(prefix='extrato-previa-') as profile:
             chrome = Chrome(CHROME, profile).start()
             try:
@@ -340,7 +346,7 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         (destino / f'acesso-direto-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',
                             {'format': 'png', 'captureBeyondViewport': True})['data']))
                         tab.evaluate("document.querySelector('.evolucao-estoque').click(); true")
-                        tab.wait("document.querySelectorAll('table tr[data-registro]').length === 6")
+                        tab.wait("document.querySelectorAll('table tr[data-registro]').length === 7")
                         self.assertTrue(tab.evaluate("!!document.querySelector('.visual-b')"))
                         if visual == 'a':
                             tab.evaluate("document.querySelector('.alternativas-extrato a:not([aria-current])').click(); true")
@@ -357,6 +363,8 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('.movimento-venda td.saldo')].every(e=>e.textContent.includes('Snapshot registrado'))"))
                         self.assertTrue(tab.evaluate("document.querySelector('.movimento-pendente td.saldo').textContent.includes('Não disponível')"))
                         self.assertTrue(tab.evaluate("!!document.querySelector('.comparacao.falta .diferenca-final')"))
+                        self.assertTrue(tab.evaluate("document.querySelector('.extrato-cartao').lastElementChild.matches('[data-evento=ok-conferencia]')"))
+                        self.assertTrue(tab.evaluate("!!document.querySelector('.movimento-manual a')"))
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('details')].every(e=>!e.open)"))
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('td.numero')].every(e=>e.scrollWidth<=e.clientWidth)"))
                         self.assertEqual(tab.evaluate("getComputedStyle(document.querySelector('td.saldo')).textAlign"), 'right')
@@ -386,9 +394,10 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                 tab.wait("!!document.querySelector('.extrato-cartao')")
                 # Follow each document link in the same authenticated browser.
                 for seletor, prefixo, titulo, conteudo in (('.movimento-compra a', '/compras/', 'Compra #', '.nota-compra-wrap'),
-                                                          ('.movimento-venda a', '/vendas/', 'Venda #', '.pagina')):
+                                                          ('.movimento-venda a', '/vendas/', 'Venda #', '.pagina'),
+                                                          ('.movimento-manual a', '/inventario/', 'Registro manual #', '.card')):
                     tab.evaluate(f"document.querySelector('{seletor}').click(); true")
-                    tab.wait(f"location.pathname.startsWith('{prefixo}') && document.title.startsWith('{titulo}') && !!document.querySelector('{conteudo}')")
+                    tab.wait(f"document.title.startsWith('{titulo}') && !!document.querySelector('{conteudo}')")
                     tab.call('Page.navigate', {'url': self.live_server_url + self.url})
                     tab.wait("!!document.querySelector('.extrato-cartao')")
             finally:

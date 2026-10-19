@@ -52,7 +52,7 @@ def investigar(rodada, params):
         movimento.rotulo = ORIGENS.get(movimento.origem, ORIGENS['nao_identificada'])
     contexto = dict(rodada=rodada, item=item, referencia=referencia, inicio=inicio, fim=fim,
                 extrato=cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim,
-                                   produto_id=item.produto_id),
+                                   produto_id=item.produto_id, rodada=rodada),
                 compra=selecionada, compras=opcoes,
                 itens_compra=(compras.filter(compra_id=selecionada.compra_id).order_by().values('unidade')
                               .annotate(total=Sum('quantidade'))) if selecionada else [],
@@ -64,6 +64,10 @@ def investigar(rodada, params):
                 fisica=rodada.contado_base if rodada.ok_em else None,
                 esperado=rodada.esperado if rodada.ok_em else None)
     contexto.update(periodo)
+    completo = params.copy()
+    completo['periodo'] = 'completo'
+    completo.pop('extrato_pagina', None)
+    contexto['completo_url'] = '?' + completo.urlencode()
     contexto['visual'] = 'a' if params.get('visual') == 'a' else 'b'
     contexto['visuais'] = []
     for valor, rotulo in (('a', 'A · Tabela compacta'), ('b', 'B · Linha do tempo')):

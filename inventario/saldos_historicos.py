@@ -59,7 +59,7 @@ def analisar(produto_id, pagina, referencia):
 
     eventos = defaultdict(list)
     for e in limitado(EventoVenda.objects.filter(venda_id__in=documentos).order_by('pk').values(
-            'venda_id', 'tipo_evento', 'descricao')):
+            'venda_id', 'tipo_evento', 'descricao', 'criado_em')):
         eventos[e['venda_id']].append(e)
     outros_nomes = defaultdict(set)
     nomes_alvo = defaultdict(set)

@@ -4,6 +4,7 @@
 .tabela-extrato .saldo .sequencia-interrompida{display:inline-block;color:#815b10;background:#fff1c5;padding:3px 6px;border-radius:4px;font-size:11px;line-height:1.35}
 
 /* Compact statement: preserve the existing responsive table and its evidence. */
+.movimento-manual{background:#f7f2fc}.movimento-manual .movimento a{color:#704494}.tabela-extrato .movimento-manual .movimento{border-left:3px solid #9c79bd}
 .alternativas-extrato{padding:0!important;margin:0 0 14px;gap:8px!important}
 .alternativas-extrato a{background:white;font-weight:650}
 .alternativas-extrato a[aria-current=page]{background:#193f46;color:white;border-color:#193f46}

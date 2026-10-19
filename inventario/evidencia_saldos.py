@@ -40,14 +40,34 @@ def conflito_eventos(eventos, outros_nomes):
         'item_removido_da_nota': r'Item removido da nota: (.+), quantidade ',
         'quantidade_item_alterada': r'Quantidade alterada na nota: (.+)\. De ',
     }
+    # Known summaries only close an independently attributable edit sequence.
+    # They never supply item identity themselves, and a summary alone is not proof.
+    resumos = {
+        'Alteracoes apos separacao atendidas.',
+        'Ajustes da separacao aplicados pela edicao da venda.',
+    }
+    atribuicoes = []
+    genericos = []
     for evento in eventos:
         if evento['tipo_evento'] in BENIGNOS:
+            continue
+        if evento['tipo_evento'] == 'alteracao_separacao_atendida':
+            if evento.get('descricao', '').strip() not in resumos or not evento.get('criado_em'):
+                return 'Resumo de edição sem evidência atribuível; snapshot não certificado.'
+            genericos.append(evento)
             continue
         padrao = padroes.get(evento['tipo_evento'])
         match = re.match(padrao, evento.get('descricao', '')) if padrao else None
         if match and match[1].strip().casefold() in outros_nomes:
+            atribuicoes.append(evento)
             continue
         return 'Edição do produto ou evento sem atribuição segura; snapshot não certificado.'
+    anterior = None
+    for resumo in sorted(genericos, key=lambda e: e['criado_em']):
+        if not any(e.get('criado_em') and (anterior is None or anterior < e['criado_em'])
+                   and e['criado_em'] <= resumo['criado_em'] for e in atribuicoes):
+            return 'Resumo sem edição anterior comprovada de outro produto; snapshot não certificado.'
+        anterior = resumo['criado_em']
     return ''
 
 
