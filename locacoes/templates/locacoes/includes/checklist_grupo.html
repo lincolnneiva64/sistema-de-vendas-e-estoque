@@ -111,6 +111,7 @@
 
             <a
               class="btn btn-success btn-whatsapp-operacional {% if not item.envio_operacional.funcionario_padrao %}disabled{% endif %}"
+              {% if item.envio_operacional.enviar_recolhimento_url %}data-enviar-recolhimento="{{ item.envio_operacional.enviar_recolhimento_url }}"{% endif %}
               href="{% if item.envio_operacional.funcionario_padrao %}{{ item.envio_operacional.funcionario_padrao.whatsapp_url }}{% else %}#{% endif %}"
               {% if not item.envio_operacional.funcionario_padrao %}aria-disabled="true"{% endif %}
               target="_blank"

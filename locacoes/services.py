@@ -142,6 +142,8 @@ def envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=Fals
         }), funcionario_padrao or next(iter(funcionarios), None))
     return {
         "checklist_url": checklist_url,
+        "enviar_recolhimento_url": reverse('locacoes:enviar_recolhimento', args=[tarefa.pk])
+            if tarefa.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO else '',
         "funcionarios": funcionarios,
         "funcionario_padrao": funcionario_padrao,
         "tem_funcionario_com_whatsapp": any(

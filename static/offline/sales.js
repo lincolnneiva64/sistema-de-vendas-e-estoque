@@ -4,6 +4,8 @@ import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot}
 const state = window.salesOffline;
 const indicator = document.getElementById('offline-global');
 const rentalActions = '#locacoesOperacionaisVenda .locacoes-rapidas-resolver, '
+    + '#locacoesOperacionaisVenda [data-enviar-recolhimento], '
+    + '#locacoesOperacionaisVenda [data-funcionario-recolhimento], '
     + '#locacoesOperacionaisVenda .locacoes-rapidas-confirmar, '
     + '#locacoesOperacionaisVenda [data-resolver-form], '
     + '#locacoesOperacionaisVenda [data-confirmar-envio-form]';

@@ -500,6 +500,8 @@ def _envios_tarefa_operacional_context(request, tarefa, ordem=None):
     return {
         "checklist_url": checklist_url,
         "checklist_whatsapp_url": checklist_whatsapp_url,
+        "enviar_recolhimento_url": reverse('locacoes:enviar_recolhimento', args=[tarefa.pk])
+            if tarefa.tipo == TarefaOperacionalLocacao.TIPO_RECOLHIMENTO else '',
         "mensagem": mensagem,
         "funcionarios": funcionarios,
         "funcionario_padrao": funcionario_padrao,

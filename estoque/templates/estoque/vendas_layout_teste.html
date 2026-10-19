@@ -3182,6 +3182,7 @@ td:first-child {
                                 <select
                                     id="locacoes-funcionario-{{ item.tarefa.id }}"
                                     class="locacoes-rapidas-select funcionario-select"
+                                    {% if item.envio_operacional.enviar_recolhimento_url %}data-funcionario-recolhimento{% endif %}
                                     {% if not item.envio_operacional.funcionarios %}disabled{% endif %}
                                 >
                                     {% for funcionario in item.envio_operacional.funcionarios %}
@@ -3204,6 +3205,7 @@ td:first-child {
                             <div class="locacoes-rapidas-acoes">
                                 <a
                                     class="locacoes-rapidas-whatsapp {% if not item.envio_operacional.funcionario_padrao %}disabled{% endif %}"
+                                    {% if item.envio_operacional.enviar_recolhimento_url %}data-enviar-recolhimento="{{ item.envio_operacional.enviar_recolhimento_url }}"{% endif %}
                                     href="{% if item.envio_operacional.funcionario_padrao %}{{ item.envio_operacional.funcionario_padrao.whatsapp_url }}{% else %}#{% endif %}"
                                     target="_blank"
                                     rel="noopener"
@@ -9586,7 +9588,7 @@ const operador = buscarCampoOperadorVenda();
 {% if local_sales_context %}
 <script type="module" src="/offline/assets/local-controlled-v1/local-sales.js"></script>
 {% else %}
-<script type="module" src="/offline/assets/connection-recovery-v1/sales.js"></script>
+<script type="module" src="/offline/assets/connection-recovery-v1/sales.js?pickup-send=1"></script>
 <script type="module" src="/offline/assets/connection-recovery-v1/sales-draft-ui.js"></script>
 {% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
@@ -9598,5 +9600,6 @@ const operador = buscarCampoOperadorVenda();
 </style>
 <script type="module" src="/offline/assets/2-8f-fix/commercial-ui.js"></script>
 {% endif %}
+<script src="{% static 'locacoes/recolhimento-envio.js' %}" defer></script>
 </body>
 </html>
