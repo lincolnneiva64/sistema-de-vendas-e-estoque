@@ -1,6 +1,6 @@
 import {hash, reserveSequence, saleOperationState, canonical, commandOf} from '/offline/assets/2-8f/core.js';
 import {prepareRevisionResolution, resolutionFromSnapshot, resolutionObservationKey} from '/offline/assets/2-8g-close/sales-revisions.js';
-import {readStock,validateStock,stockSignature,stockBaselineKey} from '/offline/assets/2-8g-close/sales-stock.js';
+import {readStock,validateStock,stockSignature,stockBaselineKey} from '/offline/assets/sack-conversion-v1/sales-stock.js';
 import {chaveSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;

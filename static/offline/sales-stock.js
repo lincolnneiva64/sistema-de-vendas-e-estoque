@@ -30,7 +30,7 @@ function baseQuantity(product,item) {
     if (fractional && unit === secondary && fn <= 0n) throw new Error('Fator de conversão local inválido.');
     const allowedFraction = ['KG','MIL'].includes(unit)
         || unit === 'DZ' && wholeAtPrecision(quantity,12n,1n)
-        || fractional && fn > 0n && (unit === secondary || unit === base && packages.has(unit) && wholeAtPrecision(quantity,fn,fd))
+        || fractional && secondary && fn > 0n && (unit === secondary || unit === base && (packages.has(unit) || unit === 'SC') && wholeAtPrecision(quantity,fn,fd))
         || packages.has(unit) && wholeAtPrecision(quantity,2n,1n);
     if (quantity % 1000n && !allowedFraction) throw new Error('Quantidade fracionada não permitida em ' + unit + '.');
     const converted = unit === base ? quantity : rounded(quantity*fd,fn);

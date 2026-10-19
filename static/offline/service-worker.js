@@ -17,6 +17,7 @@ ASSETS.push(...['app.js','core.js','sales.js','sales-draft-ui.js'].map(file => '
 ASSETS.push('/offline/assets/2-8h-inventario/sales.js');
 // New path bypasses workers that cached the previous sales module; no storage reset.
 ASSETS.push('/offline/assets/connection-recovery-v1/sales.js', '/offline/assets/connection-recovery-v1/sales-draft-ui.js');
+ASSETS.push(...['sales-draft-ui.js', 'sales-drafts.js', 'sales-stock.js'].map(file => '/offline/assets/sack-conversion-v1/' + file));
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);

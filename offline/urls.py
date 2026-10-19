@@ -3,6 +3,7 @@ from django.contrib.auth.views import LoginView
 from . import views
 
 urlpatterns = [
+    path("offline/assets/sack-conversion-v1/<str:filename>", views.versioned_asset),
     path("offline/assets/connection-recovery-v1/<str:filename>", views.versioned_asset),
     path("offline/assets/2-8i-local-auth/<str:filename>", views.versioned_asset),
     path("offline/assets/local-controlled-v1/<str:filename>", views.versioned_asset),

@@ -111,6 +111,9 @@ class PostTrialSalesBrowserTests(StaticLiveServerTestCase):
                  ('DZ','',False,'0','DZ','0.25'),('UN','',False,'0','UN','0.5'),
                  ('MIL','CT',True,'100','MIL','0.9'),('MIL','CT',True,'100','CT','90'),
                  ('CX','UN',True,'0','UN','1'),('CX','UN',True,'12','BAD','1')]
+        cases += [('SC','BD',True,'8','SC',q) for q in ('2.5','0.125','0.25','0.3','0.1','0.333')]
+        cases += [('SC','BD',True,'8','BD','1'), ('SC','BD',False,'8','SC','0.5'),
+                  ('SC','BD',True,'0','SC','0.5'), ('SC','',True,'8','SC','0.5')]
         with TemporaryDirectory(prefix='post-trial-parity-') as profile:
             chrome = Chrome(sync.CHROME,profile).start()
             try:

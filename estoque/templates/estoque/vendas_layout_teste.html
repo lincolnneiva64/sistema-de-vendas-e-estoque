@@ -6493,6 +6493,25 @@ function mensagemEstoqueInsuficienteVenda(produtoOption, quantidadeSolicitada, u
 }
 
 function validarEstoqueItemVendaAtual(mostrarAvisoErro = false) {
+    // Match the server: SC fractions require whole secondary units from the registered conversion.
+    const optionUnidade = obterProdutoOptionVenda((produto.value || produtoBusca.value || '').trim());
+    const quantidadeUnidade = Number(normalizarNumeroVenda(quantidade.value));
+    if (optionUnidade && normalizarUnidadeEstoqueVenda(unidade.value) === 'SC'
+        && Number.isFinite(quantidadeUnidade) && quantidadeUnidade > 0 && !Number.isInteger(quantidadeUnidade)) {
+        const secundaria = optionUnidade.dataset.unidade2 || '';
+        const fator = Number(normalizarNumeroVenda(optionUnidade.dataset.fator));
+        const conversaoValida = optionUnidade.dataset.fracionado === 'true' && secundaria
+            && normalizarUnidadeEstoqueVenda(secundaria) !== 'SC'
+            && normalizarUnidadeEstoqueVenda(optionUnidade.dataset.unidade1 || optionUnidade.dataset.unidade) === 'SC'
+            && fator > 0;
+        const unidadesMenores = Math.round(quantidadeUnidade * 1000) / 1000 * fator;
+        if (!conversaoValida || Math.abs(unidadesMenores - Math.round(unidadesMenores)) > 0.0005000001) {
+            let mensagem = 'Informe quantidade inteira em SC.';
+            if (conversaoValida) mensagem = `Informe uma quantidade em SC equivalente a uma quantidade inteira em ${secundaria}, ou selecione ${secundaria}, conforme o cadastro.`;
+            if (mostrarAvisoErro) mostrarAviso(mensagem, unidade, true);
+            return false;
+        }
+    }
     if (window.salesOffline.active) {
         const opt = obterProdutoOptionVenda((produto.value || produtoBusca.value || '').trim());
         const q = normalizarNumeroVenda(quantidade.value);
@@ -9589,7 +9608,7 @@ const operador = buscarCampoOperadorVenda();
 <script type="module" src="/offline/assets/local-controlled-v1/local-sales.js"></script>
 {% else %}
 <script type="module" src="/offline/assets/connection-recovery-v1/sales.js?pickup-send=1"></script>
-<script type="module" src="/offline/assets/connection-recovery-v1/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/sack-conversion-v1/sales-draft-ui.js"></script>
 {% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>

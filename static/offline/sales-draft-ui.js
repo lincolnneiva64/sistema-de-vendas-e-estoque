@@ -2,8 +2,8 @@ import '/offline/assets/connection-recovery-v1/sales.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales, listRecoverableDrafts, recoverDraft} from '/offline/assets/2-8g-close/sales-drafts.js';
-import {readStock,validateStock} from '/offline/assets/2-8g-close/sales-stock.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales, listRecoverableDrafts, recoverDraft} from '/offline/assets/sack-conversion-v1/sales-drafts.js';
+import {readStock,validateStock} from '/offline/assets/sack-conversion-v1/sales-stock.js';
 import {closedLocally,closureKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));

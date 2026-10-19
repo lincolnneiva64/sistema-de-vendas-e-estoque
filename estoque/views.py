@@ -21778,7 +21778,7 @@ def _quantidade_valida_para_produto_unidade(produto, unidade, quantidade):
         fator = Decimal(produto.fator_conversao or 0)
         if unidade_fracionada and unidade_normalizada == unidade_fracionada:
             return True
-        if unidade_normalizada == unidade_base and unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+        if unidade_normalizada == unidade_base and (unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA or unidade_normalizada == "SC"):
             return _quantidade_decimal_corresponde_inteiro(quantidade_decimal * fator)
 
     if unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
@@ -21794,9 +21794,21 @@ def _validar_quantidade_produto_unidade(produto, quantidade, unidade=None):
     unidade_normalizada = _normalizar_unidade_estoque(unidade)
     unidade_sufixo = f" em {unidade_texto}" if unidade_texto else ""
     if unidade_normalizada not in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
+        orientacao = ""
+        if (
+            unidade_normalizada == "SC"
+            and _produto_tem_conversao_fracionada_confiavel(produto)
+            and unidade_normalizada == _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
+            and _normalizar_unidade_estoque(produto.unidade_venda_2) != unidade_normalizada
+        ):
+            orientacao = (
+                f" Informe uma quantidade em SC equivalente a uma quantidade inteira em {produto.unidade_venda_2}, "
+                f"ou selecione {produto.unidade_venda_2}, conforme o cadastro."
+            )
+            raise ValueError(f"Produto {produto.nome} nao permite esta quantidade fracionada.{orientacao}")
         raise ValueError(
             f"Produto {produto.nome} nao permite venda fracionada. "
-            f"Informe quantidade inteira{unidade_sufixo}."
+            f"Informe quantidade inteira{unidade_sufixo}.{orientacao}"
         )
     raise ValueError(
         f"Produto {produto.nome} nao permite esta quantidade fracionada. "
