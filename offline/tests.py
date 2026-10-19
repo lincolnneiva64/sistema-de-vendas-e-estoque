@@ -193,7 +193,10 @@ class OfflineAPITests(TestCase):
 
     def test_health_database_failure(self):
         from django.db import DatabaseError
-        with mock.patch('offline.views.connection.cursor', side_effect=DatabaseError):
+        # Isolate the health query: patching the global ConnectionProxy cursor also
+        # breaks session loading in middleware before the health view can run.
+        with mock.patch('offline.views.connection') as health_connection:
+            health_connection.cursor.side_effect = DatabaseError
             response = self.client.get('/api/offline/health/')
         self.assertEqual(response.status_code, 503)
         self.assertFalse(response.json()['ok'])

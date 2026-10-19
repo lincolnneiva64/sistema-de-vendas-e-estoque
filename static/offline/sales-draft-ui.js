@@ -1,4 +1,4 @@
-import '/offline/assets/local-controlled-v1/sales.js';
+import '/offline/assets/connection-recovery-v1/sales.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
@@ -573,17 +573,24 @@ window.salesDraftUI = {
         });
     },
     async canRecoverOnline() {
-        if (!this.ready || !bridge.eligible || blocked || queueBlocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset) return false;
-        if (!await checkIdentity()) return false;
+        const refuse = reason => { this.lastOnlineRecoveryBlock = reason; return false; };
+        if (!this.ready) return refuse('initializing');
+        if (!bridge.eligible) return refuse('ineligible-context');
+        if (blocked || queueBlocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset)
+            return refuse(queueBlocked ? 'unknown-result' : localCompletion ? 'local-finalization'
+                : finalizing || preparedSubmission || submitted ? 'submission-in-progress' : 'protected-draft');
+        if (!await checkIdentity()) return refuse('identity');
         await flush();
         const current = await loadDraft(repo, scope);
-        if (blocked || localCompletion || finalizing || current.finalization || current.confirmation || current.revision !== revision) return false;
+        if (blocked || localCompletion || finalizing || current.finalization || current.confirmation || current.revision !== revision)
+            return refuse('protected-current-draft');
         const operations = await repo.all('operations');
         for (const op of operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
             && op.environment_id === scope.environment_id && op.status !== 'confirmada')) {
             if(closedLocally(await repo.all('metadata'),op))continue;
-            if (!(await revisionPresentation(repo,op,scope))?.recordId) return false;
+            if (!(await revisionPresentation(repo,op,scope))?.recordId) return refuse('pending-operation');
         }
+        this.lastOnlineRecoveryBlock = null;
         return true;
     },
     async finalizeOffline(origin) {
@@ -744,6 +751,7 @@ window.salesDraftUI.ready = true;
 await refreshCompletion().catch(showError);
 offlineActions();
 window.salesDraftResolve?.();
+document.dispatchEvent(new Event('sales-draft-ready'));
 document.addEventListener('sales-offline-active', offlineActions);
 new MutationObserver(offlineActions).observe(document.getElementById('btnGravarVenda'), {attributes:true, attributeFilter:['disabled'], childList:true});
 document.addEventListener('sales-draft-change', () => schedule(0));

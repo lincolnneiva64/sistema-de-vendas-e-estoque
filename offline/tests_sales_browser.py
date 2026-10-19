@@ -48,6 +48,8 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                     return keys.includes(current)
                         && !keys.includes('offline-pilot-shell-v30-admin-close')
                         && !!(await cache.match('/offline/vendas-shell/'))
+                        && !!(await cache.match('/offline/assets/connection-recovery-v1/sales.js'))
+                        && !!(await cache.match('/offline/assets/connection-recovery-v1/sales-draft-ui.js'))
                         && !!(await cache.match('/offline/assets/2-8g-close/sales-closures.js'))
                         && !!(await cache.match('/offline/assets/2-8i-local-auth/sales-draft-ui.js'));
                 })()""")
@@ -131,7 +133,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
                 tab.wait('window.salesOffline?.shell && !!window.salesOffline?.clients && !!document.querySelector("#produto option[data-produto-id]")')
                 self.assertTrue(tab.evaluate('salesOffline.shell && salesOffline.active'))
-                self.assertTrue(tab.evaluate('document.getElementById("sales-offline-notice").textContent.includes("Modo offline")'))
+                self.assertIn('Modo offline', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
                 tab.evaluate('clienteBusca.value="Mercadinho";clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
                 tab.wait('!!document.querySelector(".cliente-sugestao-item")')
                 tab.evaluate('document.querySelector(".cliente-sugestao-item").click();true')

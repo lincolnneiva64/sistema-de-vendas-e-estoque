@@ -72,7 +72,11 @@ state.activate = async () => {
         await window.salesDraftUI?.refreshCompletion();
         window.atualizarSelectsBonitosVenda?.();
         document.dispatchEvent(new Event('sales-offline-active'));
-    } finally { state.activating = false; }
+    } finally {
+        state.activating = false;
+        // Reconnection may have arrived while activation still held its guard.
+        if (indicator?.dataset.connection === 'online' && window.salesDraftUI?.ready) queueMicrotask(connectionChanged);
+    }
 };
 state.clients = async term => {
     await checkIdentity();
@@ -149,22 +153,55 @@ if (identityChannel) identityChannel.onmessage = checkIdentity;
 window.addEventListener('focus', checkIdentity);
 state.ready = state.active ? state.activate() : Promise.resolve();
 state.suspect = () => document.dispatchEvent(new Event('offline-connectivity-suspect'));
+function showProtectedOnline() {
+    if (state.identityBlocked || indicator?.dataset.connection !== 'online') return;
+    banner.hidden = false;
+    banner.dataset.blockReason = window.salesDraftUI?.lastOnlineRecoveryBlock || '';
+    if (window.salesSessionStatus?.authenticated === false) {
+        banner.dataset.reason = 'authentication';
+        banner.textContent = 'Servidor online. Sessão ausente ou expirada. Entre novamente com o mesmo usuário em Status. Venda local preservada; nenhum envio foi iniciado.';
+    } else {
+        banner.dataset.reason = 'protected-local-sale';
+        banner.textContent = 'Servidor online. Montagem mantida com dados locais para preservar venda pendente, em revisão ou protegida. Consulte Status para verificar a pendência; nenhum envio foi iniciado.';
+    }
+    if (snapshot) banner.append(document.createTextNode(' Catálogo local: '
+        + new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR') + '.'));
+}
 state.deactivate = async () => {
+    // A cached shell must not advertise a restored metadata observation as a fresh connection.
+    // A successful session GET (including authenticated=false) proves contact on this page.
+    if (state.shell && !window.salesSessionStatus) return;
     if (!state.active || state.activating || state.recovering || indicator?.dataset.connection !== 'online') return;
-    if (!await window.salesDraftUI?.canRecoverOnline()) return;
+    if (!window.salesDraftUI?.ready) return;
+    if (window.salesSessionStatus?.authenticated === false) { showProtectedOnline(); return; }
+    if (!await window.salesDraftUI?.canRecoverOnline()) { showProtectedOnline(); return; }
     if (state.recovering || indicator?.dataset.connection !== 'online') return;
     state.recovering = true;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     let previous = null;
+    let recoveryMessage = 'Servidor online. Não foi possível recuperar o catálogo online; montagem local preservada. O sistema tentará novamente, sem enviar vendas.';
+    let recoveryReason = 'catalog-unavailable';
     try {
         // Fetch a fresh server catalogue without navigating or executing its scripts.
         const response = await fetch('/vendas/', {signal: controller.signal, cache: 'no-store', credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}});
-        if (!response.ok) throw new Error('Catálogo online indisponível');
+        if (response.redirected || [401, 403].includes(response.status)) {
+            recoveryReason = 'authentication';
+            recoveryMessage = 'Servidor respondeu, mas o acesso ao catálogo online precisa de autenticação ou permissão. Entre com o mesmo usuário em Status. Venda local preservada; nenhum envio foi iniciado.';
+            throw new Error('catalog-authentication');
+        }
+        if (!response.ok) {
+            recoveryMessage = `Servidor respondeu HTTP ${response.status}; catálogo online indisponível. Montagem local preservada. O sistema tentará novamente, sem enviar vendas.`;
+            throw new Error('catalog-unavailable');
+        }
         const page = new DOMParser().parseFromString(await response.text(), 'text/html');
         const identity = page.getElementById('offline-global');
         if (identity?.dataset.actor !== scope?.actor_id || identity?.dataset.environment !== scope?.environment_id
-            || !page.getElementById('produto') || !page.getElementById('operadorVenda') || !page.getElementById('tipoVenda')) throw new Error('Identidade ou catálogo online inválido');
+            || !page.getElementById('produto') || !page.getElementById('operadorVenda') || !page.getElementById('tipoVenda')) {
+            recoveryReason = 'catalog-identity';
+            recoveryMessage = 'Servidor respondeu, mas a identidade ou o catálogo online não pôde ser validado. Confira a sessão do mesmo usuário em Status. Montagem local preservada; nenhum envio foi iniciado.';
+            throw new Error('catalog-identity');
+        }
         if (indicator.dataset.connection !== 'online' || !await window.salesDraftUI.canRecoverOnline()) return;
         const assembly = window.salesDraftBridge.capture();
         previous = {shell: state.shell, available: state.available, snapshot,
@@ -175,7 +212,7 @@ state.deactivate = async () => {
         }
         state.active = false; state.shell = false; state.available = false; snapshot = null;
         delete document.body.dataset.salesOffline;
-        banner.hidden = true; banner.textContent = '';
+        banner.hidden = true; banner.textContent = ''; delete banner.dataset.reason;
         window.salesDraftUI.restoreOnlineReference(assembly);
         document.getElementById('btnGravarVenda').textContent = 'Gravar Venda';
         document.getElementById('btnGravarVenda').disabled = false;
@@ -189,16 +226,25 @@ state.deactivate = async () => {
             for (const [id, options] of previous.options) document.getElementById(id).replaceChildren(...options);
         }
         banner.hidden = false;
-        banner.textContent = 'Conexão restabelecida. Não foi possível recuperar o catálogo online; montagem local preservada. Reabra Vendas para tentar novamente.';
+        if (!state.identityBlocked) { banner.dataset.reason = recoveryReason; banner.textContent = recoveryMessage; }
     } finally { clearTimeout(timer); state.recovering = false; }
 };
 function connectionChanged() {
+    if (state.identityBlocked) return;
+    if (indicator?.dataset.connection === 'offline' && state.active && !state.activating) {
+        delete banner.dataset.reason;
+        banner.hidden = false;
+        banner.textContent = snapshot
+            ? `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Comunicação com o servidor indisponível. Venda local preservada; nenhum envio foi iniciado.`
+            : 'Comunicação com o servidor indisponível. Dados locais não preparados; montagem preservada.';
+    }
     if (indicator?.dataset.connection === 'offline' && !state.active) state.ready = state.activate();
     if (indicator?.dataset.connection === 'online' && state.active) void state.deactivate().catch(() => {});
 }
 document.addEventListener('offline-connectivity', connectionChanged);
 document.addEventListener('offline-operation-updated', connectionChanged);
 document.addEventListener('sales-completion-released', connectionChanged);
+document.addEventListener('sales-draft-ready', connectionChanged);
 connectionChanged();
 // Official actions remain blocked; sale buttons use the local finalizer.
 document.addEventListener('click', event => {

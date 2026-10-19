@@ -15,6 +15,8 @@ ASSETS.push('/offline/assets/2-8g-auth-link/sales.js', '/offline/assets/2-8g-aut
 ASSETS.push(...['app.js', 'sales.js', 'sales-draft-ui.js'].map(file => '/offline/assets/2-8i-local-auth/' + file));
 ASSETS.push(...['app.js','core.js','sales.js','sales-draft-ui.js'].map(file => '/offline/assets/local-controlled-v1/' + file));
 ASSETS.push('/offline/assets/2-8h-inventario/sales.js');
+// New path bypasses workers that cached the previous sales module; no storage reset.
+ASSETS.push('/offline/assets/connection-recovery-v1/sales.js', '/offline/assets/connection-recovery-v1/sales-draft-ui.js');
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);

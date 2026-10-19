@@ -9586,8 +9586,8 @@ const operador = buscarCampoOperadorVenda();
 {% if local_sales_context %}
 <script type="module" src="/offline/assets/local-controlled-v1/local-sales.js"></script>
 {% else %}
-<script type="module" src="/offline/assets/local-controlled-v1/sales.js"></script>
-<script type="module" src="/offline/assets/local-controlled-v1/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/connection-recovery-v1/sales.js"></script>
+<script type="module" src="/offline/assets/connection-recovery-v1/sales-draft-ui.js"></script>
 {% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>

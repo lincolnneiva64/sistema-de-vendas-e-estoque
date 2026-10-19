@@ -129,9 +129,14 @@ class SalesConnectivityBrowserTests(StaticLiveServerTestCase):
                 marker = tab.evaluate('salesDraftUI.finalization')
                 tab.evaluate('window.fetch=realFetch;offset+=5001;await app.probe();await salesOffline.deactivate();true')
                 self.assertTrue(tab.evaluate('salesOffline.active'))
+                self.assertEqual(tab.evaluate('document.getElementById("offline-global").dataset.connection'), 'online')
+                self.assertIn('Servidor online', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
                 self.assertEqual(tab.evaluate('salesDraftUI.finalization'), marker)
+                self.assertEqual(tab.evaluate('salesDraftUI.lastOnlineRecoveryBlock'), 'local-finalization')
                 for status in ['pendente', 'enviando', 'resultado_desconhecido', 'conflito']:
-                    tab.evaluate('const op=(await repo.all("operations"))[0];await repo.put("operations",{...op,status:'+json.dumps(status)+'});await salesDraftUI.refreshCompletion();await salesOffline.deactivate();true')
+                    tab.evaluate('const op=(await repo.all("operations"))[0];await repo.put("operations",{...op,status:'+json.dumps(status)+'});await salesDraftUI.refreshCompletion();window.beforeRecovery=JSON.stringify(await repo.all("operations"));await salesOffline.deactivate();true')
+                    self.assertTrue(tab.evaluate('beforeRecovery === JSON.stringify(await repo.all("operations"))'))
+                    self.assertIn('Servidor online', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
                     self.assertTrue(tab.evaluate('salesOffline.active'))
                     self.assertEqual(tab.evaluate('(await repo.all("operations"))[0].operation_id'), marker['operation_id'])
                     self.assertFalse(tab.evaluate('await salesDraftUI.canRecoverOnline()'))
@@ -166,10 +171,113 @@ class SalesConnectivityBrowserTests(StaticLiveServerTestCase):
                 tab.wait('!salesOffline.recovering && document.getElementById("sales-offline-notice").textContent.includes("catálogo online")')
                 self.assertTrue(tab.evaluate('salesOffline.active'))
                 self.assertEqual(tab.evaluate('sent'), [])
+                for status in (401, 403, 503):
+                    tab.evaluate('window.fetch=(u,o)=>String(u)==="/vendas/"?Promise.resolve(new Response("unavailable",{status:'+str(status)+'})):realFetch(u,o);await salesOffline.deactivate();true')
+                    self.assertTrue(tab.evaluate('salesOffline.active'))
+                    text = tab.evaluate('document.getElementById("sales-offline-notice").textContent')
+                    self.assertIn('Servidor respondeu', text)
+                    self.assertIn('autenticação' if status in (401,403) else 'HTTP 503', text)
+                tab.evaluate('window.fetch=(u,o)=>String(u)==="/vendas/"?Promise.resolve(new Response("<html>Login</html>",{status:200})):realFetch(u,o);await salesOffline.deactivate();true')
+                self.assertIn('identidade', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
                 tab.evaluate('window.fetch=realFetch;await app.probe();true')
                 tab.wait('!salesOffline.active && !salesOffline.recovering')
                 self.assertEqual(tab.evaluate('sent'), [])
                 self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
                 self.assertEqual(tab.evaluate('posts'), [])
+            finally:
+                chrome.stop()
+
+
+    def test_session_expired_is_not_offline_and_pending_bytes_are_preserved(self):
+        with TemporaryDirectory(prefix='sales-session-recovery-') as profile:
+            chrome = Chrome(sync_tests.CHROME, profile).start()
+            try:
+                tab = self.open_sales(chrome)
+                self.select_customer(tab, 'Cliente Comercial')
+                self.add_product(tab, 'Produto Fracionado')
+                tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+                self.confirm_offline(tab)
+                tab.evaluate('await salesDraftUI.finalizeOffline();window.originalOperations=JSON.stringify(await repo.all("operations"));true')
+                tab.wait('!!salesDraftUI.finalization')
+                tab.evaluate('window.fetch=(u,o)=>String(u)==="/api/offline/session/"?Promise.resolve(new Response(JSON.stringify({authenticated:false,actor_id:"",can_prepare:false,username:""}),{headers:{"Content-Type":"application/json"}})):realFetch(u,o);offset+=5001;await app.probe();await salesOffline.deactivate();true')
+                self.assertEqual(tab.evaluate('document.getElementById("offline-global").dataset.connection'), 'online')
+                self.assertEqual(tab.evaluate('document.getElementById("sales-offline-notice").dataset.reason'), 'authentication')
+                self.assertIn('Sessão ausente ou expirada', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
+                self.assertTrue(tab.evaluate('originalOperations === JSON.stringify(await repo.all("operations"))'))
+                self.assertEqual(tab.evaluate('posts'), [])
+                self.assertEqual(tab.evaluate('sent'), [])
+                # Reauthentication can refresh the diagnosis, but may not release the pending sale.
+                tab.evaluate('window.fetch=realFetch;await app.probe();await salesOffline.deactivate();true')
+                self.assertEqual(tab.evaluate('document.getElementById("sales-offline-notice").dataset.reason'), 'protected-local-sale')
+                self.assertTrue(tab.evaluate('salesOffline.active'))
+                self.assertTrue(tab.evaluate('originalOperations === JSON.stringify(await repo.all("operations"))'))
+                self.assertEqual(tab.evaluate('posts'), [])
+            finally:
+                chrome.stop()
+
+
+    def test_old_cached_module_is_bypassed_without_clearing_pending_sale(self):
+        from estoque.models import Produto, Venda, ItemVenda
+        from .models import OperacaoSincronizacao
+        with TemporaryDirectory(prefix='sales-old-cache-pending-') as profile:
+            chrome = Chrome(sync_tests.CHROME, profile).start()
+            try:
+                tab = self.open_sales(chrome)
+                self.select_customer(tab, 'Cliente Comercial')
+                self.add_product(tab, 'Produto Fracionado')
+                tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);true')
+                self.confirm_offline(tab)
+                tab.evaluate('await salesDraftUI.finalizeOffline();true')
+                tab.wait('!!salesDraftUI.finalization')
+                operation = tab.evaluate('JSON.stringify((await repo.all("operations"))[0])')
+                operation_id = json.loads(operation)['operation_id']
+                tab.evaluate('window.fetch=realFetch;offset+=5001;await app.probe();true')
+                tab.evaluate('await navigator.serviceWorker.register("/service-worker.js",{scope:"/"});await navigator.serviceWorker.ready;true')
+                tab.wait('!!navigator.serviceWorker.controller')
+                models = (Produto, Venda, ItemVenda, OperacaoSincronizacao)
+                before = {m.__name__:list(m.objects.order_by('pk').values()) for m in models}
+                tab.evaluate("""(async()=>{
+                    const key=(await caches.keys()).find(k=>k.startsWith('offline-pilot-shell-'));
+                    const cache=await caches.open(key);
+                    await cache.put('/offline/assets/local-controlled-v1/sales.js',new Response(
+                        'throw new Error("obsolete-module-must-not-run")',{headers:{'Content-Type':'application/javascript'}}));
+                    return true;
+                })()""")
+                origin = tab.evaluate('performance.timeOrigin')
+                tab.call('Page.navigate', {'url':self.live_server_url+'/vendas/'})
+                tab.wait('performance.timeOrigin !== '+str(origin)+' && !!window.salesDraftUI?.ready')
+                self.repository(tab)
+                self.assertEqual(tab.evaluate('JSON.stringify(await repo.get("operations",'+json.dumps(operation_id)+'))'), operation)
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#sales-offline-notice").length'), 1)
+                self.assertTrue(tab.evaluate("""(async()=>{
+                    const key=(await caches.keys()).find(k=>k.startsWith('offline-pilot-shell-'));
+                    const cache=await caches.open(key);
+                    return (await (await cache.match('/offline/assets/local-controlled-v1/sales.js')).text())
+                        .includes('obsolete-module-must-not-run');
+                })()""") )
+                for model in models:
+                    self.assertEqual(list(model.objects.order_by('pk').values()), before[model.__name__])
+            finally:
+                chrome.stop()
+
+
+    def test_reconnection_before_draft_ready_is_rechecked_without_another_probe(self):
+        with TemporaryDirectory(prefix='sales-ready-recovery-') as profile:
+            chrome = Chrome(sync_tests.CHROME, profile).start()
+            try:
+                tab = self.open_sales(chrome)
+                self.select_customer(tab, 'Cliente Comercial')
+                self.add_product(tab, 'Produto Fracionado')
+                tab.evaluate('await (await import("/offline/assets/2-8f/commercial.js")).atualizarSnapshotComercial(repo,scope);await salesDraftUI.flush();window.savedAssembly=salesDraftBridge.capture();true')
+                self.confirm_offline(tab)
+                tab.evaluate('salesDraftUI.ready=false;window.fetch=realFetch;offset+=5001;await app.probe();true')
+                self.assertEqual(tab.evaluate('document.getElementById("offline-global").dataset.connection'), 'online')
+                self.assertTrue(tab.evaluate('salesOffline.active'))
+                tab.evaluate('salesDraftUI.ready=true;document.dispatchEvent(new Event("sales-draft-ready"));true')
+                tab.wait('!salesOffline.active && !salesOffline.recovering')
+                self.assertEqual(tab.evaluate('salesDraftBridge.capture()'), tab.evaluate('savedAssembly'))
+                self.assertEqual(tab.evaluate('sent'), [])
+                self.assertEqual(tab.evaluate('posts'), [])
+                self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
             finally:
                 chrome.stop()
