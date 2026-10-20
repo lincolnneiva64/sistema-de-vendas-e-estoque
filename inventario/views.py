@@ -26,6 +26,7 @@ from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
 from .painel import resumo_painel
+from .selecao import itens_incluidos, rodadas_incluidas, opcoes_selecao, salvar_selecao
 from .rastreabilidade import ORIGENS
 from .titulos import preparar_titulos
 
@@ -54,7 +55,7 @@ def resumo_inicial():
     # Current rounds only: requesting a recount must replace, not add to, its
     # former round in these totals. Never confirms or reconciles from a GET.
     ultima = RodadaContagem.objects.filter(item_id=OuterRef("item_id")).order_by("-numero").values("pk")[:1]
-    atuais = RodadaContagem.objects.filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True)
+    atuais = rodadas_incluidas().filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True)
     return atuais.aggregate(
         conferencias=Count("item__inventario_id", distinct=True, filter=Q(item__inventario__finalizada_em__isnull=True)),
         aguardando_ok=Count("pk", filter=Q(ok_em__isnull=True)),
@@ -92,7 +93,7 @@ def lista(request):
 
 def linhas_revisao(inventario):
     linhas = []
-    for item in inventario.itens.select_related("produto").order_by("cadastro__nome", "pk"):
+    for item in itens_incluidos(inventario).select_related("produto").order_by("cadastro__nome", "pk"):
         rodada = item.rodadas.order_by("-numero").first()
         conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).select_related("responsavel")} if rodada.ok_em else {}
         todos_movimentos = list(services.movimentos_relevantes(rodada))
@@ -140,7 +141,15 @@ def detalhe(request, inventario_id):
             rodada_id = request.POST.get("rodada")
             if acao in {"recontar", "conciliar", "revisar", "aprovar", "sinalizar"}:
                 get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario=inventario)
-            if acao == "acesso":
+            if acao == "selecao":
+                selecao = salvar_selecao(request.user, inventario.pk, request.POST.getlist("participantes"),
+                    request.POST.get("versao"), request.POST.get("motivo"))
+                pendencias = getattr(selecao, "pendencias_conclusao", None)
+                if selecao.finalizada_em:
+                    sucesso = "Seleção salva. Conferência finalizada com os OKs e envios já registrados."
+                elif pendencias:
+                    messages.warning(request, "Seleção salva. Conferência permanece aberta: " + " ".join(pendencias))
+            elif acao == "acesso":
                 acesso, token = services.gerar_acesso(request.user, inventario.pk, request.POST.get("funcionario"),
                     request.POST.getlist("rodadas"), request.POST.get("horas", 24))
                 link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
@@ -173,7 +182,7 @@ def detalhe(request, inventario_id):
             else:
                 raise ValueError("Ação inválida.")
             if not link:
-                messages.success(request, "Conferência atualizada com sucesso.")
+                messages.success(request, sucesso or "Conferência atualizada com sucesso.")
                 return redirect("inventario:detalhe", inventario.pk)
         except (ValueError, ObjectDoesNotExist, PermissionDenied) as exc:
             erro = str(exc)
@@ -196,7 +205,9 @@ def detalhe(request, inventario_id):
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
         "resumo_painel": resumo, "consultado_em": timezone.now(),
         "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
-        "rodadas_disponiveis": RodadaContagem.objects.filter(item__inventario=inventario, encerrada_em__isnull=True, atribuicao__isnull=True).count(),
+        "opcoes_selecao": opcoes_selecao(inventario),
+        "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
+        "rodadas_disponiveis": rodadas_incluidas(inventario).filter(encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),
         "pode_gerenciar": request.user.has_perm("inventario.gerenciar_inventario"),
         "pode_revisar": request.user.has_perm("inventario.revisar_inventario"),
@@ -300,7 +311,7 @@ def payload_cego(rodada):
 @require_http_methods(["GET"])
 def mobile(request):
     acesso = acesso_sessao(request)
-    rodadas = RodadaContagem.objects.filter(atribuicao__acesso=acesso, encerrada_em__isnull=True).select_related("item").order_by("pk")
+    rodadas = rodadas_incluidas().filter(atribuicao__acesso=acesso, encerrada_em__isnull=True).select_related("item").order_by("pk")
     estado = estado_conferencia(acesso)
     if acesso.ciclo != acesso.inventario.ciclo:
         rodadas = rodadas.none()

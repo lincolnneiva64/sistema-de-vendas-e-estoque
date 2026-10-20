@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from . import ajustes
+from .selecao import rodadas_incluidas
 from .models import Inventario, RodadaContagem, AplicacaoAjuste
 from .views import gestor, privado
 
@@ -41,7 +42,7 @@ def painel(request, inventario_id):
         except (ValueError, ObjectDoesNotExist) as exc:
             erro = str(exc)
     ultima = RodadaContagem.objects.filter(item_id=OuterRef('item_id')).order_by('-numero').values('pk')[:1]
-    rodadas = RodadaContagem.objects.filter(item__inventario=inventario, pk=Subquery(ultima))
+    rodadas = rodadas_incluidas(inventario).filter(pk=Subquery(ultima))
     # Bound the conservative preflight; never silently apply an unexamined tail.
     if rodadas.count() > 500:
         return render(request, 'inventario/ajustes.html', dict(inventario=inventario,

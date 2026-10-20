@@ -12,6 +12,7 @@ from django.utils import timezone
 from estoque.models import Fornecedor, Funcionario, Produto, ProdutoFornecedor
 from .conversao import converter, decimal_entrada, snapshot
 from .erros import ErroAcesso
+from .selecao import itens_incluidos, rodadas_incluidas
 from .rastreabilidade import ORIGENS
 from .models import (Inventario, ItemInventario, RodadaContagem, AcessoInventario, AtribuicaoContagem,
                      SequenciaEstoque, MovimentoObservado, ConciliacaoMovimento, DecisaoAjuste, EventoInventario, SinalizacaoFisica, ConfirmacaoContagem)
@@ -118,7 +119,7 @@ def gerar_acesso(usuario, inventario_id, funcionario_id, rodada_ids, horas=24):
         ids = {int(pk) for pk in rodada_ids}
     except (TypeError, ValueError):
         raise ValueError("Seleção de produtos inválida.")
-    rodadas = list(RodadaContagem.objects.select_for_update().filter(pk__in=ids, item__inventario=inventario,
+    rodadas = list(rodadas_incluidas(inventario).select_for_update().filter(pk__in=ids,
                     encerrada_em__isnull=True).order_by("pk"))
     if not ids:
         raise ValueError("Selecione pelo menos um produto disponível para atribuir.")
@@ -268,6 +269,58 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
     return rodada
 
 
+def estado_conclusao(inventario, *, exigir_estrutura=False):
+    """Avalia participantes; o chamador deve manter o lock da conferência."""
+    itens = list(itens_incluidos(inventario).order_by("pk"))
+    rodadas = list(rodadas_incluidas(inventario).filter(encerrada_em__isnull=True).order_by("pk"))
+    pendencias = []
+    if not itens:
+        pendencias.append("Nenhum produto participante.")
+    por_item = {}
+    for rodada in rodadas:
+        por_item.setdefault(rodada.item_id, []).append(rodada)
+    atribuicoes = {a.rodada_id: a for a in AtribuicaoContagem.objects.filter(
+        rodada__in=rodadas).select_related("acesso")}
+    for item in itens:
+        nome = item.cadastro["nome"]
+        atuais = por_item.get(item.pk, [])
+        if len(atuais) != 1:
+            if exigir_estrutura:
+                raise ValueError("Há itens sem uma rodada atual única. Solicite revisão ao responsável.")
+            pendencias.append(f"{nome}: sem rodada atual única.")
+            continue
+        rodada = atuais[0]
+        atribuicao = atribuicoes.get(rodada.pk)
+        if not rodada.ok_em:
+            pendencias.append(f"{nome}: aguardando OK.")
+        if not atribuicao:
+            pendencias.append(f"{nome}: aguardando atribuição.")
+        elif atribuicao.acesso.ciclo != inventario.ciclo:
+            pendencias.append(f"{nome}: atribuição de outro ciclo.")
+        elif not atribuicao.acesso.enviada_em:
+            pendencias.append(f"{nome}: aguardando envio de {atribuicao.acesso.funcionario_nome}.")
+    return rodadas, pendencias
+
+
+def concluir_se_pronta(inventario, *, usuario=None, acesso=None, versao=None, origem="envio_funcionario"):
+    """Compartilhada pelos dois fluxos, dentro da transação e lock existentes."""
+    if inventario.finalizada_em:
+        return []
+    rodadas, pendencias = estado_conclusao(inventario)
+    if pendencias:
+        return pendencias
+    inventario.finalizada_em = timezone.now()
+    inventario.finalizada_por = usuario
+    inventario.finalizada_por_acesso = acesso
+    inventario.finalizacao_versao = inventario.versao if versao is None else versao
+    inventario.versao += 1
+    inventario.save(update_fields=["finalizada_em", "finalizada_por", "finalizada_por_acesso", "finalizacao_versao", "versao"])
+    evento(inventario, "conferencia_finalizada", usuario=usuario, acesso=acesso, ciclo=inventario.ciclo,
+        origem=origem, rodadas=[{"id": r.pk, "versao": r.versao} for r in rodadas],
+        finalizada_em=inventario.finalizada_em.isoformat())
+    return []
+
+
 @transaction.atomic
 def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
     inventario, acesso = bloquear_inventario_acesso(acesso_id)
@@ -288,9 +341,7 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
         raise ValueError("Conferência já finalizada. Atualize a página.")
     if versao != inventario.versao:
         raise ValueError("As contagens mudaram em outra aba ou acesso. Atualize antes de finalizar.")
-    rodadas = list(RodadaContagem.objects.filter(item__inventario=inventario, encerrada_em__isnull=True).order_by("pk"))
-    if len(rodadas) != inventario.itens.count() or len({r.item_id for r in rodadas}) != len(rodadas):
-        raise ValueError("Há itens sem uma rodada atual única. Solicite revisão ao responsável.")
+    rodadas, _ = estado_conclusao(inventario, exigir_estrutura=True)
     proprias = [r for r in rodadas if AtribuicaoContagem.objects.filter(acesso=acesso, rodada=r).exists()]
     if not proprias:
         raise PermissionDenied("Este acesso não possui contagens atuais para enviar.")
@@ -302,19 +353,9 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
     acesso.save(update_fields=["enviada_em", "envio_versao"])
     evento(inventario, "atribuicao_enviada", acesso=acesso, ciclo=inventario.ciclo,
            rodadas=[{"id": r.pk, "versao": r.versao} for r in proprias])
-    atribuicoes = list(AtribuicaoContagem.objects.filter(rodada__in=rodadas).select_related("acesso"))
-    if (len(atribuicoes) != len(rodadas) or any(r.ok_em is None for r in rodadas)
-            or any(a.acesso.ciclo != inventario.ciclo or not a.acesso.enviada_em for a in atribuicoes)):
-        atualizar_versao(inventario)
-        return inventario
     validar_acesso(acesso)
-    inventario.finalizada_em = timezone.now()
-    inventario.finalizada_por_acesso = acesso
-    inventario.finalizacao_versao = versao
-    inventario.versao += 1
-    inventario.save(update_fields=["finalizada_em", "finalizada_por_acesso", "finalizacao_versao", "versao"])
-    evento(inventario, "conferencia_finalizada", acesso=acesso, ciclo=inventario.ciclo,
-        rodadas=[{"id": r.pk, "versao": r.versao} for r in rodadas], finalizada_em=inventario.finalizada_em.isoformat())
+    if concluir_se_pronta(inventario, acesso=acesso, versao=versao):
+        atualizar_versao(inventario)
     return inventario
 
 
@@ -339,7 +380,7 @@ def reabrir_conferencia(usuario, inventario_id, motivo):
     if DecisaoAjuste.objects.filter(item__inventario=inventario).exists():
         raise ValueError("Existe ajuste aplicado. Crie outra conferência.")
     abrir_ciclo(inventario, usuario, motivo)
-    for rodada in RodadaContagem.objects.filter(item__inventario=inventario, encerrada_em__isnull=True).order_by("pk"):
+    for rodada in rodadas_incluidas(inventario).filter(encerrada_em__isnull=True).order_by("pk"):
         recontar(usuario, rodada.pk, motivo)
     return inventario
 
@@ -354,6 +395,8 @@ def recontar(usuario, rodada_id, motivo):
     if inventario.finalizada_em:
         abrir_ciclo(inventario, usuario, motivo)
     item = ItemInventario.objects.select_for_update().get(pk=original.item_id)
+    if not itens_incluidos(inventario).filter(pk=item.pk).exists():
+        raise ValueError("Produto retirado da conferencia. Reinclua antes de solicitar contagem.")
     rodada = RodadaContagem.objects.select_for_update().get(pk=rodada_id)
     if rodada.encerrada_em or DecisaoAjuste.objects.filter(item=item).exists():
         raise ValueError("Rodada encerrada ou ajuste já aplicado.")
@@ -410,6 +453,8 @@ def conciliar(usuario, rodada_id, movimento_id, referencia):
 
 
 def validar_cadeia(rodada, produto, documentos=()):
+    if not itens_incluidos().filter(pk=rodada.item_id).exists():
+        raise ValueError("Produto retirado da conferencia.")
     verificar_observador()
     if not rodada.ok_em or rodada.encerrada_em:
         raise ValueError("Confirme uma rodada ativa antes da revisão.")
@@ -463,6 +508,8 @@ def sinalizar_fisico(rodada_id, descricao, chave, *, acesso_id=None, usuario=Non
         Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id)
     referencia = RodadaContagem.objects.get(pk=rodada_id)
     item = ItemInventario.objects.select_for_update().get(pk=referencia.item_id)
+    if not itens_incluidos().filter(pk=item.pk).exists():
+        raise ValueError("Produto retirado da conferencia.")
     rodada = RodadaContagem.objects.select_for_update().get(pk=rodada_id)
     if rodada.encerrada_em:
         raise ValueError("Rodada encerrada. Sinalize na rodada atual.")

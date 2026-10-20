@@ -11,6 +11,7 @@ from django.db import connection, transaction
 from estoque.models import Produto, MovimentacaoEstoqueManual
 from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
 from . import services
+from .selecao import itens_incluidos, rodadas_incluidas
 from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
                      PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado)
 
@@ -96,8 +97,7 @@ def bloquear(inventario_id, rodada_ids):
     """Consistent lock order, including product locks held through commit."""
     Inventario.objects.select_for_update().get(pk=inventario_id)
     verificar_limite(inventario_id)
-    referencias = list(RodadaContagem.objects.filter(pk__in=rodada_ids,
-        item__inventario_id=inventario_id).values('pk', 'item_id', 'item__produto_id'))
+    referencias = list(rodadas_incluidas(inventario_id).filter(pk__in=rodada_ids).values('pk', 'item_id', 'item__produto_id'))
     if len(referencias) != len(set(rodada_ids)):
         raise ValueError('Proposta fora da conferência.')
     list(ItemInventario.objects.select_for_update().filter(pk__in=[r['item_id'] for r in referencias]).order_by('pk'))
@@ -109,7 +109,7 @@ def bloquear(inventario_id, rodada_ids):
 
 
 def verificar_limite(inventario_id):
-    if ItemInventario.objects.filter(inventario_id=inventario_id).count() > 500:
+    if itens_incluidos(inventario_id).count() > 500:
         raise ValueError('Mais de 500 produtos: aprovação e aplicação bloqueadas. Divida a revisão em conferências menores.')
 
 

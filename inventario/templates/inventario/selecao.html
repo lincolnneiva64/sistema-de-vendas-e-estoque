@@ -1,0 +1,38 @@
+{% if pode_gerenciar and not inventario.finalizada_em %}
+<details class="card" id="selecao-participantes">
+  <summary>Selecionar produtos participantes</summary>
+  <p>Todos os produtos sugeridos começam incluídos. Desmarque aqui somente os que não participarão. Também é possível retirar produtos ainda não atribuídos de uma conferência em andamento, desde que não possuam contagens ou outras evidências protegidas.</p>
+  <p class="muted">Produtos incluídos sem funcionário continuam pendentes. Desmarcar na distribuição apenas deixa o produto disponível para outra atribuição.</p>
+  <form method="post" id="form-selecao-participantes" data-processamento>
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="selecao">
+    <input type="hidden" name="versao" value="{{ inventario.versao }}">
+    {% for opcao in opcoes_selecao %}
+    <label class="opcao-participante">
+      <input type="checkbox" name="participantes" value="{{ opcao.item.pk }}" {% if opcao.incluido %}checked{% endif %} {% if opcao.bloqueio %}disabled{% endif %}>
+      <span>{{ opcao.item.cadastro.nome }}<small>{% if opcao.incluido %}Incluído{% else %}Retirado — fora dos resultados{% endif %}{% if opcao.bloqueio %} · {{ opcao.bloqueio }}{% endif %}</small></span>
+    </label>
+    {% if opcao.bloqueio and opcao.incluido %}<input type="hidden" name="participantes" value="{{ opcao.item.pk }}">{% endif %}
+    {% endfor %}
+    <label>Motivo da retirada ou reinclusão<textarea name="motivo" required maxlength="2000"></textarea></label>
+    <div class="aviso">
+      <p><strong>Atenção:</strong> ao salvar a retirada de produtos, a conferência poderá ser finalizada automaticamente se todos os produtos restantes já estiverem conferidos e enviados pelos funcionários.</p>
+      <p>A finalização não realiza ajustes de estoque. Faltas e sobras continuarão disponíveis para análise e autorização separada.</p>
+    </div>
+    <button data-processando="Salvando seleção…">Salvar produtos participantes</button>
+    <p class="mensagem" data-feedback role="status" aria-live="polite"></p>
+  </form>
+</details>
+{% endif %}
+{% if eventos_selecao %}
+<details class="card" id="historico-selecao"><summary>Histórico de retiradas e reinclusões</summary>
+  <p class="muted">Este registro não faz parte dos resultados da contagem.</p>
+  {% for evento in eventos_selecao %}<p>{{ evento.criado_em|date:'d/m/Y H:i:s' }} · {{ evento.usuario }} · {{ evento.dados.nome }} · {% if evento.acao == 'produto_retirado' %}Retirado{% else %}Reincluído{% endif %} · {{ evento.dados.motivo }}</p>{% endfor %}
+</details>
+{% endif %}
+<style>
+  #form-selecao-participantes .opcao-participante { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid #dbe4e8; }
+  #form-selecao-participantes .opcao-participante input[type=checkbox] { width:20px; min-width:20px; height:20px; margin:2px 0 0; }
+  #form-selecao-participantes .opcao-participante span { min-width:0; overflow-wrap:anywhere; }
+  #form-selecao-participantes .opcao-participante small { display:block; font-weight:400; color:#475569; }
+</style>
