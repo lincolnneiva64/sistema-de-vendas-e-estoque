@@ -77,6 +77,7 @@ class SugestoesProdutosBrowserTests(DadosSugestoes, StaticLiveServerTestCase):
                             tab.call("Network.setCookie", {"name":"sessionid", "value":self.client.cookies["sessionid"].value,"url":self.live_server_url})
                             tab.call("Emulation.setDeviceMetricsOverride", {"width":width,"height":844,"deviceScaleFactor":1,"mobile":width<860})
                             tab.call("Page.navigate", {"url":self.live_server_url+rota})
+                            tab.wait('document.readyState === "complete"')
                             selector = ('#tbodyAdicionarProdutoMobile [name="produto_busca[]"]' if width<860 else '#tabelaItensCompra [name="produto_busca[]"]') if nome=="compra" else '#produtoManualBuscaSugestao'
                             if nome != "compra":
                                 tab.wait('!!document.getElementById("btnToggleAdicionarProdutosMobile")')
@@ -87,16 +88,34 @@ class SugestoesProdutosBrowserTests(DadosSugestoes, StaticLiveServerTestCase):
                             tab.wait('[...document.querySelectorAll(".spc-'+('compra' if nome=='compra' else 'lista')+'")].filter(e=>e.getClientRects().length).length>=3')
                             target = '.spc-compra' if nome=='compra' else '.spc-lista'
                             tab.evaluate('window.botao=[...document.querySelectorAll('+json.dumps(target)+')].find(e=>e.getClientRects().length && e.dataset.produtoId==='+json.dumps(str(self.produto.pk))+');botao.scrollIntoView({block:"center",behavior:"instant"});true')
-                            metrics = tab.evaluate('''(()=>{
+                            metrics = tab.evaluate(r'''(()=>{
                               const r=botao.querySelector('.spc-mobile'), n=r.firstElementChild;
+                              const luminancia=cor=>{
+                                const rgb=cor.match(/[\d.]+/g).slice(0,3).map(v=>{
+                                  v=Number(v)/255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;
+                                });
+                                return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+                              };
+                              const contraste=(texto,fundo)=>{
+                                const a=luminancia(texto), b=luminancia(fundo);
+                                return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+                              };
                               return {valores:[...r.children].slice(1).map(e=>e.textContent), title:botao.title,
                                 mobile:!!r.getClientRects().length, desktop:!!botao.querySelector('.spc-desktop').getClientRects().length,
                                 altura:botao.getBoundingClientRect().height, truncado:n.scrollWidth>n.clientWidth,
                                 larguraNome:n.getBoundingClientRect().width,
                                 fonteValores:parseFloat(getComputedStyle(r.children[1]).fontSize),
                                 gap:parseFloat(getComputedStyle(r).columnGap),
+                                separacaoNome:r.children[1].getBoundingClientRect().left-n.getBoundingClientRect().right,
+                                contrasteMinimo:Math.min(...[...r.children].slice(1).flatMap(e=>{
+                                  const s=getComputedStyle(e), l=getComputedStyle(e.firstElementChild);
+                                  return [contraste(s.color,s.backgroundColor),contraste(l.color,s.backgroundColor)];
+                                })),
                                 valoresCompletos:[...r.children].slice(1).every(e=>e.scrollWidth<=e.clientWidth+1 && e.getBoundingClientRect().right<=r.getBoundingClientRect().right+1),
-                                mesmaLinha:[...r.children].every(e=>Math.abs(e.getBoundingClientRect().top-n.getBoundingClientRect().top)<1),
+                                mesmaLinha:[...r.children].every(e=>{
+                                  const a=e.getBoundingClientRect(), b=n.getBoundingClientRect();
+                                  return Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<1;
+                                }),
                                 overflow:document.documentElement.scrollWidth>innerWidth,
                                 sobreposto:n.getBoundingClientRect().right>r.children[1].getBoundingClientRect().left};
                             })()''')
@@ -112,8 +131,11 @@ class SugestoesProdutosBrowserTests(DadosSugestoes, StaticLiveServerTestCase):
                                 self.assertFalse(metrics["overflow"], metrics)
                                 self.assertTrue(metrics["valoresCompletos"], metrics)
                                 self.assertGreaterEqual(metrics["fonteValores"], 11.5)
-                                self.assertLessEqual(metrics["gap"], 2)
+                                self.assertGreaterEqual(metrics["separacaoNome"], 12)
+                                self.assertGreaterEqual(metrics["contrasteMinimo"], 7)
                             self.assertEqual(tab.evaluate('[...document.querySelector('+json.dumps(target+'[data-produto-id="'+str(self.ausente.pk)+'"]')+').querySelectorAll(".spc-valor")].map(e=>e.textContent)'), ["Est: 0,125", "PC: —", "PV: —"])
+                            tab.evaluate('(async()=>{await new Promise(r=>setTimeout(r,600));botao.scrollIntoView({block:"center",behavior:"instant"});await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);return true})()')
+                            tab.wait('(()=>{const r=botao.getBoundingClientRect();return botao.isConnected && r.top>=0 && r.bottom<=innerHeight})()')
                             shot=tab.call("Page.captureScreenshot", {"format":"png"})["data"]
                             (evidence/f"{nome}-{width}.png").write_bytes(base64.b64decode(shot))
                             (evidence/f"{nome}-{width}.json").write_text(json.dumps(metrics,indent=2),encoding="utf-8")
