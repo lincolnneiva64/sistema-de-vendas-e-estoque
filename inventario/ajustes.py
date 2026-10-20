@@ -14,7 +14,8 @@ from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
 from . import services
 from .selecao import itens_incluidos, rodadas_incluidas
 from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
-                     PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado)
+                     PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado,
+                     ConfirmacaoContagem)
 
 SALT = 'inventario-ajustes-v1'
 
@@ -272,6 +273,59 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
                        assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica'))
         propostas.append(proposta)
     return aplicar(usuario, inventario_id, previa_aplicacao(inventario_id, propostas), confirmacao=True)
+
+
+def projetar_resultado(linhas_revisao):
+    """Light read model, not an authorization or a documentary validation.
+
+    Reuse the rounds already read by the detail page. Fetch only recorded
+    application balances, never the potentially large JSON evidence.
+    """
+    aplicadas = {a['decisao__item_id']: a for a in AplicacaoAjuste.objects.filter(
+        decisao__item_id__in=[l['item'].pk for l in linhas_revisao],
+        proposta__estado='aplicado').values(
+            'decisao__item_id', 'decisao__rodada_id', 'proposta__rodada_id',
+            'antes', 'diferenca', 'depois', 'unidade')}
+    campos_ok = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
+    ultima = ConfirmacaoContagem.objects.filter(rodada_id=OuterRef('rodada_id')).order_by(
+        '-versao_entrada').values('pk')[:1]
+    confirmacoes = {c['rodada_id']: c for c in ConfirmacaoContagem.objects.filter(
+        rodada_id__in=[l['rodada'].pk for l in linhas_revisao], pk=Subquery(ultima)
+    ).values('rodada_id', *campos_ok)}
+    linhas = []
+    for revisao in linhas_revisao:
+        rodada, item = revisao['rodada'], revisao['item']
+        linha = dict(rodada=rodada, atual=item.produto.quantidade,
+            unidade=item.cadastro.get('base', ''), estado='Requer prévia',
+            bloqueio='', saldo_aplicado=None, unidade_aplicada='', preliminar=True)
+        if revisao['decisao']:
+            linha['estado'] = 'Aplicado'
+            aplicacao = aplicadas.get(item.pk)
+            if (aplicacao and aplicacao['decisao__rodada_id'] == rodada.pk
+                    and aplicacao['proposta__rodada_id'] == rodada.pk
+                    and aplicacao['unidade'].strip()
+                    and aplicacao['antes'] + aplicacao['diferenca'] == aplicacao['depois']):
+                linha.update(saldo_aplicado=aplicacao['depois'],
+                             unidade_aplicada=aplicacao['unidade'])
+        elif (not rodada.ok_em or rodada.esperado is None or rodada.contado_base is None
+                or rodada.sequencia_ok is None or rodada.encerrada_em):
+            linha.update(estado='Bloqueado', bloqueio='Confirmação física ausente ou rodada encerrada.')
+        elif any(s.resolvida_em is None for s in revisao['sinalizacoes']):
+            linha.update(estado='Bloqueado', bloqueio='Sinalização física pendente de resolução.')
+        elif (rodada.pk not in confirmacoes or any(
+                confirmacoes[rodada.pk][campo] != getattr(rodada, campo) for campo in campos_ok)):
+            linha.update(estado='Bloqueado', bloqueio='OK sem confirmação original compatível; solicite recontagem.')
+        elif rodada.contado_base == rodada.esperado:
+            linha.update(estado='Sem diferença', bloqueio='Sem diferença registrada para atualizar.')
+        linhas.append(linha)
+    resumo = dict(aptos=0, candidatos=sum(l['estado'] == 'Requer prévia' for l in linhas),
+        bloqueados=sum(l['estado'] == 'Bloqueado' for l in linhas),
+        aplicados=sum(l['estado'] == 'Aplicado' for l in linhas), total=len(linhas))
+    erro = ''
+    if len(linhas) > 500:
+        resumo['candidatos'] = 0
+        erro = 'Mais de 500 produtos: divida a revisão em conferências menores. Aplicação bloqueada.'
+    return dict(linhas=linhas, aptas=[], resumo=resumo, erro=erro, preliminar=True)
 
 
 def preparar_resultado(inventario):

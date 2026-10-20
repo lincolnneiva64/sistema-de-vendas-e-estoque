@@ -1,7 +1,8 @@
 <div class="atualizacao-resultado" id="atualizacao-resultado">
   <h3>Atualização do estoque</h3>
   {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% else %}
-  <p>{{ atualizacao.resumo.aptos }} aptos para atualizar · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p>
+  {% if atualizacao.preliminar %}<p>{{ atualizacao.resumo.candidatos }} requerem prévia · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p><p>A situação inicial é preliminar. Revise a prévia para validar os documentos, os bloqueios e os saldos antes de confirmar.</p>
+  {% else %}<p>{{ atualizacao.resumo.aptos }} aptos para atualizar · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p>{% endif %}
   {% if not ajustes_habilitados %}<p class="aviso">Aplicação real desabilitada no servidor. A prévia não altera o estoque.</p>{% endif %}
   {% if previa_lote %}
     <h4>Revisar atualização em lote</h4>
@@ -15,8 +16,8 @@
       <details><summary>Adicionar observação</summary><label>Observação opcional<textarea name="observacao" maxlength="4000"></textarea></label></details>
       <div class="acoes"><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Cancelar</a><button name="confirmacao" value="sim" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar atualização</button></div>
     </form>
-  {% elif atualizacao.resumo.aptos and pode_aprovar %}
+  {% elif pode_aprovar and atualizacao.resumo.candidatos or pode_aprovar and atualizacao.resumo.aptos %}
     <a class="button" id="revisar-atualizacao" href="?atualizar=prever#atualizacao-resultado">Revisar atualização em lote</a>
-  {% elif not atualizacao.resumo.aptos %}<p class="status">Nenhum produto apto com diferença para atualizar. Consulte a situação de cada produto acima.</p>{% endif %}
+  {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige prévia validada e autorização.</p>{% endif %}
   {% endif %}
 </div>

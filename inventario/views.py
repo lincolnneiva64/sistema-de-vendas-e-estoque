@@ -203,12 +203,13 @@ def detalhe(request, inventario_id):
     inventario.refresh_from_db()
     linhas = linhas_revisao(inventario)
     resumo = resumo_painel(linhas)
-    atualizacao = ajustes.preparar_resultado(inventario)
+    prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
+              and request.user.has_perm("inventario.aprovar_ajuste"))
+    atualizacao = (ajustes.preparar_resultado(inventario) if prever
+                   else ajustes.projetar_resultado(linhas))
     por_rodada = {l['rodada'].pk: l for l in atualizacao['linhas']}
     for linha in linhas:
         linha['atualizacao'] = por_rodada.get(linha['rodada'].pk)
-    prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
-              and request.user.has_perm("inventario.aprovar_ajuste"))
     previa_lote = ajustes.previa_atualizacao(inventario.pk, atualizacao['aptas']) if prever and atualizacao['aptas'] else ''
     acessos = list(inventario.acessos.select_related("funcionario"))
     for acesso in acessos:

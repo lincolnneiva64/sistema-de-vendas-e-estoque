@@ -1,6 +1,7 @@
 <td data-label="Atualização do estoque" class="situacao-atualizacao">{% with a=linha.atualizacao %}
 {% if a.estado == 'Aplicado' %}<strong class="estado-atualizacao estado-aplicado">Aplicado</strong>{% if a.saldo_aplicado is not None %}<span class="saldo-aplicado">Saldo registrado: {{ a.saldo_aplicado|floatformat:'-3' }} {{ a.unidade_aplicada }}</span>{% else %}<span>Saldo histórico indisponível; consulte a auditoria.</span>{% endif %}
 {% elif a.bloqueio %}<strong class="estado-atualizacao estado-bloqueado">{{ a.estado }}</strong><span>{{ a.bloqueio }}</span>
+{% elif a.preliminar %}<strong class="estado-atualizacao">Requer prévia</strong><span>A validação documental será feita ao revisar a atualização.</span>
 {% elif a.estado == 'Pendente de revisão' or a.estado == 'Aprovado' %}<strong class="estado-atualizacao estado-apto">Apto para atualizar</strong><span>Prévia: {{ a.atual|floatformat:'-3' }} → {{ a.resultante|floatformat:'-3' }} {{ a.unidade }}</span>
 {% elif a.estado == 'Rejeitado' %}<strong>Rejeitado</strong><span>Uma nova proposta exige nova confirmação física.</span>
 {% else %}<strong>{{ a.estado|default:'Indisponível' }}</strong>{% endif %}{% endwith %}</td>
