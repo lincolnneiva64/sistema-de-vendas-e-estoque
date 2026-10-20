@@ -64,6 +64,14 @@
   .cp-table th { text-align:left; font-size:.68rem; color:#64748b; text-transform:uppercase; background:#f8fafc; padding:10px 11px; border-bottom:1px solid #edf1f6; }
   .cp-table th.grupo { background:#eef6ff; color:#164173; font-size:.72rem; letter-spacing:.02em; }
   .cp-table td { padding:11px; border-bottom:1px solid #f0f3f8; vertical-align:middle; font-weight:750; }
+  .cp-totals { background:#eef6ff; color:#164173; }
+  .cp-table .cp-totals th, .cp-table .cp-totals td { background:#eef6ff; border-top:2px solid #bfdbfe; padding:14px 11px; text-transform:none; font-size:.9rem; }
+  .cp-totals-title { display:block; font-weight:950; }
+  .cp-totals-note { display:block; margin-top:4px; font-size:.75rem; line-height:1.4; font-weight:750; color:#475569; }
+  .cp-totals .cp-money { font-weight:950; }
+  .cp-mobile-totals { border:1px solid #bfdbfe; border-top:3px solid #93c5fd; }
+  .cp-mobile-totals .cp-values-grid { grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:12px; gap:14px 10px; }
+  .cp-mobile-totals .cp-money { white-space:normal; overflow-wrap:anywhere; }
   .cp-money { font-weight:950; color:#172033; white-space:nowrap; }
   .cp-money.open { color:#166534; }
   .cp-money.interest.zero, .cp-money.paid.zero, .cp-money.original { color:#64748b; font-weight:820; }
@@ -364,6 +372,18 @@
           <tr><td colspan="10" class="cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</td></tr>
         {% endfor %}
       </tbody>
+      {% if contas %}
+      <tfoot>
+        <tr class="cp-totals" data-resultados-totais>
+          <th scope="row">
+            <span class="cp-totals-title">Total dos resultados filtrados</span>
+            <span class="cp-totals-note">{{ totais_resultados.quantidade }} conta{{ totais_resultados.quantidade|pluralize:"s" }} &middot; Todos os resultados</span>
+          </th>
+          <td>{% include "estoque/partials/contas_pagar_totais_valores.html" %}</td>
+          <td><span class="cp-totals-note">Soma dos valores das contas listadas. Pago = principal registrado; juros separados.</span>{% if totais_resultados.legadas %}<span class="cp-totals-note">{{ totais_resultados.legadas }} conta(s) com histórico legado: pago não informado.</span>{% endif %}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
     </table>
   </section>
 
@@ -441,6 +461,15 @@
     {% empty %}
       <div class="cp-mobile-card cp-empty">{% if fornecedor_id or compra_documento or data_inicio or data_fim or termo or situacao != 'todas' or atalho %}Nenhuma conta corresponde aos filtros aplicados.{% else %}Nenhuma conta encontrada.{% endif %}</div>
     {% endfor %}
+    {% if contas %}
+    <footer class="cp-mobile-card cp-totals cp-mobile-totals" data-resultados-totais aria-label="Totais dos resultados filtrados">
+      <span class="cp-totals-title">Total dos resultados filtrados</span>
+      <span class="cp-totals-note">{{ totais_resultados.quantidade }} conta{{ totais_resultados.quantidade|pluralize:"s" }} &middot; Todos os resultados</span>
+      {% include "estoque/partials/contas_pagar_totais_valores.html" %}
+      <span class="cp-totals-note">Soma dos valores das contas listadas. Pago = principal registrado; juros separados.</span>
+      {% if totais_resultados.legadas %}<span class="cp-totals-note">{{ totais_resultados.legadas }} conta(s) com histórico legado: pago não informado.</span>{% endif %}
+    </footer>
+    {% endif %}
   </section>
   </div>
 </div>

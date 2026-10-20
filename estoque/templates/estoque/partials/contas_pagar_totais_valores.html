@@ -1,0 +1,8 @@
+{% load i18n %}{% language "pt-br" %}
+<div class="cp-values-grid">
+  <div><span class="cp-value-label">Original</span><span class="cp-money" data-total="original">R$ {{ totais_resultados.original|floatformat:2 }}</span></div>
+  <div><span class="cp-value-label">Pago</span><span class="cp-money paid" data-total="pago">R$ {{ totais_resultados.pago|floatformat:2 }}</span></div>
+  <div><span class="cp-value-label">Juros</span><span class="cp-money interest" data-total="juros">R$ {{ totais_resultados.juros|floatformat:2 }}</span></div>
+  <div><span class="cp-value-label">Em aberto</span><span class="cp-money open" data-total="aberto">R$ {{ totais_resultados.aberto|floatformat:2 }}</span></div>
+</div>
+{% endlanguage %}

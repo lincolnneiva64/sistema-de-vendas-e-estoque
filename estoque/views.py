@@ -28312,6 +28312,15 @@ def contas_pagar(request):
 
     total_aberto = resumo_cards["aberto"]["valor"]
     total_original = sum((_financeiro_dinheiro(conta.valor_original) for conta in contas), Decimal("0.00")).quantize(Decimal("0.01"))
+    # Mesma lista e mesmos valores exibidos nas linhas; nenhum filtro paralelo.
+    totais_resultados = {
+        "quantidade": len(contas),
+        "original": total_original,
+        "pago": sum((conta.principal_pago for conta in contas), Decimal("0.00")),
+        "juros": sum((conta.juros_pagos for conta in contas), Decimal("0.00")),
+        "aberto": sum((_financeiro_dinheiro(conta.valor_em_aberto) for conta in contas), Decimal("0.00")),
+        "legadas": sum(conta.pagamento_legado_sem_historico for conta in contas),
+    }
 
     fornecedores = Fornecedor.objects.filter(
         contas_pagar__isnull=False
@@ -28461,6 +28470,7 @@ def contas_pagar(request):
             "periodo_label": periodo_label,
             "total_aberto": total_aberto,
             "total_original": total_original,
+            "totais_resultados": totais_resultados,
             "resumo_cards": resumo_cards,
             "principal_pago_periodo": principal_pago_periodo,
             "juros_pagos_periodo": juros_pagos_periodo,
