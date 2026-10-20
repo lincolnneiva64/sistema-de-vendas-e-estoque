@@ -107,6 +107,7 @@ main:has(.painel-inventario){max-width:1360px}
 .estado-bloqueado{background:#fff0cc;color:#795200}
 .estado-apto{background:#e8f1f5;color:#264f62}
 .situacao-atualizacao .saldo-aplicado{font-size:1rem;font-weight:700;color:#145b3e}
+.situacao-atualizacao .aplicacao-nao-comprovada{font-size:1rem;line-height:1.6;font-weight:500;color:#263f49}
 .estimativa-recolhida{border:1px solid #d8e2e5;border-radius:10px;background:white;margin:16px 0}
 .estimativa-recolhida>summary{padding:14px 18px;color:#3d585e}
 .estimativa-recolhida .financeiro-painel{margin:0;border-radius:0 0 10px 10px}

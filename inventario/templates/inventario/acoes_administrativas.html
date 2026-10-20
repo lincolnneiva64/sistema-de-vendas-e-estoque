@@ -1,0 +1,9 @@
+{% if modo_historico %}{% if pode_aprovar or pode_revisar %}
+<details class="card" id="acoes-administrativas"><summary>Ações administrativas</summary>
+{% if pode_aprovar and revisao_historica_disponivel %}
+<p>A revisão dos ajustes pendentes não reabre a conferência nem cria novas rodadas. O acesso não altera estoque; qualquer aplicação exige prévia validada e confirmação expressa.</p>
+<form method="post" id="acessar-revisao-historica">{% csrf_token %}<input type="hidden" name="acao" value="revisar_ajustes_historicos"><button class="secondary">Revisar ajustes pendentes</button></form>
+{% endif %}
+{% if pode_revisar %}<details class="card"><summary>Reabrir conferência geral</summary><form method="post">{% csrf_token %}<input type="hidden" name="acao" value="reabrir_conferencia"><label>Justificativa<textarea name="motivo" required></textarea></label><p>As rodadas anteriores serão preservadas. Serão abertas novas rodadas cegas para todos os produtos; distribua novos links. Os acessos antigos não recuperarão escrita.</p><button class="secondary">Reabrir em novo ciclo</button></form></details>{% endif %}
+</details>
+{% endif %}{% endif %}

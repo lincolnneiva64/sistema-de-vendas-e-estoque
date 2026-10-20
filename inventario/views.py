@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.middleware.csrf import get_token
 from django.db.models import Count, F, Q, OuterRef, Subquery
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,6 +23,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from estoque.models import Produto, Fornecedor, Funcionario
 from .conversao import converter
 from . import services, sessoes, ajustes
+from . import acesso_ajustes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
@@ -134,6 +136,10 @@ def linhas_revisao(inventario):
 def detalhe(request, inventario_id):
     gestor(request)
     inventario = get_object_or_404(Inventario, pk=inventario_id)
+    if inventario.finalizada_em and (
+            request.GET.get("atualizar") == "prever"
+            or request.method == "POST" and request.POST.get("acao") in {"atualizar", "aprovar"}):
+        raise PermissionDenied("Conferência em modo histórico. Use Ações administrativas para revisar ajustes pendentes.")
     erro, link, whatsapp_url, destinatario, sucesso = "", "", "", "", ""
     if request.method == "POST":
         try:
@@ -141,10 +147,18 @@ def detalhe(request, inventario_id):
             rodada_id = request.POST.get("rodada")
             if acao in {"recontar", "conciliar", "revisar", "aprovar", "sinalizar"}:
                 get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario=inventario)
-            if acao == "atualizar":
-                ajustes.atualizar(request.user, inventario.pk, request.POST.get("previa"),
-                    confirmacao=request.POST.get("confirmacao") == "sim",
-                    observacao=request.POST.get("observacao", ""))
+            if acao == "revisar_ajustes_historicos":
+                acesso = acesso_ajustes.iniciar(request.user, inventario)
+                return redirect(reverse("inventario:ajustes", args=[inventario.pk]) + "?" +
+                                urlencode({"revisao_historica": acesso}))
+            elif acao == "atualizar":
+                with transaction.atomic():
+                    atual = Inventario.objects.select_for_update().get(pk=inventario.pk)
+                    if atual.finalizada_em:
+                        raise PermissionDenied("Conferência em modo histórico. Use Ações administrativas.")
+                    ajustes.atualizar(request.user, inventario.pk, request.POST.get("previa"),
+                        confirmacao=request.POST.get("confirmacao") == "sim",
+                        observacao=request.POST.get("observacao", ""))
                 messages.success(request, "Atualização concluída. Os saldos aplicados estão registrados no resultado e no histórico.")
                 return redirect(reverse("inventario:detalhe", args=[inventario.pk]) + "#titulo-resumo")
             elif acao == "selecao":
@@ -204,6 +218,7 @@ def detalhe(request, inventario_id):
     linhas = linhas_revisao(inventario)
     resumo = resumo_painel(linhas)
     prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
+              and not inventario.finalizada_em
               and request.user.has_perm("inventario.aprovar_ajuste"))
     atualizacao = (ajustes.preparar_resultado(inventario) if prever
                    else ajustes.projetar_resultado(linhas))
@@ -218,6 +233,9 @@ def detalhe(request, inventario_id):
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
+        "modo_historico": bool(inventario.finalizada_em),
+        "revisao_historica_disponivel": any(l['diferenca'] is not None and l['diferenca'] != 0
+            and not l['decisao'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
         "atualizacao": atualizacao, "previa_lote": previa_lote,
         "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),

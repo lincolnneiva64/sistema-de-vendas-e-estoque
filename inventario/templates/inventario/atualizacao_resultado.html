@@ -1,5 +1,9 @@
 <div class="atualizacao-resultado" id="atualizacao-resultado">
   <h3>Atualização do estoque</h3>
+  {% if modo_historico %}
+  <p class="muted">Histórico de consulta · {{ atualizacao.resumo.aplicados }} ajustes registrados nesta conferência.</p>
+  <p class="muted">A finalização das contagens e a revisão não comprovam aplicação de ajustes. Consulte os saldos registrados e a evolução de cada produto.</p>
+  {% else %}
   {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% else %}
   {% if atualizacao.preliminar %}<p>{{ atualizacao.resumo.candidatos }} requerem prévia · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p><p>A situação inicial é preliminar. Revise a prévia para validar os documentos, os bloqueios e os saldos antes de confirmar.</p>
   {% else %}<p>{{ atualizacao.resumo.aptos }} aptos para atualizar · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p>{% endif %}
@@ -19,5 +23,6 @@
   {% elif pode_aprovar and atualizacao.resumo.candidatos or pode_aprovar and atualizacao.resumo.aptos %}
     <a class="button" id="revisar-atualizacao" href="?atualizar=prever#atualizacao-resultado">Revisar atualização em lote</a>
   {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige prévia validada e autorização.</p>{% endif %}
+  {% endif %}
   {% endif %}
 </div>
