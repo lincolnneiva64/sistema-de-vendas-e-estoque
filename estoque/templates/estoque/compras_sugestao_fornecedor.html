@@ -1,6 +1,7 @@
 {% extends 'estoque/base.html' %}
 {% block title %}{% if modo_edicao_lista %}Editar Lista por Fornecedor{% else %}Nova Lista por Fornecedor{% endif %}{% endblock %}
 {% block content %}
+{% include "estoque/includes/produto_sugestao_consulta_mobile.html" %}
 
 <style>
   .sugestao-page {
@@ -3332,6 +3333,11 @@
         </button>
       `;
     }).join("");
+    lista.querySelectorAll("[data-produto-id]").forEach((botao) => {
+      const produto = produtosPorId.get(String(botao.dataset.produtoId));
+      botao.classList.add("spc-lista");
+      window.produtoSugestaoConsulta(botao, produto.nome, produto.consulta_atual || {});
+    });
     lista.classList.add("aberta");
     manualWrap?.classList.add("autocomplete-aberto");
     mostrarMsg("");

@@ -8699,6 +8699,7 @@ def sugestao_compra_fornecedor(request):
                     "id": produto.id,
                     "nome": produto.nome,
                     "vinculado": produto.id in produtos_vinculados_ids,
+                    "consulta_atual": _produto_consulta_sugestao(produto),
                     "estoque_atual": f"{estoque_atual:.3f}",
                     "estoque_minimo": f"{estoque_minimo:.3f}",
                     "quantidade_vendida": f"{quantidade_vendida.quantize(Decimal('0.001')):.3f}",
@@ -10844,6 +10845,18 @@ def _lista_fornecedor_fmt_moeda(valor):
     return f"{valor:.2f}".replace(".", ",")
 
 
+def _produto_consulta_sugestao(produto):
+    """Dados atuais do cadastro, sem usar custos/estoques historicos da lista."""
+    vista = getattr(produto, "preco_vista", None)
+    venda = vista if vista else getattr(produto, "preco_venda", None)
+    dados = {
+        "estoque": getattr(produto, "quantidade", None),
+        "pc": getattr(produto, "preco_compra", None),
+        "pv": venda if venda else None,
+    }
+    return {campo: str(valor) if valor is not None else None for campo, valor in dados.items()}
+
+
 def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None, produtos_vinculados_ids=None):
     def dec_attr(nome, padrao="0"):
         return getattr(produto, nome, Decimal(padrao)) or Decimal(padrao)
@@ -10901,6 +10914,7 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None, pr
 
     return {
         "id": produto.id,
+        "consulta_atual": _produto_consulta_sugestao(produto),
         "nome": produto.nome,
         "estoque_atual": _lista_fornecedor_fmt_qtd(estoque_atual),
         "estoque_minimo": _lista_fornecedor_fmt_qtd(estoque_minimo),

@@ -1,0 +1,53 @@
+<style>
+  .spc-mobile { display:none; }
+  .spc-nome { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .spc-valor { white-space:nowrap; font-variant-numeric:tabular-nums; font-weight:700; }
+  .spc-label { font-size:.87em; font-weight:600; color:#475569; }
+  .spc-compra, .spc-lista { min-width:0; }
+  @media (max-width:860px) {
+    .spc-lista .spc-desktop { display:none; }
+    .spc-lista .spc-mobile { display:grid; }
+    #produtoManualSugestoes { width:calc(100% + 24px); margin-left:-12px; margin-right:-12px; }
+    #produtoManualSugestoes .spc-lista { padding:9px 4px; }
+  }
+  @media (max-width:820px) {
+    .spc-compra .spc-desktop, .spc-compra::after { display:none; }
+    .spc-compra .spc-mobile { display:grid; }
+    .produto-sugestoes .spc-compra { padding:9px 4px; }
+  }
+  .spc-mobile { width:100%; grid-template-columns:minmax(0,max-content) repeat(3,max-content); justify-content:start; align-items:center; gap:2px; font-family:Arial,sans-serif; font-size:12px; line-height:1.4; }
+  .spc-mobile .spc-nome { font-weight:650; }
+  @media (max-width:360px) { .spc-mobile { font-size:11.5px; } }
+</style>
+<script>
+window.produtoSugestaoConsulta = function(botao, nome, dados) {
+  function numero(valor, estoque) {
+    if (valor === null || valor === undefined || String(valor).trim() === '') return '\u2014';
+    const texto = String(valor).trim();
+    const n = Number(texto.includes(',') ? texto.replace(/\./g, '').replace(',', '.') : texto);
+    if (!Number.isFinite(n) || (!estoque && n <= 0)) return '\u2014';
+    return n.toLocaleString('pt-BR', {minimumFractionDigits:estoque ? 0 : 2, maximumFractionDigits:estoque ? 3 : 2});
+  }
+  const desktop = document.createElement('span');
+  desktop.className = 'spc-desktop';
+  while (botao.firstChild) desktop.appendChild(botao.firstChild);
+  botao.appendChild(desktop);
+  const mobile = document.createElement('span');
+  mobile.className = 'spc-mobile';
+  const nomeEl = document.createElement('span');
+  nomeEl.className = 'spc-nome';
+  nomeEl.textContent = nome;
+  mobile.appendChild(nomeEl);
+  [['Est', dados.estoque, true], ['PC', dados.pc, false], ['PV', dados.pv, false]].forEach(([label, valor, estoque]) => {
+    const campo = document.createElement('span');
+    campo.className = 'spc-valor';
+    const rotulo = document.createElement('span');
+    rotulo.className = 'spc-label';
+    rotulo.textContent = label + ':';
+    campo.append(rotulo, document.createTextNode(' ' + numero(valor, estoque)));
+    mobile.appendChild(campo);
+  });
+  botao.title = nome;
+  botao.appendChild(mobile);
+};
+</script>
