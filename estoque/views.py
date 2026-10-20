@@ -16007,7 +16007,20 @@ def _recalcular_status_separacao_da_venda(venda, usuario=None):
         separacao.refresh_from_db()
         return separacao
 
+    from .services.separacao_vendas import resolver_pendencia_nota_com_conferencia
+    if resolver_pendencia_nota_com_conferencia(separacao.pk, usuario):
+        separacao.refresh_from_db()
+        return separacao
+    revisao_anterior = {
+        campo: getattr(separacao, campo)
+        for campo in ("revisao_pendente", "teve_revisao", "revisao_concluida_em")
+    }
     recalcular_status_separacao(separacao, usuario)
+    if revisao_anterior["revisao_pendente"]:
+        # Recalcular o status fisico nao comprova atendimento da revisao da nota.
+        for campo, valor in revisao_anterior.items():
+            setattr(separacao, campo, valor)
+        separacao.save(update_fields=[*revisao_anterior, "atualizado_em"])
     marcar_revisao_pendente_se_necessario(separacao)
     return separacao
 

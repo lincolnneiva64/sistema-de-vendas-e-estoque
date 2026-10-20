@@ -15,6 +15,44 @@ STATUS_ITENS_COM_PENDENCIA = {
 UNIDADES_PESO_REAL = {"KG"}
 
 
+@transaction.atomic
+def resolver_pendencia_nota_com_conferencia(separacao_id, usuario=None):
+    """Atende somente revisoes comprovadas pelo checklist, sem alterar snapshots."""
+    separacao = SeparacaoVenda.objects.select_for_update().select_related("venda").get(pk=separacao_id)
+    if separacao.venda.cancelada or not separacao.finalizado_em:
+        return False
+    if not separacao.revisao_pendente and not eventos_fisicos_apos_separacao(separacao):
+        return False
+    itens = list(separacao.itens.select_for_update().select_related("item_venda__produto"))
+    atuais = list(ItemVenda.objects.filter(venda_id=separacao.venda_id).values_list("id", flat=True))
+    if not itens or set(atuais) != {item.item_venda_id for item in itens}:
+        return False
+    for item in itens:
+        atual = item.item_venda
+        if item.status != SeparacaoVendaItem.STATUS_CONFERIDO:
+            return False
+        if (not atual.produto_id or item.produto_nome_snapshot != atual.produto.nome
+                or item.unidade_snapshot != atual.unidade
+                or item.quantidade_separada is None or item.quantidade_separada <= 0
+                or atual.quantidade != item.quantidade_separada):
+            return False
+    # Uma observacao livre nao constitui uma regra verificavel.
+    if any(item.observacao for item in itens):
+        return False
+    agora = timezone.now()
+    separacao.revisao_pendente = False
+    separacao.teve_revisao = True
+    separacao.revisao_concluida_em = agora
+    separacao.status = SeparacaoVenda.STATUS_SEPARADA
+    separacao.save(update_fields=["revisao_pendente", "teve_revisao", "revisao_concluida_em", "status", "atualizado_em"])
+    EventoVenda.objects.create(
+        venda_id=separacao.venda_id, tipo_evento="alteracao_separacao_atendida",
+        descricao="Atendida automaticamente: itens e quantidades da nota correspondem a separacao fisica registrada.",
+        canal="sistema", usuario=str(usuario or "sistema")[:120],
+    )
+    return True
+
+
 TIPOS_EVENTO_ALTERACAO_FISICA = {
     "quantidade_item_alterada",
     "item_removido_da_nota",

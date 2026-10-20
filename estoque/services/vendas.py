@@ -43,7 +43,6 @@ def criar_ou_atualizar_venda(*, usuario, dados):
     from ..views import (
         _abrir_conta_receber_conversao_venda_a_prazo,
         _ajustar_movimentos_edicao_venda_a_vista,
-        _ajustes_separacao_foram_aplicados,
         _atualizar_saldo_pendente_pedido,
         _baixar_estoque_movimentos,
         _baixar_estoque_produto,
@@ -55,7 +54,6 @@ def criar_ou_atualizar_venda(*, usuario, dados):
         _estornar_movimentos_venda_a_vista_para_prazo,
         _formatar_moeda,
         _formatar_quantidade,
-        _montar_payload_ajuste_separacao_venda,
         _normalizar_tipo_pagamento_venda,
         _normalizar_unidade_estoque,
         _quantidade_decimal_estoque,
@@ -315,17 +313,6 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                     .select_for_update()
                     .get(pk=venda_em_edicao.pk, cancelada=False)
                 )
-
-                payload_ajuste_separacao = None
-                if separacao_ajuste_edicao:
-                    separacao_ajuste_edicao = (
-                        SeparacaoVenda.objects
-                        .select_for_update()
-                        .get(pk=separacao_ajuste_edicao.pk, venda=venda)
-                    )
-                    payload_ajuste_separacao = _montar_payload_ajuste_separacao_venda(
-                        separacao_ajuste_edicao
-                    )
 
                 pagamento_antigo_imediato = _venda_pagamento_imediato(venda.tipo_pagamento)
                 pagamento_novo_imediato = _venda_pagamento_imediato(tipo_pagamento_venda)
@@ -767,35 +754,6 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                     )
                 _recalcular_status_separacao_da_venda(venda, usuario)
 
-                if (
-                    separacao_ajuste_edicao
-                    and payload_ajuste_separacao
-                    and _ajustes_separacao_foram_aplicados(
-                        venda,
-                        payload_ajuste_separacao,
-                    )
-                ):
-                    agora = timezone.now()
-                    separacao_ajuste_edicao.revisao_pendente = False
-                    separacao_ajuste_edicao.teve_revisao = True
-                    separacao_ajuste_edicao.revisao_concluida_em = agora
-                    separacao_ajuste_edicao.status = SeparacaoVenda.STATUS_SEPARADA
-                    separacao_ajuste_edicao.save(
-                        update_fields=[
-                            "revisao_pendente",
-                            "teve_revisao",
-                            "revisao_concluida_em",
-                            "status",
-                            "atualizado_em",
-                        ]
-                    )
-
-                    _registrar_evento_venda(
-                        venda,
-                        "alteracao_separacao_atendida",
-                        "Ajustes da separacao aplicados pela edicao da venda.",
-                        usuario=usuario,
-                    )
 
         except ValueError as exc:
             raise ErroGravarVenda(str(exc))
