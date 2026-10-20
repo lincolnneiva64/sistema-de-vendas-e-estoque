@@ -21,12 +21,12 @@ from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
 from .conversao import converter
-from . import services, sessoes
+from . import services, sessoes, ajustes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
 from .painel import resumo_painel
-from .selecao import itens_incluidos, rodadas_incluidas, opcoes_selecao, salvar_selecao
+from .selecao import itens_incluidos, rodadas_incluidas, salvar_selecao
 from .rastreabilidade import ORIGENS
 from .titulos import preparar_titulos
 
@@ -141,7 +141,13 @@ def detalhe(request, inventario_id):
             rodada_id = request.POST.get("rodada")
             if acao in {"recontar", "conciliar", "revisar", "aprovar", "sinalizar"}:
                 get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario=inventario)
-            if acao == "selecao":
+            if acao == "atualizar":
+                ajustes.atualizar(request.user, inventario.pk, request.POST.get("previa"),
+                    confirmacao=request.POST.get("confirmacao") == "sim",
+                    observacao=request.POST.get("observacao", ""))
+                messages.success(request, "Atualização concluída. Os saldos aplicados estão registrados no resultado e no histórico.")
+                return redirect(reverse("inventario:detalhe", args=[inventario.pk]) + "#titulo-resumo")
+            elif acao == "selecao":
                 selecao = salvar_selecao(request.user, inventario.pk, request.POST.getlist("participantes"),
                     request.POST.get("versao"), request.POST.get("motivo"))
                 pendencias = getattr(selecao, "pendencias_conclusao", None)
@@ -150,8 +156,9 @@ def detalhe(request, inventario_id):
                 elif pendencias:
                     messages.warning(request, "Seleção salva. Conferência permanece aberta: " + " ".join(pendencias))
             elif acao == "acesso":
-                acesso, token = services.gerar_acesso(request.user, inventario.pk, request.POST.get("funcionario"),
-                    request.POST.getlist("rodadas"), request.POST.get("horas", 24))
+                acesso, token = services.distribuir_produtos(request.user, inventario.pk, request.POST.get("funcionario"),
+                    request.POST.getlist("rodadas"), request.POST.get("horas", 24), request.POST.get("versao"),
+                    manter_nao_selecionados=request.POST.get("manter_nao_selecionados") == "sim")
                 link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
                 sucesso = "Atribuição concluída. Copie o link abaixo e entregue ao funcionário."
             elif acao == "reabrir_conferencia":
@@ -196,6 +203,13 @@ def detalhe(request, inventario_id):
     inventario.refresh_from_db()
     linhas = linhas_revisao(inventario)
     resumo = resumo_painel(linhas)
+    atualizacao = ajustes.preparar_resultado(inventario)
+    por_rodada = {l['rodada'].pk: l for l in atualizacao['linhas']}
+    for linha in linhas:
+        linha['atualizacao'] = por_rodada.get(linha['rodada'].pk)
+    prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
+              and request.user.has_perm("inventario.aprovar_ajuste"))
+    previa_lote = ajustes.previa_atualizacao(inventario.pk, atualizacao['aptas']) if prever and atualizacao['aptas'] else ''
     acessos = list(inventario.acessos.select_related("funcionario"))
     for acesso in acessos:
         atuais = acesso.atribuicoes.filter(rodada__encerrada_em__isnull=True)
@@ -204,8 +218,8 @@ def detalhe(request, inventario_id):
         acesso.expirado = acesso.expira_em <= timezone.now()
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
         "resumo_painel": resumo, "consultado_em": timezone.now(),
+        "atualizacao": atualizacao, "previa_lote": previa_lote,
         "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
-        "opcoes_selecao": opcoes_selecao(inventario),
         "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
         "rodadas_disponiveis": rodadas_incluidas(inventario).filter(encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),

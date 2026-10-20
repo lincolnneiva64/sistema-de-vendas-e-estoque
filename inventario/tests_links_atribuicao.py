@@ -39,7 +39,7 @@ class LinksAtribuicaoTests(TestCase):
         return services.gerar_acesso(self.gestor, self.inv.pk, self.funcionario.pk, self.rodadas)
 
     def test_criacao_apresenta_link_sem_redirect_e_sem_persistir_token(self):
-        response = self.client.post(self.url, {'acao': 'acesso', 'funcionario': self.funcionario.pk,
+        response = self.client.post(self.url, {'acao': 'acesso', 'versao': self.inv.versao, 'funcionario': self.funcionario.pk,
                                              'rodadas': self.rodadas, 'horas': '24'})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('Location', response)
@@ -101,18 +101,18 @@ class LinksAtribuicaoTests(TestCase):
         self.atribuir()
         response = self.client.get(self.url)
         campos = Elementos(response.content.decode()).ids
-        self.assertIn('disabled', campos['selecionar-todos'])
-        self.assertIn('disabled', campos['confirmar-atribuicao'])
+        self.assertNotIn('selecionar-todos', campos)
+        self.assertNotIn('confirmar-atribuicao', campos)
         self.assertContains(response, 'Todos os produtos já estão atribuídos.')
         self.assertContains(response, 'name="acao" value="renovar"')
         self.assertContains(response, 'data-renovar-acesso')
 
     def test_selecao_vazia_e_validade_invalida_sao_diferentes(self):
-        response = self.client.post(self.url, {'acao': 'acesso', 'funcionario': self.funcionario.pk, 'horas': '24'})
+        response = self.client.post(self.url, {'acao': 'acesso', 'versao': self.inv.versao, 'funcionario': self.funcionario.pk, 'horas': '24'})
         self.assertContains(response, 'Selecione pelo menos um produto disponível para atribuir.')
         for horas in ('', 'abc', '0', '169', '1.5'):
             with self.subTest(horas=horas):
-                response = self.client.post(self.url, {'acao': 'acesso', 'funcionario': self.funcionario.pk,
+                response = self.client.post(self.url, {'acao': 'acesso', 'versao': self.inv.versao, 'funcionario': self.funcionario.pk,
                                                      'rodadas': self.rodadas, 'horas': horas})
                 self.assertContains(response, 'Informe uma validade inteira entre 1 e 168 horas.')
         self.assertFalse(AcessoInventario.objects.exists())

@@ -7,6 +7,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.core import signing
 from django.db import connection, transaction
+from django.db.models import OuterRef, Subquery
 
 from estoque.models import Produto, MovimentacaoEstoqueManual
 from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
@@ -271,3 +272,31 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
                        assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica'))
         propostas.append(proposta)
     return aplicar(usuario, inventario_id, previa_aplicacao(inventario_id, propostas), confirmacao=True)
+
+
+def preparar_resultado(inventario):
+    """Projeção compartilhada, somente leitura, da atualização e sua auditoria."""
+    ultima = RodadaContagem.objects.filter(item_id=OuterRef('item_id')).order_by('-numero').values('pk')[:1]
+    rodadas = rodadas_incluidas(inventario).filter(pk=Subquery(ultima))
+    if rodadas.count() > 500:
+        return dict(linhas=[], aptas=[], resumo=dict(aptos=0),
+            erro='Mais de 500 produtos: divida a revisão em conferências menores. Aplicação bloqueada.')
+    linhas = [avaliar(r) for r in rodadas.select_related('item__produto').order_by('item__cadastro__nome', 'pk')]
+    # Presentation only: an applied balance is historical, never a fresh forecast.
+    aplicadas = {a.proposta.rodada_id: a for a in AplicacaoAjuste.objects.filter(
+        proposta__rodada_id__in=[l['rodada'].pk for l in linhas if l['estado'] == 'Aplicado'],
+        proposta__estado='aplicado').select_related('proposta', 'decisao')}
+    for linha in linhas:
+        linha.update(saldo_aplicado=None, unidade_aplicada='')
+        aplicacao = aplicadas.get(linha['rodada'].pk)
+        if (linha['estado'] == 'Aplicado' and aplicacao
+                and aplicacao.decisao.rodada_id == linha['rodada'].pk
+                and aplicacao.decisao.item_id == linha['rodada'].item_id
+                and aplicacao.unidade.strip()
+                and aplicacao.antes + aplicacao.diferenca == aplicacao.depois):
+            linha.update(saldo_aplicado=aplicacao.depois, unidade_aplicada=aplicacao.unidade)
+    aptas = [l for l in linhas if not l['bloqueio'] and l['estado'] in ('Pendente de revisão', 'Aprovado')]
+    resumo = dict(aptos=len(aptas), bloqueados=sum(l['estado'] == 'Bloqueado' for l in linhas),
+        aplicados=sum(l['estado'] == 'Aplicado' for l in linhas),
+        pendentes=sum(l['estado'] == 'Pendente de revisão' for l in linhas), total=len(linhas))
+    return dict(linhas=linhas, aptas=aptas, resumo=resumo, erro='')

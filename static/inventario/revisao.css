@@ -31,30 +31,30 @@ main:has(.painel-inventario){max-width:1360px}
 .criterios-painel p{max-width:100ch;color:#dce9e4}
 .resumo-inventario{padding:0;overflow:hidden}
 .titulo-tabela{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:21px 22px 10px}
-.titulo-tabela h2{margin:0 0 6px}.titulo-tabela p{margin:0;font-size:.85rem}
-.atualizacao-painel{font-size:.75rem;color:#64777c;text-align:right}
-.nota-saldos{margin:0;padding:4px 22px 18px;font-size:.78rem;line-height:1.5;color:#64777c}
+.titulo-tabela h2{margin:0 0 6px}.titulo-tabela p{margin:0;font-size:.95rem}
+.atualizacao-painel{font-size:.82rem;color:#64777c;text-align:right}
+.nota-saldos{margin:0;padding:4px 22px 18px;font-size:.875rem;line-height:1.5;color:#64777c}
 .tabela-resumo{max-height:620px;width:100%;overflow:auto}
-.tabela-resumo table{width:100%;table-layout:fixed;font-size:.84rem}
+.tabela-resumo table{width:100%;table-layout:fixed;font-size:.95rem}
 .tabela-resumo thead{position:sticky;top:0;background:#edf2f2;z-index:1}
-.tabela-resumo th,.tabela-resumo td{padding:15px 10px;white-space:normal;overflow-wrap:anywhere;border-bottom:1px solid #e2e9ea}
-.tabela-resumo thead th{font-size:.73rem;font-weight:700;color:#52696f}
+.tabela-resumo th,.tabela-resumo td{padding:18px 12px;white-space:normal;overflow-wrap:anywhere;border-bottom:1px solid #e2e9ea}
+.tabela-resumo thead th{font-size:.875rem;font-weight:700;color:#52696f}
 .tabela-resumo th:first-child{width:26%;padding-left:22px}
 .tabela-resumo th:nth-child(2),.tabela-resumo th:nth-child(3){width:11%}
 .tabela-resumo th:nth-child(4){width:10%}.tabela-resumo th:nth-child(5){width:15%}
 .tabela-resumo th:nth-child(6){width:14%}.tabela-resumo th:nth-child(7){width:13%}
 .resumo-linha th{font-weight:650}.resumo-linha a{color:#1b4a48;text-decoration:none;line-height:1.5}
 .resumo-linha a:hover{text-decoration:underline}
-.responsavel-painel{display:block;font-size:.74rem;font-weight:400;color:#64777c;margin-top:5px}
+.responsavel-painel{display:block;font-size:.85rem;font-weight:400;color:#64777c;margin-top:5px}
 .painel-inventario .numero-painel{text-align:center;vertical-align:middle;font-variant-numeric:tabular-nums}
-.numero-painel>span{display:block}.numero-painel small{display:block;font-weight:400;font-size:.72rem;line-height:1.5;margin-top:5px;color:#52696f}
+.numero-painel>span{display:block;font-size:1.1rem;font-weight:650;line-height:1.45}.numero-painel small{display:block;font-weight:400;font-size:.82rem;line-height:1.5;margin-top:6px;color:#52696f}
 .resumo-linha[data-resultado=falta]{box-shadow:inset 3px 0 var(--falta);background:#fffafa}
 .resumo-linha[data-resultado=sobra]{box-shadow:inset 3px 0 var(--sobra);background:#fafbff}
 .resumo-linha[data-resultado=correto]{box-shadow:inset 3px 0 var(--correto)}
 .resumo-linha[data-resultado=pendente]{box-shadow:inset 3px 0 #ca9e32;background:#fffdf7}
 .resumo-linha.falta .diferenca>span{color:var(--falta);font-weight:750}
 .resumo-linha.sobra .diferenca>span{color:var(--sobra);font-weight:750}
-.situacao{display:inline-block;border-radius:20px;padding:5px 9px;font-size:.73rem;font-weight:700}
+.situacao{display:inline-block;border-radius:20px;padding:6px 10px;font-size:.85rem;font-weight:700}
 .situacao-falta{color:var(--falta);background:#fce9e7}.situacao-sobra{color:var(--sobra);background:#e9effe}
 .situacao-correto{color:var(--correto);background:#e4f4eb}.situacao-pendente{color:var(--pendente);background:#fff0bf}
 .revisao-pendente{display:block;font-size:.71rem;color:var(--pendente);margin-top:6px}
@@ -65,7 +65,7 @@ main:has(.painel-inventario){max-width:1360px}
 .movimento-digital{margin:16px 0;padding-bottom:12px}
 .painel-inventario a:focus-visible,.painel-inventario summary:focus-visible{outline:3px solid #2b7b9a;outline-offset:4px;border-radius:3px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-@media(max-width:950px){
+@media(max-width:1100px){
  .indicadores-painel{grid-template-columns:repeat(3,minmax(0,1fr))}
  .titulo-tabela{align-items:flex-start;flex-direction:column;gap:8px}.atualizacao-painel{text-align:left}
  .tabela-resumo{max-height:none;overflow:visible;padding:0 12px 12px}
@@ -74,7 +74,7 @@ main:has(.painel-inventario){max-width:1360px}
  .tabela-resumo .resumo-linha{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid #e2e9ea;border-radius:10px;margin:0 0 12px;overflow:hidden}
  .tabela-resumo .resumo-linha>th{grid-column:1/-1;width:auto;padding:16px 18px;border-bottom:1px solid #e2e9ea;font-size:.95rem}
  .tabela-resumo .resumo-linha>td{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;min-width:0;padding:13px 10px}
- .resumo-linha>td::before{content:attr(data-label);font-size:.72rem;font-weight:500;color:#52696f}
+ .resumo-linha>td::before{content:attr(data-label);font-size:.85rem;font-weight:600;color:#52696f}
  .numero-painel small{margin:0;max-width:22ch}.resumo-linha>td:nth-child(even){border-right:1px solid #e2e9ea}
 }
 @media(max-width:560px){
@@ -87,6 +87,27 @@ main:has(.painel-inventario){max-width:1360px}
  .detalhe-produto{padding:8px 12px}.detalhe-produto>summary{line-height:1.5}.conteudo-produto{overflow-wrap:anywhere}
 }
 /* Direct access to the statement without opening investigation panels. */
-.tabela-resumo .evolucao-estoque{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 10px;border:1px solid #bbd6d0;border-radius:6px;background:#edf7f3;color:#14634f;font-size:12px;font-weight:700;text-decoration:none;white-space:normal;line-height:1.4}
+.tabela-resumo .evolucao-estoque{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 10px;border:1px solid #bbd6d0;border-radius:6px;background:#edf7f3;color:#14634f;font-size:14px;font-weight:700;text-decoration:none;white-space:normal;line-height:1.4}
 .tabela-resumo .evolucao-estoque:hover{background:#dfeee8}
 .tabela-resumo .evolucao-estoque:focus-visible{outline:2px solid #116f60;outline-offset:3px}
+.reserva-distribuicao{border-top:1px solid #c4d5da;background:#edf4f2;border-radius:8px;margin-top:24px;padding:16px;line-height:1.5}
+.atualizacao-resultado{padding:20px;border-top:1px solid #d8e2e5;overflow-wrap:anywhere}
+.atualizacao-resultado .acoes{display:flex;gap:12px;flex-wrap:wrap}
+.previa-lote{padding-left:22px}.previa-lote li{margin:12px 0;line-height:1.6}
+.situacao-atualizacao{white-space:normal;min-width:170px;max-width:260px;font-size:14px;line-height:1.6}
+.situacao-atualizacao span{display:block;margin-top:5px;overflow-wrap:anywhere}
+@media(min-width:1101px){.tabela-resumo th:first-child{width:22%}.tabela-resumo th:nth-child(2),.tabela-resumo th:nth-child(3){width:9%}.tabela-resumo th:nth-child(4){width:8%}.tabela-resumo th:nth-child(5),.tabela-resumo th:nth-child(6){width:11%}.tabela-resumo th:nth-child(7){width:10%}.tabela-resumo th:nth-child(8){width:20%}}
+@media(max-width:1100px){.tabela-resumo .resumo-linha>.situacao-atualizacao{grid-column:1/-1;max-width:none}}
+@media(max-width:600px){.situacao-atualizacao{max-width:none;min-width:0}.atualizacao-resultado{padding:16px}.atualizacao-resultado .button,.atualizacao-resultado button{white-space:normal}}
+.resumo-inventario #titulo-resumo{scroll-margin-top:20px}
+.resumo-linha>th>a:first-child{font-size:1rem}
+.numero-painel[data-label="Estimativa ao custo"]>span{font-size:.95rem;font-weight:500}
+.estado-atualizacao{display:inline-block;padding:6px 10px;border-radius:8px;font-size:.875rem;line-height:1.4}
+.estado-aplicado{background:#dff3e8;color:#145b3e}
+.estado-bloqueado{background:#fff0cc;color:#795200}
+.estado-apto{background:#e8f1f5;color:#264f62}
+.situacao-atualizacao .saldo-aplicado{font-size:1rem;font-weight:700;color:#145b3e}
+.estimativa-recolhida{border:1px solid #d8e2e5;border-radius:10px;background:white;margin:16px 0}
+.estimativa-recolhida>summary{padding:14px 18px;color:#3d585e}
+.estimativa-recolhida .financeiro-painel{margin:0;border-radius:0 0 10px 10px}
+@media(max-width:1100px){.tabela-resumo .resumo-linha>td{padding:16px 10px;min-height:88px}.situacao-atualizacao .saldo-aplicado{font-size:1.05rem}}

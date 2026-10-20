@@ -228,11 +228,11 @@ class SelecaoConcorrenciaTests(DadosSelecao, TransactionTestCase):
 
 
 class SelecaoBrowserTests(DadosSelecao, StaticLiveServerTestCase):
-    def test_retirada_explicita_na_tela_e_resultado(self):
+    def test_distribuicao_unica_desktop_mobile(self):
         self.client.force_login(self.user)
-        pasta = Path(__file__).resolve().parents[1] / "diagnostics" / "inventario-selecao"
+        pasta = Path(__file__).resolve().parents[1] / "diagnostics" / "distribuicao-simplificada"
         pasta.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(prefix="inventario-selecao-browser-") as profile:
+        with TemporaryDirectory(prefix="inventario-distribuicao-browser-") as profile:
             chrome = Chrome(r"C:\Program Files\Google\Chrome\Application\chrome.exe", profile).start()
             try:
                 for largura in [1280, 390, 320]:
@@ -240,20 +240,26 @@ class SelecaoBrowserTests(DadosSelecao, StaticLiveServerTestCase):
                     tab.call("Network.enable")
                     tab.call("Network.setBlockedURLs", {"urls": ["https://*"]})
                     tab.call("Network.setCookie", {"name": "sessionid", "value": self.client.cookies["sessionid"].value, "url": self.live_server_url})
-                    tab.call("Emulation.setDeviceMetricsOverride", {"width": largura, "height": 900, "deviceScaleFactor": 1, "mobile": largura < 800})
+                    tab.call("Emulation.setDeviceMetricsOverride", {"width": largura, "height": 1000, "deviceScaleFactor": 1, "mobile": largura < 800})
                     tab.call("Page.navigate", {"url": self.live_server_url + reverse("inventario:detalhe", args=[self.inv.pk])})
-                    tab.wait('!!document.getElementById("form-selecao-participantes")')
-                    tab.evaluate('document.getElementById("selecao-participantes").open=true;document.getElementById("selecao-participantes").scrollIntoView({block:"start",behavior:"instant"});true')
+                    tab.wait('!!document.querySelector(".resumo-inventario") && window.inventarioRevisaoPronta===true')
+                    self.assertFalse(tab.evaluate('!!document.getElementById("form-selecao-participantes")'))
+                    tab.evaluate('document.getElementById("distribuicao").open=true;document.getElementById("distribuicao").scrollIntoView({block:"start",behavior:"instant"});true')
                     if largura == 1280:
-                        tab.evaluate('document.querySelector(\'[name="participantes"][value="'+str(self.itens[0].pk)+'"]\').checked=false;document.querySelector("#form-selecao-participantes textarea").value="Não participa desta conferência";document.getElementById("form-selecao-participantes").requestSubmit();true')
-                        tab.wait('!!document.getElementById("historico-selecao")')
-                        tab.evaluate('document.getElementById("selecao-participantes").open=true;document.getElementById("selecao-participantes").scrollIntoView({block:"start",behavior:"instant"});true')
-                    self.assertFalse(tab.evaluate('document.querySelector(\'[name="participantes"][value="'+str(self.itens[0].pk)+'"]\').checked'))
-                    self.assertEqual(tab.evaluate('document.querySelectorAll(".resumo-linha").length'), 2)
-                    self.assertEqual(tab.evaluate('document.querySelector(\'[data-indicador="pendentes"] strong\').textContent.trim()'), "2")
+                        self.assertFalse(tab.evaluate('document.querySelector("[name=manter_nao_selecionados]").checked'))
+                        selecionadas = json.dumps([r.pk for r in self.rodadas[:2]])
+                        tab.evaluate('document.querySelector("[name=funcionario]").value="'+str(self.funcionario.pk)+'";document.querySelectorAll("[name=rodadas]").forEach(c=>c.checked='+selecionadas+'.includes(Number(c.value)));true')
+                    if largura == 1280:
+                        tab.evaluate('document.getElementById("form-atribuicao").dispatchEvent(new Event("change", {bubbles:true}));true')
+                        self.assertFalse(tab.evaluate('document.getElementById("confirmar-atribuicao").disabled'))
                     self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
-                    (pasta / f"selecao-{largura}.png").write_bytes(base64.b64decode(tab.call("Page.captureScreenshot", {"format": "png"})["data"]))
-                    tab.evaluate('document.getElementById("selecao-participantes").open=false;document.querySelector(".indicadores-painel").scrollIntoView({block:"start",behavior:"instant"});true')
+                    rect = tab.evaluate('(()=>{const r=document.getElementById("distribuicao").getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}})()')
+                    (pasta / f"distribuicao-{largura}.png").write_bytes(base64.b64decode(tab.call("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": True, "clip": rect})["data"]))
+                    if largura == 1280:
+                        tab.evaluate('document.getElementById("form-atribuicao").requestSubmit();true')
+                        tab.wait('!!document.getElementById("link-funcionario")')
+                    self.assertEqual(tab.evaluate('document.querySelectorAll(".resumo-linha").length'), 2)
+                    tab.evaluate('document.querySelector(".indicadores-painel").scrollIntoView({block:"start",behavior:"instant"});true')
                     (pasta / f"resultado-{largura}.png").write_bytes(base64.b64decode(tab.call("Page.captureScreenshot", {"format": "png"})["data"]))
             finally:
                 chrome.stop()

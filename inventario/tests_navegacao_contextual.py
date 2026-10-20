@@ -56,7 +56,7 @@ class NavegacaoContextualBrowserTests(Dados, StaticLiveServerTestCase):
                     tab.wait('location.pathname === '+json.dumps(path)+' && document.readyState === "complete" && window.inventarioFeedbackPronto === true')
 
                 for path, expected in [(lista,[voltar_vendas]), (detalhe,[voltar_vendas,inicio]),
-                        (ajustes,[voltar_vendas,inicio,voltar]), (historico,[voltar_vendas,inicio,voltar]),
+                        (ajustes,[voltar_vendas,inicio,voltar]), (historico,[voltar_vendas,inicio,{'texto':'Voltar a Produtos e diverg\u00eancias','href':detalhe+'#titulo-resumo'}]),
                         (manual,[voltar_vendas,inicio,voltar])]:
                     abrir(path)
                     self.assertEqual(tab.evaluate("[...document.querySelectorAll('.navegacao-contextual a')].map(a=>({texto:a.textContent,href:a.getAttribute('href')}))"), expected)
@@ -68,7 +68,7 @@ class NavegacaoContextualBrowserTests(Dados, StaticLiveServerTestCase):
                     for index, link in enumerate(expected):
                         abrir(path)
                         tab.evaluate(f'document.querySelectorAll(".navegacao-contextual a")[{index}].click();true')
-                        tab.wait('location.pathname === '+json.dumps(link['href'])+' && document.readyState === "complete"')
+                        tab.wait('location.pathname === '+json.dumps(link['href'].split('#')[0])+' && document.readyState === "complete"')
 
                 # The individual counting access must not acquire administrative links or permissions.
                 tab.call('Network.clearBrowserCookies')

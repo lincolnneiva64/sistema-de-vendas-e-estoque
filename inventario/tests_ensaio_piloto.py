@@ -156,7 +156,7 @@ class PublicHttpsTests(TestCase):
             p=produto();inv=services.criar_inventario(user,'HTTPS','manual',[p.pk]);round=inv.itens.get().rodadas.get()
             browser.force_login(user)
             url=f'/inventario/sessao/{inv.pk}/';browser.get(url)
-            response=browser.post(url,{'acao':'acesso','funcionario':employee.pk,'horas':24,'rodadas':[round.pk],
+            response=browser.post(url,{'acao':'acesso','versao':inv.versao,'funcionario':employee.pk,'horas':24,'rodadas':[round.pk],
                 'csrfmiddlewaretoken':browser.cookies['csrftoken'].value},HTTP_ORIGIN='https://piloto.example.test')
             self.assertEqual(response.status_code,200)
             link=response.context['link'];self.assertTrue(link.startswith('https://piloto.example.test/inventario/acesso/'))

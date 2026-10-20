@@ -66,7 +66,7 @@ class DistribuicaoTests(TestCase):
     def test_link_compartilhavel_e_renovacao_invalida_token_antigo(self):
         self.client.force_login(self.gestor)
         url = reverse('inventario:detalhe', args=[self.inv.pk])
-        resposta = self.client.post(url, {'acao': 'acesso', 'funcionario': self.ana.pk,
+        resposta = self.client.post(url, {'acao': 'acesso', 'versao': self.inv.versao, 'funcionario': self.ana.pk,
             'horas': 24, 'rodadas': [r.pk for r in self.rodadas]})
         self.assertContains(resposta, 'Copiar link')
         self.assertContains(resposta, 'Enviar pelo WhatsApp')

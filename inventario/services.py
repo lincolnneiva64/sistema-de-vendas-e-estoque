@@ -109,6 +109,36 @@ def criar_inventario(usuario, titulo=None, criterio=None, selecionados=None):
 
 
 @transaction.atomic
+def distribuir_produtos(usuario, inventario_id, funcionario_id, rodada_ids, horas, versao,
+                        manter_nao_selecionados=False):
+    """A confirmação da distribuição define expressamente seu escopo."""
+    from .selecao import salvar_selecao
+    permitir(usuario, "gerenciar_inventario")
+    inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    try:
+        versao = int(versao)
+    except (TypeError, ValueError):
+        raise ValueError("Atualize a página antes de distribuir os produtos.")
+    if inventario.versao != versao:
+        raise ValueError("A conferência mudou. Atualize a página antes de distribuir os produtos.")
+    # Validar e criar a atribuição primeiro; qualquer falha posterior reverte
+    # também acesso e token. Produtos já atribuídos nunca são retirados.
+    acesso, token = gerar_acesso(usuario, inventario.pk, funcionario_id, rodada_ids, horas)
+    if not manter_nao_selecionados:
+        incluidos = list(itens_incluidos(inventario).values_list("pk", flat=True))
+        sem_atribuicao = set(rodadas_incluidas(inventario).filter(
+            encerrada_em__isnull=True, atribuicao__isnull=True).values_list("item_id", flat=True))
+        salvar_selecao(usuario, inventario.pk, [pk for pk in incluidos if pk not in sem_atribuicao],
+            inventario.versao, "Retirado na distribuição: produto não selecionado e não reservado para outra distribuição.")
+    # Invalida formulários concorrentes também quando não houve retirada.
+    inventario.refresh_from_db()
+    atualizar_versao(inventario)
+    evento(inventario, "distribuicao_confirmada", usuario, acesso=acesso,
+        manter_nao_selecionados=bool(manter_nao_selecionados), ciclo=inventario.ciclo)
+    return acesso, token
+
+
+@transaction.atomic
 def gerar_acesso(usuario, inventario_id, funcionario_id, rodada_ids, horas=24):
     permitir(usuario, "gerenciar_inventario")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)

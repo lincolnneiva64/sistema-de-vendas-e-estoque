@@ -54,7 +54,7 @@ class LinksBrowserTests(StaticLiveServerTestCase):
             antigo = tab.evaluate("document.querySelector('#link-funcionario').value")
             self.assertEqual(tab.evaluate('document.activeElement.id'), 'compartilhar-acesso')
             self.assertTrue(tab.evaluate("document.querySelector('#compartilhar-acesso').getBoundingClientRect().top >= 0 && document.querySelector('#compartilhar-acesso').getBoundingClientRect().top < innerHeight"))
-            self.assertTrue(tab.evaluate("document.querySelector('#selecionar-todos').disabled && document.querySelector('#confirmar-atribuicao').disabled"))
+            self.assertTrue(tab.evaluate("!document.querySelector('#selecionar-todos') && !document.querySelector('#confirmar-atribuicao')"))
             # Mock clipboard: never replace the user's real clipboard contents.
             tab.evaluate("Object.defineProperty(navigator, 'clipboard', {value:{writeText:async text=>{window.linkCopiado=text}}, configurable:true}); document.querySelector('#copiar-link').click(); true")
             tab.wait("document.querySelector('#feedback-link').textContent === 'Link copiado.'")
@@ -79,7 +79,7 @@ class LinksBrowserTests(StaticLiveServerTestCase):
             self.assertIn('Gerando novo link', tab.evaluate("document.querySelector('[data-renovar-acesso] button').textContent"))
             tab.evaluate("window.dispatchEvent(new Event('pageshow')); true")
             self.assertFalse(tab.evaluate("document.querySelector('[data-renovar-acesso] button').disabled"))
-            self.assertTrue(tab.evaluate("document.querySelector('#confirmar-atribuicao').disabled"))
+            self.assertFalse(tab.evaluate("!!document.querySelector('#confirmar-atribuicao')"))
         self.assertFalse(EventoInventario.objects.filter(acao='acesso_renovado').exists())
 
     def test_erro_renovacao_recebe_foco(self):
