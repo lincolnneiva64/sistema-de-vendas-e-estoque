@@ -37,6 +37,11 @@
 @media(max-width:575px){.offline-global{padding:10px 12px;gap:10px}.offline-global #offline-status.offline-status-card{flex-basis:100%;text-align:left;max-width:100%;justify-content:flex-start}.offline-global button{width:100%;white-space:normal}.offline-global a{font-size:12px}#offline-status.offline-status-card{padding:12px;gap:8px}.offline-status-detail{flex-basis:100%}}
 
 /* Compact disclosure: independent of monitoring, queue and manual sync. */
+.offline-global[data-state="checking"]{--offline-bg:#fef3c7;--offline-fg:#78350f;--offline-border:#d97706}
+.offline-status-action{display:block;flex-basis:100%;font-weight:600}
+@keyframes offline-action-pulse{0%,100%{box-shadow:0 0 0 0 #16a34a70}50%{box-shadow:0 0 0 7px #16a34a00}}
+.offline-global[data-state="online"][data-requires-action="true"] .offline-disclosure>summary{animation:offline-action-pulse 2s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.offline-global[data-state="online"][data-requires-action="true"] .offline-disclosure>summary{animation-duration:4s}}
 .offline-global{position:fixed;top:8px;left:0;z-index:9990;display:block;padding:0!important;border:0!important;font:13px/1.45 system-ui,sans-serif;box-shadow:none;background:transparent;pointer-events:none}
 .offline-global[data-state]{background:transparent}
 .offline-global[data-state="ready"]{--offline-bg:#1d4ed8;--offline-fg:#fff;--offline-border:#1e40af}

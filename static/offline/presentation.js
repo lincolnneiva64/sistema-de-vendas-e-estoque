@@ -3,15 +3,18 @@ export function renderIndicator(target, state, elapsedMinutes) {
     if (!target) return;
     const global = target.closest('.offline-global');
     if (global?.querySelector('#offline-toggle')) {
-        const labels = {checking: 'Verificando', online: 'Online', waiting: 'Espera', offline: 'Offline', ready: 'Enviar',
-            syncing: 'Envio', success: 'Online', auth: 'Atenção', error: 'Erro', conflict: 'Atenção'};
-        const label = labels[state.kind] || 'Status';
+        const labels = {checking: 'Reconectando', online: 'Online', offline: 'Offline'};
+        const label = labels[state.connectionKind] || 'Reconectando';
+        global.dataset.state = state.connectionKind;
+        global.dataset.requiresAction = String(state.requiresAction);
+        global.dataset.syncState = state.kind;
         global.querySelector('#offline-tab-label').textContent = label;
         const badge = global.querySelector('#offline-pending-badge');
         badge.textContent = String(state.count);
         badge.hidden = !state.count;
         global.querySelector('#offline-toggle').setAttribute('aria-label',
-            'Conexão e sincronização: ' + state.label + '. ' + state.count + ' operações pendentes. Abrir ou recolher detalhes');
+            label + '. ' + (state.requiresAction ? 'Há pendências que exigem atenção. ' : '')
+            + state.label + '. ' + state.count + ' operações pendentes. Abrir ou recolher detalhes');
     }
     const quantity = state.count + (state.count === 1 ? ' operação' : ' operações');
     let title = state.label, detail = '', counter = '', pending = '';
@@ -29,10 +32,20 @@ export function renderIndicator(target, state, elapsedMinutes) {
     } else if (state.kind === 'online') {
         title = 'Conexão estável';
     }
+    if (global) {
+        title = state.connectionKind === 'online' ? 'Online — comunicação confirmada com o servidor'
+            : state.connectionKind === 'offline' ? 'Offline — servidor inacessível'
+            : 'Reconectando — aguardando confirmação do servidor';
+        detail = state.label;
+        if (state.kind === 'waiting') detail = 'Sincronização aguardando verificação de estabilidade (' + elapsedMinutes + ' de 15 minutos).';
+        if (state.kind === 'online') detail = '';
+        counter = ''; pending = '';
+    }
     target.dataset.state = state.kind;
     target.classList.add('offline-status-card');
     const parts = [[title, 'offline-status-title'], [detail, 'offline-status-detail'],
-        [counter, 'offline-status-counter'], [pending, 'offline-status-pending']];
+        [counter, 'offline-status-counter'], [pending, 'offline-status-pending'],
+        ...(state.actionDetails || []).map(text => [text, 'offline-status-action'])];
     const signature = JSON.stringify(parts);
     // Avoid replacing the live region every second when its content is unchanged.
     if (target.dataset.presentation === signature) return;

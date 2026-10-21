@@ -122,7 +122,6 @@ async function render() {
         ? 'Estabilidade reiniciada \u00e0s ' + new Date(stability.failedAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + ' \u2014 motivo: falha de comunica\u00e7\u00e3o' : '';
     renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
-    if (globalIndicator) globalIndicator.dataset.state = state.kind;
     const observedConnection = connectionStatus(stability.connection, Date.now());
     const connectionKind = observedConnection === 'offline' ? 'offline'
         : observedConnection === 'online' && stability.valid(performance.now(), Date.now()) ? 'online' : 'checking';

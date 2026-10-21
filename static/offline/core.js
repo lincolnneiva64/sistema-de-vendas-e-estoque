@@ -295,5 +295,16 @@ export function indicatorState({operations, stability, now, wall, syncing = fals
     else if (ready && pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) { kind = 'error'; label = 'Erro de sincronização — operações preservadas'; }
     else if (!ready && count > 0) { kind = 'waiting'; label = 'Conexão restabelecida — Verificando estabilidade para sincronização segura (' + Math.floor(stability.elapsed(now, wall) / 60000) + ' de 15 minutos)' + (count ? ' \u00b7 ' + quantity + ' aguardando' : ''); }
     else { kind = 'online'; label = 'ONLINE'; }
-    return {kind, label, count, canSync: ready && authenticated && sendable && !syncing};
+    // Connectivity is independent of session/preparation and the sync safety gate.
+    const observed = connectionStatus(stability.connection, wall);
+    const connectionKind = observed === 'offline' ? 'offline'
+        : observed === 'online' && connected ? 'online' : 'checking';
+    const actionDetails = [];
+    if (!authenticated) actionDetails.push('Para preparar ou sincronizar, autentique-se online e confira sua permissão em Detalhes offline. Dados locais preservados.');
+    if (pending.some(op => op.status === 'conflito')) actionDetails.push('Conflito pendente: abra Detalhes offline para revisar a operação.');
+    if (pending.some(op => ['erro', 'resultado_desconhecido'].includes(op.status))) actionDetails.push('Há operação com erro ou resultado desconhecido. Consulte os detalhes antes de tentar sincronizar; a fila está preservada.');
+    if (count) actionDetails.push(quantity + (count === 1 ? ' ainda não confirmada.' : ' ainda não confirmadas.') + ' Consulte Detalhes offline; quando liberada, a sincronização continua manual.');
+    if (notice && notice.until > wall && notice.kind === 'error') actionDetails.push(notice.label);
+    return {kind, label, count, connectionKind, requiresAction: actionDetails.length > 0,
+        actionDetails, canSync: ready && authenticated && sendable && !syncing};
 }
