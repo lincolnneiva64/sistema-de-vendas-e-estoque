@@ -1,7 +1,9 @@
-{% if registro.entrada is not None %}<span class="entrada">Entrada +{{ registro.entrada|floatformat:'-3' }} <span>{{ registro.unidade|default:'Unidade não disponível' }}</span></span>
+{% if registro.fonte == 'regularizacao' %}<strong>Regularização aplicada</strong><small>Correção registrada: {% if registro.diferenca_aplicada > 0 %}+{% endif %}{{ registro.diferenca_aplicada|floatformat:'-3' }} {{ registro.unidade }}</small>
+{% else %}{% if registro.entrada is not None %}<span class="entrada">Entrada +{{ registro.entrada|floatformat:'-3' }} <span>{{ registro.unidade|default:'Unidade não disponível' }}</span></span>
 {% elif registro.saida is not None %}<span class="saida">Saída −{{ registro.saida|floatformat:'-3' }} <span>{{ registro.unidade|default:'Unidade não disponível' }}</span></span>
 {% elif registro.antes is not None and registro.depois is not None %}
 {% if registro.depois > registro.antes %}<span class="entrada">Entrada</span><small class="indisponivel">Variação bruta; unidade não comprovada</small>
 {% elif registro.depois < registro.antes %}<span class="saida">Saída</span><small class="indisponivel">Variação bruta; unidade não comprovada</small>
 {% else %}<span>Sem variação</span><small class="indisponivel">Registro bruto</small>{% endif %}
 {% else %}<span class="indisponivel">Não disponível</span>{% endif %}
+{% endif %}

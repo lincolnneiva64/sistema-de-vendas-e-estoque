@@ -14,6 +14,8 @@ from estoque.models import ItemVenda, MovimentacaoEstoqueManual
 
 from .rastreabilidade import ORIGENS
 from .saldos_historicos import analisar
+from .models import AplicacaoAjuste
+from .extrato_apresentacao import identificar_vendas, tecnicos_das_vendas
 
 
 COLUNAS = ('pk', 'dia', 'instante', 'fonte', 'documento', 'quantidade', 'unidade',
@@ -45,6 +47,7 @@ def evidencia_inicial(pagina, inicio):
 
 def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim, produto_id=None, rodada=None):
     produto_id = produto_id or (selecionada.produto_id if selecionada else None)
+    timeline = params.get('visual') != 'a'
     decimal = DecimalField(max_digits=12, decimal_places=3)
 
     def normalizar(qs, fonte, dia, instante, **campos):
@@ -82,6 +85,32 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         ref=Concat(Value('Movimentação manual #'), Cast('pk', CharField()))).filter(ref=OuterRef('referencia'))
     movimentos = movimentos.annotate(manual_documentado=Exists(correspondente)).exclude(
         origem='ajuste_manual', manual_documentado=True)
+    tecnicos = None
+    regularizacoes_q = None
+    if timeline:
+        tecnicos = identificar_vendas(movimentos, vendas)
+        movimentos = tecnicos.exclude(origem='venda', outro_movimento=False,
+            item_venda_documentado__isnull=False)
+        # Only a persisted application with the actual manual-movement FK proves
+        # an applied regularization. Neither a title nor an observation is proof.
+        aplicacao = AplicacaoAjuste.objects.filter(
+            decisao__movimentacao_id=OuterRef('pk'),
+            decisao__item__produto_id=OuterRef('produto_id'),
+            proposta__rodada_id=F('decisao__rodada_id'),
+            proposta__rodada__item_id=F('decisao__item_id'))
+        todos_manuais = MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id).annotate(
+            aplicado_em=Subquery(aplicacao.values('aplicado_em')[:1]))
+        regulares = todos_manuais.filter(aplicado_em__gte=inicio, aplicado_em__lt=fim) if inicio else todos_manuais.none()
+        regularizacoes_q = normalizar(regulares.values('pk'), 'regularizacao',
+            TruncDate('aplicado_em'), F('aplicado_em'), documento=F('pk'),
+            antes=F('estoque_antes'), depois=F('estoque_depois'))
+        referencia_regular = regulares.filter(estoque_antes=OuterRef('antes'),
+            estoque_depois=OuterRef('depois')).annotate(
+                ref=Concat(Value('Movimentação manual #'), Cast('pk', CharField()))).filter(
+                    ref=OuterRef('referencia'))
+        movimentos = movimentos.annotate(regular_documentado=Exists(referencia_regular)).exclude(
+            origem='ajuste_manual', regular_documentado=True)
+        manuais = manuais.annotate(aplicado_em=Subquery(aplicacao.values('aplicado_em')[:1])).filter(aplicado_em__isnull=True)
     movimentos_q = normalizar(movimentos.values('pk'), 'digital', TruncDate('registrado_em'), F('registrado_em'),
         origem=F('origem'), antes=F('antes'), depois=F('depois'), referencia=F('referencia'))
     manuais_q = normalizar(manuais.values('pk'), 'manual', TruncDate('criado_em'), F('criado_em'),
@@ -104,6 +133,8 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         TruncDate('venda__estoque_devolvido_cancelamento_em'), F('venda__estoque_devolvido_cancelamento_em'),
         documento=F('venda_id'), devolvido=F('venda__estoque_devolvido_cancelamento'))
     fontes = [vendas_q, removidos_q, movimentos_q, devolucoes_q, manuais_q]
+    if regularizacoes_q is not None:
+        fontes.append(regularizacoes_q)
     if params.get('visual') != 'a' and rodada and rodada.ok_em and inicio and inicio < fim:
         # Include exactly this historical OK, even outside the selected interval.
         # UNION keeps chronological pagination in SQL, without loading all events.
@@ -114,6 +145,11 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         'dia', 'instante', 'fonte', 'pk')
     pagina = Paginator(unificada, 50).get_page(params.get('extrato_pagina'))
     pagina.devolucao_sem_data = sem_data
+    tecnicos_por_item = tecnicos_das_vendas(tecnicos, pagina) if timeline else {}
+    registros_aplicados = [l['pk'] for l in pagina if l['fonte'] == 'regularizacao']
+    aplicadas = {a.decisao.movimentacao_id: a for a in AplicacaoAjuste.objects.filter(
+        decisao__movimentacao_id__in=registros_aplicados).select_related(
+            'decisao__movimentacao', 'decisao__item')}
     for linha in pagina:
         fonte = linha['fonte']
         linha.update(entrada=None, saida=None, saldo=None, url='', classe='pendente', fonte_texto='Documento atual')
@@ -128,6 +164,21 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
             linha.update(titulo=f"{tipo} #{linha['documento']}", classe='venda', saida=linha['quantidade'],
                 nota='Quantidade documental · Responsável: ' + (linha['pessoa'] or 'Não disponível'),
                 url=reverse('estoque:venda_detalhe', args=[linha['documento']]))
+            linha['registros_tecnicos'] = tecnicos_por_item.get(linha['pk'], [])
+        elif fonte == 'regularizacao':
+            aplicada = aplicadas[linha['pk']]
+            conferencia_id = aplicada.decisao.item.inventario_id
+            linha.update(titulo=f'Regularização — Conferência nº {conferencia_id}', classe='manual',
+                fonte_texto='Regularização de conferência efetivamente aplicada',
+                nota=f'Ajuste manual #{linha["pk"]} · Aplicação {aplicada.pk} · Lote {aplicada.lote}',
+                saldo=aplicada.depois, saldo_antes=aplicada.antes, saldo_unidade=aplicada.unidade,
+                saldo_tipo='Saldo registrado na aplicação',
+                saldo_evidencia=f'Aplicação vinculada à conferência. Registro manual original #{linha["pk"]}: {linha["antes"]} → {linha["depois"]}.',
+                saldo_aviso='Saldo histórico da aplicação; não representa o saldo atual.',
+                diferenca_aplicada=aplicada.diferenca, unidade=aplicada.unidade,
+                url=reverse('inventario:movimento_manual',
+                    args=[conferencia_id, aplicada.decisao.rodada_id, linha['pk']]),
+                movimentacao_em=aplicada.decisao.movimentacao.criado_em)
         elif fonte == 'manual':
             linha.update(titulo=f"Ajuste manual #{linha['documento']}" if linha['origem']=='ajuste' else f"Conferência manual #{linha['documento']}",
                 classe='manual', fonte_texto='Registro manual documentado',
