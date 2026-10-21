@@ -178,7 +178,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
                 diferenca_aplicada=aplicada.diferenca, unidade=aplicada.unidade,
                 url=reverse('inventario:movimento_manual',
                     args=[conferencia_id, aplicada.decisao.rodada_id, linha['pk']]),
-                movimentacao_em=aplicada.decisao.movimentacao.criado_em)
+                movimentacao_em=aplicada.decisao.movimentacao.criado_em, aplicacao_registrada=aplicada)
         elif fonte == 'manual':
             linha.update(titulo=f"Ajuste manual #{linha['documento']}" if linha['origem']=='ajuste' else f"Conferência manual #{linha['documento']}",
                 classe='manual', fonte_texto='Registro manual documentado',
@@ -212,6 +212,9 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         linha['detalhe_id'] = f"registro-{fonte}-{linha['pk']}"
     if produto_id:
         analisar(produto_id, pagina, fim)
+    if timeline and rodada:
+        from .saldos_apresentacao import apresentar
+        apresentar(pagina, rodada)
     pagina.saldo_inicial = evidencia_inicial(pagina, inicio)
     for sentido, numero in (('anterior', pagina.number - 1), ('proxima', pagina.number + 1)):
         consulta = params.copy()

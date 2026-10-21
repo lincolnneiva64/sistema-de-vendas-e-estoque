@@ -63,3 +63,7 @@
 .visual-b .tabela-extrato tr.evento-conferencia>td{display:block;padding:0;background:transparent;border:0}
 .visual-b .evento-conferencia .comparacao{margin:0;border:0;padding:4px}
 .visual-b .evento-conferencia .comparacao:before{content:none}
+
+.visual-b .tabela-extrato .equivalencia-un,.visual-b .tabela-extrato .comparacao dd .equivalencia-un{display:block;font-size:13px;font-weight:650;color:#294b5c;line-height:1.4;margin-top:3px}
+.visual-b .composicao-un{font-size:12px;font-weight:500}
+.visual-b .saldo-contagem-antes{font-size:13px;font-weight:500;margin:5px 0;overflow-wrap:anywhere}
