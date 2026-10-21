@@ -115,7 +115,7 @@ class HistoricoTests(HistoricoFixture, TestCase):
         ItemVendaRemovido.objects.filter(pk=removido.pk).update(criado_em=self.inicio + timedelta(days=2))
         resposta = self.client.get(self.url)
         linhas = list(resposta.context['extrato'])
-        self.assertEqual([l['fonte'] for l in linhas], ['compra', 'digital', 'venda', 'remocao'])
+        self.assertEqual([l['fonte'] for l in linhas], ['compra', 'digital', 'venda', 'remocao', 'conferencia'])
         self.assertEqual(linhas[0]['entrada'], 2)
         self.assertEqual(linhas[2]['saida'], 3)
         self.assertTrue(all(l['saldo'] is None for l in linhas))
@@ -136,8 +136,8 @@ class HistoricoTests(HistoricoFixture, TestCase):
         primeira = self.client.get(self.url, {'compra': self.compra.pk, 'intervalo': 'entre_compras'})
         segunda = self.client.get(self.url + primeira.context['extrato'].proxima_url)
         ids = [r['detalhe_id'] for resposta in (primeira, segunda) for r in resposta.context['extrato']]
-        self.assertEqual(len(ids), 62)
-        self.assertEqual(len(set(ids)), 62)
+        self.assertEqual(len(ids), 63)
+        self.assertEqual(len(set(ids)), 63)
         self.assertEqual(segunda.context['compra'].compra_id, self.compra.pk)
         self.assertEqual(segunda.context['intervalo'], 'entre_compras')
         self.assertNotContains(segunda, 'class="saldo-inicial"')
@@ -257,7 +257,7 @@ class HistoricoTests(HistoricoFixture, TestCase):
             MovimentoObservado.objects.create(produto=self.produto, sequencia=seq, antes=None,
                 depois=None, registrado_em=data)
         resposta = self.client.get(self.url)
-        self.assertEqual([m.sequencia for m in resposta.context['movimentos']], [2])
+        self.assertEqual([m.sequencia for m in resposta.context['movimentos']], [2, 3])
         self.assertContains(resposta, 'Saldo bruto: Não disponível → Não disponível.')
 
     def test_paginacao_e_quantidade_constante_de_consultas(self):
@@ -346,7 +346,7 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         (destino / f'acesso-direto-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot',
                             {'format': 'png', 'captureBeyondViewport': True})['data']))
                         tab.evaluate("document.querySelector('.evolucao-estoque').click(); true")
-                        tab.wait("document.querySelectorAll('table tr[data-registro]').length === 7")
+                        tab.wait("document.querySelectorAll('table tr[data-registro]').length === 8")
                         self.assertTrue(tab.evaluate("!!document.querySelector('.visual-b')"))
                         if visual == 'a':
                             tab.evaluate("document.querySelector('.alternativas-extrato a:not([aria-current])').click(); true")
@@ -363,7 +363,7 @@ class HistoricoBrowserTests(HistoricoFixture, StaticLiveServerTestCase):
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('.movimento-venda td.saldo')].every(e=>e.textContent.includes('Snapshot registrado'))"))
                         self.assertTrue(tab.evaluate("document.querySelector('.movimento-pendente td.saldo').textContent.includes('Não disponível')"))
                         self.assertTrue(tab.evaluate("!!document.querySelector('.comparacao.falta .diferenca-final')"))
-                        self.assertTrue(tab.evaluate("document.querySelector('.extrato-cartao').lastElementChild.matches('[data-evento=ok-conferencia]')"))
+                        self.assertTrue(tab.evaluate("!!document.querySelector('.extrato-cartao').lastElementChild.matches('[data-evento=ok-conferencia]')") if visual == 'a' else tab.evaluate("!!document.querySelector('tr.evento-conferencia [data-evento=ok-conferencia]')"))
                         self.assertTrue(tab.evaluate("!!document.querySelector('.movimento-manual a')"))
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('details')].every(e=>!e.open)"))
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('td.numero')].every(e=>e.scrollWidth<=e.clientWidth)"))

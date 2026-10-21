@@ -17,7 +17,7 @@ class PeriodosHistoricoTests(HistoricoFixture, TestCase):
                 self.assertEqual(r.context['visual'],visual)
                 self.assertContains(r, f'class="extrato-pagina visual-{visual}"')
                 self.assertEqual(r.context['inicio'],self.inicio)
-                self.assertEqual(r.context['fim'],self.agora)
+                self.assertEqual(r.context['fim'],self.agora) if visual == 'a' else self.assertGreaterEqual(r.context['fim'],self.agora)
 
     def consulta(self, **params):
         r = self.client.get(self.url, params)
@@ -31,7 +31,7 @@ class PeriodosHistoricoTests(HistoricoFixture, TestCase):
         self.assertEqual(self.consulta().context['inicio'], self.inicio)
         r = self.consulta(periodo='tres_compras', compra=antigas[-1].pk)
         self.assertEqual(r.context['inicio'], antigas[1].estoque_entrada_realizada_em)
-        self.assertEqual(r.context['fim'], self.agora)
+        self.assertGreaterEqual(r.context['fim'], self.agora)
         self.assertEqual(r.context['compra'].compra_id, self.compra.pk)
         self.assertEqual({l['documento'] for l in r.context['extrato'] if l['fonte']=='compra'},
                          {self.compra.pk, antigas[0].pk, antigas[1].pk})
@@ -45,15 +45,16 @@ class PeriodosHistoricoTests(HistoricoFixture, TestCase):
         self.assertEqual(r.context['referencia'], self.agora)
         self.assertEqual((r.context['esperado'], r.context['fisica'], r.context['diferenca']), (10,8,-2))
 
-    def test_fim_personalizado_futuro_limitado_ao_ok(self):
+    def test_fim_personalizado_futuro_limitado_ao_momento_da_consulta(self):
         r = self.consulta(periodo='personalizado', data_inicial=self.inicio.date().isoformat(),
             data_final=(self.agora+timedelta(days=10)).date().isoformat())
-        self.assertEqual(r.context['fim'], self.agora)
+        self.assertGreaterEqual(r.context['fim'], self.agora)
 
     def test_data_final_inclusiva_nao_inclui_venda_do_dia_seguinte(self):
         dia = timezone.localtime(self.inicio).date()
         for deslocamento in (0,1):
             venda = Venda.objects.create(data_venda=dia+timedelta(days=deslocamento))
+            Venda.objects.filter(pk=venda.pk).update(criado_em=self.inicio+timedelta(days=deslocamento))
             ItemVenda.objects.create(venda=venda, produto=self.produto, quantidade=1,
                 unidade='UN', preco_unitario=0, valor_total=0)
         r = self.consulta(periodo='personalizado',data_inicial=dia.isoformat(),data_final=dia.isoformat())
@@ -101,8 +102,8 @@ class PeriodosHistoricoTests(HistoricoFixture, TestCase):
             linhas.extend((l['fonte'],l['pk']) for l in r.context['extrato'])
             self.assertIn('periodo=tres_compras', r.context['extrato'].proxima_url)
             self.assertIn('visual=b', r.context['extrato'].proxima_url)
-        self.assertEqual(len(linhas), 121)
-        self.assertEqual(len(set(linhas)),121)
+        self.assertEqual(len(linhas), 122)
+        self.assertEqual(len(set(linhas)),122)
 
     def test_compra_especifica_e_proxima_compra_preservadas(self):
         antigas = self.compras_anteriores()
@@ -133,7 +134,8 @@ class PeriodosEvidenciaTests(HistoricoFixture, TestCase):
             ItemCompra.objects.create(compra=compra, produto=self.produto, quantidade=1,
                 unidade='CX', preco_unitario=0, valor_total=0)
         respostas = [self.client.get(self.url, {'periodo':'tres_compras', 'visual':v}) for v in ('a','b')]
-        a,b = [list(r.context['extrato']) for r in respostas]
+        a,b = [[l for l in r.context['extrato'] if l['fonte'] != 'conferencia'] for r in respostas]
+        self.assertEqual(sum(l['fonte']=='conferencia' for l in respostas[1].context['extrato']), 1)
         self.assertEqual(a,b)
         self.assertEqual(len([l for l in a if l['fonte']=='compra']),3)
         self.assertTrue(all(l['saldo'] is None for l in a if l['fonte']=='compra'))

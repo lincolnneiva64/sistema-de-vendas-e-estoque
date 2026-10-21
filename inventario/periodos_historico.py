@@ -12,13 +12,15 @@ from .models import MovimentoObservado
 MODOS = ('ultima', 'tres_compras', 'personalizado', 'completo', 'compra')
 
 
-def selecionar(params, referencia, selecionada, documentos, produto_id):
+def selecionar(params, referencia, selecionada, documentos, produto_id, limite=None):
+    limite = limite if limite is not None else referencia
     modo = params.get('periodo') or ('compra' if params.get('compra', '').isdigit() else 'ultima')
     if modo not in MODOS:
         modo = 'ultima'
-    fim = referencia
+    fim = limite
     inicio = selecionada.compra.estoque_entrada_realizada_em if selecionada else referencia-timedelta(days=30)
-    aviso = '' if selecionada else 'Sem compra recebida datada: últimos 30 dias até a referência da conferência.'
+    aviso = '' if selecionada else ('Sem compra recebida datada: últimos 30 dias antes da conferência e registros posteriores até o momento da consulta.'
+        if limite != referencia else 'Sem compra recebida datada: últimos 30 dias até a referência da conferência.')
     erro = ''
     if modo == 'tres_compras':
         ultimas = list(documentos[:3])
@@ -31,13 +33,15 @@ def selecionar(params, referencia, selecionada, documentos, produto_id):
             if not primeiro or not ultimo or primeiro > ultimo:
                 raise ValueError
             inicio = timezone.make_aware(datetime.combine(primeiro, time.min))
-            fim = min(timezone.make_aware(datetime.combine(ultimo+timedelta(days=1), time.min)), referencia)
+            fim = min(timezone.make_aware(datetime.combine(ultimo+timedelta(days=1), time.min)), limite)
             if inicio >= fim:
                 raise ValueError
-            aviso = 'Datas inclusivas no fuso local; o fim é limitado à referência da conferência.'
+            aviso = ('Datas inclusivas no fuso local; o fim é limitado ao momento da consulta.'
+                     if limite != referencia else 'Datas inclusivas no fuso local; o fim é limitado à referência da conferência.')
         except (ValueError, OverflowError, TypeError):
             inicio = fim = referencia
-            erro = 'Informe um período válido, com início anterior à referência da conferência e fim igual ou posterior ao início.'
+            erro = ('Informe um período válido, com início anterior ao momento da consulta e fim igual ou posterior ao início.'
+                    if limite != referencia else 'Informe um período válido, com início anterior à referência da conferência e fim igual ou posterior ao início.')
     elif modo == 'completo':
         candidatos = []
         fontes = ((documentos, 'compra__estoque_entrada_realizada_em'),
@@ -47,11 +51,11 @@ def selecionar(params, referencia, selecionada, documentos, produto_id):
             (MovimentoObservado.objects.filter(produto_id=produto_id), 'registrado_em'),
             (MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id), 'criado_em'))
         for qs, campo in fontes:
-            valor = qs.filter(**{campo+'__lte': referencia}).aggregate(inicio=Min(campo))['inicio']
+            valor = qs.filter(**{campo+'__lte': limite}).aggregate(inicio=Min(campo))['inicio']
             if valor:
                 candidatos.append(valor)
         dia = ItemVenda.objects.filter(produto_id=produto_id,
-            venda__data_venda__lte=timezone.localtime(referencia).date()).aggregate(
+            venda__data_venda__lte=timezone.localtime(limite).date()).aggregate(
                 inicio=Min('venda__data_venda'))['inicio']
         if dia:
             candidatos.append(timezone.make_aware(datetime.combine(dia, time.min)))

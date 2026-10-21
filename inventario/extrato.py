@@ -103,7 +103,14 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     devolucoes_q = normalizar(devolucoes.values('pk'), 'cancelamento',
         TruncDate('venda__estoque_devolvido_cancelamento_em'), F('venda__estoque_devolvido_cancelamento_em'),
         documento=F('venda_id'), devolvido=F('venda__estoque_devolvido_cancelamento'))
-    unificada = compras_q.union(vendas_q, removidos_q, movimentos_q, devolucoes_q, manuais_q, all=True).order_by(
+    fontes = [vendas_q, removidos_q, movimentos_q, devolucoes_q, manuais_q]
+    if params.get('visual') != 'a' and rodada and rodada.ok_em and inicio and inicio < fim:
+        # Include exactly this historical OK, even outside the selected interval.
+        # UNION keeps chronological pagination in SQL, without loading all events.
+        conferencia_q = normalizar(type(rodada).objects.filter(pk=rodada.pk).values('pk'),
+            'conferencia', TruncDate('ok_em'), F('ok_em'))
+        fontes.append(conferencia_q)
+    unificada = compras_q.union(*fontes, all=True).order_by(
         'dia', 'instante', 'fonte', 'pk')
     pagina = Paginator(unificada, 50).get_page(params.get('extrato_pagina'))
     pagina.devolucao_sem_data = sem_data
@@ -114,6 +121,8 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
             linha.update(titulo=f"Compra #{linha['documento']}", classe='compra', entrada=linha['quantidade'],
                 nota='Entrada documentada · Fornecedor: ' + (linha['pessoa'] or 'Não disponível'),
                 url=reverse('estoque:compras_detalhe', args=[linha['documento']]))
+        elif fonte == 'conferencia':
+            linha.update(titulo='Conferência física — OK', classe='conferencia')
         elif fonte == 'venda':
             tipo = 'Consumo próprio' if linha['origem'] == 'consumo_proprio' else 'Venda'
             linha.update(titulo=f"{tipo} #{linha['documento']}", classe='venda', saida=linha['quantidade'],

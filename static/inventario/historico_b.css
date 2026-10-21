@@ -56,3 +56,10 @@
  .visual-b .tabela-extrato tr>td:last-child{grid-column:2;grid-row:3;padding:5px 4px}
  .visual-b .tabela-extrato .saldo strong{font-size:24px}
 }
+
+/* The OK is a historical reference in its chronological position. */
+.visual-b .tabela-extrato tr.evento-conferencia{display:block;background:#f3f8f8}
+.visual-b .tabela-extrato tr.evento-conferencia:before{background:#547b81}
+.visual-b .tabela-extrato tr.evento-conferencia>td{display:block;padding:0;background:transparent;border:0}
+.visual-b .evento-conferencia .comparacao{margin:0;border:0;padding:4px}
+.visual-b .evento-conferencia .comparacao:before{content:none}

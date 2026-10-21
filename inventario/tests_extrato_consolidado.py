@@ -125,7 +125,7 @@ class ConsolidadoTests(HistoricoFixture, TestCase):
         self.edicao_outro(venda_posterior,resumo=False)
         venda_final=self.venda_snapshot(8,D('1.2'),1,D('.2'),'FD')
         self.edicao_outro(venda_final,tipo='item_removido_da_nota')
-        r=self.resposta(periodo='tres_compras')
+        r=self.resposta(periodo='tres_compras', visual='a')
         compras={l['pk']:l for l in r.context['extrato'] if l['fonte']=='compra'}
         self.assertEqual(compras[compra_intermediaria.pk]['saldo'],D('1.2'))
         self.assertEqual(compras[compra_recente.pk]['saldo'],D('2.2'))

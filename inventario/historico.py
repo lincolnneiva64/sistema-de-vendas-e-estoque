@@ -16,10 +16,12 @@ from .periodos_historico import selecionar
 
 def investigar(rodada, params):
     item = rodada.item
+    timeline = params.get('visual') != 'a'
     referencia = rodada.ok_em or item.inventario.finalizada_em or item.inventario.criado_em
+    limite = timezone.now() if timeline else referencia
     compras = ItemCompra.objects.filter(
         produto_id=item.produto_id, compra__estoque_entrada_realizada=True,
-        compra__estoque_entrada_realizada_em__lte=referencia,
+        compra__estoque_entrada_realizada_em__lte=limite,
     ).select_related('compra__fornecedor').order_by('-compra__estoque_entrada_realizada_em', '-compra_id', 'pk')
     # Paginate purchase documents too; an item is not assumed unique per purchase.
     primeiro_item = ItemCompra.objects.filter(produto_id=item.produto_id,
@@ -30,8 +32,8 @@ def investigar(rodada, params):
     if params.get('compra', '').isdigit() and params.get('periodo', 'compra') == 'compra':
         selecionada = compras.filter(compra_id=params['compra']).first()
     if selecionada is None:
-        selecionada = compras.first()
-    periodo = selecionar(params, referencia, selecionada, documentos, item.produto_id)
+        selecionada = compras.filter(compra__estoque_entrada_realizada_em__lte=referencia).first() or compras.first()
+    periodo = selecionar(params, referencia, selecionada, documentos, item.produto_id, limite=limite)
     inicio, fim = periodo['inicio'], periodo['fim']
     params = params.copy()
     params['periodo'] = periodo['periodo']
@@ -43,7 +45,8 @@ def investigar(rodada, params):
         # Sales have a business date only: boundary-day documents are candidates,
         # not proof they happened after a purchase or before a physical count.
         datas = (timezone.localtime(inicio).date(), timezone.localtime(fim-timedelta(microseconds=1)).date())
-        vendas = vendas.filter(venda__data_venda__range=datas)
+        vendas = (vendas.filter(venda__criado_em__gte=inicio, venda__criado_em__lt=fim)
+                  if timeline else vendas.filter(venda__data_venda__range=datas))
         removidos = removidos.filter(criado_em__gte=inicio, criado_em__lt=fim)
     else:
         movimentos, vendas, removidos = movimentos.none(), vendas.none(), removidos.none()

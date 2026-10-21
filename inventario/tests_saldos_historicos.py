@@ -170,7 +170,7 @@ class SaldosHistoricosTests(HistoricoFixture, TestCase):
 
     def test_snapshot_posterior_ao_ok_nao_e_retroativo(self):
         Venda.objects.filter(pk=self.posterior.venda_id).update(criado_em=self.agora+timedelta(hours=1))
-        vendas, compras, _ = self.linhas()
+        vendas, compras, _ = self.linhas(visual='a')
         self.assertIsNone(vendas[self.posterior.pk]['saldo'])
         self.assertIsNone(compras[0]['saldo'])
 
