@@ -3,6 +3,7 @@ import copy
 import json
 from decimal import Decimal
 from django.test import TestCase, Client
+from django.contrib.auth.models import Permission
 from estoque.models import Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, DespesaDiaria, Produto
 from .models import OperacaoSincronizacao
 from .services import command_hash
@@ -13,6 +14,8 @@ class OnlineSaleTests(TestCase):
     def setUp(self):
         self.user, self.customer, self.product, self.command = fixtures()
         self.user.user_permissions.clear()  # Online creation does not require pilot permission.
+        self.user.user_permissions.add(*Permission.objects.filter(content_type__app_label='estoque',
+            codename__in=['add_venda', 'view_cliente', 'view_produto']))
         self.client.force_login(self.user)
 
     def send(self, command=None):
@@ -73,4 +76,4 @@ class OnlineSaleTests(TestCase):
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.create_user(username='other-online')
         self.client.force_login(user)
-        self.assertEqual(self.lookup().status_code, 409)
+        self.assertEqual(self.lookup().status_code, 403)

@@ -45,11 +45,15 @@ class PickupLinkTests(LinkFixture, TestCase):
     def test_employee_confirms_without_login_and_client_receipt_has_no_authority(self):
         link = self.issue()
         employee, data = self.employee_form(link)
-        self.assertNotIn('sessionid', employee.cookies)
+        # A scoped receipt session is not an authenticated commercial session.
+        self.assertNotIn('_auth_user_id', employee.session)
         response = employee.post(link, data)
         self.assertEqual(response.status_code, 302)
         receipt = employee.get(response.url)
         self.assertContains(receipt, 'Recolhimento registrado')
+        self.assertNotIn('_auth_user_id', employee.session)
+        self.assertEqual(employee.get('/vendas/').status_code, 302)
+        self.assertEqual(Client().get(response.url).status_code, 302)
         self.assertNotContains(receipt, 'id="form-envio-checklist"')
         grant = AutorizacaoRecolhimento.objects.get()
         self.assertIsNotNone(grant.conferencia_id)

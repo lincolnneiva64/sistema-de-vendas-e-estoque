@@ -74,7 +74,7 @@ class SessoesSeparadasTests(TestCase):
         self.assertEqual(self.client.get(self.mobile).status_code, 200)
         self.assertEqual(self.client.get(reverse('inventario:lista')).status_code, 302)
         self.assertEqual(self.client.get(reverse('estoque:conferencia_estoque_produto', args=[self.produto.pk])).status_code, 403)
-        self.assertEqual(self.client.get('/vendas/').status_code, 200)
+        self.assertEqual(self.client.get('/vendas/').status_code, 302)
 
     def test_apenas_cookie_comercial_nao_autoriza_contagem(self):
         self.client.force_login(self.gestor)
@@ -97,7 +97,7 @@ class SessoesSeparadasTests(TestCase):
     def test_legado_sem_login_nao_reconstroi_autenticacao_perdida(self):
         chave = self.legado()
         response = self.client.get('/vendas/')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.session.session_key, chave)
         self.assertNotIn('_auth_user_id', self.client.session)
         self.assertEqual(self.client.get(self.mobile).status_code, 200)
@@ -109,7 +109,7 @@ class SessoesSeparadasTests(TestCase):
         sessao.save()
         chave = sessao.session_key
         response = self.client.get('/vendas/')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.session.session_key, chave)
         self.assertEqual(self.client.cookies[settings.SESSION_COOKIE_NAME].value, chave)
         self.assertNotEqual(response.cookies[settings.SESSION_COOKIE_NAME]['max-age'], 0)
@@ -136,7 +136,7 @@ class SessoesSeparadasTests(TestCase):
         self.client.post(self.convite)
         self.client.cookies[sessoes.COOKIE] = '0' * 32
         self.assertEqual(self.client.get(self.mobile).status_code, 403)
-        self.assertEqual(self.client.get('/vendas/').status_code, 200)
+        self.assertEqual(self.client.get('/vendas/').status_code, 302)
 
     def test_expiracao_revogacao_inativacao_e_renovacao_sao_respeitadas(self):
         for bloqueio in ('expiracao', 'revogacao', 'inativacao', 'renovacao'):
@@ -156,7 +156,7 @@ class SessoesSeparadasTests(TestCase):
                 else:
                     services.renovar_acesso(self.gestor, self.acesso.pk)
                 self.assertEqual(client.get(self.mobile).status_code, 403)
-                self.assertEqual(client.get('/vendas/').status_code, 200)
+                self.assertEqual(client.get('/vendas/').status_code, 302)
 
     def test_produto_fora_da_atribuicao_e_recusado(self):
         outro = produto(nome='Outro produto fictício')

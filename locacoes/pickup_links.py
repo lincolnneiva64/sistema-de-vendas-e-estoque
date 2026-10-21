@@ -200,6 +200,7 @@ def individual(request, token):
     if (grant.revogada_em or grant.expira_em <= timezone.now() or task.tipo != 'recolhimento'
             or not grant.funcionario.ativo or not grant.funcionario.pode_receber_checklist):
         return unavailable(request)
+    request.session['comprovante_recolhimento'] = {'id': grant.pk, 'hash': grant.token_hash}
     if grant.conferencia_id:
         return protect(redirect('locacoes:checklist_recolhimento_cliente', pk=grant.conferencia_id))
     if not task.pendente_operacional:

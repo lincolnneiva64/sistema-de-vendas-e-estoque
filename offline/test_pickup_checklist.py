@@ -144,7 +144,7 @@ class PickupChecklistTests(PickupFixture, TestCase):
 
     def test_anonymous_legacy_and_changed_marker_with_valid_csrf_cannot_write(self):
         anonymous = Client(enforce_csrf_checks=True)
-        anonymous.get(self.url)
+        anonymous.get('/entrar/')
         data = {**self.legacy_payload(), 'csrfmiddlewaretoken': anonymous.cookies['csrftoken'].value}
         before = list(EventoLocacao.objects.values())
         for marker in (None, '', '0', '1'):

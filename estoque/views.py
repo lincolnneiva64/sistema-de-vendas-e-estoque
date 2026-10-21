@@ -929,6 +929,8 @@ def encontrar_cliente_duplicado(cliente):
 
 def montar_checklist_url(request, rota_id):
     checklist_path = reverse("estoque:entrega_rota_checklist", kwargs={"pk": rota_id})
+    from sistema.acesso_funcionarios import proteger_path
+    checklist_path = proteger_path(request, checklist_path)
     checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
     if checklist_base_url:
         return f"{checklist_base_url}{checklist_path}"
@@ -946,6 +948,8 @@ def montar_checklist_cliente_url(request, rota_id, venda_id, rota_item_id=None):
             "estoque:entrega_rota_checklist_cliente",
             kwargs={"rota_id": rota_id, "venda_id": venda_id},
         )
+    from sistema.acesso_funcionarios import proteger_path
+    checklist_path = proteger_path(request, checklist_path)
     checklist_base_url = getattr(settings, "CHECKLIST_BASE_URL", "").rstrip("/")
     if checklist_base_url:
         return f"{checklist_base_url}{checklist_path}"
@@ -953,6 +957,8 @@ def montar_checklist_cliente_url(request, rota_id, venda_id, rota_item_id=None):
 
 
 def montar_url_publica(request, path):
+    from sistema.acesso_funcionarios import proteger_path
+    path = proteger_path(request, path)
     base_url = (
         getattr(settings, "CHECKLIST_BASE_URL", "")
         or getattr(settings, "SISTEMA_ONLINE_URL", "")
@@ -25612,6 +25618,8 @@ def separacao_venda_detalhe(request, pk):
             recalcular_status_separacao(separacao, request.user)
 
         messages.success(request, "Separacao concluida.")
+        if getattr(request, 'operational_authorized', False):
+            return redirect('estoque:separacao_venda_detalhe', pk=separacao.pk)
         return redirect("estoque:separacao_vendas_fila")
 
     itens = [

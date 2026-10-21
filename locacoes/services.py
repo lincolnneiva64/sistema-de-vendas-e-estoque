@@ -79,6 +79,8 @@ def telefone_funcionario_checklist(funcionario):
 
 
 def url_publica_checklist(request, path):
+    from sistema.acesso_funcionarios import proteger_path
+    path = proteger_path(request, path)
     base_url = (
         getattr(settings, "CHECKLIST_BASE_URL", "")
         or getattr(settings, "SISTEMA_ONLINE_URL", "")
@@ -104,7 +106,7 @@ def envios_tarefa_operacional_context(request, tarefa, incluir_responsaveis=Fals
         else "locacoes:conferencia_recolhimento"
     )
     checklist_path = reverse(rota, kwargs={"pk": tarefa.pk})
-    checklist_url = request.build_absolute_uri(checklist_path)
+    checklist_url = url_publica_checklist(request, checklist_path)
     funcionarios = []
     candidatos = (Funcionario.objects.filter(ativo=True).order_by("-pode_receber_checklist", "nome")
                   if incluir_responsaveis else Funcionario.habilitados_para_checklist())

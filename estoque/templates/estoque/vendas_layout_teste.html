@@ -1958,6 +1958,7 @@ td:first-child {
     <div class="bloco-venda bloco-lancamento">
         <div class="topo-venda">
         <h2>Vendas</h2>
+        {% include 'estoque/includes/sessao_usuario.html' %}
 
         <div id="clienteResumo" class="cliente-resumo" aria-live="polite">
             <div class="cliente-resumo-item cliente-principal">
@@ -9077,7 +9078,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
             }, true);
         });
 
-        const form = operador.closest("form") || document.querySelector("form");
+        const form = operador.closest("form") || document.querySelector("form:not([data-auth-session])");
         if (form) {
             form.addEventListener("submit", (e) => {
                 if (!operador.value) {

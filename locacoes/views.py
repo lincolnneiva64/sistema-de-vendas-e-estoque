@@ -1768,7 +1768,7 @@ def conferencia_entrega(request, pk):
         if conferencia_salva
         else ""
     )
-    checklist_url = request.build_absolute_uri(checklist_path) if checklist_path else ""
+    checklist_url = url_publica_checklist(request, checklist_path) if checklist_path else ""
     checklist_cliente_whatsapp_url = (
         _url_publica_checklist_whatsapp(request, checklist_path)
         if checklist_path

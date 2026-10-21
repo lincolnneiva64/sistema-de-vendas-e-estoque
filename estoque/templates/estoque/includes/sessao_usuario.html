@@ -1,0 +1,5 @@
+{% if request.user.is_authenticated %}
+<form data-auth-session method="post" action="{% url 'sistema_logout' %}" style="display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:6px;margin:4px 12px">
+{% csrf_token %}<span>{{ request.user.get_username }}</span><button type="submit" class="btn btn-sm btn-outline-secondary">Sair</button>
+</form>
+{% endif %}

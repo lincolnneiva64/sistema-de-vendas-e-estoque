@@ -113,11 +113,17 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'offline.local_sales.LocalSalesMiddleware',
     'inventario.middleware.AcessoLimitadoMiddleware',
+    'sistema.acesso.AcessoComercialMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'sistema.urls'
+LOGIN_URL = 'sistema_login'
+SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=2592000, cast=int)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+SESSION_SAVE_EVERY_REQUEST = config('SESSION_SAVE_EVERY_REQUEST', default=False, cast=bool)
+OPERACIONAL_LINK_MAX_AGE = config('OPERACIONAL_LINK_MAX_AGE', default=86400, cast=int)
 CSRF_FAILURE_VIEW = 'locacoes.pickup_security.csrf_failure'
 OFFLINE_ENVIRONMENT_ID = config("OFFLINE_ENVIRONMENT_ID", default="").strip()
 
