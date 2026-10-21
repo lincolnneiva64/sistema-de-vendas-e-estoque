@@ -222,7 +222,7 @@ class AjustesFeedbackBrowserTests(AjustesFixture, StaticLiveServerTestCase):
                 self.assertFalse(tab.evaluate('document.querySelector(".navegacao-contextual a").hasAttribute("disabled")'))
                 tab.evaluate('window.release();true')
                 tab.wait('!!document.querySelector("[data-estado=Aplicado]")')
-                self.assertTrue(tab.evaluate('document.querySelector(".status").textContent.includes("concluída")'))
+                self.assertTrue(tab.evaluate('document.querySelector(".status").textContent.includes("Estoque atualizado com sucesso")'))
                 self.assertEqual(AplicacaoAjuste.objects.count(), 1)
                 tab.evaluate('document.querySelectorAll(".navegacao-contextual a")[2].click();true')
                 tab.wait('window.inventarioRevisaoPronta === true')

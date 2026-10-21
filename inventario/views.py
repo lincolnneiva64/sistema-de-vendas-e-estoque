@@ -24,6 +24,7 @@ from estoque.models import Produto, Fornecedor, Funcionario
 from .conversao import converter
 from . import services, sessoes, ajustes
 from . import acesso_ajustes
+from . import confirmacao_ajustes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
 from .apresentacao import entrada, quantidade
@@ -134,12 +135,28 @@ def linhas_revisao(inventario):
 @privado
 @require_http_methods(["GET", "POST"])
 def detalhe(request, inventario_id):
-    gestor(request)
+    try:
+        gestor(request)
+    except PermissionDenied as exc:
+        if confirmacao_ajustes.solicitada(request):
+            return confirmacao_ajustes.erro(request, exc, 403)
+        raise
     inventario = get_object_or_404(Inventario, pk=inventario_id)
+    mensagens = confirmacao_ajustes.mensagens_validas(request, inventario_id)
+    if request.method == 'GET' and confirmacao_ajustes.solicitada(request) and request.GET.get('resultado_atualizacao'):
+        try:
+            return confirmacao_ajustes.consultar(request, inventario_id)
+        except PermissionDenied as exc:
+            return confirmacao_ajustes.erro(request, exc, 403)
+        except ValueError as exc:
+            return confirmacao_ajustes.erro(request, exc)
     if inventario.finalizada_em and (
             request.GET.get("atualizar") == "prever"
             or request.method == "POST" and request.POST.get("acao") in {"atualizar", "aprovar"}):
-        raise PermissionDenied("Conferência em modo histórico. Use Ações administrativas para revisar ajustes pendentes.")
+        mensagem = 'Conferência em modo histórico. Use Ações administrativas para revisar ajustes pendentes.'
+        if confirmacao_ajustes.solicitada(request):
+            return confirmacao_ajustes.erro(request, mensagem, 403)
+        raise PermissionDenied(mensagem)
     erro, link, whatsapp_url, destinatario, sucesso = "", "", "", "", ""
     if request.method == "POST":
         try:
@@ -159,8 +176,8 @@ def detalhe(request, inventario_id):
                     ajustes.atualizar(request.user, inventario.pk, request.POST.get("previa"),
                         confirmacao=request.POST.get("confirmacao") == "sim",
                         observacao=request.POST.get("observacao", ""))
-                messages.success(request, "Atualização concluída. Os saldos aplicados estão registrados no resultado e no histórico.")
-                return redirect(reverse("inventario:detalhe", args=[inventario.pk]) + "#titulo-resumo")
+                    comprovacao = confirmacao_ajustes.conferir_gravacao(inventario.pk, request.POST.get('previa'))
+                return confirmacao_ajustes.concluir(request, inventario.pk, comprovacao)
             elif acao == "selecao":
                 selecao = salvar_selecao(request.user, inventario.pk, request.POST.getlist("participantes"),
                     request.POST.get("versao"), request.POST.get("motivo"))
@@ -206,6 +223,8 @@ def detalhe(request, inventario_id):
                 messages.success(request, sucesso or "Conferência atualizada com sucesso.")
                 return redirect("inventario:detalhe", inventario.pk)
         except (ValueError, ObjectDoesNotExist, PermissionDenied) as exc:
+            if confirmacao_ajustes.solicitada(request) and request.POST.get('acao') == 'atualizar':
+                return confirmacao_ajustes.erro(request, exc, 403 if isinstance(exc, PermissionDenied) else 400)
             erro = str(exc)
     if link:
         destinatario = acesso.funcionario_nome
@@ -232,7 +251,7 @@ def detalhe(request, inventario_id):
         acesso.total_produtos = atuais.count()
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
-    return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas,
+    return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,
         "modo_historico": bool(inventario.finalizada_em),
         "revisao_historica_disponivel": any(l['diferenca'] is not None and l['diferenca'] != 0
             and not l['decisao'] for l in linhas),

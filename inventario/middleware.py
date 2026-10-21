@@ -33,6 +33,9 @@ class AcessoLimitadoMiddleware:
             recusa = csrf.process_view(request, match.func, match.args, match.kwargs)
             if recusa is not None:
                 response = recusa
+                if request.headers.get('X-Inventario-Ajuste') == '1' and match.url_name in {'detalhe', 'ajustes'}:
+                    from .confirmacao_ajustes import erro
+                    response = erro(request, 'Validação de segurança expirada ou inválida. Esta tentativa não foi executada. Recarregue a página antes de confirmar.', 403)
         sessao = request.inventario_session
         if request.path_info.startswith(sessoes.CAMINHO):
             patch_vary_headers(response, ("Cookie",))
