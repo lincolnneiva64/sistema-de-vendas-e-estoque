@@ -103,7 +103,7 @@ def bloquear(inventario_id, rodada_ids):
     if len(referencias) != len(set(rodada_ids)):
         raise ValueError('Proposta fora da conferência.')
     list(ItemInventario.objects.select_for_update().filter(pk__in=[r['item_id'] for r in referencias]).order_by('pk'))
-    rodadas = list(RodadaContagem.objects.select_for_update(of=('self',)).select_related('item__produto')
+    rodadas = list(RodadaContagem.objects.select_for_update(of=('self',)).select_related('item__produto', 'item__inventario')
         .filter(pk__in=rodada_ids).order_by('pk'))
     produtos = {p.pk: p for p in Produto.objects.select_for_update()
                 .filter(pk__in=[r['item__produto_id'] for r in referencias]).order_by('pk')}
@@ -127,7 +127,16 @@ def decidir(usuario, inventario_id, rodada_id, previa, justificativa, aprovar=Tr
     avaliacao = avaliar(rodada, produto, travar_documentos=True)
     if avaliacao['bloqueio'] or avaliacao.get('assinatura') != dados.get('assinatura'):
         raise ValueError(avaliacao['bloqueio'] or 'Dados alterados desde a preparação. Prepare novamente.')
-    existente = PropostaAjuste.objects.filter(rodada=rodada, assinatura=dados['assinatura']).first()
+    return _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar)
+
+
+def _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar=True):
+    """Persist evidence already fully validated under this transaction's locks.
+
+    Only decidir()/atualizar() call this internal helper. Both enforce permission,
+    signed preview and current evidence before reaching it. No cross-request cache.
+    """
+    existente = avaliacao.get('proposta')
     if existente:
         if existente.estado == 'aprovado' and not aprovar:
             existente.estado = 'rejeitado'
@@ -139,7 +148,7 @@ def decidir(usuario, inventario_id, rodada_id, previa, justificativa, aprovar=Tr
             raise ValueError('Decisão já registrada. Uma proposta rejeitada exige nova confirmação física.')
         return existente
     proposta = PropostaAjuste.objects.create(rodada=rodada,
-        confirmacao_id=avaliacao['evidencia']['confirmacao'], assinatura=dados['assinatura'],
+        confirmacao_id=avaliacao['evidencia']['confirmacao'], assinatura=avaliacao['assinatura'],
         evidencia=avaliacao['evidencia'], justificativa=justificativa.strip(),
         estado='aprovado' if aprovar else 'rejeitado', autorizado_por=usuario)
     EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao=proposta.estado,
@@ -192,9 +201,22 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     for rodada, produto in travadas:
         proposta = por_rodada[rodada.pk]
         atual = avaliar(rodada, produto, travar_documentos=True)
-        if atual['bloqueio'] or atual.get('assinatura') != proposta.assinatura or assinatura(proposta.evidencia) != proposta.assinatura:
-            raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
+        _validar_proposta(proposta, atual)
         avaliacoes.append((proposta, rodada, produto, atual))
+    return _gravar_aplicacoes(usuario, inventario_id, avaliacoes)
+
+
+def _validar_proposta(proposta, atual):
+    if atual['bloqueio'] or atual.get('assinatura') != proposta.assinatura or assinatura(proposta.evidencia) != proposta.assinatura:
+        raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
+
+
+def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
+    """The existing stock/audit writer, shared by both authorized entry points.
+
+    Callers hold inventory, round, item, product and documentary locks and have
+    validated the complete lot in this same atomic transaction before writing.
+    """
     lote = uuid4()
     resultados = []
     for proposta, rodada, produto, atual in avaliacoes:
@@ -259,20 +281,28 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
             return list(AplicacaoAjuste.objects.filter(proposta__in=propostas.values()).order_by('proposta__rodada_id'))
         raise ValueError('Seleção parcialmente atualizada. Confira os resultados e confirme uma nova seleção.')
     assinaturas = {e['rodada']: e['assinatura'] for e in entradas}
-    propostas = []
+    avaliacoes = []
     for rodada, produto in travadas:
         atual = avaliar(rodada, produto, travar_documentos=True)
         if (atual['bloqueio'] or atual['estado'] not in ('Pendente de revisão', 'Aprovado')
                 or atual.get('assinatura') != assinaturas[rodada.pk]):
             raise ValueError(atual['bloqueio'] or 'Dados alterados. Confira os saldos e confirme novamente.')
-        proposta = decidir(usuario, inventario_id, rodada.pk, atual['token'],
-            observacao or 'Atualização de estoque confirmada pelo gestor.',
-            confirmacao=True)
+        avaliacoes.append((rodada, produto, atual))
+    # Every product and document is checked before the first write. The same
+    # locks remain held through approval, stock movement, audit and commit.
+    preparadas = []
+    for rodada, produto, atual in avaliacoes:
+        proposta = _registrar_decisao(usuario, rodada, atual,
+            observacao or 'Atualização de estoque confirmada pelo gestor.')
+        _validar_proposta(proposta, atual)
         EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao='confirmado_gestor',
             dados=dict(confirmacao_fisica=proposta.confirmacao_id, observacao=observacao,
                        assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica'))
-        propostas.append(proposta)
-    return aplicar(usuario, inventario_id, previa_aplicacao(inventario_id, propostas), confirmacao=True)
+        preparadas.append((proposta, rodada, produto, atual))
+    # Preserve the execution/audit-trigger check that aplicar() performed at
+    # this point in the composed flow. It is one cheap check for the whole lot.
+    verificar_execucao()
+    return _gravar_aplicacoes(usuario, inventario_id, preparadas)
 
 
 def projetar_resultado(linhas_revisao):
