@@ -23,7 +23,10 @@ def resolver_pendencia_nota_com_conferencia(separacao_id, usuario=None):
         return False
     if not separacao.revisao_pendente and not eventos_fisicos_apos_separacao(separacao):
         return False
-    itens = list(separacao.itens.select_for_update().select_related("item_venda__produto"))
+    # Sale and separation are already locked above. The optional item/product
+    # joins must remain readable (including removed items), not lock targets:
+    # PostgreSQL rejects FOR UPDATE on the nullable side of an outer join.
+    itens = list(separacao.itens.select_for_update(of=("self",)).select_related("item_venda__produto"))
     atuais = list(ItemVenda.objects.filter(venda_id=separacao.venda_id).values_list("id", flat=True))
     if not itens or set(atuais) != {item.item_venda_id for item in itens}:
         return False
