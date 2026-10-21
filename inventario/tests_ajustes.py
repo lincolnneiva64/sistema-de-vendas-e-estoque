@@ -1,3 +1,4 @@
+from estoque.services import estoque_manual_lote
 """Fictitious stock only; real PostgreSQL transactions and browser checks."""
 import base64
 from concurrent.futures import ThreadPoolExecutor
@@ -272,13 +273,13 @@ class AplicacaoTests(AjustesFixture, TestCase):
 
     def test_falha_no_segundo_desfaz_todo_lote_inclusive_observador(self):
         p1 = self.aprovar(); p2 = self.aprovar(self.segunda())
-        original = ajustes.conferir_ou_ajustar_estoque
+        original = estoque_manual_lote.conferir_movimento
         chamadas=[]
         def falhar(*args, **kwargs):
             chamadas.append(1)
             if len(chamadas)==2: raise ValueError('Falha simulada')
             return original(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=falhar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=falhar):
             with self.assertRaisesMessage(ValueError, 'Falha simulada'):
                 self.aplicar([p1,p2])
         self.assertFalse(AplicacaoAjuste.objects.exists())

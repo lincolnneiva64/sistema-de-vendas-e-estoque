@@ -37,38 +37,43 @@ def ler_token(valor):
         raise ValueError('Prévia inválida ou expirada. Prepare novamente os ajustes.')
 
 
-def avaliar(rodada, produto=None, travar_documentos=False):
+def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
     """Read-only preview; equality of balances alone never establishes continuity."""
     produto = produto or rodada.item.produto
     item = rodada.item
+    if _lote is not None:
+        _lote.conferir(rodada, travar_documentos)
     resultado = dict(rodada=rodada, produto=produto, unidade=item.cadastro.get('base', ''),
                      esperado=rodada.esperado, contado=rodada.contado_base if rodada.ok_em else None,
                      atual=produto.quantidade, diferenca=None, resultante=None,
                      estado='Pendente de revisão', bloqueio='', evidencia=None)
     if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None:
         resultado['diferenca'] = rodada.contado_base - rodada.esperado
-    movimentos = list(services.movimentos_relevantes(rodada)) if rodada.ok_em else []
+    movimentos = (list(_lote.movimentos[item.produto_id]) if _lote is not None
+        else list(services.movimentos_relevantes(rodada))) if rodada.ok_em else []
     resultado['movimentos'] = movimentos
     resultado['posteriores'] = [m for m in movimentos if m.sequencia > (rodada.sequencia_ok or 0)]
     try:
         # All conferences use the same evidence checks for preparation/approval.
         # Actual execution remains separately guarded in aplicar().
-        if DecisaoAjuste.objects.filter(item=item).exists():
+        if (item.pk in _lote.decisoes if _lote is not None else DecisaoAjuste.objects.filter(item=item).exists()):
             resultado['estado'] = 'Aplicado'
             return resultado
         if (not rodada.ok_em or rodada.esperado is None or rodada.contado_base is None
                 or rodada.sequencia_ok is None or rodada.encerrada_em
-                or item.rodadas.filter(numero__gt=rodada.numero).exists()):
+                or (_lote.maior_numero.get(item.pk, 0) > rodada.numero if _lote is not None
+                    else item.rodadas.filter(numero__gt=rodada.numero).exists())):
             raise ValueError('Confirmação física ausente, alterada ou substituída por recontagem.')
-        confirmacao = rodada.confirmacoes.order_by('-versao_entrada').first()
+        confs = _lote.confirmacoes[rodada.pk] if _lote is not None else None
+        confirmacao = (confs[-1] if confs else None) if _lote is not None else rodada.confirmacoes.order_by('-versao_entrada').first()
         if not confirmacao or any(getattr(confirmacao, campo) != getattr(rodada, campo)
                 for campo in ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')):
             raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
         from .conciliacao_documental import conciliar
-        documentos = conciliar(rodada, movimentos, travar=travar_documentos)
+        documentos = conciliar(rodada, movimentos, travar=travar_documentos, _lote=_lote)
         resultado['documentos'] = documentos
         sequencia = services.validar_cadeia(rodada, produto,
-            documentos={d['observador'] for d in documentos})
+            documentos={d['observador'] for d in documentos}, _lote=_lote)
         diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal('.001'))
         resultante = produto.quantidade + diferenca
         resultado.update(diferenca=diferenca, resultante=resultante)
@@ -83,10 +88,11 @@ def avaliar(rodada, produto=None, travar_documentos=False):
             cadastro=item.cadastro, sequencia=sequencia, atual=str(produto.quantidade),
             documentos=documentos,
             diferenca=str(diferenca), resultante=str(resultante),
-            sinais=list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
+            sinais=list(_lote.sinais[item.pk]) if _lote is not None else list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
         resultado.update(evidencia=dados, assinatura=assinatura(dados))
         resultado['token'] = token(dict(tipo='preparacao', rodada=rodada.pk, assinatura=resultado['assinatura']))
-        proposta = PropostaAjuste.objects.filter(rodada=rodada, assinatura=resultado['assinatura']).first()
+        proposta = (_lote.propostas.get((rodada.pk, resultado['assinatura'])) if _lote is not None
+                    else PropostaAjuste.objects.filter(rodada=rodada, assinatura=resultado['assinatura']).first())
         resultado['proposta'] = proposta
         if proposta:
             resultado['estado'] = proposta.get_estado_display()
@@ -130,7 +136,7 @@ def decidir(usuario, inventario_id, rodada_id, previa, justificativa, aprovar=Tr
     return _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar)
 
 
-def _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar=True):
+def _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar=True, *, _novas=None):
     """Persist evidence already fully validated under this transaction's locks.
 
     Only decidir()/atualizar() call this internal helper. Both enforce permission,
@@ -147,12 +153,16 @@ def _registrar_decisao(usuario, rodada, avaliacao, justificativa, aprovar=True):
         if existente.estado != ('aprovado' if aprovar else 'rejeitado'):
             raise ValueError('Decisão já registrada. Uma proposta rejeitada exige nova confirmação física.')
         return existente
-    proposta = PropostaAjuste.objects.create(rodada=rodada,
+    proposta = PropostaAjuste(rodada=rodada,
         confirmacao_id=avaliacao['evidencia']['confirmacao'], assinatura=avaliacao['assinatura'],
         evidencia=avaliacao['evidencia'], justificativa=justificativa.strip(),
         estado='aprovado' if aprovar else 'rejeitado', autorizado_por=usuario)
-    EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao=proposta.estado,
-        dados=dict(evidencia=proposta.evidencia, justificativa=proposta.justificativa))
+    if _novas is not None:
+        _novas.append(proposta)
+    else:
+        proposta.save(force_insert=True)
+        EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao=proposta.estado,
+            dados=dict(evidencia=proposta.evidencia, justificativa=proposta.justificativa))
     return proposta
 
 
@@ -198,11 +208,13 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     travadas = bloquear(inventario_id, [p.rodada_id for p in propostas])
     por_rodada = {p.rodada_id: p for p in propostas}
     avaliacoes = []
-    for rodada, produto in travadas:
-        proposta = por_rodada[rodada.pk]
-        atual = avaliar(rodada, produto, travar_documentos=True)
-        _validar_proposta(proposta, atual)
-        avaliacoes.append((proposta, rodada, produto, atual))
+    from .contexto_ajustes import carregar
+    with carregar([r for r, _ in travadas], travar=True) as lote:
+        for rodada, produto in travadas:
+            proposta = por_rodada[rodada.pk]
+            atual = avaliar(rodada, produto, travar_documentos=True, _lote=lote)
+            _validar_proposta(proposta, atual)
+            avaliacoes.append((proposta, rodada, produto, atual))
     return _gravar_aplicacoes(usuario, inventario_id, avaliacoes)
 
 
@@ -217,6 +229,8 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
     Callers hold inventory, round, item, product and documentary locks and have
     validated the complete lot in this same atomic transaction before writing.
     """
+    if len(avaliacoes) > 1:
+        return _gravar_lote(usuario, inventario_id, avaliacoes)
     lote = uuid4()
     resultados = []
     for proposta, rodada, produto, atual in avaliacoes:
@@ -247,6 +261,40 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
             decisao=decisao.pk, operacao=str(registro.pk), lote=str(lote), diferenca=str(registro.diferenca))
         resultados.append(registro)
     return resultados
+
+
+def _gravar_lote(usuario, inventario_id, avaliacoes):
+    from estoque.services.estoque_manual_lote import gravar
+    from .models import EventoInventario
+    lote = uuid4()
+    movimentos = gravar(usuario, [dict(produto=p, antes=a['atual'], depois=a['resultante'],
+        sequencia=a['evidencia']['sequencia'], motivo=pr.justificativa,
+        observacao=f'Conferência {inventario_id}; proposta {pr.pk}; lote {lote}')
+        for pr, r, p, a in avaliacoes])
+    decisoes = [DecisaoAjuste(item=r.item, rodada=r, movimentacao=m['historico'],
+        diferenca=a['diferenca'], justificativa=pr.justificativa, aprovado_por=usuario)
+        for (pr, r, p, a), m in zip(avaliacoes, movimentos)]
+    DecisaoAjuste.objects.bulk_create(decisoes)
+    registros = [AplicacaoAjuste(proposta=pr, decisao=d, usuario=usuario, lote=lote,
+        antes=m['estoque_antes'], diferenca=m['diferenca'], depois=m['estoque_depois'],
+        unidade=a['unidade'], evidencia=dict(preparacao=pr.evidencia,
+        autorizado_por=pr.autorizado_por_id, justificativa=pr.justificativa))
+        for (pr, r, p, a), m, d in zip(avaliacoes, movimentos, decisoes)]
+    AplicacaoAjuste.objects.bulk_create(registros)
+    ids = [pr.pk for pr, r, p, a in avaliacoes]
+    if PropostaAjuste.objects.filter(pk__in=ids, estado='aprovado').update(estado='aplicado') != len(ids):
+        raise ValueError('Transição incompleta das propostas.')
+    for proposta, _, _, _ in avaliacoes:
+        proposta.estado = 'aplicado'
+    EventoAjuste.objects.bulk_create([EventoAjuste(proposta=pr, usuario=usuario, acao='aplicado',
+        dados=dict(operacao=str(reg.pk), lote=str(lote), antes=str(reg.antes),
+        diferenca=str(reg.diferenca), depois=str(reg.depois)))
+        for (pr, r, p, a), reg in zip(avaliacoes, registros)])
+    EventoInventario.objects.bulk_create([EventoInventario(inventario_id=inventario_id,
+        acao='ajuste_aplicado', usuario=usuario, rodada=r, dados=dict(decisao=reg.decisao_id,
+        operacao=str(reg.pk), lote=str(lote), diferenca=str(reg.diferenca)))
+        for (pr, r, p, a), reg in zip(avaliacoes, registros)])
+    return registros
 
 
 def previa_atualizacao(inventario_id, linhas):
@@ -282,23 +330,28 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
         raise ValueError('Seleção parcialmente atualizada. Confira os resultados e confirme uma nova seleção.')
     assinaturas = {e['rodada']: e['assinatura'] for e in entradas}
     avaliacoes = []
-    for rodada, produto in travadas:
-        atual = avaliar(rodada, produto, travar_documentos=True)
-        if (atual['bloqueio'] or atual['estado'] not in ('Pendente de revisão', 'Aprovado')
-                or atual.get('assinatura') != assinaturas[rodada.pk]):
-            raise ValueError(atual['bloqueio'] or 'Dados alterados. Confira os saldos e confirme novamente.')
-        avaliacoes.append((rodada, produto, atual))
+    from .contexto_ajustes import carregar
+    with carregar([r for r, _ in travadas], travar=True) as lote:
+        for rodada, produto in travadas:
+            atual = avaliar(rodada, produto, travar_documentos=True, _lote=lote)
+            if (atual['bloqueio'] or atual['estado'] not in ('Pendente de revisão', 'Aprovado')
+                    or atual.get('assinatura') != assinaturas[rodada.pk]):
+                raise ValueError(atual['bloqueio'] or 'Dados alterados. Confira os saldos e confirme novamente.')
+            avaliacoes.append((rodada, produto, atual))
     # Every product and document is checked before the first write. The same
     # locks remain held through approval, stock movement, audit and commit.
-    preparadas = []
+    preparadas, novas, eventos = [], [], []
     for rodada, produto, atual in avaliacoes:
         proposta = _registrar_decisao(usuario, rodada, atual,
-            observacao or 'Atualização de estoque confirmada pelo gestor.')
+            observacao or 'Atualização de estoque confirmada pelo gestor.', _novas=novas)
         _validar_proposta(proposta, atual)
-        EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao='confirmado_gestor',
+        eventos.append(EventoAjuste(proposta=proposta, usuario=usuario, acao='confirmado_gestor',
             dados=dict(confirmacao_fisica=proposta.confirmacao_id, observacao=observacao,
-                       assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica'))
+                       assinatura=assinaturas[rodada.pk], fluxo='confirmacao_unica')))
         preparadas.append((proposta, rodada, produto, atual))
+    PropostaAjuste.objects.bulk_create(novas)
+    EventoAjuste.objects.bulk_create([EventoAjuste(proposta=p, usuario=usuario, acao='aprovado',
+        dados=dict(evidencia=p.evidencia, justificativa=p.justificativa)) for p in novas] + eventos)
     # Preserve the execution/audit-trigger check that aplicar() performed at
     # this point in the composed flow. It is one cheap check for the whole lot.
     verificar_execucao()
@@ -365,7 +418,10 @@ def preparar_resultado(inventario):
     if rodadas.count() > 500:
         return dict(linhas=[], aptas=[], resumo=dict(aptos=0),
             erro='Mais de 500 produtos: divida a revisão em conferências menores. Aplicação bloqueada.')
-    linhas = [avaliar(r) for r in rodadas.select_related('item__produto').order_by('item__cadastro__nome', 'pk')]
+    from .contexto_ajustes import carregar
+    atuais = list(rodadas.select_related('item__produto').order_by('item__cadastro__nome', 'pk'))
+    with carregar(atuais) as lote:
+        linhas = [avaliar(r, _lote=lote) for r in atuais]
     # Presentation only: an applied balance is historical, never a fresh forecast.
     aplicadas = {a.proposta.rodada_id: a for a in AplicacaoAjuste.objects.filter(
         proposta__rodada_id__in=[l['rodada'].pk for l in linhas if l['estado'] == 'Aplicado'],

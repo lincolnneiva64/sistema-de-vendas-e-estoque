@@ -482,22 +482,27 @@ def conciliar(usuario, rodada_id, movimento_id, referencia):
     return conciliacao
 
 
-def validar_cadeia(rodada, produto, documentos=()):
-    if not itens_incluidos().filter(pk=rodada.item_id).exists():
+def validar_cadeia(rodada, produto, documentos=(), *, _lote=None):
+    if _lote is not None:
+        _lote.conferir(rodada)
+    if not (rodada.item_id in _lote.incluidos if _lote is not None else itens_incluidos().filter(pk=rodada.item_id).exists()):
         raise ValueError("Produto retirado da conferencia.")
-    verificar_observador()
+    if _lote is None:
+        verificar_observador()
+    elif _lote.erro_observador:
+        raise ValueError(_lote.erro_observador)
     if not rodada.ok_em or rodada.encerrada_em:
         raise ValueError("Confirme uma rodada ativa antes da revisão.")
-    if SinalizacaoFisica.objects.filter(rodada__item_id=rodada.item_id, resolvida_em__isnull=True).exists():
+    if (rodada.item_id in _lote.pendentes if _lote is not None else SinalizacaoFisica.objects.filter(rodada__item_id=rodada.item_id, resolvida_em__isnull=True).exists()):
         raise ValueError("Movimentação física sinalizada sem resolução. Revisão ou recontagem necessária.")
     if not produto.ativo or produto.excluido or produto.quantidade is None or snapshot(produto) != rodada.item.cadastro:
         raise ValueError("Produto ou conversão alterado. Solicite nova conferência.")
-    confirmacoes = list(rodada.confirmacoes.order_by("versao_entrada"))
+    confirmacoes = _lote.confirmacoes[rodada.pk] if _lote is not None else list(rodada.confirmacoes.order_by("versao_entrada"))
     primeira = confirmacoes[0] if confirmacoes else rodada
-    movimentos = list(movimentos_relevantes(rodada))
+    movimentos = _lote.movimentos[rodada.item.produto_id] if _lote is not None else list(movimentos_relevantes(rodada))
     proxima, saldo = primeira.sequencia_ok + 1, primeira.esperado
     saldos = {primeira.sequencia_ok: primeira.esperado}
-    conciliados = set(rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).values_list("movimento_id", flat=True))
+    conciliados = _lote.conciliados[rodada.pk] if _lote is not None else set(rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).values_list("movimento_id", flat=True))
     for movimento in movimentos:
         if movimento.sequencia != proxima or movimento.antes != saldo or movimento.depois is None:
             raise ValueError("Histórico descontínuo. Revisão técnica e recontagem necessárias.")
@@ -510,7 +515,7 @@ def validar_cadeia(rodada, produto, documentos=()):
     for confirmacao in confirmacoes:
         if saldos.get(confirmacao.sequencia_ok) != confirmacao.esperado:
             raise ValueError("Referências entre confirmações não conciliadas. Solicite revisão técnica ou recontagem.")
-    atual = sequencia(produto.pk)
+    atual = _lote.sequencias.get(produto.pk, 0) if _lote is not None else sequencia(produto.pk)
     if proxima - 1 != atual or saldo != produto.quantidade:
         raise ValueError("Saldo ou sequência sem conciliação. Solicite recontagem.")
     return atual

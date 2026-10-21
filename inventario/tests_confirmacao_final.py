@@ -1,3 +1,4 @@
+from estoque.services import estoque_manual_lote
 """Final POST and response handling, using fictitious stock on disposable PostgreSQL."""
 import json
 import time
@@ -74,14 +75,14 @@ class ConfirmacaoFinalTests(Fluxo, AjustesFixture, TestCase):
     def test_erro_de_validacao_e_rollback_sem_sucesso(self):
         self.segunda()
         self.preparar()
-        original = ajustes.conferir_ou_ajustar_estoque
+        original = estoque_manual_lote.conferir_movimento
         chamadas = []
         def falhar(*args, **kwargs):
             chamadas.append(args)
             if len(chamadas) == 2:
                 raise ValueError('Falha fictícia no segundo produto')
             return original(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=falhar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=falhar):
             resposta = self.client.post(self.painel, self.dados, **HEADERS)
         self.assertEqual(resposta.status_code, 400)
         self.assertEqual(resposta.json()['erro'], 'Falha fictícia no segundo produto')

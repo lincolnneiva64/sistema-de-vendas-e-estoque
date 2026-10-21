@@ -1,3 +1,4 @@
+from estoque.services import estoque_manual_lote
 """Synthetic documents and stock; never operational IDs or fixed production data."""
 from decimal import Decimal
 from unittest.mock import patch
@@ -140,14 +141,14 @@ class ConciliacaoDocumentalTests(AjustesFixture, TestCase):
     def test_lote_com_documento_e_falha_reverte_integralmente(self):
         self.vender()
         p1 = self.aprovar(); p2 = self.aprovar(self.segunda())
-        original = ajustes.conferir_ou_ajustar_estoque
+        original = estoque_manual_lote.conferir_movimento
         chamadas = []
         def falhar(*args, **kwargs):
             chamadas.append(1)
             if len(chamadas)==2:
                 raise ValueError('Falha integral fictícia')
             return original(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=falhar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=falhar):
             with self.assertRaises(ValueError):
                 ajustes.aplicar(self.usuario,self.inv.pk,ajustes.previa_aplicacao(self.inv.pk,[p1,p2]),True)
         self.produto.refresh_from_db()

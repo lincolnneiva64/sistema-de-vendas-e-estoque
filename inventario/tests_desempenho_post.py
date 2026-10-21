@@ -1,3 +1,4 @@
+from estoque.services import estoque_manual_lote
 """Synthetic POST benchmark. Real transactions on the guarded disposable PG only."""
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -106,7 +107,7 @@ class SegurancaPostTests(DadosPost, TransactionTestCase):
 
     def test_valida_todos_antes_de_gravar_e_preserva_auditoria(self):
         oks = list(ConfirmacaoContagem.objects.order_by('pk').values())
-        original_avaliar, original_gravar = ajustes.avaliar, ajustes.conferir_ou_ajustar_estoque
+        original_avaliar, original_gravar = ajustes.avaliar, estoque_manual_lote.conferir_movimento
         avaliadas = []
         def avaliar(*args, **kwargs):
             self.assertFalse(PropostaAjuste.objects.exists())
@@ -117,7 +118,7 @@ class SegurancaPostTests(DadosPost, TransactionTestCase):
             self.assertEqual(len(avaliadas), 7)
             return original_gravar(*args, **kwargs)
         with patch.object(ajustes, 'avaliar', side_effect=avaliar), \
-                patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=gravar):
+                patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=gravar):
             resposta = self.enviar()
         self.assertEqual(resposta.status_code, 200)
         self.assertEqual(oks, list(ConfirmacaoContagem.objects.order_by('pk').values()))
@@ -139,21 +140,21 @@ class SegurancaPostTests(DadosPost, TransactionTestCase):
         self.sem_aplicacao()
 
     def test_falha_no_setimo_produto_reverte_lote_inteiro(self):
-        original = ajustes.conferir_ou_ajustar_estoque
+        original = estoque_manual_lote.conferir_movimento
         chamadas = []
         def gravar(*args, **kwargs):
             chamadas.append(args[0])
             if len(chamadas) == 7:
                 raise ValueError('Falha fictícia na sétima gravação')
             return original(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=gravar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=gravar):
             resposta = self.enviar()
         self.assertEqual(resposta.status_code, 400)
         self.assertEqual(len(chamadas), 7)
         self.sem_aplicacao()
 
     def test_falha_auditoria_reverte_movimento(self):
-        with patch.object(AplicacaoAjuste.objects, 'create', side_effect=RuntimeError('Auditoria fictícia indisponível')):
+        with patch.object(AplicacaoAjuste.objects, 'bulk_create', side_effect=RuntimeError('Auditoria fictícia indisponível')):
             with self.assertRaises(RuntimeError):
                 self.enviar()
         self.sem_aplicacao()
