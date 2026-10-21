@@ -22593,6 +22593,21 @@ def gravar_venda(request):
         resultado = criar_ou_atualizar_venda(usuario=request.user, dados=dados)
     except ErroGravarVenda as exc:
         return erro_gravar_venda(exc.mensagem, exc.status, exc.extras)
+    except Exception:
+        logger.exception(
+            "Falha inesperada ao gravar venda | venda_id=%r",
+            dados.get("venda_id"),
+        )
+        return JsonResponse(
+            {
+                "sucesso": False,
+                "mensagem": (
+                    "O servidor encontrou um erro ao processar a venda. "
+                    "Consulte a nota antes de tentar novamente."
+                ),
+            },
+            status=500,
+        )
 
     venda = resultado.venda
     visualizar_url = reverse("estoque:venda_detalhe", args=[venda.id])
