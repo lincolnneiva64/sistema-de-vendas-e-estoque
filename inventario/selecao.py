@@ -51,6 +51,7 @@ def salvar_selecao(usuario, inventario_id, selecionados, versao, motivo):
     from . import services
     services.permitir(usuario, "gerenciar_inventario")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    services.exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         raise ValueError("Conferência finalizada. A seleção histórica não pode ser alterada.")
     try:

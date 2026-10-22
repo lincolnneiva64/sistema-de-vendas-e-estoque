@@ -31,11 +31,18 @@ def evento(inventario, acao, usuario=None, rodada=None, acesso=None, **dados):
 def bloquear_inventario_acesso(acesso_id):
     inventario_id = AcessoInventario.objects.values_list("inventario_id", flat=True).get(pk=acesso_id)
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    exigir_nao_cancelada(inventario)
     acesso = AcessoInventario.objects.select_for_update().get(pk=acesso_id)
     return inventario, acesso
 
 
+def exigir_nao_cancelada(inventario):
+    if inventario.cancelada_em:
+        raise PermissionDenied("Conferência cancelada. Disponível apenas para consulta.")
+
+
 def validar_escrita(inventario, acesso, token_hash=None):
+    exigir_nao_cancelada(inventario)
     validar_acesso(acesso)
     if token_hash is not None and not secrets.compare_digest(acesso.token_hash, token_hash):
         raise ErroAcesso("credencial_renovada", "Acesso renovado. Abra o novo link em outra aba deste navegador e volte para verificar o acesso nesta tela.")
@@ -114,6 +121,7 @@ def distribuir_participantes(usuario, inventario_id, rodada_ids, funcionarios, h
     from .selecao import salvar_selecao
     permitir(usuario, "gerenciar_inventario")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    exigir_nao_cancelada(inventario)
     try:
         versao = int(versao)
     except (TypeError, ValueError):
@@ -171,6 +179,7 @@ def distribuir_produtos(usuario, inventario_id, funcionario_id, rodada_ids, hora
 def gerar_acesso(usuario, inventario_id, funcionario_id, rodada_ids, horas=24):
     permitir(usuario, "gerenciar_inventario")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         raise ValueError("Reabra a conferência antes de distribuir novas contagens.")
     funcionario = Funcionario.objects.get(pk=funcionario_id, ativo=True)
@@ -223,7 +232,7 @@ def validar_acesso(acesso):
 @transaction.atomic
 def revogar_acesso(usuario, acesso_id):
     permitir(usuario, "gerenciar_inventario")
-    acesso = AcessoInventario.objects.select_for_update().get(pk=acesso_id)
+    inventario, acesso = bloquear_inventario_acesso(acesso_id)
     if acesso.revogado_em is None:
         acesso.revogado_em = timezone.now()
         acesso.save(update_fields=["revogado_em"])
@@ -363,6 +372,7 @@ def estado_conclusao(inventario, *, exigir_estrutura=False):
 
 def concluir_se_pronta(inventario, *, usuario=None, acesso=None, versao=None, origem="envio_funcionario"):
     """Compartilhada pelos dois fluxos, dentro da transação e lock existentes."""
+    exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         return []
     rodadas, pendencias = estado_conclusao(inventario)
@@ -428,6 +438,7 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
 
 
 def abrir_ciclo(inventario, usuario, motivo):
+    exigir_nao_cancelada(inventario)
     anterior = {"ciclo": inventario.ciclo, "finalizada_em": inventario.finalizada_em.isoformat() if inventario.finalizada_em else None,
                 "acesso": inventario.finalizada_por_acesso_id}
     inventario.ciclo += 1
@@ -443,6 +454,7 @@ def reabrir_conferencia(usuario, inventario_id, motivo):
     if not str(motivo or "").strip():
         raise ValueError("Justifique a reabertura.")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    exigir_nao_cancelada(inventario)
     if not inventario.finalizada_em:
         raise ValueError("A conferência já está em andamento.")
     if DecisaoAjuste.objects.filter(item__inventario=inventario).exists():
@@ -460,6 +472,7 @@ def recontar(usuario, rodada_id, motivo):
         raise ValueError("Justifique a reabertura ou recontagem.")
     original = RodadaContagem.objects.get(pk=rodada_id)
     inventario = Inventario.objects.select_for_update().get(pk=original.item.inventario_id)
+    exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         abrir_ciclo(inventario, usuario, motivo)
     item = ItemInventario.objects.select_for_update().get(pk=original.item_id)
@@ -495,7 +508,7 @@ def conciliar(usuario, rodada_id, movimento_id, referencia):
     permitir(usuario, "revisar_inventario")
     if not str(referencia).strip():
         raise ValueError("Informe documento e evidência da movimentação física após o OK.")
-    Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id)
+    exigir_nao_cancelada(Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id))
     rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
     if not rodada.ok_em or rodada.encerrada_em or DecisaoAjuste.objects.filter(item=rodada.item).exists():
         raise ValueError("Rodada indisponível para conciliação.")
@@ -578,7 +591,7 @@ def sinalizar_fisico(rodada_id, descricao, chave, *, acesso_id=None, usuario=Non
             raise PermissionDenied("Produto fora desta atribuição.")
     else:
         permitir(usuario, "revisar_inventario")
-        Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id)
+        exigir_nao_cancelada(Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id))
     referencia = RodadaContagem.objects.get(pk=rodada_id)
     item = ItemInventario.objects.select_for_update().get(pk=referencia.item_id)
     if not itens_incluidos().filter(pk=item.pk).exists():
@@ -603,7 +616,7 @@ def resolver_sinalizacao(usuario, sinalizacao_id, evidencia):
     if not str(evidencia or "").strip():
         raise ValueError("Documente a verificação física e a resolução. Sem evidência, solicite recontagem.")
     referencia = SinalizacaoFisica.objects.select_related("rodada").get(pk=sinalizacao_id)
-    Inventario.objects.select_for_update().get(pk=referencia.rodada.item.inventario_id)
+    exigir_nao_cancelada(Inventario.objects.select_for_update().get(pk=referencia.rodada.item.inventario_id))
     item = ItemInventario.objects.select_for_update().get(pk=referencia.rodada.item_id)
     sinal = SinalizacaoFisica.objects.select_for_update().get(pk=sinalizacao_id)
     if sinal.resolvida_em is None:
@@ -619,7 +632,7 @@ def revisar(usuario, rodada_id, motivo):
     permitir(usuario, "revisar_inventario")
     if not str(motivo).strip():
         raise ValueError("Documente a correspondência física no OK e a ausência de lançamentos pendentes.")
-    Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id)
+    exigir_nao_cancelada(Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id))
     rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
     if DecisaoAjuste.objects.filter(item=rodada.item).exists():
         raise ValueError("Ajuste já aplicado.")
@@ -640,3 +653,27 @@ def aprovar(usuario, rodada_id, justificativa):
     if not getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False):
         raise ValueError("Aplicação de ajustes desabilitada. Aguarde revisão e autorização posterior.")
     raise ValueError("Fluxo antigo desativado. Use Ajustes de estoque: aprove a proposta e confirme a aplicação separadamente.")
+
+
+@transaction.atomic
+def cancelar_conferencia(usuario, inventario_id):
+    permitir(usuario, "gerenciar_inventario")
+    inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
+    if inventario.cancelada_em:
+        return inventario
+    if inventario.finalizada_em:
+        raise ValueError("Conferência já finalizada. O cancelamento é permitido somente em andamento.")
+    from .models import AplicacaoAjuste, PropostaAjuste
+    if (DecisaoAjuste.objects.filter(item__inventario=inventario).exists()
+            or AplicacaoAjuste.objects.filter(proposta__rodada__item__inventario=inventario).exists()
+            or PropostaAjuste.objects.filter(rodada__item__inventario=inventario, estado="aplicado").exists()):
+        raise ValueError("Cancelamento impedido: existem ajustes de estoque já aplicados. Nenhum ajuste será desfeito.")
+    agora = timezone.now()
+    revogados = inventario.acessos.filter(revogado_em__isnull=True).update(revogado_em=agora)
+    inventario.cancelada_em = agora
+    inventario.cancelada_por = usuario
+    inventario.versao += 1
+    inventario.save(update_fields=["cancelada_em", "cancelada_por", "versao"])
+    evento(inventario, "conferencia_cancelada", usuario, situacao_anterior="em_andamento",
+           acessos_revogados=revogados, cancelada_em=agora.isoformat())
+    return inventario

@@ -18,9 +18,10 @@
 <p class="muted">Será usado apenas o critério escolhido. A seleção e as regras de conversão ficam congeladas.</p><button>Criar conferência</button></form></details>{% endif %}
 <section aria-labelledby="titulo-em-andamento" id="conferencias-em-andamento"><h2 id="titulo-em-andamento">Conferências em andamento</h2>
 {% for inventario in em_andamento %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência em andamento.</p>{% endfor %}</section>
-<section aria-labelledby="titulo-historico" id="historico-conferencias"><h2 id="titulo-historico">Histórico de conferências finalizadas</h2>
-{% for inventario in finalizados %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência finalizada.</p>{% endfor %}</section>
+<section aria-labelledby="titulo-historico" id="historico-conferencias"><h2 id="titulo-historico">Histórico de conferências</h2>
+{% for inventario in finalizados %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência no histórico.</p>{% endfor %}</section>
 {% endtimezone %}{% endlanguage %}{% endblock %}{% block head %}<style>
 #resumo-conferencias{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0 8px}#resumo-conferencias .card{margin:0;padding:12px 14px}#resumo-conferencias span{font-size:.9rem}
 .conferencia-lista{overflow-wrap:anywhere}.conferencia-lista h3{font-size:1.15rem;margin:8px 0 12px}.conferencia-lista p{margin:6px 0}.conferencia-andamento{border-left:4px solid #18796c}.conferencia-lista .situacao{font-weight:650;color:#17634f}#historico-conferencias{margin-top:36px;border-top:1px solid #c4d5da;padding-top:16px}
+.conferencia-cancelada{border-left:4px solid #87969b}.conferencia-cancelada .situacao{color:#52696f}
 </style>{% endblock %}{% block scripts %}{% load static %}<script src="{% static 'inventario/selecao.js' %}" defer></script>{% endblock %}

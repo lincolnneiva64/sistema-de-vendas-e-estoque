@@ -11,6 +11,8 @@ class Inventario(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     ciclo = models.PositiveIntegerField(default=1)
     versao = models.PositiveIntegerField(default=0)
+    cancelada_em = models.DateTimeField(null=True, blank=True)
+    cancelada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="inventarios_cancelados")
     finalizada_em = models.DateTimeField(null=True, blank=True)
     finalizacao_versao = models.PositiveIntegerField(null=True)
     finalizada_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.PROTECT, related_name="inventarios_finalizados")

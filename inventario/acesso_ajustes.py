@@ -15,12 +15,14 @@ def contexto(usuario, inventario):
 
 def iniciar(usuario, inventario):
     services.permitir(usuario, 'aprovar_ajuste')
+    services.exigir_nao_cancelada(inventario)
     if not inventario.finalizada_em:
         raise PermissionDenied('Esta conferência não está no histórico.')
     return signing.dumps(contexto(usuario, inventario), salt=SALT, compress=True)
 
 
 def exigir(request, inventario):
+    services.exigir_nao_cancelada(inventario)
     if not inventario.finalizada_em:
         return ''
     services.permitir(request.user, 'aprovar_ajuste')

@@ -59,7 +59,7 @@ def resumo_inicial():
     # Current rounds only: requesting a recount must replace, not add to, its
     # former round in these totals. Never confirms or reconciles from a GET.
     ultima = RodadaContagem.objects.filter(item_id=OuterRef("item_id")).order_by("-numero").values("pk")[:1]
-    atuais = rodadas_incluidas().filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True)
+    atuais = rodadas_incluidas().filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True, item__inventario__cancelada_em__isnull=True)
     return atuais.aggregate(
         conferencias=Count("item__inventario_id", distinct=True, filter=Q(item__inventario__finalizada_em__isnull=True)),
         aguardando_ok=Count("pk", filter=Q(ok_em__isnull=True)),
@@ -84,8 +84,8 @@ def lista(request):
             erro = str(exc)
     produtos = services.produtos_disponiveis_para_inventario().order_by("nome")
     inventarios = Inventario.objects.order_by('-criado_em', '-pk')
-    em_andamento = list(inventarios.filter(finalizada_em__isnull=True))
-    finalizados = list(inventarios.filter(finalizada_em__isnull=False))
+    em_andamento = list(inventarios.filter(finalizada_em__isnull=True, cancelada_em__isnull=True))
+    finalizados = list(inventarios.filter(Q(finalizada_em__isnull=False) | Q(cancelada_em__isnull=False)))
     preparar_titulos(em_andamento + finalizados)
     return render(request, "inventario/lista.html", {
         "em_andamento": em_andamento,
@@ -163,6 +163,8 @@ def detalhe(request, inventario_id):
             return confirmacao_ajustes.erro(request, exc, 403)
         raise
     inventario = get_object_or_404(Inventario, pk=inventario_id)
+    if inventario.cancelada_em and request.method == "POST":
+        raise PermissionDenied("Conferência cancelada. Disponível apenas para consulta.")
     mensagens = confirmacao_ajustes.mensagens_validas(request, inventario_id)
     if request.method == 'GET' and confirmacao_ajustes.solicitada(request) and request.GET.get('resultado_atualizacao'):
         try:
@@ -276,7 +278,7 @@ def detalhe(request, inventario_id):
         linha["participa_marcado"] = not erro or request.POST.get("acao") != "acesso" or linha["participante_protegido"] or str(rodada.pk) in request.POST.getlist("rodadas")
         linha["funcionario_escolhido"] = request.POST.get("funcionario_" + str(rodada.pk), "") if erro else ""
     prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
-              and not inventario.finalizada_em
+              and not inventario.finalizada_em and not inventario.cancelada_em
               and request.user.has_perm("inventario.aprovar_ajuste"))
     atualizacao = (ajustes.preparar_resultado(inventario) if prever
                    else ajustes.projetar_resultado(linhas))
@@ -291,7 +293,7 @@ def detalhe(request, inventario_id):
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,
-        "modo_historico": bool(inventario.finalizada_em),
+        "modo_historico": bool(inventario.finalizada_em or inventario.cancelada_em),
         "revisao_historica_disponivel": any(l['diferenca'] is not None and l['diferenca'] != 0
             and not l['decisao'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
@@ -300,9 +302,9 @@ def detalhe(request, inventario_id):
         "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
         "rodadas_disponiveis": rodadas_incluidas(inventario).filter(encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),
-        "pode_gerenciar": request.user.has_perm("inventario.gerenciar_inventario"),
-        "pode_revisar": request.user.has_perm("inventario.revisar_inventario"),
-        "pode_aprovar": request.user.has_perm("inventario.aprovar_ajuste")})
+        "pode_gerenciar": not inventario.cancelada_em and request.user.has_perm("inventario.gerenciar_inventario"),
+        "pode_revisar": not inventario.cancelada_em and request.user.has_perm("inventario.revisar_inventario"),
+        "pode_aprovar": not inventario.cancelada_em and request.user.has_perm("inventario.aprovar_ajuste")})
 
 
 def csv_seguro(valor):
@@ -492,3 +494,20 @@ def previa_conversao(request, rodada_id):
         return JsonResponse({"total": format(total, ".3f").replace(".", ",")})
     except ValueError as exc:
         return JsonResponse({"erro": str(exc)}, status=400)
+
+
+@privado
+@csrf_protect
+@require_POST
+def cancelar(request, inventario_id):
+    services.permitir(request.user, "gerenciar_inventario")
+    get_object_or_404(Inventario, pk=inventario_id)
+    if request.POST.get("confirmacao") != "sim":
+        return HttpResponse("Confirme o cancelamento.", status=400)
+    try:
+        services.cancelar_conferencia(request.user, inventario_id)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Conferência cancelada. Histórico preservado e estoque inalterado.")
+    return redirect("inventario:detalhe", inventario_id)

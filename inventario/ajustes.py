@@ -103,7 +103,8 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
 
 def bloquear(inventario_id, rodada_ids):
     """Consistent lock order, including product locks held through commit."""
-    Inventario.objects.select_for_update().get(pk=inventario_id)
+    from .services import exigir_nao_cancelada
+    exigir_nao_cancelada(Inventario.objects.select_for_update().get(pk=inventario_id))
     verificar_limite(inventario_id)
     referencias = list(rodadas_incluidas(inventario_id).filter(pk__in=rodada_ids).values('pk', 'item_id', 'item__produto_id'))
     if len(referencias) != len(set(rodada_ids)):
@@ -195,7 +196,8 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     dados = ler_token(previa)
     if dados.get('tipo') != 'aplicacao' or dados.get('inventario') != inventario_id or not dados.get('propostas'):
         raise ValueError('Prévia de aplicação inválida.')
-    Inventario.objects.select_for_update().get(pk=inventario_id)
+    from .services import exigir_nao_cancelada
+    exigir_nao_cancelada(Inventario.objects.select_for_update().get(pk=inventario_id))
     verificar_limite(inventario_id)
     propostas = list(PropostaAjuste.objects.filter(pk__in=dados['propostas'],
         rodada__item__inventario_id=inventario_id).order_by('rodada_id'))
