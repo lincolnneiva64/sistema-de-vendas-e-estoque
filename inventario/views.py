@@ -1,4 +1,5 @@
 import csv
+from collections import defaultdict
 import secrets
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -10,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 from django.middleware.csrf import get_token
-from django.db.models import Count, F, Q, OuterRef, Subquery
+from django.db.models import Count, F, Q, OuterRef, Subquery, Prefetch
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -96,21 +97,41 @@ def lista(request):
 
 def linhas_revisao(inventario):
     linhas = []
-    for item in itens_incluidos(inventario).select_related("produto").order_by("cadastro__nome", "pk"):
-        rodada = item.rodadas.order_by("-numero").first()
+    itens = list(itens_incluidos(inventario).select_related("produto").prefetch_related(
+        Prefetch("rodadas", queryset=RodadaContagem.objects.select_related(
+            "atribuicao__acesso", "revisao_por").prefetch_related("confirmacoes").order_by("numero"),
+            to_attr="rodadas_revisao"),
+        "decisao",
+    ).order_by("cadastro__nome", "pk"))
+    sinais_por_item, eventos_por_item = defaultdict(list), defaultdict(list)
+    for sinal in SinalizacaoFisica.objects.filter(rodada__item__in=itens).select_related(
+            "rodada", "acesso", "usuario", "resolvida_por").order_by("criado_em"):
+        sinais_por_item[sinal.rodada.item_id].append(sinal)
+    for registro in inventario.eventos.filter(rodada__item__in=itens).select_related(
+            "rodada", "usuario", "acesso").order_by("criado_em"):
+        eventos_por_item[registro.rodada.item_id].append(registro)
+    for item in itens:
+        rodada = item.rodadas_revisao[-1]
         conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).select_related("responsavel")} if rodada.ok_em else {}
-        todos_movimentos = list(services.movimentos_relevantes(rodada))
-        sinalizacoes = list(SinalizacaoFisica.objects.filter(rodada__item=item).select_related("acesso", "usuario", "resolvida_por").order_by("criado_em"))
+        todos_movimentos = list(services.movimentos_relevantes(rodada)) if rodada.ok_em or rodada.confirmacoes.all() else []
+        sinalizacoes = sinais_por_item[item.pk]
         diferenca = rodada.contado_base - rodada.esperado if rodada.ok_em else None
         valor = (diferenca * item.custo_base).quantize(Decimal("0.01")) if diferenca is not None and item.custo_base is not None else None
         inseguro = False
         try:
+            # There is no chain to review before an OK. Keep all validation
+            # for confirmed rounds, including observer and stock checks.
+            if not rodada.ok_em:
+                raise ValueError("Confirme uma rodada ativa antes da revisão.")
             services.validar_cadeia(rodada, item.produto)
             bloqueio = "Revisão física necessária" if rodada.revisao_sequencia != services.sequencia(item.produto_id) else "Revisão registrada"
         except ValueError as exc:
             bloqueio = str(exc)
             inseguro = rodada.ok_em is not None
-        decisao = DecisaoAjuste.objects.filter(item=item).first()
+        try:
+            decisao = item.decisao
+        except DecisaoAjuste.DoesNotExist:
+            decisao = None
         situacao = "Aguardando OK" if not rodada.ok_em else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
         if rodada.numero > 1 and not rodada.ok_em:
             situacao = "Recontagem"
@@ -128,7 +149,7 @@ def linhas_revisao(inventario):
                 "quantidade": quantidade(m.depois - m.antes, item.cadastro, diferenca=True) if m.antes is not None and m.depois is not None else "Saldo desconhecido",
                 "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
                 "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
-            "historico": item.rodadas.prefetch_related("confirmacoes").order_by("numero"), "eventos": inventario.eventos.filter(rodada__item=item).select_related("usuario", "acesso").order_by("criado_em")})
+            "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
     return sorted(linhas, key=lambda l: (0 if l["destaque"] != "neutro" else 1, l["item"].cadastro["nome"]))
 
 

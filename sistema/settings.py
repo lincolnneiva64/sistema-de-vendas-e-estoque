@@ -275,3 +275,28 @@ LOCAL_SALES_LOOPBACK = os.environ.get("_LOCAL_SALES_LOOPBACK") == "1" and not an
 # Render terminates TLS at its edge; trust its scheme header only in that runtime.
 if os.environ.get("RENDER", "").lower() == "true":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Unexpected request failures must remain diagnosable with DEBUG=False.
+# One stderr handler, no propagation to parent handlers or admin email.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "safe_request_error": {"()": "sistema.request_logging.SafeRequestErrorFormatter"},
+    },
+    "handlers": {
+        "request_error_stderr": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+            "level": "ERROR",
+            "formatter": "safe_request_error",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["request_error_stderr"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
