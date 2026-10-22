@@ -151,13 +151,15 @@ class MedicaoLoteTests(TransactionTestCase):
         self.assertEqual(len(rodadas),n)
         self.ajustar_ids=[r.item.produto_id for r in rodadas[:a]]
         self.funcionarios=[]
-        for grupo in (rodadas[:n//2],rodadas[n//2:]):
-            f=Funcionario.objects.create(nome=f'Funcionário fictício {len(self.funcionarios)}')
-            self.inv.refresh_from_db()
-            r=self.medir('distribuir',lambda:self.admin.post(self.detalhe,dict(acao='acesso',funcionario=f.pk,
-                rodadas=[r.pk for r in grupo],horas=24,versao=self.inv.versao,manter_nao_selecionados='sim')))
-            self.assertEqual(r.status_code,200)
-            token=r.context['link'].rstrip('/').split('/')[-1]
+        grupos=(rodadas[:n//2],rodadas[n//2:])
+        funcionarios=[Funcionario.objects.create(nome=f'Funcionário fictício {i}') for i in range(2)]
+        dados=dict(acao='acesso',rodadas=[r.pk for r in rodadas],horas=24,versao=self.inv.versao)
+        dados.update({f'funcionario_{r.pk}':f.pk for grupo,f in zip(grupos,funcionarios) for r in grupo})
+        resposta=self.medir('distribuir',lambda:self.admin.post(self.detalhe,dados))
+        self.assertEqual(resposta.status_code,200)
+        links=[resposta.context['link']]+[l['link'] for l in resposta.context['links_adicionais']]
+        for grupo,link in zip(grupos,links):
+            token=link.rstrip('/').split('/')[-1]
             cliente=Client()
             self.assertEqual(cliente.post(reverse('inventario:convite',args=[token])).status_code,302)
             mobile=self.medir('abrir_mobile',lambda:cliente.get(reverse('inventario:mobile'),HTTP_ACCEPT='application/json'))

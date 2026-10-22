@@ -8,17 +8,18 @@ from .tests_selecao_explicita import DadosSelecao
 
 
 class DistribuicaoEscopoTests(DadosSelecao, TestCase):
-    def distribuir(self, indices, manter=False, funcionario=None, versao=None):
+    def distribuir(self, indices, funcionario=None, versao=None):
         self.inv.refresh_from_db()
         return services.distribuir_produtos(self.user, self.inv.pk,
             (funcionario or self.funcionario).pk, [self.rodadas[n].pk for n in indices], 24,
-            self.inv.versao if versao is None else versao, manter)
+            self.inv.versao if versao is None else versao)
 
     def test_padrao_retira_na_distribuicao_e_finaliza_sem_pendencias(self):
         self.client.force_login(self.user)
         url = reverse("inventario:detalhe", args=[self.inv.pk])
         antes = self.client.get(url)
-        self.assertContains(antes, "Manter produtos não selecionados para outra distribuição")
+        self.assertNotContains(antes, "Manter produtos não selecionados para outra distribuição")
+        self.assertContains(antes, "Participantes e funcionários")
         self.assertContains(antes, 'id="form-atribuicao"')
         resposta = self.client.post(reverse("inventario:detalhe", args=[self.inv.pk]), {
             "acao": "acesso", "funcionario": self.funcionario.pk, "versao": self.inv.versao,
@@ -48,14 +49,17 @@ class DistribuicaoEscopoTests(DadosSelecao, TestCase):
         for participante in self.produtos[:2]:
             self.assertIn(participante.nome, csv)
 
-    def test_reserva_multiplos_funcionarios_preserva_oks_envios(self):
-        ana, _ = self.distribuir([0], manter=True)
+    def test_multiplos_funcionarios_preserva_oks_envios(self):
+        gerados = services.distribuir_participantes(self.user, self.inv.pk,
+            [r.pk for r in self.rodadas[:2]],
+            {str(self.rodadas[0].pk): self.funcionario.pk, str(self.rodadas[1].pk): self.outro.pk}, 24, self.inv.versao)
+        ana, _ = gerados[0]
+        bruno, _ = gerados[1]
         self.ok(ana, 0)
         self.assertIsNone(self.enviar(ana).finalizada_em)
         ana.refresh_from_db()
         envio = ana.enviada_em
         antes = list(self.itens[0].rodadas.values())
-        bruno, _ = self.distribuir([1], funcionario=self.outro)
         self.assertEqual(set(itens_incluidos(self.inv).values_list("pk", flat=True)), {i.pk for i in self.itens[:2]})
         self.assertEqual(list(self.itens[0].rodadas.values()), antes)
         ana.refresh_from_db()
@@ -63,12 +67,12 @@ class DistribuicaoEscopoTests(DadosSelecao, TestCase):
         self.ok(bruno, 1)
         self.assertIsNotNone(self.enviar(bruno).finalizada_em)
 
-    def test_reserva_sem_nova_atribuicao_continua_pendente(self):
-        acesso, _ = self.distribuir([0], manter=True)
+    def test_desmarcados_nao_impedem_conclusao(self):
+        acesso, _ = self.distribuir([0])
         self.ok(acesso, 0)
-        self.assertIsNone(self.enviar(acesso).finalizada_em)
-        self.assertEqual(itens_incluidos(self.inv).count(), 3)
-        self.assertFalse(EventoInventario.objects.filter(acao=RETIRADO).exists())
+        self.assertIsNotNone(self.enviar(acesso).finalizada_em)
+        self.assertEqual(itens_incluidos(self.inv).count(), 1)
+        self.assertEqual(EventoInventario.objects.filter(acao=RETIRADO).count(), 2)
 
     def test_evidencia_no_nao_selecionado_reverte_distribuicao_inteira(self):
         RodadaContagem.objects.filter(pk=self.rodadas[2].pk).update(embalagens=0)

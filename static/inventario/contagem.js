@@ -46,6 +46,12 @@ const produtosPendentes = () => [...document.querySelectorAll('form.contagem')].
 let navegandoPendencias = false;
 const proximaPendencia = document.querySelector('#proxima-pendencia');
 function atualizarPendencias() {
+    const formularios = [...document.querySelectorAll('form.contagem')];
+    const conferidos = formularios.filter(form => form.dataset.confirmado === 'true'
+        && camposContagem(form).every(campo => campo.value.trim() && campo.validity.valid)).length;
+    const progresso = document.querySelector('#progresso-contagem');
+    if (progresso) progresso.textContent = conferidos + ' de ' + formularios.length
+        + ' conferidos — faltam ' + (formularios.length - conferidos);
     if (!proximaPendencia) return;
     const pendentes = produtosPendentes();
     proximaPendencia.hidden = !navegandoPendencias || !pendentes.length || conferenciaBloqueada;

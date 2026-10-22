@@ -246,7 +246,7 @@ class SelecaoBrowserTests(DadosSelecao, StaticLiveServerTestCase):
                     self.assertFalse(tab.evaluate('!!document.getElementById("form-selecao-participantes")'))
                     tab.evaluate('document.getElementById("distribuicao").open=true;document.getElementById("distribuicao").scrollIntoView({block:"start",behavior:"instant"});true')
                     if largura == 1280:
-                        self.assertFalse(tab.evaluate('document.querySelector("[name=manter_nao_selecionados]").checked'))
+                        self.assertFalse(tab.evaluate('!!document.querySelector("[name=manter_nao_selecionados]")'))
                         selecionadas = json.dumps([r.pk for r in self.rodadas[:2]])
                         tab.evaluate('document.querySelector("[name=funcionario]").value="'+str(self.funcionario.pk)+'";document.querySelectorAll("[name=rodadas]").forEach(c=>c.checked='+selecionadas+'.includes(Number(c.value)));true')
                     if largura == 1280:

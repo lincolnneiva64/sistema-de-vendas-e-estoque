@@ -1,0 +1,20 @@
+{% load l10n %}
+{% if pode_gerenciar %}<details class="card" id="distribuicao" {% if not acessos and rodadas_disponiveis and not inventario.finalizada_em %}open{% endif %}>
+<summary>Participantes e funcionários <span class="muted">· {{ resumo_painel.total }} participantes salvos</span></summary>
+{% if inventario.finalizada_em %}<p>Conferência finalizada. Participantes e contagens preservados.</p>
+{% elif not rodadas_disponiveis %}<p>Todos os produtos já estão atribuídos. Os links e as contagens existentes estão preservados.</p>
+{% else %}<form method="post" id="form-atribuicao" data-processamento>{% csrf_token %}
+<input type="hidden" name="acao" value="acesso"><input type="hidden" name="versao" value="{{ inventario.versao|unlocalize }}">
+<p>Marque os participantes desta conferência e indique seus funcionários. Produtos desmarcados ficam fora desta conferência e continuam disponíveis no estoque.</p>
+<div class="grid"><label>Funcionário padrão<select name="funcionario"><option value="">Selecione</option>{% for funcionario in funcionarios %}<option value="{{ funcionario.pk|unlocalize }}" {% if funcionario_padrao == funcionario.pk|stringformat:'s' %}selected{% endif %}>{{ funcionario.nome }}</option>{% endfor %}</select></label>
+<label>Validade dos novos links em horas<input name="horas" type="number" min="1" max="168" value="24" required></label></div>
+<label><input type="checkbox" id="selecionar-todos"> Selecionar todos os produtos disponíveis</label>
+{% for linha in linhas %}<div class="participante-selecao">
+<label><input type="checkbox" name="rodadas" value="{{ linha.rodada.pk|unlocalize }}" {% if linha.participa_marcado %}checked{% endif %} {% if linha.participante_protegido %}disabled{% endif %}> {{ linha.item.cadastro.nome }}</label>
+{% if linha.participante_protegido %}<input type="hidden" name="rodadas" value="{{ linha.rodada.pk|unlocalize }}"><p class="muted">Participação protegida: atribuição ou histórico existente.</p>{% endif %}
+{% if linha.rodada.atribuicao %}<p>Funcionário: {{ linha.rodada.atribuicao.acesso.funcionario_nome }} · Link preservado</p>
+{% else %}<label>Funcionário deste produto<select name="funcionario_{{ linha.rodada.pk|unlocalize }}"><option value="">Usar funcionário padrão</option>{% for funcionario in funcionarios %}<option value="{{ funcionario.pk|unlocalize }}" {% if linha.funcionario_escolhido == funcionario.pk|stringformat:'s' %}selected{% endif %}>{{ funcionario.nome }}</option>{% endfor %}</select></label>{% endif %}
+</div>{% endfor %}
+<p id="total-selecao" role="status"></p>
+<button id="confirmar-atribuicao" data-processando="Salvando participantes…">Salvar participantes e gerar links</button><p class="mensagem" data-feedback role="status" aria-live="polite"></p>
+</form>{% endif %}</details>{% endif %}

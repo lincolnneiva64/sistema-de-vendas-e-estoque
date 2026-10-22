@@ -109,9 +109,8 @@ def criar_inventario(usuario, titulo=None, criterio=None, selecionados=None):
 
 
 @transaction.atomic
-def distribuir_produtos(usuario, inventario_id, funcionario_id, rodada_ids, horas, versao,
-                        manter_nao_selecionados=False):
-    """A confirmação da distribuição define expressamente seu escopo."""
+def distribuir_participantes(usuario, inventario_id, rodada_ids, funcionarios, horas, versao):
+    """Save the single participant list before creating any employee links."""
     from .selecao import salvar_selecao
     permitir(usuario, "gerenciar_inventario")
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
@@ -121,21 +120,51 @@ def distribuir_produtos(usuario, inventario_id, funcionario_id, rodada_ids, hora
         raise ValueError("Atualize a página antes de distribuir os produtos.")
     if inventario.versao != versao:
         raise ValueError("A conferência mudou. Atualize a página antes de distribuir os produtos.")
-    # Validar e criar a atribuição primeiro; qualquer falha posterior reverte
-    # também acesso e token. Produtos já atribuídos nunca são retirados.
-    acesso, token = gerar_acesso(usuario, inventario.pk, funcionario_id, rodada_ids, horas)
-    if not manter_nao_selecionados:
-        incluidos = list(itens_incluidos(inventario).values_list("pk", flat=True))
-        sem_atribuicao = set(rodadas_incluidas(inventario).filter(
-            encerrada_em__isnull=True, atribuicao__isnull=True).values_list("item_id", flat=True))
-        salvar_selecao(usuario, inventario.pk, [pk for pk in incluidos if pk not in sem_atribuicao],
-            inventario.versao, "Retirado na distribuição: produto não selecionado e não reservado para outra distribuição.")
-    # Invalida formulários concorrentes também quando não houve retirada.
+    if inventario.finalizada_em:
+        raise ValueError("Conferência finalizada. A seleção histórica será preservada.")
+    try:
+        ids = {int(pk) for pk in rodada_ids}
+    except (TypeError, ValueError):
+        raise ValueError("Seleção de participantes inválida.")
+    rodadas = list(rodadas_incluidas(inventario).filter(
+        encerrada_em__isnull=True, pk__in=ids).select_related("atribuicao"))
+    if not ids:
+        raise ValueError("Selecione pelo menos um produto disponível para atribuir.")
+    if len(rodadas) != len(ids):
+        raise ValueError("Selecione produtos participantes disponíveis nesta conferência.")
+    grupos = {}
+    for rodada in rodadas:
+        if getattr(rodada, "atribuicao", None) is not None:
+            continue  # Existing assignments and their links are immutable here.
+        try:
+            funcionario_id = int(funcionarios.get(str(rodada.pk), ""))
+        except (TypeError, ValueError):
+            raise ValueError("Escolha o funcionário de cada produto participante.")
+        grupos.setdefault(funcionario_id, []).append(rodada.pk)
+    # Removal checks protect all existing assignments, drafts, OKs and history.
+    # Any failure in a later employee group rolls back this selection as well.
+    salvar_selecao(usuario, inventario.pk, [r.item_id for r in rodadas],
+        inventario.versao, "Seleção de participantes confirmada pelo responsável.")
+    gerados = [gerar_acesso(usuario, inventario.pk, funcionario_id, ids_grupo, horas)
+               for funcionario_id, ids_grupo in sorted(grupos.items())]
     inventario.refresh_from_db()
     atualizar_versao(inventario)
-    evento(inventario, "distribuicao_confirmada", usuario, acesso=acesso,
-        manter_nao_selecionados=bool(manter_nao_selecionados), ciclo=inventario.ciclo)
-    return acesso, token
+    evento(inventario, "distribuicao_confirmada", usuario,
+        participantes=sorted(ids), acessos=[a.pk for a, _ in gerados], ciclo=inventario.ciclo)
+    return gerados
+
+
+@transaction.atomic
+def distribuir_produtos(usuario, inventario_id, funcionario_id, rodada_ids, horas, versao):
+    """Single-employee adapter, preserving already assigned participants."""
+    ids = list(rodada_ids)
+    existentes = list(rodadas_incluidas().filter(item__inventario_id=inventario_id,
+        encerrada_em__isnull=True, atribuicao__isnull=False).values_list("pk", flat=True))
+    gerados = distribuir_participantes(usuario, inventario_id, ids + existentes,
+        {str(pk): funcionario_id for pk in ids}, horas, versao)
+    if not gerados:
+        raise ValueError("Nenhum novo produto para atribuir.")
+    return gerados[0]
 
 
 @transaction.atomic

@@ -13,16 +13,18 @@ let processando = false;
 
 function atualizarSelecao() {
     if (!formularioAtribuicao) return;
-    const campos = [...formularioAtribuicao.querySelectorAll('[name=rodadas]:not(:disabled)')];
-    const selecionados = campos.filter(campo => campo.checked).length;
+    const campos = [...formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled)')];
+    const selecionados = [...formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:checked')].length;
     selecionarTodos.disabled = processando || campos.length === 0;
-    selecionarTodos.checked = campos.length > 0 && selecionados === campos.length;
-    selecionarTodos.indeterminate = selecionados > 0 && selecionados < campos.length;
+    const editaveisMarcados = campos.filter(campo => campo.checked).length;
+    selecionarTodos.checked = campos.length > 0 && editaveisMarcados === campos.length;
+    selecionarTodos.indeterminate = editaveisMarcados > 0 && editaveisMarcados < campos.length;
     confirmarAtribuicao.disabled = processando || selecionados === 0;
+    document.querySelector('#total-selecao').textContent = selecionados + ' participantes na seleção a salvar';
 }
 
 selecionarTodos?.addEventListener('change', event => {
-    formularioAtribuicao.querySelectorAll('[name=rodadas]:not(:disabled)').forEach(campo => { campo.checked = event.target.checked; });
+    formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled)').forEach(campo => { campo.checked = event.target.checked; });
     atualizarSelecao();
 });
 formularioAtribuicao?.addEventListener('change', atualizarSelecao);
@@ -35,7 +37,7 @@ formularios.forEach(form => form.addEventListener('submit', event => {
         event.preventDefault();
         return;
     }
-    if (form === formularioAtribuicao && !form.querySelector('[name=rodadas]:not(:disabled):checked')) {
+    if (form === formularioAtribuicao && !form.querySelector('input[type=checkbox][name=rodadas]:checked')) {
         event.preventDefault();
         form.querySelector('[data-feedback]').textContent = 'Selecione pelo menos um produto disponível para atribuir.';
         atualizarSelecao();
@@ -85,3 +87,15 @@ document.querySelector('#copiar-link')?.addEventListener('click', async () => {
         feedback.textContent = 'Selecione e copie o link exibido acima.';
     }
 });
+
+document.querySelectorAll('[data-copiar-adicional]').forEach(botao => botao.addEventListener('click', async () => {
+    const cartao = botao.closest('section');
+    const campo = cartao.querySelector('[data-link-adicional]');
+    try {
+        await navigator.clipboard.writeText(campo.value);
+        cartao.querySelector('[data-feedback-copia]').textContent = 'Link copiado.';
+    } catch (_) {
+        campo.select();
+        cartao.querySelector('[data-feedback-copia]').textContent = 'Selecione e copie o link exibido.';
+    }
+}));

@@ -46,8 +46,8 @@ class LinksBrowserTests(StaticLiveServerTestCase):
 
     def test_cliques_reais_criam_e_renovam_link_visivel(self):
         with self.navegador() as tab:
-            self.assertTrue(tab.evaluate("document.querySelector('#confirmar-atribuicao').disabled"))
-            tab.evaluate(f"document.querySelector('[name=funcionario]').value='{self.funcionario.pk}'; document.querySelector('#selecionar-todos').click(); true")
+            self.assertFalse(tab.evaluate("document.querySelector('#confirmar-atribuicao').disabled"))
+            tab.evaluate(f"document.querySelector('[name=funcionario]').value='{self.funcionario.pk}'; true")
             self.assertFalse(tab.evaluate("document.querySelector('#confirmar-atribuicao').disabled"))
             tab.evaluate("document.querySelector('#confirmar-atribuicao').click(); true")
             tab.wait("!!document.querySelector('#link-funcionario')")

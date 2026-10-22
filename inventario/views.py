@@ -179,6 +179,7 @@ def detalhe(request, inventario_id):
             return confirmacao_ajustes.erro(request, mensagem, 403)
         raise PermissionDenied(mensagem)
     erro, link, whatsapp_url, destinatario, sucesso = "", "", "", "", ""
+    links_adicionais = []
     if request.method == "POST":
         try:
             acao = request.POST.get("acao")
@@ -208,11 +209,20 @@ def detalhe(request, inventario_id):
                 elif pendencias:
                     messages.warning(request, "Seleção salva. Conferência permanece aberta: " + " ".join(pendencias))
             elif acao == "acesso":
-                acesso, token = services.distribuir_produtos(request.user, inventario.pk, request.POST.get("funcionario"),
-                    request.POST.getlist("rodadas"), request.POST.get("horas", 24), request.POST.get("versao"),
-                    manter_nao_selecionados=request.POST.get("manter_nao_selecionados") == "sim")
-                link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
-                sucesso = "Atribuição concluída. Copie o link abaixo e entregue ao funcionário."
+                if request.POST.get("manter_nao_selecionados"):
+                    raise ValueError("Atualize esta página e confirme a lista única de participantes. A reserva foi removida.")
+                selecionados = request.POST.getlist("rodadas")
+                funcionarios = {pk: request.POST.get("funcionario_" + pk) or request.POST.get("funcionario")
+                    for pk in selecionados}
+                gerados = services.distribuir_participantes(request.user, inventario.pk, selecionados,
+                    funcionarios, request.POST.get("horas", 24), request.POST.get("versao"))
+                sucesso = "Participantes salvos. Atribuição concluída. Entregue cada link somente ao funcionário indicado."
+                if gerados:
+                    acesso, token = gerados[0]
+                    link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
+                    links_adicionais = [{"nome": a.funcionario_nome,
+                        "link": request.build_absolute_uri(reverse("inventario:convite", args=[t]))}
+                        for a, t in gerados[1:]]
             elif acao == "reabrir_conferencia":
                 services.reabrir_conferencia(request.user, inventario.pk, request.POST.get("motivo", ""))
             elif acao in {"revogar", "renovar"}:
@@ -257,6 +267,14 @@ def detalhe(request, inventario_id):
     inventario.refresh_from_db()
     linhas = linhas_revisao(inventario)
     resumo = resumo_painel(linhas)
+    for linha in linhas:
+        rodada = linha["rodada"]
+        linha["participante_protegido"] = bool(getattr(rodada, "atribuicao", None)
+            or rodada.numero != 1 or rodada.versao or rodada.ok_em or rodada.encerrada_em
+            or rodada.revisada_em or linha["decisao"] or linha["sinalizacoes"]
+            or any(getattr(rodada, campo) is not None for campo in ("embalagens", "avulsos", "contado", "contado_base", "esperado")))
+        linha["participa_marcado"] = not erro or request.POST.get("acao") != "acesso" or linha["participante_protegido"] or str(rodada.pk) in request.POST.getlist("rodadas")
+        linha["funcionario_escolhido"] = request.POST.get("funcionario_" + str(rodada.pk), "") if erro else ""
     prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
               and not inventario.finalizada_em
               and request.user.has_perm("inventario.aprovar_ajuste"))
@@ -278,7 +296,7 @@ def detalhe(request, inventario_id):
             and not l['decisao'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
         "atualizacao": atualizacao, "previa_lote": previa_lote,
-        "erro": erro, "link": link, "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
+        "erro": erro, "link": link, "links_adicionais": links_adicionais, "funcionario_padrao": request.POST.get("funcionario", "") if erro else "", "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
         "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
         "rodadas_disponiveis": rodadas_incluidas(inventario).filter(encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),
@@ -389,11 +407,13 @@ def mobile(request):
     if acesso.ciclo != acesso.inventario.ciclo:
         rodadas = rodadas.none()
     produtos = [dict(payload_cego(r), chave_sinalizacao=str(uuid4())) for r in rodadas]
+    progresso = {"total": len(produtos), "conferidos": sum(p["conferido"] for p in produtos)}
+    progresso["faltam"] = progresso["total"] - progresso["conferidos"]
     if "application/json" in request.headers.get("Accept", ""):
-        return JsonResponse({"produtos": produtos, "conferencia": estado, "csrf": get_token(request),
+        return JsonResponse({"produtos": produtos, "progresso": progresso, "conferencia": estado, "csrf": get_token(request),
                              "acesso_id": acesso.pk})
     return render(request, "inventario/mobile.html", {"funcionario": acesso.funcionario_nome, "conferencia": estado,
-        "produtos": produtos, "acesso_id": acesso.pk, "conferencia_id": acesso.inventario_id})
+        "produtos": produtos, "progresso": progresso, "acesso_id": acesso.pk, "conferencia_id": acesso.inventario_id})
 
 
 def estado_conferencia(acesso):
