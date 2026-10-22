@@ -184,8 +184,8 @@
                             <span class="qty-muted">-</span>
                           {% endif %}
                         </td>
-                        <td>{{ item.unidade|default:"-" }}</td>
-                        <td class="qty-number">R$ {{ item.preco_unitario|floatformat:2 }}</td>
+                        <td>{% if item.id == item_venda.id %}<select name="nova_unidade" aria-label="Nova unidade">{% for un in unidades_quantidade %}<option value="{{ un }}" {% if un == unidade_informada %}selected{% endif %}>{{ un }}</option>{% endfor %}</select>{% else %}{{ item.unidade|default:"-" }}{% endif %}</td>
+                        <td class="qty-number">R$ {% if item.id == item_venda.id %}{{ preco_preview|floatformat:2 }}{% else %}{{ item.preco_unitario|floatformat:2 }}{% endif %}</td>
                         <td class="qty-number">R$ {{ item.valor_total|floatformat:2 }}</td>
                         <td class="qty-number {% if item.id == item_venda.id and quantidade_preview %}qty-new-total{% endif %}">
                           {% if item.id == item_venda.id and quantidade_preview %}
@@ -222,6 +222,9 @@
               <form method="post" class="qty-confirm" data-qty-confirm-actions>
                 {% csrf_token %}
                 <input type="hidden" name="nova_quantidade" value="{{ quantidade_preview }}">
+                <input type="hidden" name="nova_unidade" value="{{ unidade_informada }}">
+                <input type="hidden" name="autorizacao_quantidade" value="{{ autorizacao_quantidade }}">
+                <p>Preco proporcional a unidade selecionada: R$ {{ preco_preview|floatformat:2 }} / {{ unidade_informada }}.</p>
                 <a class="qty-btn" href="{% url 'estoque:venda_detalhe' venda.id %}?nota_atualizada=1{% if retorno_querystring %}&{{ retorno_querystring }}{% endif %}" data-qty-action="cancelar">Cancelar / Voltar</a>
                 <button class="qty-btn primary qty-confirm-button" type="submit" autofocus data-qty-action="confirmar">Confirmar alteracao da quantidade</button>
               </form>

@@ -23956,6 +23956,8 @@ def venda_editar_cabecalho(request, pk):
 
 
 def venda_editar_quantidade_item(request, pk, item_id):
+    from estoque.services import quantidade_venda
+    from estoque.services.vendas import ErroGravarVenda
     venda = get_object_or_404(
         Venda.objects.select_related("cliente").prefetch_related("itens__produto"),
         pk=pk,
@@ -23978,53 +23980,33 @@ def venda_editar_quantidade_item(request, pk, item_id):
     novo_valor_item = None
     novo_total_venda = None
     erro_quantidade = ""
+    unidade_informada = request.GET.get("nova_unidade") or item_venda.unidade
+    preco_preview = item_venda.preco_unitario
+    autorizacao_quantidade = ""
 
     def calcular_previsao(valor_quantidade):
-        nova_quantidade = _decimal_do_front(valor_quantidade, "0.001")
-        if nova_quantidade <= 0:
-            raise ValueError("Informe uma quantidade maior que zero.")
-
-        novo_total_item = (nova_quantidade * item_venda.preco_unitario).quantize(Decimal("0.01"))
+        nonlocal unidade_informada, preco_preview, autorizacao_quantidade
+        nova_quantidade, unidade_informada, preco_preview, novo_total_item, autorizacao_quantidade = quantidade_venda.previa(
+            request.user, venda, item_venda, valor_quantidade, unidade_informada)
         total_previsto = (total_atual_venda - valor_atual_item + novo_total_item).quantize(Decimal("0.01"))
         return nova_quantidade, novo_total_item, total_previsto
 
     if request.method == "POST":
-        quantidade_postada = request.POST.get("nova_quantidade")
-        try:
-            nova_quantidade, novo_total_item, total_previsto = calcular_previsao(quantidade_postada)
-        except ValueError as exc:
-            messages.warning(request, str(exc))
-            quantidade_url = reverse(
-                "estoque:venda_editar_quantidade_item",
-                kwargs={"pk": venda.pk, "item_id": item_venda.pk},
-            )
-            return redirect(_url_com_retorno(quantidade_url, retorno_url))
-
         quantidade_anterior = item_venda.quantidade
         valor_anterior_item = valor_atual_item
         total_anterior = total_atual_venda
         produto_nome = item_venda.produto.nome if item_venda.produto else "Produto nao identificado"
-
-        with transaction.atomic():
-            item_venda.quantidade = nova_quantidade
-            item_venda.valor_total = novo_total_item
-            item_venda.save(update_fields=["quantidade", "valor_total"])
-            venda.total = total_previsto
-            venda.save(update_fields=["total", "atualizado_em"])
-            novo_total_confirmado = total_previsto
-            _registrar_evento_venda(
-                venda,
-                "quantidade_item_alterada",
-                (
-                    f"Quantidade alterada na nota: {produto_nome}. "
-                    f"De {quantidade_anterior} {item_venda.unidade} para {nova_quantidade} {item_venda.unidade}. "
-                    f"Total da venda: R$ {total_anterior} -> R$ {novo_total_confirmado}."
-                ),
-                canal="sistema",
-                usuario=venda.operador,
-            )
-            _sincronizar_conta_receber(venda, "quantidade de item alterada")
-            _recalcular_status_separacao_da_venda(venda, request.user)
+        try:
+            venda, item_venda, _ = quantidade_venda.confirmar(
+                request.user, venda.pk, item_venda.pk, request.POST.get("autorizacao_quantidade"),
+                request.POST.get("nova_quantidade"), request.POST.get("nova_unidade", item_venda.unidade))
+        except (ValueError, ErroGravarVenda) as exc:
+            messages.warning(request, str(exc))
+            quantidade_url = reverse("estoque:venda_editar_quantidade_item", kwargs={"pk": venda.pk, "item_id": item_venda.pk})
+            return redirect(_url_com_retorno(quantidade_url, retorno_url))
+        nova_quantidade = item_venda.quantidade
+        novo_total_item = item_venda.valor_total
+        novo_total_confirmado = venda.total
 
         messages.success(request, f"Quantidade de {produto_nome} atualizada com sucesso.")
         request.session[f"venda_quantidade_alterada_{venda.pk}"] = {
@@ -24068,6 +24050,10 @@ def venda_editar_quantidade_item(request, pk, item_id):
             "novo_valor_item": novo_valor_item,
             "novo_total_venda": novo_total_venda,
             "erro_quantidade": erro_quantidade,
+            "unidades_quantidade": quantidade_venda.unidades(item_venda.produto),
+            "unidade_informada": unidade_informada,
+            "preco_preview": preco_preview,
+            "autorizacao_quantidade": autorizacao_quantidade,
             "possui_alerta_operacional": possui_alerta_operacional,
             "retorno_url": retorno_url,
             "retorno_querystring": _querystring_retorno(retorno_url),

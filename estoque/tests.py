@@ -39598,9 +39598,12 @@ class SeparacaoVendaFase1Tests(TestCase):
         separacao.save(update_fields=["status", "atualizado_em"])
         item_venda = venda.itens.get()
 
+        quantidade_url = reverse("estoque:venda_editar_quantidade_item", args=[venda.id, item_venda.id])
+        previa = self.client.get(quantidade_url, {"nova_quantidade": "14,300"}, secure=True)
         resposta = self.client.post(
-            reverse("estoque:venda_editar_quantidade_item", args=[venda.id, item_venda.id]),
-            {"nova_quantidade": "14,300"},
+            quantidade_url,
+            {"nova_quantidade": "14,300", "nova_unidade": "KG",
+             "autorizacao_quantidade": previa.context["autorizacao_quantidade"]},
             secure=True,
         )
 
