@@ -1,8 +1,8 @@
-<article class="card conferencia-lista {% if inventario.cancelada_em %}conferencia-cancelada{% endif %} {% if not inventario.finalizada_em and not inventario.cancelada_em %}conferencia-andamento{% endif %}" data-conferencia="{{ inventario.pk }}">
-<h3><a href="{% url 'inventario:detalhe' inventario.pk %}">{{ inventario.titulo_exibicao }}</a></h3>
+{% if not inventario.cancelada_em %}<article class="card conferencia-lista {% if inventario.cancelada_em %}conferencia-cancelada{% endif %} {% if not inventario.finalizada_em and not inventario.cancelada_em %}conferencia-andamento{% endif %}" data-conferencia="{{ inventario.pk }}">
+<h3>{% if inventario.cancelada_em %}{{ inventario.titulo_exibicao }}{% else %}<a href="{% url 'inventario:detalhe' inventario.pk %}">{{ inventario.titulo_exibicao }}</a>{% endif %}</h3>
 {% if inventario.aviso_titulo %}<p class="muted">{{ inventario.aviso_titulo }}</p>{% endif %}
 <p class="situacao">{% if inventario.cancelada_em %}Cancelada{% elif inventario.finalizada_em %}Finalizada{% else %}Em andamento{% endif %}</p>
 <p>Criada em <time datetime="{{ inventario.criado_em|date:'c' }}">{{ inventario.criado_em|date:'d/m/Y H:i:s' }}</time></p>
 {% if inventario.finalizada_em %}<p>Finalizada em <time datetime="{{ inventario.finalizada_em|date:'c' }}">{{ inventario.finalizada_em|date:'d/m/Y H:i:s' }}</time></p>{% endif %}
 {% if inventario.cancelada_em %}<p>Cancelada em {{ inventario.cancelada_em|date:"d/m/Y H:i:s" }} por {{ inventario.cancelada_por }}</p>{% endif %}
-</article>
+</article>{% endif %}

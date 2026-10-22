@@ -85,7 +85,7 @@ def lista(request):
     produtos = services.produtos_disponiveis_para_inventario().order_by("nome")
     inventarios = Inventario.objects.order_by('-criado_em', '-pk')
     em_andamento = list(inventarios.filter(finalizada_em__isnull=True, cancelada_em__isnull=True))
-    finalizados = list(inventarios.filter(Q(finalizada_em__isnull=False) | Q(cancelada_em__isnull=False)))
+    finalizados = list(inventarios.filter(finalizada_em__isnull=False, cancelada_em__isnull=True))
     preparar_titulos(em_andamento + finalizados)
     return render(request, "inventario/lista.html", {
         "em_andamento": em_andamento,
@@ -155,7 +155,7 @@ def linhas_revisao(inventario):
 
 @privado
 @require_http_methods(["GET", "POST"])
-def detalhe(request, inventario_id):
+def detalhe(request, inventario_id, *, consulta_auditoria=False):
     try:
         gestor(request)
     except PermissionDenied as exc:
@@ -165,6 +165,9 @@ def detalhe(request, inventario_id):
     inventario = get_object_or_404(Inventario, pk=inventario_id)
     if inventario.cancelada_em and request.method == "POST":
         raise PermissionDenied("Conferência cancelada. Disponível apenas para consulta.")
+    if inventario.cancelada_em and not consulta_auditoria:
+        messages.info(request, f"A Conferência nº {inventario.pk} foi cancelada. Seus registros estão preservados para consulta administrativa autorizada; o estoque permaneceu inalterado pelo cancelamento.")
+        return redirect("inventario:lista")
     mensagens = confirmacao_ajustes.mensagens_validas(request, inventario_id)
     if request.method == 'GET' and confirmacao_ajustes.solicitada(request) and request.GET.get('resultado_atualizacao'):
         try:
@@ -509,5 +512,16 @@ def cancelar(request, inventario_id):
     except ValueError as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(request, "Conferência cancelada. Histórico preservado e estoque inalterado.")
+        messages.success(request, f"Conferência nº {inventario_id} cancelada. Histórico preservado e estoque inalterado.")
+        return redirect("inventario:lista")
     return redirect("inventario:detalhe", inventario_id)
+
+
+@privado
+@require_http_methods(["GET"])
+def auditoria_cancelada(request, inventario_id):
+    services.permitir(request.user, "gerenciar_inventario")
+    inventario = get_object_or_404(Inventario, pk=inventario_id)
+    if not inventario.cancelada_em:
+        return redirect("inventario:detalhe", inventario_id)
+    return detalhe(request, inventario_id, consulta_auditoria=True)
