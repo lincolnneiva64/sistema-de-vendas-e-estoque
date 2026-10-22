@@ -110,46 +110,53 @@ def linhas_revisao(inventario):
     for registro in inventario.eventos.filter(rodada__item__in=itens).select_related(
             "rodada", "usuario", "acesso").order_by("criado_em"):
         eventos_por_item[registro.rodada.item_id].append(registro)
-    for item in itens:
-        rodada = item.rodadas_revisao[-1]
-        conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).select_related("responsavel")} if rodada.ok_em else {}
-        todos_movimentos = list(services.movimentos_relevantes(rodada)) if rodada.ok_em or rodada.confirmacoes.all() else []
-        sinalizacoes = sinais_por_item[item.pk]
-        diferenca = rodada.contado_base - rodada.esperado if rodada.ok_em else None
-        valor = (diferenca * item.custo_base).quantize(Decimal("0.01")) if diferenca is not None and item.custo_base is not None else None
-        inseguro = False
-        try:
-            # There is no chain to review before an OK. Keep all validation
-            # for confirmed rounds, including observer and stock checks.
-            if not rodada.ok_em:
-                raise ValueError("Confirme uma rodada ativa antes da revisão.")
-            services.validar_cadeia(rodada, item.produto)
-            bloqueio = "Revisão física necessária" if rodada.revisao_sequencia != services.sequencia(item.produto_id) else "Revisão registrada"
-        except ValueError as exc:
-            bloqueio = str(exc)
-            inseguro = rodada.ok_em is not None
-        try:
-            decisao = item.decisao
-        except DecisaoAjuste.DoesNotExist:
-            decisao = None
-        situacao = "Aguardando OK" if not rodada.ok_em else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
-        if rodada.numero > 1 and not rodada.ok_em:
-            situacao = "Recontagem"
-        if inseguro or any(s.resolvida_em is None for s in sinalizacoes):
-            situacao = "Revisão necessária"
-        destaque = "falta" if diferenca is not None and diferenca < 0 else "sobra" if diferenca is not None and diferenca > 0 else "neutro"
-        linhas.append({"item": item, "rodada": rodada, "diferenca": diferenca, "valor": valor,
-            "bloqueio": bloqueio, "decisao": decisao,
-            "situacao": situacao, "destaque": destaque,
-            "esperado_texto": quantidade(rodada.esperado, item.cadastro),
-            "contado_texto": quantidade(rodada.contado_base if rodada.ok_em else None, item.cadastro),
-            "diferenca_texto": quantidade(rodada.contado - rodada.esperado if rodada.ok_em else None, item.cadastro, diferenca=True),
-            "sinalizacoes": sinalizacoes, "chave_sinalizacao": str(uuid4()),
-            "movimentos": [{"registro": m, "origem": ORIGENS.get(m.origem, ORIGENS["nao_identificada"]),
-                "quantidade": quantidade(m.depois - m.antes, item.cadastro, diferenca=True) if m.antes is not None and m.depois is not None else "Saldo desconhecido",
-                "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
-                "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
-            "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
+    from contextlib import nullcontext
+    from django.db.models import prefetch_related_objects
+    from .contexto_ajustes import carregar
+    atuais = [item.rodadas_revisao[-1] for item in itens]
+    com_evidencias = [r for r in atuais if r.ok_em or r.confirmacoes.all()]
+    prefetch_related_objects(com_evidencias, "conciliacoes__responsavel")
+    with carregar(com_evidencias) if com_evidencias else nullcontext(None) as lote:
+        for item in itens:
+            rodada = item.rodadas_revisao[-1]
+            conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.all() if c.conciliado_em >= rodada.ok_em} if rodada.ok_em else {}
+            todos_movimentos = list(lote.movimentos[item.produto_id]) if lote is not None and (rodada.ok_em or rodada.confirmacoes.all()) else []
+            sinalizacoes = sinais_por_item[item.pk]
+            diferenca = rodada.contado_base - rodada.esperado if rodada.ok_em else None
+            valor = (diferenca * item.custo_base).quantize(Decimal("0.01")) if diferenca is not None and item.custo_base is not None else None
+            inseguro = False
+            try:
+                # There is no chain to review before an OK. Keep all validation
+                # for confirmed rounds, including observer and stock checks.
+                if not rodada.ok_em:
+                    raise ValueError("Confirme uma rodada ativa antes da revisão.")
+                services.validar_cadeia(rodada, item.produto, _lote=lote)
+                bloqueio = "Revisão física necessária" if rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0) else "Revisão registrada"
+            except ValueError as exc:
+                bloqueio = str(exc)
+                inseguro = rodada.ok_em is not None
+            try:
+                decisao = item.decisao
+            except DecisaoAjuste.DoesNotExist:
+                decisao = None
+            situacao = "Aguardando OK" if not rodada.ok_em else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
+            if rodada.numero > 1 and not rodada.ok_em:
+                situacao = "Recontagem"
+            if inseguro or any(s.resolvida_em is None for s in sinalizacoes):
+                situacao = "Revisão necessária"
+            destaque = "falta" if diferenca is not None and diferenca < 0 else "sobra" if diferenca is not None and diferenca > 0 else "neutro"
+            linhas.append({"item": item, "rodada": rodada, "diferenca": diferenca, "valor": valor,
+                "bloqueio": bloqueio, "decisao": decisao,
+                "situacao": situacao, "destaque": destaque,
+                "esperado_texto": quantidade(rodada.esperado, item.cadastro),
+                "contado_texto": quantidade(rodada.contado_base if rodada.ok_em else None, item.cadastro),
+                "diferenca_texto": quantidade(rodada.contado - rodada.esperado if rodada.ok_em else None, item.cadastro, diferenca=True),
+                "sinalizacoes": sinalizacoes, "chave_sinalizacao": str(uuid4()),
+                "movimentos": [{"registro": m, "origem": ORIGENS.get(m.origem, ORIGENS["nao_identificada"]),
+                    "quantidade": quantidade(m.depois - m.antes, item.cadastro, diferenca=True) if m.antes is not None and m.depois is not None else "Saldo desconhecido",
+                    "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
+                    "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
+                "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
     return sorted(linhas, key=lambda l: (0 if l["destaque"] != "neutro" else 1, l["item"].cadastro["nome"]))
 
 
@@ -272,8 +279,18 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
     inventario.refresh_from_db()
     linhas = linhas_revisao(inventario)
     resumo = resumo_painel(linhas)
+    from . import contagem_admin
+    pode_editar_contagem = request.user.has_perm('inventario.revisar_inventario') and not inventario.cancelada_em
     for linha in linhas:
         rodada = linha["rodada"]
+        registro_admin = next((e for e in reversed(linha['eventos'])
+            if e.acao == contagem_admin.ACAO and rodada.ok_em and e.dados.get('versao_saida') == rodada.versao), None)
+        linha['ok_admin_nome'] = registro_admin.dados.get('usuario_nome') if registro_admin else ''
+        linha['edicao_admin'] = pode_editar_contagem and not linha['decisao'] and not rodada.encerrada_em
+        if linha['edicao_admin']:
+            linha['autorizacao_admin'] = contagem_admin.autorizacao(request.user, inventario, rodada)
+            linha['embalagens_admin'] = entrada(rodada.embalagens, linha['item'].cadastro['continua'])
+            linha['avulsos_admin'] = entrada(rodada.avulsos, linha['item'].cadastro['secundaria_continua'])
         linha["participante_protegido"] = bool(getattr(rodada, "atribuicao", None)
             or rodada.numero != 1 or rodada.versao or rodada.ok_em or rodada.encerrada_em
             or rodada.revisada_em or linha["decisao"] or linha["sinalizacoes"]
@@ -303,6 +320,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         "atualizacao": atualizacao, "previa_lote": previa_lote,
         "erro": erro, "link": link, "links_adicionais": links_adicionais, "funcionario_padrao": request.POST.get("funcionario", "") if erro else "", "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
         "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
+        "eventos_auditoria": inventario.eventos.select_related('usuario', 'acesso').order_by('pk'),
         "rodadas_disponiveis": rodadas_incluidas(inventario).filter(encerrada_em__isnull=True, atribuicao__isnull=True).count(),
         "acessos": acessos, "ajustes_habilitados": getattr(settings, "INVENTARIO_AJUSTES_HABILITADOS", False),
         "pode_gerenciar": not inventario.cancelada_em and request.user.has_perm("inventario.gerenciar_inventario"),
@@ -525,3 +543,27 @@ def auditoria_cancelada(request, inventario_id):
     if not inventario.cancelada_em:
         return redirect("inventario:detalhe", inventario_id)
     return detalhe(request, inventario_id, consulta_auditoria=True)
+
+
+@privado
+@csrf_protect
+@require_POST
+def editar_contagem_admin(request, inventario_id, rodada_id):
+    from . import contagem_admin
+    services.permitir(request.user, 'revisar_inventario')
+    get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario_id=inventario_id)
+    destino = reverse('inventario:detalhe', args=[inventario_id]) + '#titulo-resumo'
+    try:
+        if request.POST.get('confirmacao') != 'sim':
+            raise ValueError('Confirme a contagem para registrar o OK.')
+        contagem_admin.confirmar(request.user, inventario_id, rodada_id,
+            request.POST.get('autorizacao'), request.POST.get('embalagens'), request.POST.get('avulsos'))
+    except (ValueError, PermissionDenied) as exc:
+        if 'application/json' in request.headers.get('Accept', ''):
+            return JsonResponse({'erro': str(exc)}, status=403 if isinstance(exc, PermissionDenied) else 409)
+        messages.error(request, str(exc))
+    else:
+        if 'application/json' in request.headers.get('Accept', ''):
+            return JsonResponse({'destino': destino})
+        messages.success(request, 'Contagem administrativa confirmada. OK anterior preservado e estoque inalterado.')
+    return redirect(destino)

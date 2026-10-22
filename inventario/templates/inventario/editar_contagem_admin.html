@@ -1,0 +1,11 @@
+{% load l10n %}
+{% if linha.edicao_admin %}<details class="edicao-contagem-admin"><summary class="button secondary">Editar contagem</summary>
+<form method="post" action="{% url 'inventario:editar_contagem_admin' inventario.pk linha.rodada.pk %}" data-edicao-admin data-fator="{{ linha.item.cadastro.fator }}" data-base="{{ linha.item.cadastro.base }}">
+{% csrf_token %}<input type="hidden" name="autorizacao" value="{{ linha.autorizacao_admin }}"><input type="hidden" name="confirmacao" value="sim">
+<p class="muted">{{ linha.item.cadastro.nome }} · Rodada {{ linha.rodada.numero }}. O OK anterior será preservado. Esta confirmação não altera o estoque.</p>
+<label>Quantidade em {{ linha.item.cadastro.base }}<input type="number" name="embalagens" min="0" max="999999999.999" step="{% if linha.item.cadastro.continua %}0.001{% else %}1{% endif %}" inputmode="decimal" value="{{ linha.embalagens_admin }}" required></label>
+{% if linha.item.cadastro.fracionado %}<label>Avulsos em {{ linha.item.cadastro.secundaria }}<input type="number" name="avulsos" min="0" max="999999999.999" step="{% if linha.item.cadastro.secundaria_continua %}0.001{% else %}1{% endif %}" inputmode="decimal" value="{{ linha.avulsos_admin }}" required></label>{% endif %}
+<p>Total em {{ linha.item.cadastro.base }}: <output data-total-admin aria-live="polite">—</output></p>
+<button type="submit">Confirmar contagem</button><button type="button" class="secondary" data-fechar-edicao-admin>Voltar</button>
+<p data-mensagem-admin role="status" aria-live="polite"></p>
+</form></details>{% elif linha.decisao %}<small>Contagem bloqueada: ajuste aplicado.</small>{% endif %}

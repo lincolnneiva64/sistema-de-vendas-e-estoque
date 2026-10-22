@@ -282,6 +282,9 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
     if not atribuicao:
         raise PermissionDenied("Produto fora desta atribuição.")
     rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
+    from .contagem_admin import confirmado
+    if confirmado(rodada):
+        raise PermissionDenied("Contagem confirmada pelo administrador. Solicite revisão ao responsável.")
     if rodada.encerrada_em:
         raise ValueError("Rodada encerrada. Atualize a página.")
     if DecisaoAjuste.objects.filter(item=rodada.item).exists():
@@ -349,6 +352,10 @@ def estado_conclusao(inventario, *, exigir_estrutura=False):
         por_item.setdefault(rodada.item_id, []).append(rodada)
     atribuicoes = {a.rodada_id: a for a in AtribuicaoContagem.objects.filter(
         rodada__in=rodadas).select_related("acesso")}
+    from .contagem_admin import ACAO
+    versoes = {r.pk: r.versao for r in rodadas if r.ok_em}
+    administrativos = {e.rodada_id for e in inventario.eventos.filter(acao=ACAO, rodada__in=rodadas)
+                       if e.dados.get('versao_saida') == versoes.get(e.rodada_id)}
     for item in itens:
         nome = item.cadastro["nome"]
         atuais = por_item.get(item.pk, [])
@@ -361,6 +368,8 @@ def estado_conclusao(inventario, *, exigir_estrutura=False):
         atribuicao = atribuicoes.get(rodada.pk)
         if not rodada.ok_em:
             pendencias.append(f"{nome}: aguardando OK.")
+        if rodada.pk in administrativos:
+            continue  # Administrative confirmation needs no employee invitation or submission.
         if not atribuicao:
             pendencias.append(f"{nome}: aguardando atribuição.")
         elif atribuicao.acesso.ciclo != inventario.ciclo:
