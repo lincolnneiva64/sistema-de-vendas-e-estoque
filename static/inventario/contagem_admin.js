@@ -1,5 +1,12 @@
 'use strict';
 document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
+    const modal = form.closest('dialog');
+    const abrir = document.querySelector('[data-abrir-edicao-admin="' + modal.id + '"]');
+    abrir.addEventListener('click', () => {
+        modal.showModal();
+        form.elements.embalagens.focus();
+    });
+    modal.addEventListener('cancel', event => { if (enviando) event.preventDefault(); });
     const principal = form.elements.embalagens;
     const avulsos = form.elements.avulsos;
     const mensagem = form.querySelector('[data-mensagem-admin]');
@@ -27,7 +34,7 @@ document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
     form.addEventListener('input', atualizarTotal);
     atualizarTotal();
     form.querySelector('[data-fechar-edicao-admin]').addEventListener('click', () => {
-        if (!enviando) form.closest('details').open = false;
+        if (!enviando) modal.close();
     });
     form.addEventListener('submit', async event => {
         event.preventDefault();
@@ -44,6 +51,7 @@ document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
             }
             const dados = await resposta.json();
             if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível confirmar a contagem.');
+            modal.close();
             const destino = new URL(dados.destino, window.location.origin);
             if (destino.pathname === window.location.pathname && destino.search === window.location.search) {
                 window.location.hash = destino.hash;

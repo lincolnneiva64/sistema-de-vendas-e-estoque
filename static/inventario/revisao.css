@@ -117,4 +117,16 @@ main:has(.painel-inventario){max-width:1360px}
 .participante-selecao .participante-nome{display:flex;align-items:flex-start;gap:10px;font-size:clamp(1.05rem,1rem + .3vw,1.2rem);font-weight:750;line-height:1.4;color:#182f39}
 .participante-nome span{min-width:0;overflow-wrap:anywhere}.participante-nome input[type=checkbox]{flex:0 0 20px;width:20px;height:20px;margin:3px 0 0}
 .participante-selecao .participante-funcionario{font-size:.9rem;font-weight:600;line-height:1.5;color:#52696f;margin-top:14px}.participante-funcionario select{font-size:1rem;font-weight:400;color:#182f39;margin-top:6px}
-.edicao-contagem-admin{text-align:left;white-space:normal;min-width:180px}.edicao-contagem-admin summary{font-size:.88rem;margin-top:10px}.edicao-contagem-admin form{min-width:180px;max-width:300px;padding:12px;background:#f2f6f7;border:1px solid #d8e2e5;border-radius:8px}.edicao-contagem-admin label{font-size:.95rem}.edicao-contagem-admin input{font-size:1rem}.edicao-contagem-admin button{margin:4px 0;white-space:normal}.edicao-contagem-admin output{font-weight:700}
+/* Native dialog follows the existing inventory modal pattern. */
+.edicao-contagem-admin{display:block;margin-top:10px;white-space:normal}
+.edicao-contagem-admin>button{font-size:.88rem}
+.modal-contagem-admin{box-sizing:border-box;width:min(34rem,calc(100% - 24px));max-height:85dvh;overflow-y:auto;margin:auto;padding:24px;border:1px solid #d8e2e5;border-radius:12px;background:#fff;color:#182f39;text-align:left;white-space:normal;box-shadow:0 16px 48px #182f3933}
+.modal-contagem-admin::backdrop{background:#0008}
+.modal-contagem-admin h2{font-size:1.3rem;line-height:1.35;margin:0;overflow-wrap:anywhere}
+.modal-contagem-admin form{width:100%;min-width:0;box-sizing:border-box}
+.modal-contagem-admin label{display:block;font-size:1rem;margin-top:14px}
+.modal-contagem-admin input{box-sizing:border-box;width:100%;min-height:44px;font-size:1.1rem;margin-top:6px}
+.modal-contagem-admin button{min-height:44px;margin:6px 6px 0 0;white-space:normal;max-width:100%}
+.modal-contagem-admin output{font-size:1.2rem;font-weight:700}
+.modal-contagem-admin [data-mensagem-admin]{overflow-wrap:anywhere}
+@media(max-width:480px){.modal-contagem-admin{padding:18px}.modal-contagem-admin button{width:100%;margin-right:0}}

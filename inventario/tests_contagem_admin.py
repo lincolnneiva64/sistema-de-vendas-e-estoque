@@ -323,7 +323,7 @@ class ContagemAdminConcorrenciaTests(AdminFixture, TransactionTestCase):
 
 @skipUnless(Path(CHROME).is_file(), 'Chrome indisponível')
 class ContagemAdminBrowserTests(AdminFixture, StaticLiveServerTestCase):
-    def test_edicao_na_linha_desktop_mobile_total_e_duplo_clique(self):
+    def test_modal_desktop_mobile_total_erro_cancelar_e_duplo_clique(self):
         self.enviar_funcionario()
         with TemporaryDirectory(prefix='contagem-admin-browser-') as profile:
             chrome = Chrome(CHROME, profile).start()
@@ -334,10 +334,23 @@ class ContagemAdminBrowserTests(AdminFixture, StaticLiveServerTestCase):
                 tab.wait("window.inventarioContagemAdminPronta === true")
                 for width in (1280, 390, 320):
                     tab.call('Emulation.setDeviceMetricsOverride', {'width':width,'height':900,'deviceScaleFactor':1,'mobile':width<600})
-                    tab.evaluate("window.formAdmin=document.querySelector('form[data-base=DZ]');formAdmin.closest('details').open=true;formAdmin.elements.embalagens.value='1';formAdmin.elements.avulsos.value='6';formAdmin.dispatchEvent(new Event('input',{bubbles:true}));true")
+                    tab.evaluate("window.formAdmin=document.querySelector('form[data-base=DZ]');document.querySelector('[data-abrir-edicao-admin=\"'+formAdmin.closest('dialog').id+'\"]').click();formAdmin.elements.embalagens.value='1';formAdmin.elements.avulsos.value='6';formAdmin.dispatchEvent(new Event('input',{bubbles:true}));true")
                     self.assertIn('1,5 DZ', tab.evaluate("formAdmin.querySelector('output').textContent"))
                     self.assertEqual(tab.evaluate("formAdmin.querySelectorAll('textarea').length"), 0)
                     self.assertTrue(tab.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+                    self.assertTrue(tab.evaluate("formAdmin.closest('dialog').matches(':modal')"))
+                    self.assertIn('Agua Oxig', tab.evaluate("formAdmin.closest('dialog').querySelector('h2').textContent"))
+                    self.assertTrue(tab.evaluate("(()=>{const r=formAdmin.closest('dialog').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&Math.abs((r.left+r.right)/2-document.documentElement.clientWidth/2)<2})()"), str(tab.evaluate("({width:innerWidth,rect:formAdmin.closest('dialog').getBoundingClientRect().toJSON(),margin:getComputedStyle(formAdmin.closest('dialog')).margin})")))
+                    tab.evaluate("formAdmin.querySelector('[data-fechar-edicao-admin]').click();true")
+                    self.assertFalse(tab.evaluate("formAdmin.closest('dialog').open"))
+                tab.evaluate("document.querySelector('[data-abrir-edicao-admin=\"'+formAdmin.closest('dialog').id+'\"]').click();true")
+                # A failed request must preserve quantities and keep the dialog open.
+                tab.evaluate("window.fetchOriginal=window.fetch;window.fetch=async()=>({ok:false,headers:new Headers({'content-type':'application/json'}),json:async()=>({erro:'Conflito sintetico: tente novamente.'})});formAdmin.querySelector('button[type=submit]').click();true")
+                tab.wait("formAdmin.querySelector('[data-mensagem-admin]').textContent.includes('Conflito')")
+                self.assertTrue(tab.evaluate("formAdmin.closest('dialog').matches(':modal')"))
+                self.assertEqual(tab.evaluate('formAdmin.elements.avulsos.value'), '6')
+                self.assertEqual(tab.evaluate('formAdmin.elements.embalagens.value'), '1')
+                tab.evaluate('window.fetch=window.fetchOriginal;true')
                 tab.evaluate("formAdmin.dataset.fator='16';formAdmin.elements.embalagens.value='0';formAdmin.elements.avulsos.value='1';formAdmin.dispatchEvent(new Event('input',{bubbles:true}));true")
                 self.assertEqual(tab.evaluate("formAdmin.querySelector('output').textContent"), '0,062 DZ')
                 tab.evaluate("formAdmin.elements.avulsos.value='3';formAdmin.dispatchEvent(new Event('input',{bubbles:true}));true")
@@ -352,5 +365,28 @@ class ContagemAdminBrowserTests(AdminFixture, StaticLiveServerTestCase):
                 self.assertEqual(ConfirmacaoContagem.objects.count(), 3)
                 self.assertEqual(RodadaContagem.objects.get(pk=self.rodadas[0].pk).contado_base, 1)
                 self.assertEqual(Produto.objects.get(pk=self.agua.pk).quantidade, 10)
+            finally:
+                chrome.stop()
+
+    def test_modal_sem_avulsos_escape_e_foco(self):
+        p = produto(nome='Produto unitario sintetico', unidade_compra='UN', vende_fracionado=False)
+        inv = services.criar_inventario(self.usuario, criterio='manual', selecionados=[p.pk])
+        with TemporaryDirectory(prefix='contagem-admin-browser-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = chrome.tab(); tab.call('Network.enable')
+                tab.call('Network.setCookie', {'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url})
+                tab.call('Page.navigate', {'url':self.live_server_url+reverse('inventario:detalhe', args=[inv.pk])})
+                tab.wait("window.inventarioContagemAdminPronta === true")
+                tab.evaluate("window.abrirAdmin=document.querySelector('[data-abrir-edicao-admin]');abrirAdmin.focus();abrirAdmin.click();window.formAdmin=document.querySelector('[data-edicao-admin]');true")
+                self.assertIsNone(tab.evaluate("formAdmin.elements.avulsos || null"))
+                self.assertTrue(tab.evaluate("document.activeElement===formAdmin.elements.embalagens"))
+                tab.evaluate("formAdmin.elements.embalagens.value='3';formAdmin.dispatchEvent(new Event('input',{bubbles:true}));true")
+                self.assertEqual(tab.evaluate("formAdmin.querySelector('output').textContent"), '3 UN')
+                tab.call('Input.dispatchKeyEvent', {'type':'keyDown','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+                tab.call('Input.dispatchKeyEvent', {'type':'keyUp','key':'Escape','code':'Escape','windowsVirtualKeyCode':27})
+                tab.wait("!formAdmin.closest('dialog').open")
+                self.assertTrue(tab.evaluate('document.activeElement===abrirAdmin'))
+                self.assertFalse(ConfirmacaoContagem.objects.filter(rodada__item__inventario=inv).exists())
             finally:
                 chrome.stop()
