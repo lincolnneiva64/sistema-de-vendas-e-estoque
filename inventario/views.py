@@ -27,12 +27,13 @@ from . import services, sessoes, ajustes
 from . import acesso_ajustes
 from . import confirmacao_ajustes
 from .erros import ErroAcesso
-from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica
+from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica, ConfirmacaoContagem
 from .apresentacao import entrada, quantidade
 from .painel import resumo_painel
 from .selecao import itens_incluidos, rodadas_incluidas, salvar_selecao
 from .rastreabilidade import ORIGENS
 from .titulos import preparar_titulos
+from .ordenacao import chave_produto
 
 
 def privado(view):
@@ -102,7 +103,7 @@ def linhas_revisao(inventario):
             "atribuicao__acesso", "revisao_por").prefetch_related("confirmacoes").order_by("numero"),
             to_attr="rodadas_revisao"),
         "decisao",
-    ).order_by("cadastro__nome", "pk"))
+    ).order_by("pk"))
     sinais_por_item, eventos_por_item = defaultdict(list), defaultdict(list)
     for sinal in SinalizacaoFisica.objects.filter(rodada__item__in=itens).select_related(
             "rodada", "acesso", "usuario", "resolvida_por").order_by("criado_em"):
@@ -157,7 +158,7 @@ def linhas_revisao(inventario):
                     "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
                     "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
                 "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
-    return sorted(linhas, key=lambda l: (0 if l["destaque"] != "neutro" else 1, l["item"].cadastro["nome"]))
+    return sorted(linhas, key=lambda linha: chave_produto(linha["item"]))
 
 
 @privado
@@ -400,7 +401,10 @@ def payload_cego(rodada):
     cadastro = rodada.item.cadastro
     # A concurrent OK may commit after this round was read. Keep the history
     # consistent with the version being returned; a stale write still gets 409.
-    ultimo = rodada.confirmacoes.filter(versao_entrada__lt=rodada.versao).order_by("-versao_entrada").first()
+    if hasattr(rodada, "confirmacoes_mobile"):
+        ultimo = next((c for c in rodada.confirmacoes_mobile if c.versao_entrada < rodada.versao), None)
+    else:
+        ultimo = rodada.confirmacoes.filter(versao_entrada__lt=rodada.versao).order_by("-versao_entrada").first()
     total = ""
     exibir_total = cadastro["base"] == "PCT" and cadastro["secundaria"] == "KG" and cadastro["fracionado"]
     if exibir_total:
@@ -425,11 +429,13 @@ def payload_cego(rodada):
 @require_http_methods(["GET"])
 def mobile(request):
     acesso = acesso_sessao(request)
-    rodadas = rodadas_incluidas().filter(atribuicao__acesso=acesso, encerrada_em__isnull=True).select_related("item").order_by("pk")
+    rodadas = rodadas_incluidas().filter(atribuicao__acesso=acesso, encerrada_em__isnull=True).select_related("item").prefetch_related(
+        Prefetch("confirmacoes", queryset=ConfirmacaoContagem.objects.order_by("-versao_entrada"),
+                 to_attr="confirmacoes_mobile")).order_by("pk")
     estado = estado_conferencia(acesso)
     if acesso.ciclo != acesso.inventario.ciclo:
         rodadas = rodadas.none()
-    produtos = [dict(payload_cego(r), chave_sinalizacao=str(uuid4())) for r in rodadas]
+    produtos = [dict(payload_cego(r), chave_sinalizacao=str(uuid4())) for r in sorted(rodadas, key=lambda rodada: chave_produto(rodada.item))]
     progresso = {"total": len(produtos), "conferidos": sum(p["conferido"] for p in produtos)}
     progresso["faltam"] = progresso["total"] - progresso["conferidos"]
     if "application/json" in request.headers.get("Accept", ""):
