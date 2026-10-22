@@ -220,6 +220,31 @@ class ParticipantesBrowserTests(ParticipantesFixture, StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url})
                 tab.call('Page.navigate', {'url': self.live_server_url + self.url})
                 tab.wait('window.inventarioRevisaoPronta === true')
+                self.assertIn('30 produtos selecionados', tab.evaluate("document.querySelector('#distribuicao summary').textContent"))
+                for width in (320, 390, 1280):
+                    tab.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': 900, 'deviceScaleFactor': 1, 'mobile': width < 600})
+                    medidas = tab.evaluate("""(() => {
+                        const nome = document.querySelector('.participante-nome');
+                        const checkbox = nome.querySelector('input');
+                        const texto = nome.querySelector('span');
+                        const funcionario = document.querySelector('.participante-funcionario');
+                        return {fonte:parseFloat(getComputedStyle(nome).fontSize), peso:parseInt(getComputedStyle(nome).fontWeight),
+                            fonteFuncionario:parseFloat(getComputedStyle(funcionario).fontSize),
+                            gap:texto.getBoundingClientRect().left-checkbox.getBoundingClientRect().right,
+                            alinhamento:Math.abs(checkbox.getBoundingClientRect().top-texto.getBoundingClientRect().top),
+                            semOverflow:document.documentElement.scrollWidth<=innerWidth};
+                    })()""")
+                    self.assertGreaterEqual(medidas['fonte'], 16.8)
+                    self.assertGreaterEqual(medidas['peso'], 700)
+                    self.assertGreater(medidas['fonte'], medidas['fonteFuncionario'])
+                    self.assertGreaterEqual(medidas['gap'], 8)
+                    self.assertLessEqual(medidas['alinhamento'], 5)
+                    self.assertTrue(medidas['semOverflow'])
+                    import base64
+                    destino = Path('artifacts') / f'produtos-selecao-{width}.png'
+                    destino.parent.mkdir(exist_ok=True)
+                    destino.write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'captureBeyondViewport': True})['data']))
+                tab.call('Emulation.clearDeviceMetricsOverride')
                 self.assertIn('30 produtos', tab.evaluate("document.querySelector('#total-participantes').textContent"))
                 self.assertEqual(tab.evaluate("document.querySelectorAll('[name=manter_nao_selecionados]').length"), 0)
                 tab.evaluate(f"document.querySelector('[name=funcionario]').value='{self.ana.pk}';document.querySelectorAll('input[type=checkbox][name=rodadas]')[29].click();true")

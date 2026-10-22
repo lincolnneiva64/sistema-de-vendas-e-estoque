@@ -114,3 +114,6 @@ main:has(.painel-inventario){max-width:1360px}
 @media(max-width:1100px){.tabela-resumo .resumo-linha>td{padding:16px 10px;min-height:88px}.situacao-atualizacao .saldo-aplicado{font-size:1.05rem}}
 
 .participante-selecao{border-top:1px solid #d8e2e5;padding:12px 0;overflow-wrap:anywhere}.participante-selecao select{width:100%;min-height:44px}#total-participantes,#progresso-participantes{font-weight:650}
+.participante-selecao .participante-nome{display:flex;align-items:flex-start;gap:10px;font-size:clamp(1.05rem,1rem + .3vw,1.2rem);font-weight:750;line-height:1.4;color:#182f39}
+.participante-nome span{min-width:0;overflow-wrap:anywhere}.participante-nome input[type=checkbox]{flex:0 0 20px;width:20px;height:20px;margin:3px 0 0}
+.participante-selecao .participante-funcionario{font-size:.9rem;font-weight:600;line-height:1.5;color:#52696f;margin-top:14px}.participante-funcionario select{font-size:1rem;font-weight:400;color:#182f39;margin-top:6px}

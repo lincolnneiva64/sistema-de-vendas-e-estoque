@@ -19,7 +19,9 @@ class DistribuicaoEscopoTests(DadosSelecao, TestCase):
         url = reverse("inventario:detalhe", args=[self.inv.pk])
         antes = self.client.get(url)
         self.assertNotContains(antes, "Manter produtos não selecionados para outra distribuição")
-        self.assertContains(antes, "Participantes e funcionários")
+        self.assertContains(antes, "Produtos da conferência")
+        self.assertContains(antes, f"{len(self.rodadas)} produtos selecionados")
+        self.assertContains(antes, "Selecione os produtos que serão conferidos e, se necessário, indique o funcionário responsável por cada um.")
         self.assertContains(antes, 'id="form-atribuicao"')
         resposta = self.client.post(reverse("inventario:detalhe", args=[self.inv.pk]), {
             "acao": "acesso", "funcionario": self.funcionario.pk, "versao": self.inv.versao,
