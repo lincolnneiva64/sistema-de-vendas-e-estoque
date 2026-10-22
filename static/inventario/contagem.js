@@ -37,7 +37,58 @@ function aplicarEstadoConferencia(estado) {
             : 'Este acesso não permite alterações. Solicite orientação ao responsável.';
     }
 }
+const camposContagem = form => [form.elements.embalagens, form.elements.avulsos].filter(Boolean);
+const camposFaltantes = form => camposContagem(form).filter(campo => campo.value.trim() === '');
+const produtosPendentes = () => [...document.querySelectorAll('form.contagem')].filter(form =>
+    camposContagem(form).some(campo => !campo.value.trim() || !campo.validity.valid)
+    || form.dataset.confirmado !== 'true'
+    || form.dataset.valoresSalvos !== JSON.stringify([form.elements.embalagens.value, form.elements.avulsos?.value || '']));
+let navegandoPendencias = false;
+const proximaPendencia = document.querySelector('#proxima-pendencia');
+function atualizarPendencias() {
+    if (!proximaPendencia) return;
+    const pendentes = produtosPendentes();
+    proximaPendencia.hidden = !navegandoPendencias || !pendentes.length || conferenciaBloqueada;
+    proximaPendencia.textContent = 'Ir para o próximo pendente (' + pendentes.length + ')';
+    document.querySelectorAll('.pendencia-destacada').forEach(cartao => {
+        if (!pendentes.includes(cartao.querySelector('form.contagem'))) cartao.classList.remove('pendencia-destacada');
+    });
+}
+function irParaPendente() {
+    const form = produtosPendentes()[0];
+    if (!form) return;
+    document.querySelectorAll('.pendencia-destacada').forEach(cartao => cartao.classList.remove('pendencia-destacada'));
+    const cartao = form.closest('article');
+    cartao.classList.add('pendencia-destacada');
+    const campo = camposFaltantes(form)[0] || camposContagem(form).find(campo => !campo.validity.valid);
+    if (campo?.readOnly && !conferenciaBloqueada) form.querySelector('[data-editar-contagem]').click();
+    const alvo = campo && !campo.readOnly ? campo : form.querySelector('[value=ok]:not(:disabled)') || form.querySelector('[data-editar-contagem]');
+    alvo.focus({preventScroll: true});
+    alvo.scrollIntoView({block: 'center', behavior: 'smooth'});
+}
+proximaPendencia?.addEventListener('click', irParaPendente);
+const avisoPendencias = document.querySelector('#aviso-pendencias');
+document.querySelector('#ir-primeiro-pendente')?.addEventListener('click', () => {
+    avisoPendencias.close();
+    irParaPendente();
+});
+document.querySelector('#fechar-pendencias')?.addEventListener('click', () => avisoPendencias.close());
+function mostrarPendencias() {
+    const pendentes = produtosPendentes();
+    document.querySelector('#quantidade-pendentes').textContent = pendentes.length + ' produto(s) pendente(s). Confirme todos os campos e o OK.';
+    const lista = document.querySelector('#lista-pendentes');
+    lista.replaceChildren(...pendentes.map(form => {
+        const item = document.createElement('li');
+        item.textContent = form.closest('article').querySelector('h2').textContent;
+        return item;
+    }));
+    navegandoPendencias = true;
+    atualizarPendencias();
+    avisoPendencias.showModal();
+}
+
 document.querySelectorAll('form.contagem').forEach(form => {
+    form.noValidate = true;
     let enviando = false;
     let precisaVerificar = false;
     const valores = () => JSON.stringify([form.elements.embalagens.value, form.elements.avulsos?.value || '']);
@@ -92,7 +143,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
     } : null;
     const quantidade = (principal, avulsos) => principal + ' ' + form.elements.embalagens.dataset.unidade
         + (form.elements.avulsos ? ' + ' + avulsos + ' ' + form.elements.avulsos.dataset.unidade + ' avulsos' : '');
-    const pendencia = () => quantidade(form.elements.embalagens.value || 'Quantidade vazia', form.elements.avulsos?.value || '0')
+    const pendencia = () => quantidade(form.elements.embalagens.value || 'Quantidade vazia', form.elements.avulsos?.value || (form.elements.avulsos ? 'Quantidade vazia' : '0'))
         + ' não confirmados; último OK ' + (ultimoOK ? 'conhecido: ' + quantidade(ultimoOK.embalagens, ultimoOK.avulsos) : 'ainda não registrado') + '.';
 
     const atualizarEdicao = () => {
@@ -117,6 +168,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
                 + quantidade(ultimoOK.embalagens, ultimoOK.avulsos)
             : precisaVerificar ? 'Último OK ainda não verificado no servidor.' : 'Nenhum OK salvo.';
         if (!confirmado) cartao.querySelector('.estado-produto').textContent = pendencia();
+        atualizarPendencias();
     };
     atualizarVisual(form.dataset.confirmado === 'true');
     atualizarEdicao();
@@ -133,6 +185,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
     });
     form.addEventListener('input', () => {
         if (protegido || enviando || conferenciaBloqueada || finalizando || verificando) return;
+        camposContagem(form).forEach(campo => campo.removeAttribute('aria-invalid'));
         form.dataset.confirmado = 'false';
         atualizarVisual(false);
         form.querySelector('.mensagem').textContent = 'Alterações ainda não confirmadas. Dê OK novamente antes de enviar.';
@@ -164,6 +217,20 @@ document.querySelectorAll('form.contagem').forEach(form => {
         if (precisaVerificar) return;
         if (protegido && (acao === 'salvar' || form.dataset.confirmado === 'true')) return;
         const mensagem = form.querySelector('.mensagem');
+        if (acao === 'ok') {
+            const faltantes = camposFaltantes(form);
+            camposContagem(form).forEach(campo => campo.setAttribute('aria-invalid', String(!campo.value.trim() || !campo.validity.valid)));
+            if (faltantes.length) {
+                if (faltantes[0].readOnly) editar.click();
+                mensagem.textContent = 'Falta informar a quantidade de: ' + faltantes.map(campo =>
+                    (campo.name === 'avulsos' ? 'avulsos em ' : '') + campo.dataset.unidade).join(', ')
+                    + '. Se não houver quantidade, digite 0 para confirmar.';
+                faltantes[0].focus();
+                faltantes[0].scrollIntoView({block: 'center', behavior: 'smooth'});
+                return;
+            }
+            if (!form.reportValidity()) return;
+        }
         const dados = new FormData(form);
         dados.set('acao', acao);
         enviando = true;
@@ -186,6 +253,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
             form.dataset.valoresSalvos = valores();
             aplicarEstadoConferencia(resultado.conferencia);
             mensagem.textContent = resultado.mensagem;
+            if (navegandoPendencias && proximaPendencia) cartao.append(proximaPendencia);
         } catch (erro) {
             precisaVerificar = true;
             form.dataset.confirmado = 'false';
@@ -240,10 +308,9 @@ if (finalizarConferencia) finalizarConferencia.addEventListener('submit', async 
         mensagem.textContent = 'Aguarde as gravações em andamento antes de finalizar.';
         return;
     }
-    const pendente = [...document.querySelectorAll('form.contagem')].some(form =>
-        form.dataset.confirmado !== 'true' || form.dataset.valoresSalvos !== JSON.stringify([form.elements.embalagens.value, form.elements.avulsos?.value || '']));
-    if (pendente) {
-        mensagem.textContent = 'Confirme o OK de todos os produtos e das alterações antes de enviar.';
+    if (produtosPendentes().length) {
+        mensagem.textContent = 'Conferência incompleta. Confira os produtos pendentes.';
+        mostrarPendencias();
         return;
     }
     const dados = new FormData(finalizarConferencia);

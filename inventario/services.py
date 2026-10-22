@@ -375,8 +375,17 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
     proprias = [r for r in rodadas if AtribuicaoContagem.objects.filter(acesso=acesso, rodada=r).exists()]
     if not proprias:
         raise PermissionDenied("Este acesso não possui contagens atuais para enviar.")
-    if any(r.ok_em is None for r in proprias):
-        raise ValueError("Ainda há produtos sem OK. Confirme todas as suas contagens antes de enviar.")
+    pendentes = []
+    for rodada in proprias:
+        try:
+            converter(rodada.item.cadastro, rodada.embalagens, rodada.avulsos)
+            completa = rodada.ok_em is not None
+        except ValueError:
+            completa = False
+        if not completa:
+            pendentes.append(rodada.item.cadastro["nome"])
+    if pendentes:
+        raise ValueError("Conferência incompleta. Produtos pendentes: " + "; ".join(pendentes))
     validar_acesso(acesso)
     acesso.enviada_em = timezone.now()
     acesso.envio_versao = versao

@@ -7,3 +7,12 @@
 form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344c45}
 
 .total-convertido{display:flex;flex-direction:column;gap:8px;padding:16px;margin:16px 0;background:#eaf4f2;border:1px solid #8eb7ad;border-radius:10px}.total-convertido output{font-size:1.6rem;font-weight:750;color:#124f44}.total-convertido small{color:#704c04}
+
+.card.pendencia-destacada { outline: 3px solid #d49d00; background: #fff8d6; scroll-margin-block: 1rem; }
+.contagem input[aria-invalid="true"] { outline: 3px solid #d49d00; background: #fff8d6; }
+#aviso-pendencias { box-sizing: border-box; width: min(32rem, calc(100% - 24px)); max-height: 85dvh; overflow-y: auto; border: 2px solid #d49d00; border-radius: 12px; padding: 16px; }
+#aviso-pendencias::backdrop { background: #0008; }
+#lista-pendentes { max-height: 35dvh; overflow-y: auto; overflow-wrap: anywhere; padding-left: 24px; }
+#aviso-pendencias button { display: block; width: 100%; min-height: 44px; margin-top: 12px; white-space: normal; }
+#proxima-pendencia { min-height: 44px; max-width: 100%; white-space: normal; }
+#proxima-pendencia[hidden] { display: none; }
