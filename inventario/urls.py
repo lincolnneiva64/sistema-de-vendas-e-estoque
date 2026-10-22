@@ -5,6 +5,7 @@ from . import ajustes_views
 
 app_name = "inventario"
 urlpatterns = [
+    path("sessao/<int:inventario_id>/finalizar-administrativamente/", views.finalizar_administrativamente, name="finalizar_administrativamente"),
     path("sessao/<int:inventario_id>/contagem-admin/<int:rodada_id>/", views.editar_contagem_admin, name="editar_contagem_admin"),
     path("sessao/<int:inventario_id>/auditoria/", views.auditoria_cancelada, name="auditoria_cancelada"),
     path("sessao/<int:inventario_id>/cancelar/", views.cancelar, name="cancelar"),

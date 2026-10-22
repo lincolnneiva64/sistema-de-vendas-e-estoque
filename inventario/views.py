@@ -313,8 +313,18 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         acesso.total_produtos = atuais.count()
         acesso.total_ok = atuais.filter(rodada__ok_em__isnull=False).count()
         acesso.expirado = acesso.expira_em <= timezone.now()
+    encerramento_previa, encerramento_erro = None, ""
+    if (not inventario.finalizada_em and not inventario.cancelada_em
+            and request.user.has_perm("inventario.gerenciar_inventario")
+            and request.user.has_perm("inventario.revisar_inventario")):
+        from . import encerramento
+        try:
+            encerramento_previa = encerramento.previa(request.user, inventario)
+        except ValueError as exc:
+            encerramento_erro = str(exc)
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,
         "modo_historico": bool(inventario.finalizada_em or inventario.cancelada_em),
+        "encerramento_previa": encerramento_previa, "encerramento_erro": encerramento_erro,
         "revisao_historica_disponivel": any(l['diferenca'] is not None and l['diferenca'] != 0
             and not l['decisao'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
@@ -573,3 +583,23 @@ def editar_contagem_admin(request, inventario_id, rodada_id):
             return JsonResponse({'destino': destino})
         messages.success(request, 'Contagem administrativa confirmada. OK anterior preservado e estoque inalterado.')
     return redirect(destino)
+
+
+@privado
+@csrf_protect
+@require_POST
+def finalizar_administrativamente(request, inventario_id):
+    from . import encerramento
+    get_object_or_404(Inventario, pk=inventario_id)
+    try:
+        dados = encerramento.finalizar(request.user, inventario_id, request.POST.get("previa"), request.POST.get("confirmacao"))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("inventario:detalhe", inventario_id=inventario_id)
+    if dados.get("ja_finalizada"):
+        messages.info(request, f"Conferencia nº {inventario_id} ja finalizada. Nenhum ajuste foi executado.")
+    else:
+        messages.success(request, f"Conferencia nº {inventario_id} finalizada. {dados['aplicados']} produtos com ajuste ja aplicado; "
+            f"{dados['sem_ajuste']} permanecem sem ajuste aplicado, sendo {dados['diferencas_pendentes']} com diferenca registrada. "
+            "Nenhum saldo foi alterado pelo encerramento. Bloqueios e historico preservados.")
+    return redirect("inventario:lista")
