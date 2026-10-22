@@ -1,0 +1,11 @@
+{% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% endif %}
+<p>Somente os produtos aptos com diferenças abaixo terão seus saldos alterados. Produtos já ajustados ficam fora desta operação.</p>
+{% include 'inventario/previa_produtos_ajuste.html' %}
+{% if not atualizacao.aptas %}<p>Nenhum produto apto com diferença para atualizar.</p>{% endif %}
+{% if atualizacao.resumo.bloqueados %}<section class="aviso" data-bloqueados-modal><strong>{{ atualizacao.resumo.bloqueados }} produto(s) bloqueado(s), sem atualização:</strong><ul>{% for linha in atualizacao.linhas %}{% if linha.estado == 'Bloqueado' %}<li>{{ linha.rodada.item.cadastro.nome }}: {{ linha.bloqueio }}</li>{% endif %}{% endfor %}</ul></section>{% endif %}
+<p>Os movimentos posteriores ao OK serão preservados. Se os dados mudarem, a confirmação será recusada e será necessária nova revisão.</p>
+{% if not ajustes_habilitados %}<p class="aviso">Aplicação de ajustes desabilitada no servidor.</p>{% endif %}
+{% if previa_lote %}<form id="confirmar-atualizacao-modal" method="post" data-confirmar-ajustes-modal action="{% url 'inventario:ajustes_modal' inventario.pk %}">
+{% csrf_token %}<input type="hidden" name="acao" value="atualizar"><input type="hidden" name="previa" value="{{ previa_lote }}"><input type="hidden" name="revisao_historica" value="{{ revisao_historica }}"><input type="hidden" name="confirmacao" value="sim">
+<button type="submit" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar atualização</button><button type="button" class="secondary" data-cancelar-ajustes>Cancelar</button><p role="status" data-erro-ajustes></p>
+</form>{% else %}<button type="button" class="secondary" data-cancelar-ajustes>Cancelar</button>{% endif %}

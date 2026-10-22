@@ -130,3 +130,12 @@ main:has(.painel-inventario){max-width:1360px}
 .modal-contagem-admin output{font-size:1.2rem;font-weight:700}
 .modal-contagem-admin [data-mensagem-admin]{overflow-wrap:anywhere}
 @media(max-width:480px){.modal-contagem-admin{padding:18px}.modal-contagem-admin button{width:100%;margin-right:0}}
+/* Direct adjustment preview and verified receipt, in the inventory visual style. */
+.ajustes-diretos{padding:22px;white-space:normal}.revisar-estoque-principal{width:100%;min-height:58px;font-size:1.15rem;font-weight:750}
+.modal-ajustes-estoque{box-sizing:border-box;width:min(52rem,calc(100% - 24px));max-height:85dvh;overflow-y:auto;margin:auto;padding:24px;border:1px solid #d8e2e5;border-radius:12px;background:#fff;color:#182f39;box-shadow:0 16px 48px #182f3933;white-space:normal;overflow-wrap:anywhere}
+.modal-ajustes-estoque::backdrop{background:#0008}.modal-ajustes-estoque h2{font-size:1.4rem;line-height:1.35;margin-top:0}
+.modal-ajustes-estoque .previa-lote{padding-left:22px}.modal-ajustes-estoque .previa-lote li{padding:12px 0;line-height:1.5;border-bottom:1px solid #d8e2e5}
+.modal-ajustes-estoque button,.modal-ajustes-estoque .button{max-width:100%;min-height:46px;white-space:normal;margin:6px 6px 0 0}
+@media(max-width:480px){.ajustes-diretos{padding:16px}.modal-ajustes-estoque{padding:18px}.modal-ajustes-estoque button,.modal-ajustes-estoque .button{width:100%;margin-right:0}}
+
+.ajustes-diretos [data-revisar-estoque][hidden]{display:none}

@@ -92,14 +92,15 @@ class AtualizacaoResultadoTests(AjustesFixture, TestCase):
     def test_falha_no_lote_reverte_primeiro_ajuste(self):
         self.segunda()
         previa = self.previa()
-        original = ajustes.conferir_ou_ajustar_estoque
+        from estoque.services import estoque_manual_lote
+        original = estoque_manual_lote.conferir_movimento
         chamadas = []
         def aplicar(*args, **kwargs):
             chamadas.append(args)
             if len(chamadas) == 2:
                 raise ValueError('Falha fictícia no segundo item')
             return original(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=aplicar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=aplicar):
             self.enviar(previa)
         self.assertFalse(AplicacaoAjuste.objects.exists())
         self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
@@ -132,18 +133,18 @@ class ResultadoBrowserTests(AjustesFixture, StaticLiveServerTestCase):
                 tab.call('Network.setCookie', {'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url})
                 tab.call('Emulation.setDeviceMetricsOverride', {'width': largura, 'height': 1000, 'deviceScaleFactor': 1, 'mobile': largura < 800})
                 tab.call('Page.navigate', {'url': url})
-                tab.wait('!!document.getElementById("revisar-atualizacao")')
+                tab.wait('window.inventarioAjustesModalPronto===true')
                 def capturar(etapa):
                     self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
                     rect = tab.evaluate('(()=>{const r=document.querySelector(".resumo-inventario").getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}})()')
                     (pasta / f'{etapa}-{largura}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'format': 'png', 'captureBeyondViewport': True, 'clip': rect})['data']))
                 capturar('antes')
                 tab.evaluate('document.getElementById("revisar-atualizacao").click();true')
-                tab.wait('!!document.getElementById("confirmar-atualizacao-resultado")')
+                tab.wait('!!document.getElementById("confirmar-atualizacao-modal")')
                 self.assertFalse(AplicacaoAjuste.objects.exists())
                 capturar('previa')
-                tab.evaluate('document.querySelector("#confirmar-atualizacao-resultado button").click();true')
-                tab.wait('!!document.querySelector(".saldo-aplicado")')
+                tab.evaluate('document.querySelector("#confirmar-atualizacao-modal button").click();true')
+                tab.wait('!!document.querySelector("#modal-sucesso-estoque")?.open')
                 self.assertFalse(tab.evaluate('!!document.getElementById("revisar-atualizacao")'))
                 self.assertEqual(AplicacaoAjuste.objects.count(), 1)
                 self.assertEqual(self.fresca().item.produto.quantidade, 8)

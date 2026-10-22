@@ -1,0 +1,6 @@
+{% if pode_aprovar %}<div class="ajustes-diretos" data-ajustes-diretos data-url="{% url 'inventario:ajustes_modal' inventario.pk %}" data-detalhe="{% url 'inventario:detalhe' inventario.pk %}">
+<button type="button" data-revisar-estoque {% if atualizacao.resumo.candidatos or atualizacao.resumo.aptos %}id="revisar-atualizacao"{% else %}hidden{% endif %} class="revisar-estoque-principal" disabled>Revisar e atualizar estoque</button><p role="status" data-estado-ajustes>Verificando ajustes disponíveis…</p>{% csrf_token %}
+</div>
+<dialog id="modal-previa-estoque" class="modal-ajustes-estoque" aria-labelledby="titulo-previa-estoque"><h2 id="titulo-previa-estoque">Revisar atualização do estoque</h2><div data-conteudo-previa></div></dialog>
+<dialog id="modal-sucesso-estoque" class="modal-ajustes-estoque" aria-labelledby="titulo-sucesso-estoque"><h2 id="titulo-sucesso-estoque">Estoque atualizado com sucesso</h2><p data-conferencia-sucesso></p><p data-quantidade-sucesso></p><p data-pendencias-sucesso></p><div class="acoes"><a class="button" href="{% url 'inventario:lista' %}">Voltar às conferências</a><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Continuar nesta conferência</a></div></dialog>
+{% endif %}

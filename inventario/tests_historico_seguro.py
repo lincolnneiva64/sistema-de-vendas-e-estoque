@@ -62,7 +62,7 @@ class HistoricoSeguroTests(AjustesFixture, TestCase):
         self.assertContains(pagina, 'Revisão por')
         self.assertContains(pagina, 'Revisao ficticia registrada')
         self.assertContains(pagina, 'id="acoes-administrativas"')
-        self.assertNotContains(pagina, 'id="revisar-atualizacao"')
+        self.assertContains(pagina, 'id="revisar-atualizacao"')
         self.assertNotContains(pagina, 'Requer prévia')
         self.assertNotContains(pagina, 'Apto para atualizar')
         self.assertNotContains(pagina, 'id="confirmar-atualizacao-resultado"')
@@ -204,7 +204,8 @@ class HistoricoSeguroBrowserTests(DadosLegibilidade, StaticLiveServerTestCase):
                 self.assertFalse(tab.evaluate('document.getElementById("acoes-administrativas").open'))
                 self.assertGreaterEqual(tab.evaluate('parseFloat(getComputedStyle(document.querySelector(".aplicacao-nao-comprovada")).fontSize)'), 16)
                 self.assertGreaterEqual(tab.evaluate('parseInt(getComputedStyle(document.querySelector(".aplicacao-nao-comprovada")).fontWeight)'), 500)
-                self.assertFalse(tab.evaluate('!!document.getElementById("revisar-atualizacao")'))
+                tab.wait('window.inventarioAjustesModalPronto===true')
+                self.assertTrue(tab.evaluate('!!document.getElementById("revisar-atualizacao")'))
                 self.assertFalse(tab.evaluate('document.querySelector(".resumo-inventario").textContent.includes("Requer prévia")'))
                 def capturar(nome):
                     self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))

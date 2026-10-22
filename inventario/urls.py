@@ -1,10 +1,11 @@
 from django.contrib.auth.views import LoginView
 from django.urls import path
 from . import views
-from . import ajustes_views
+from . import ajustes_views, ajustes_modal
 
 app_name = "inventario"
 urlpatterns = [
+    path("sessao/<int:inventario_id>/atualizacao-modal/", ajustes_modal.modal, name="ajustes_modal"),
     path("sessao/<int:inventario_id>/finalizar-administrativamente/", views.finalizar_administrativamente, name="finalizar_administrativamente"),
     path("sessao/<int:inventario_id>/contagem-admin/<int:rodada_id>/", views.editar_contagem_admin, name="editar_contagem_admin"),
     path("sessao/<int:inventario_id>/auditoria/", views.auditoria_cancelada, name="auditoria_cancelada"),

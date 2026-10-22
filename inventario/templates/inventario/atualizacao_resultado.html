@@ -1,3 +1,4 @@
+{% include "inventario/ajustes_diretos.html" %}
 <div class="atualizacao-resultado" id="atualizacao-resultado">
   <h3>Atualização do estoque</h3>
   {% if modo_historico %}
@@ -11,17 +12,14 @@
   {% if previa_lote %}
     <h4>Revisar atualização em lote</h4>
     <p>Somente os produtos aptos abaixo serão atualizados. Produtos bloqueados e já aplicados ficam fora deste lote.</p>
-    <ul class="previa-lote">{% for linha in atualizacao.aptas %}
-      <li><strong>{{ linha.rodada.item.cadastro.nome }}</strong>: {{ linha.atual|floatformat:'-3' }} {{ linha.unidade }} → <strong>{{ linha.resultante|floatformat:'-3' }} {{ linha.unidade }}</strong> · diferença {{ linha.diferenca|floatformat:'-3' }}</li>
-    {% endfor %}</ul>
+    {% include 'inventario/previa_produtos_ajuste.html' %}
     <p>A diferença será aplicada ao estoque atual, preservando as movimentações posteriores ao OK. Se os dados mudarem, o lote será recusado e será necessário revisar outra prévia. O lote é aplicado integralmente ou revertido.</p>
     <form method="post" id="confirmar-atualizacao-resultado">
       {% csrf_token %}<input type="hidden" name="acao" value="atualizar"><input type="hidden" name="previa" value="{{ previa_lote }}">
       <details><summary>Adicionar observação</summary><label>Observação opcional<textarea name="observacao" maxlength="4000"></textarea></label></details>
       <div class="acoes"><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Cancelar</a><button name="confirmacao" value="sim" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar atualização</button></div>
     </form>
-  {% elif pode_aprovar and atualizacao.resumo.candidatos or pode_aprovar and atualizacao.resumo.aptos %}
-    <a class="button" id="revisar-atualizacao" href="?atualizar=prever#atualizacao-resultado">Revisar atualização em lote</a>
+
   {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige prévia validada e autorização.</p>{% endif %}
   {% endif %}
   {% endif %}

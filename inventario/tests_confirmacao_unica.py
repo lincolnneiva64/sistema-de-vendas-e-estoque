@@ -47,7 +47,10 @@ class ConfirmacaoUnicaTests(AjustesFixture, TransactionTestCase):
     def test_rollback_inclui_aprovacao_e_confirmacao(self):
         r2 = self.segunda()
         previa = self.previa([self.rodada, r2])
-        real = ajustes.conferir_ou_ajustar_estoque
+        # Multi-product updates use the existing batch writer. Inject the
+        # failure in that real path, after stock writes and before commit.
+        from estoque.services import estoque_manual_lote
+        real = estoque_manual_lote.conferir_movimento
         n = 0
         def falhar(*args, **kwargs):
             nonlocal n
@@ -55,7 +58,7 @@ class ConfirmacaoUnicaTests(AjustesFixture, TransactionTestCase):
             if n == 2:
                 raise ValueError('Falha simulada')
             return real(*args, **kwargs)
-        with patch.object(ajustes, 'conferir_ou_ajustar_estoque', side_effect=falhar):
+        with patch.object(estoque_manual_lote, 'conferir_movimento', side_effect=falhar):
             with self.assertRaisesMessage(ValueError, 'Falha simulada'):
                 self.aplicar(previa)
         self.assertFalse(PropostaAjuste.objects.exists())

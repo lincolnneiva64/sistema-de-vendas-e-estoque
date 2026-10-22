@@ -1,0 +1,3 @@
+﻿<ul class="previa-lote">{% for linha in atualizacao.aptas %}
+<li><strong>{{ linha.rodada.item.cadastro.nome }}</strong>: {{ linha.atual|floatformat:'-3' }} {{ linha.unidade }} → <strong>{{ linha.resultante|floatformat:'-3' }} {{ linha.unidade }}</strong> · diferença {{ linha.diferenca|floatformat:'-3' }}<br>Contagem física: {{ linha.rodada.contado_base|floatformat:'-3' }} {{ linha.unidade }}</li>
+{% endfor %}</ul>
