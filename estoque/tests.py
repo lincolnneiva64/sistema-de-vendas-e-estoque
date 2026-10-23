@@ -11587,7 +11587,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
             bloco_adicionar,
         )
         self.assertIn(
-            "window.adicionarCardSugestaoNaLista(cardManual);",
+            "window.adicionarCardSugestaoNaLista(cardManual, false);",
             bloco_adicionar,
         )
         self.assertIn(
@@ -12217,10 +12217,11 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, "Últimas 3 compras deste produto")
         self.assertContains(resposta, fornecedor_recente.nome)
         self.assertContains(resposta, fornecedor_antigo.nome)
-        self.assertContains(resposta, "2.500 UN")
-        self.assertContains(resposta, "4.000 CX")
-        self.assertContains(resposta, "R$ 9.87")
-        self.assertContains(resposta, "R$ 12.34")
+        # Decimal separators follow the active locale, including pt-BR.
+        self.assertRegex(html, r"2[,.]500 UN")
+        self.assertRegex(html, r"4[,.]000 CX")
+        self.assertRegex(html, r"R\$ 9[,.]87")
+        self.assertRegex(html, r"R\$ 12[,.]34")
         self.assertLess(html.index(fornecedor_recente.nome), html.index(fornecedor_antigo.nome))
         self.assertContains(resposta, "function fecharHistoricosComprasMobile(exceto)")
         self.assertContains(resposta, ".sugestao-historico-item > div:first-child")
@@ -12250,10 +12251,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertContains(resposta, fornecedores[1].nome)
         self.assertNotContains(resposta, fornecedores[0].nome)
         self.assertNotContains(resposta, fornecedores[2].nome)
-        self.assertContains(resposta, "1.750 UN")
-        self.assertContains(resposta, "3.250 FD")
-        self.assertContains(resposta, "R$ 9.25")
-        self.assertContains(resposta, "R$ 8.50")
+        self.assertRegex(html, r"1[,.]750 UN")
+        self.assertRegex(html, r"3[,.]250 FD")
+        self.assertRegex(html, r"R\$ 9[,.]25")
+        self.assertRegex(html, r"R\$ 8[,.]50")
         self.assertLess(html.index(fornecedores[4].nome), html.index(fornecedores[3].nome))
         self.assertLess(html.index(fornecedores[3].nome), html.index(fornecedores[1].nome))
         self.assertContains(resposta, "function fecharHistoricosListaVer(exceto)")

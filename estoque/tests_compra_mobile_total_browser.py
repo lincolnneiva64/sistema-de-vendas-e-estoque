@@ -190,10 +190,13 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                     self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")
                     self.assertTrue(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
                     click(tab, button)
+                    # Synchronize with the real pointer event's UI response.
+                    tab.wait(f'document.querySelector({button!r}).textContent==="Confirmar"')
                     self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Confirmar")
                     self.assertFalse(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
                     tab.evaluate(f'window.editCard=document.querySelector({card!r});editCard.querySelector(".sugestao-qtd-input").value={qty!r};editCard.querySelector(".sugestao-preco-input").value={price!r};editCard.querySelector(".sugestao-preco-input").dispatchEvent(new Event("input",{{bubbles:true}}));true')
                     click(tab, button)
+                    tab.wait(f'document.querySelector({button!r}).textContent==="Editar"')
                     self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")
                 self.assertEqual(self.total(tab), "R$ 220,00")
                 tab.evaluate('localStorage.setItem("saved-list-preserved","draft");true')

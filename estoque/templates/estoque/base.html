@@ -116,9 +116,9 @@
                 return Math.max(
                     window.pageYOffset || 0,
                     window.scrollY || 0,
-                    elementoRolagem — elementoRolagem.scrollTop || 0 : 0,
-                    document.documentElement — document.documentElement.scrollTop || 0 : 0,
-                    document.body — document.body.scrollTop || 0 : 0
+                    elementoRolagem ? elementoRolagem.scrollTop || 0 : 0,
+                    document.documentElement ? document.documentElement.scrollTop || 0 : 0,
+                    document.body ? document.body.scrollTop || 0 : 0
                 );
             }
 

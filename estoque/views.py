@@ -11102,8 +11102,9 @@ def compras_lista_fornecedor_editar(request, pk):
     fornecedor_id = fornecedor.id if fornecedor else None
 
     fornecedores = list(Fornecedor.objects.all().order_by("nome", "id"))
+    fornecedores_payload = [{"id": f.id, "nome": f.nome} for f in fornecedores]
     fornecedores_json = json.dumps(
-        [{"id": f.id, "nome": f.nome} for f in fornecedores],
+        fornecedores_payload,
         ensure_ascii=False,
     )
 
@@ -11252,6 +11253,7 @@ def compras_lista_fornecedor_editar(request, pk):
         "fornecedor": fornecedor,
         "fornecedores": fornecedores,
         "fornecedores_json": fornecedores_json,
+        "fornecedores_payload": fornecedores_payload,
         "fornecedores_sugestao_json": fornecedores_json,
         "linhas": linhas_edicao,
         "produtos_sugestao": produtos_sugestao,

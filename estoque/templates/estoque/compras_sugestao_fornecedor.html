@@ -874,6 +874,8 @@
     display: none;
   }
 
+  .sugestao-progresso-mobile { display: none; }
+
   .sugestao-mobile-card {
     border: 1px solid #e9b8c0;
     border-left: 6px solid #9f1239;
@@ -1440,11 +1442,56 @@
     }
 
     .sugestao-mobile-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 8px;
     }
 
     .sugestao-mobile-edit {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 8px;
+    }
+
+    /* Preserve the original field order used by the existing serializers. */
+    .sugestao-mobile-edit > :nth-child(1),
+    .sugestao-item-lista-mobile-grid > :nth-child(1) { grid-area: 1 / 1; }
+    .sugestao-mobile-edit > :nth-child(2),
+    .sugestao-item-lista-mobile-grid > :nth-child(2) { grid-area: 2 / 1; }
+    .sugestao-mobile-edit > :nth-child(3),
+    .sugestao-item-lista-mobile-grid > :nth-child(3) { grid-area: 1 / 2; }
+    .sugestao-mobile-edit > :nth-child(4),
+    .sugestao-item-lista-mobile-grid > :nth-child(4) { grid-area: 2 / 2; }
+    .sugestao-mobile-edit > :nth-child(5) { grid-area: 3 / 1; }
+    .sugestao-mobile-edit > :nth-child(6) { grid-area: 4 / 1; }
+    .sugestao-mobile-edit > :nth-child(7) { grid-area: 3 / 2; }
+    .sugestao-mobile-edit > :nth-child(8) { grid-area: 4 / 2; }
+
+    .sugestao-mobile-edit > .sugestao-mobile-edit-actions {
+      grid-column: 1 / -1;
+    }
+
+    .sugestao-mobile-grid > div,
+    .sugestao-mobile-edit > *,
+    .sugestao-item-lista-mobile-grid > * {
+      min-width: 0;
+    }
+
+    .sugestao-mobile-top { margin-bottom: 6px; }
+    .sugestao-mobile-edit,
+    .sugestao-historico-mobile { margin-top: 6px; }
+    .sugestao-historico-toggle { min-height: 44px; }
+    .sugestao-mobile-label { overflow-wrap: anywhere; }
+
+    .sugestao-progresso-mobile {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      margin: 0 0 8px;
+      padding: 8px;
+      border: 1px solid #bbf7d0;
+      border-radius: 8px;
+      background: #f0fdf4;
+      color: #14532d;
+      font-weight: 850;
     }
 
     .sugestao-mobile-edit .sugestao-input,
@@ -1460,12 +1507,12 @@
     }
 
     .sugestao-mobile-card {
-      padding: 14px;
+      padding: 10px;
     }
 
     .sugestao-mobile-edit-actions {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 2px;
     }
@@ -1475,7 +1522,7 @@
       gap: 10px;
       margin: 12px;
       padding: 12px;
-      border: 1px solid #bbf7d0;
+      border: 2px solid #16a34a;
       border-radius: 10px;
       background: #f8fff9;
     }
@@ -1487,6 +1534,17 @@
     .sugestao-itens-lista-mobile h2 {
       margin: 0;
       color: #14532d;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    .sugestao-pre-lista-titulo {
+      margin: 0 0 8px;
+      padding: 10px;
+      border: 2px solid #9f1239;
+      border-radius: 10px;
+      background: #fff3f4;
+      color: #881337;
       font-size: 1rem;
       font-weight: 950;
     }
@@ -1505,10 +1563,18 @@
       display: grid;
       gap: 8px;
       padding: 10px;
-      border: 1px solid #d9f99d;
+      border: 1px solid #16a34a;
       border-left: 5px solid #16a34a;
       border-radius: 9px;
-      background: #fff;
+      background: #f0fdf4;
+    }
+
+    .sugestao-item-detalhes > summary {
+      min-height: 44px;
+      align-content: center;
+      color: #14532d;
+      font-weight: 850;
+      cursor: pointer;
     }
 
     .sugestao-item-lista-mobile-topo {
@@ -1521,14 +1587,14 @@
 
     .sugestao-item-lista-mobile-grid {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 4px 8px;
     }
 
     .sugestao-item-lista-mobile .sugestao-input {
       width: 100%;
       max-width: none;
-      min-height: 42px;
+      min-height: 44px;
       padding: 9px 10px;
       font-size: .98rem;
       box-sizing: border-box;
@@ -1583,8 +1649,25 @@
     }
 
     .sugestao-mobile-produto {
+      font-size: 1.125rem;
       line-height: 1.25;
       overflow-wrap: anywhere;
+    }
+
+    .sugestao-item-lista-mobile-topo span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .sugestao-devolver-lista-mobile { grid-column: 1 / -1; }
+
+    .sugestao-historico-item {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      overflow-wrap: anywhere;
+    }
+
+    @media (min-width: 360px) {
+      .sugestao-mobile-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
 
     .sugestao-manual {
@@ -1733,22 +1816,42 @@
     }
 
     .sugestao-atalhos-lateral {
+      position: relative;
       top: auto;
-      right: 8px;
-      bottom: 78px;
-      transform: translateX(calc(100% - 46px));
+      right: auto;
+      bottom: auto;
+      margin: 8px;
+      flex-wrap: wrap;
+      transform: none;
     }
 
     .sugestao-atalhos-toggle {
-      width: 46px;
-      min-height: 104px;
+      width: auto;
+      min-height: 44px;
+      writing-mode: horizontal-tb;
       font-size: 12px;
+      border-radius: 8px;
     }
 
     .sugestao-atalhos-painel {
-      width: min(270px, calc(100vw - 54px));
+      display: none;
+      width: 100%;
+      box-sizing: border-box;
       max-height: min(62vh, calc(100vh - 190px));
       overflow-y: auto;
+    }
+
+    .sugestao-atalhos-lateral.aberto .sugestao-atalhos-painel { display: block; }
+
+    /* On this page only, utility buttons follow the content instead of
+       covering purchase fields. Keep the original controls and handlers. */
+    body:has(.sugestao-page) #atalho-despesa-global,
+    body:has(.sugestao-page) #botao-voltar-topo {
+      position: static !important;
+      margin: 12px;
+      transform: none !important;
+      opacity: 1;
+      pointer-events: auto;
     }
   }
 </style>
@@ -2044,6 +2147,12 @@
       </div>
 
       <div class="sugestao-mobile{% if modo_edicao_lista %} sugestao-mobile-edicao-direta{% endif %}" id="mobileSugestaoProdutos">
+        {% if not modo_edicao_lista %}<h2 class="sugestao-pre-lista-titulo" id="preListaMobileTitulo">Pré-lista — Falta comprar</h2>{% endif %}
+        <div class="sugestao-progresso-mobile" role="status" aria-live="polite" aria-atomic="true">
+          <span>Pendentes: <strong data-produtos-pendentes>0</strong></span>
+          <span>Confirmados: <strong data-produtos-confirmados>0</strong></span>
+        </div>
+        {% if not modo_edicao_lista %}<p>Pré-lista: toque em <strong>Peguei</strong> para confirmar. Somente os itens confirmados serão gravados.</p>{% endif %}
         {% if modo_edicao_lista %}<p>Toque em Editar no produto, confirme os valores e use Salvar alterações para gravar a lista.</p>{% endif %}
         {% if linhas %}
         {% for linha in linhas %}
@@ -2079,7 +2188,7 @@
               </div>
             </div>
             <div class="sugestao-mobile-edit">
-              <label class="sugestao-mobile-label">Quantidade/compra</label>
+              <label class="sugestao-mobile-label">Quantidade / compra</label>
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Quantidade de compra para {{ linha.produto.nome }}">
               <label class="sugestao-mobile-label">Preco compra</label>
               <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}">
@@ -2091,7 +2200,7 @@
                 {% if modo_edicao_lista %}
                   <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>
                 {% else %}
-                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>
+                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Peguei</button>
                 {% endif %}
                 <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
               </div>
@@ -2100,9 +2209,9 @@
         {% endfor %}
         {% endif %}
       </div>
-      <section class="sugestao-itens-lista-mobile{% if modo_edicao_lista %} sugestao-itens-lista-edicao-direta{% endif %}" id="itensListaMobile" aria-label="Itens da lista">
-        <h2>Itens da lista</h2>
-      <div class="sugestao-itens-lista-vazia" id="itensListaMobileVazia">Toque em Adicionar à lista nos produtos sugeridos.</div>
+      <section class="sugestao-itens-lista-mobile{% if modo_edicao_lista %} sugestao-itens-lista-edicao-direta{% endif %}" id="itensListaMobile" aria-labelledby="listaConfirmadaMobileTitulo">
+        <h2 id="listaConfirmadaMobileTitulo">Lista confirmada — Já peguei</h2>
+      <div class="sugestao-itens-lista-vazia" id="itensListaMobileVazia">Toque em Peguei nos produtos da pré-lista.</div>
         <div id="itensListaMobileLista"></div>
       </section>
       <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}">
@@ -3473,7 +3582,7 @@
     const atributosLista = modoEdicaoLista ? ' data-na-lista="1"' : "";
     const botaoAcao = modoEdicaoLista
       ? '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>'
-      : '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Adicionar à lista</button>';
+      : '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Peguei</button>';
     return `
       <article class="${classesCard}" data-produto-id="${produto.id}" data-sugestao-original="${escapeHtml(produto.sugestao)}"${atributosLista}>
         <div class="sugestao-mobile-top">
@@ -3489,7 +3598,7 @@
         </div>
         ${historicoMobileProdutoHtml(produto)}
         <div class="sugestao-mobile-edit">
-          <label class="sugestao-mobile-label">Quantidade/compra</label>
+          <label class="sugestao-mobile-label">Quantidade / compra</label>
           <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Quantidade de compra para ${escapeHtml(produto.nome)}">
           <label class="sugestao-mobile-label">Preco compra</label>
           <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}">
@@ -3873,7 +3982,6 @@
   let remocaoEmAndamento = false;
   let focoPrecoPendentePorEnter = null;
   const produtosTratadosMobile = new Set();
-  let fluxoAdicaoMobile = 0;
 
   function ehMobileLista() {
     return window.matchMedia("(max-width: 860px)").matches;
@@ -3894,24 +4002,10 @@
 
   window.rolarProximoProdutoSugestaoMobile = rolarProximoProdutoMobile;
 
-  function confirmarAdicaoMobile(card, item) {
+  function confirmarAdicaoMobile(card) {
     if (!ehMobileLista() || modoEdicaoLista) return;
-    const sequencia = ++fluxoAdicaoMobile;
-    const ordem = cards();
-    const seguintes = ordem.slice(ordem.indexOf(card) + 1).concat(ordem.slice(0, ordem.indexOf(card)));
-    produtosTratadosMobile.add(String(card.dataset.produtoId));
-    window.setTimeout(function() {
-      ocultarProdutoTratado(card);
-      if (sequencia !== fluxoAdicaoMobile || !ehMobileLista()) return;
-      if (item?.isConnected) item.scrollIntoView({ behavior: "instant", block: "center" });
-      window.setTimeout(function() {
-        if (sequencia !== fluxoAdicaoMobile || !ehMobileLista()) return;
-        const proximo = seguintes.find((alvo) => alvo.isConnected &&
-          !produtosTratadosMobile.has(String(alvo.dataset.produtoId)) &&
-          alvo.getClientRects().length);
-        rolarProximoProdutoMobile(proximo);
-      }, 1300);
-    }, 350);
+    // One synchronous transfer: never jump to the confirmed list and back.
+    ocultarProdutoTratado(card);
   }
 
   window.sugestaoMobileCardsParaLista = function(cards) {
@@ -4027,6 +4121,7 @@
       quantidade: valor(".sugestao-qtd-input", card),
       unidade: valores[4] || "",
       precoCompra: valor(".sugestao-preco-input", card),
+      precoUnitario: valor(".sugestao-preco-unitario-input", card),
       total: valor(".sugestao-total-input", card),
     };
   }
@@ -4054,7 +4149,12 @@
   }
 
   function atualizarContadorItensLista() {
-    const total = lista.querySelectorAll(".sugestao-item-lista-mobile[data-produto-id]").length;
+    const origem = cards();
+    const total = origem.filter(card => card.dataset.naLista === "1").length;
+    const pendentes = origem.filter(card => card.dataset.naLista !== "1" &&
+      !produtosTratadosMobile.has(String(card.dataset.produtoId))).length;
+    mobile.querySelector("[data-produtos-pendentes]").textContent = String(pendentes);
+    mobile.querySelector("[data-produtos-confirmados]").textContent = String(total);
     if (!contador) return;
     contador.dataset.count = String(total);
     const totalEl = contador.querySelector("[data-itens-lista-mobile-total]");
@@ -4072,14 +4172,23 @@
     });
     if (!botao) return;
     botao.disabled = adicionado;
-    botao.textContent = adicionado ? "Adicionado à lista" : "Adicionar à lista";
+    botao.textContent = adicionado ? "Confirmado" : "Peguei";
   }
 
   function renderItem(card) {
     const dados = valoresDoCard(card);
-    const historicoHtml = historicoDoCardHtml(card);
     const existente = itemPorId(dados.produtoId);
     if (existente && existente.dataset.editando === "1") return existente;
+    if (existente) {
+      // Keep the existing controls, history expansion and focus intact.
+      existente.querySelector(".sugestao-item-lista-qtd-input").value = dados.quantidade;
+      existente.querySelector(".sugestao-item-lista-preco-input").value = dados.precoCompra;
+      existente.querySelector(".sugestao-item-lista-mobile-total span").textContent = dados.total;
+      existente.querySelector("[data-preco-unitario-confirmado]").textContent = dados.precoUnitario;
+      confirmarValoresAtuais(existente);
+      return existente;
+    }
+    const historicoHtml = historicoDoCardHtml(card);
     const conteudo = `
       <div class="sugestao-item-lista-mobile-topo">
         <span>${html(dados.produto)}</span>
@@ -4092,20 +4201,20 @@
         <input type="text" inputmode="decimal" class="sugestao-input sugestao-item-lista-preco-input" value="${html(dados.precoCompra)}" aria-label="Preco de ${html(dados.produto)} na lista" readonly>
       </div>
       <div class="sugestao-item-lista-mobile-total">Total: <span>${html(dados.total)}</span></div>
+      <details class="sugestao-item-detalhes">
+        <summary>Estoque e detalhes</summary>
+        ${card.querySelector(".sugestao-mobile-grid")?.outerHTML || ""}
+        <div><span class="sugestao-mobile-label">Preço unitário</span><span data-preco-unitario-confirmado>${html(dados.precoUnitario)}</span></div>
+      </details>
       ${historicoHtml}
       <div class="sugestao-item-lista-mobile-erro" role="alert"></div>
       <div class="sugestao-mobile-edit-actions">
         <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-editar-lista-mobile">Editar</button>
         <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-cancelar-edicao-lista-mobile" hidden>Cancelar edição</button>
         <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-lista-mobile">Remover</button>
+        <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-devolver-lista-mobile">Devolver à pré-lista</button>
       </div>
     `;
-
-    if (existente) {
-      existente.innerHTML = conteudo;
-      confirmarValoresAtuais(existente);
-      return existente;
-    }
 
     lista.insertAdjacentHTML("beforeend", `<article class="sugestao-item-lista-mobile" data-produto-id="${html(dados.produtoId)}">${conteudo}</article>`);
     const criado = itemPorId(dados.produtoId);
@@ -4135,6 +4244,8 @@
     if (qtdCard && qtd) qtdCard.value = qtd.value;
     if (precoCard && preco) precoCard.value = preco.value;
     if (unitarioCard && preco) unitarioCard.value = decimal(numero(preco.value) / fator, 2);
+    const unitarioItem = item.querySelector("[data-preco-unitario-confirmado]");
+    if (unitarioItem && unitarioCard) unitarioItem.textContent = unitarioCard.value;
     if (totalCard) totalCard.value = decimal(total, 2);
 
     const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
@@ -4249,19 +4360,28 @@
   function adicionarCardNaLista(card, confirmarFluxo = true) {
     if (!card || card.dataset.naLista === "1") return;
     marcarBotao(card, true);
-    const item = renderItem(card);
-    atualizarVazio();
-    if (confirmarFluxo) confirmarAdicaoMobile(card, item);
+    renderItem(card);
+    if (confirmarFluxo) confirmarAdicaoMobile(card);
     else ocultarProdutoTratado(card);
+    atualizarVazio();
   }
 
   window.adicionarCardSugestaoNaLista = adicionarCardNaLista;
 
+  function devolverItemParaPreLista(item) {
+    // Require a valid saved edit before moving an item; do not discard input.
+    if (item.dataset.editando === "1" && !salvarEdicao(item)) return;
+    const card = cardPorId(item.dataset.produtoId);
+    if (!card) return;
+    marcarBotao(card, false);
+    produtosTratadosMobile.delete(String(card.dataset.produtoId));
+    card.classList.remove("sugestao-tratada-mobile");
+    item.remove();
+    atualizarVazio();
+  }
+
   function removerItemDaLista(item) {
     const card = cardPorId(item.dataset.produtoId);
-    const ordem = ehMobileLista() ? cards() : [];
-    const indice = ordem.indexOf(card);
-    const seguintes = indice >= 0 ? ordem.slice(indice + 1).concat(ordem.slice(0, indice)) : ordem;
     if (itemEmEdicao === item) itemEmEdicao = null;
     if (card) {
       marcarBotao(card, false);
@@ -4269,12 +4389,6 @@
     }
     item.remove();
     atualizarVazio();
-    if (ehMobileLista()) {
-      const proximo = seguintes.find((alvo) => alvo.isConnected &&
-        !produtosTratadosMobile.has(String(alvo.dataset.produtoId)) &&
-        alvo.getClientRects().length);
-      rolarProximoProdutoMobile(proximo);
-    }
   }
 
   function abrirModalRemoverItem(item, botaoOrigem) {
@@ -4484,6 +4598,10 @@
       cancelarEdicao(item);
       return;
     }
+    if (event.target.closest(".sugestao-devolver-lista-mobile")) {
+      devolverItemParaPreLista(item);
+      return;
+    }
     if (event.target.closest(".sugestao-remover-lista-mobile")) {
       abrirModalRemoverItem(item, event.target.closest(".sugestao-remover-lista-mobile"));
     }
@@ -4536,6 +4654,9 @@
   if (modoEdicaoLista) {
     prepararEdicaoDiretaMobile();
   }
+  // Manual addition/removal uses the same source cards and delegated handlers.
+  const observadorCards = new MutationObserver(atualizarContadorItensLista);
+  observadorCards.observe(mobile, { childList: true });
   atualizarVazio();
 })();
 </script>
