@@ -12082,14 +12082,18 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
-        compra = Compra.objects.select_for_update().prefetch_related("itens__produto").get(pk=compra.pk)
+        compra = Compra.objects.select_for_update().get(pk=compra.pk)
         if compra.status == Compra.STATUS_FINALIZADA or compra.estoque_entrada_realizada:
             return
-        bloquear_produtos_precos(compra.itens.exclude(produto_id=None).values_list('produto_id',flat=True))
-        for item in compra.itens.select_related("produto").all():
+        itens = list(compra.itens.all())
+        produtos = bloquear_produtos_precos(item.produto_id for item in itens if item.produto_id)
+        fornecedores = []
+        for item in itens:
             if not item.produto_id:
                 continue
-            produto = Produto.objects.select_for_update().get(pk=item.produto_id)
+            # The catalog mutex and ordered group/product locks remain held until
+            # commit. Reuse those current rows instead of selecting each again.
+            produto = produtos[item.produto_id]
 
             if (
                 revisao_precos_pendente
@@ -12106,16 +12110,22 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
             produto.save(update_fields=["quantidade", "atualizado_em"])
             identificar(produto.pk, produto.quantidade - item.quantidade, produto.quantidade, "compra", f"Compra #{compra.pk}")
-            _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids, compra=compra)
+            if produto.pk in atualizar_custo_produto_ids and produto.preco_compra != item.preco_unitario:
+                _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids, compra=compra)
             if compra.fornecedor_id:
-                ProdutoFornecedor.objects.update_or_create(
-                    produto=produto,
-                    fornecedor=compra.fornecedor,
-                    defaults={
-                        "ultimo_preco_compra": item.preco_unitario,
-                        "ultima_compra_em": compra.data_compra,
-                    },
-                )
+                fornecedores.append(ProdutoFornecedor(
+                    produto_id=produto.pk, fornecedor_id=compra.fornecedor_id,
+                    ultimo_preco_compra=item.preco_unitario, ultima_compra_em=compra.data_compra,
+                ))
+
+        if fornecedores:
+            # Preserve supplier metadata, active flag and creation timestamp on
+            # conflicts; only the fields previously changed by update_or_create.
+            ProdutoFornecedor.objects.bulk_create(
+                fornecedores, update_conflicts=True,
+                unique_fields=["produto", "fornecedor"],
+                update_fields=["ultimo_preco_compra", "ultima_compra_em", "atualizado_em"],
+            )
 
         _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
 
