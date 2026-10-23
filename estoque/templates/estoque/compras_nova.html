@@ -247,9 +247,7 @@
     var select = linha.querySelector(".produto-select-real");
     if (!select) return null;
 
-    return Array.from(select.options || []).find(function(opt) {
-      return opt.value === String(produtoId);
-    }) || null;
+    return window.garantirOpcaoProdutoCompra(select,produtoId);
   }
 
   function atualizarEstoqueTopoPelaSugestao(linha) {
@@ -2836,7 +2834,10 @@
     <button type="button" class="compras-btn compras-btn-primary" id="abrirContasPagarGeralCompra">Ver / pagar contas</button>
   </section>
 
-  <form method="post" id="formCompra" data-edicao-finalizada="{% if edicao_finalizada %}1{% else %}0{% endif %}" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra and not edicao_finalizada %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
+  <template id="catalogoProdutosCompra"><select>
+{% for produto in produtos %}{% include 'estoque/includes/compra_produto_opcao.html' %}{% endfor %}
+</select></template>
+<form method="post" id="formCompra" data-edicao-finalizada="{% if edicao_finalizada %}1{% else %}0{% endif %}" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra and not edicao_finalizada %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
     {% csrf_token %}
     <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" hidden></p>
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
@@ -3136,9 +3137,7 @@
                   <input type="text" name="produto_busca[]" class="produto-busca" autocomplete="off" placeholder="Digite o produto" value="{{ linha.produto_nome }}">
                   <select name="produto_id[]" class="produto-select-real" tabindex="-1" aria-hidden="true">
                     <option value="">Selecione...</option>
-                    {% for produto in produtos %}
-                      <option value="{{ produto.id }}" data-grupo-id="{{ produto.vinculo_grupo.grupo_id }}" data-grupo-url="{% if produto.vinculo_grupo %}{% url 'estoque:grupos_produtos_detalhe' produto.vinculo_grupo.grupo_id %}{% endif %}" data-grupo-precos="{{ produto.vinculo_grupo.grupo.nome }}" data-grupo-regularizado="{% if produto.vinculo_grupo.grupo.precos_regularizados %}1{% else %}0{% endif %}" data-versao-grupo="{{ produto.vinculo_grupo.grupo.versao_precos }}" data-unidade="{{ produto.unidade_compra|default:'' }}" data-consulta-pc="{{ produto.preco_compra|default_if_none:'' }}" data-preco-compra="{{ produto.preco_compra|default:0|floatformat:2 }}" data-preco-compra-fracionado="{{ produto.preco_compra_fracionado|default:0|floatformat:2 }}" data-preco-venda="{{ produto.preco_venda|default:produto.preco_vista|default:0|floatformat:2 }}" data-preco-vista="{{ produto.preco_vista|default:produto.preco_venda|default:0|floatformat:2 }}" data-preco-prazo="{{ produto.preco_prazo|default:0|floatformat:2 }}" data-preco-vista-fracionado="{{ produto.preco_vista_fracionado|default:0|floatformat:2 }}" data-preco-prazo-fracionado="{{ produto.preco_prazo_fracionado|default:0|floatformat:2 }}" data-vende-fracionado="{% if produto.vende_fracionado %}1{% else %}0{% endif %}" data-fator-conversao="{{ produto.fator_conversao|default:0|floatformat:2 }}" data-estoque="{{ produto.quantidade|default:0 }}" {% if linha.produto_id == produto.id %}selected{% endif %}>{{ produto.nome }}</option>
-                    {% endfor %}
+                    {% if linha.produto_id %}<option value="{{ linha.produto_id }}" selected>{{ linha.produto_nome }}</option>{% endif %}
                   </select>
                   <div class="produto-sugestoes"></div>
                   <div class="produto-historico-compra"></div>
@@ -3170,6 +3169,31 @@
           </tbody>
 
         </table>
+<script>
+(function() {
+  const catalogo=document.getElementById('catalogoProdutosCompra').content.querySelector('select');
+  const opcoes=Array.from(catalogo.options);
+  const porId=new Map(opcoes.map(opcao=>[opcao.value,opcao]));
+  // Page-local data, freshly rendered with this GET. Only selected options live in each row.
+  window.opcoesCatalogoProdutosCompra=()=>opcoes;
+  window.garantirOpcaoProdutoCompra=function(select,id) {
+    if(!select || !id)return null;
+    id=String(id);
+    let opcao=Array.from(select.options).find(item=>item.value===id);
+    const fonte=porId.get(id);
+    if(!opcao && fonte){opcao=fonte.cloneNode(true);select.append(opcao);}
+    return opcao || null;
+  };
+  document.querySelectorAll('#tabelaItensCompra select[name="produto_id[]"]').forEach(select=>{
+    const id=select.value, fonte=porId.get(id);
+    if(fonte){
+      const opcao=fonte.cloneNode(true);opcao.selected=true;
+      select.replaceChildren(new Option('Selecione...',''),opcao);
+    } else {select.replaceChildren(new Option('Selecione...',''));}
+  });
+})();
+</script>
+
       </div>
       <div class="compras-total">
         <span class="compras-total-itens">Itens: <span id="totalItensCompraMobile">0</span></span>
@@ -4001,7 +4025,7 @@
 
   function opcoesProduto(linha) {
     const produto = linha.querySelector('[name="produto_id[]"]');
-    return Array.from(produto.options).filter((opt) => opt.value);
+    return window.opcoesCatalogoProdutosCompra();
   }
 
   function campoPrecoUnitario(linha) {
@@ -4394,6 +4418,7 @@
     }
 
     mostrarErroLinhaCompra(linha, "");
+    window.garantirOpcaoProdutoCompra(produto,opt.value);
     produto.value = opt.value;
     produtoBusca.value = opt.textContent.trim();
     unidade.value = opt.dataset.unidade || "";
@@ -7596,7 +7621,7 @@
       const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
       const estoqueValor = linha.querySelector(".produto-estoque-valor");
       const optionProduto = produtoId && item.produto_id
-        ? Array.from(produtoId.options || []).find(function(opt) { return opt.value === String(item.produto_id); })
+        ? window.garantirOpcaoProdutoCompra(produtoId,item.produto_id)
         : null;
 
       // Rascunhos antigos nao registravam o estado: preservar os itens existentes.
