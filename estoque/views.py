@@ -10216,7 +10216,7 @@ def compras_lista_fornecedor_gravar(request):
                 "pedidos_abertos": _decimal_lista_fornecedor(linha.get("pedidos"), casas=3),
                 "quantidade_sugerida": quantidade_sugerida,
                 "quantidade_final": quantidade_final,
-                "unidade": str(linha.get("unidade") or "")[:20],
+                "unidade": str(linha.get("unidade") or produto.unidade_compra or produto.unidade_venda_1 or "")[:20],
                 "preco_compra": preco_compra,
                 "preco_unitario": preco_unitario,
                 "total": total,
@@ -10739,7 +10739,7 @@ def _criar_compra_rascunho_da_lista_fornecedor(lista, request):
             compra=compra,
             produto=item.produto,
             quantidade=item.quantidade_final,
-            unidade=item.unidade or "",
+            unidade=item.unidade or item.produto.unidade_compra or item.produto.unidade_venda_1 or "",
             preco_unitario=item.preco_compra,
             valor_total=item.total,
             observacao=None,
@@ -10927,7 +10927,7 @@ def _lista_fornecedor_produto_payload(produto, fornecedor_id=None, item=None, pr
         "quantidade_vendida": _lista_fornecedor_fmt_qtd(vendido),
         "quantidade_pedidos_abertos": _lista_fornecedor_fmt_qtd(pedidos),
         "sugestao": _lista_fornecedor_fmt_qtd(quantidade),
-        "unidade": getattr(produto, "unidade", "") or "",
+        "unidade": (item.unidade if item else "") or produto.unidade_compra or produto.unidade_venda_1 or "",
         "preco_compra": _lista_fornecedor_fmt_moeda(preco_compra),
         "preco_unitario_calculado": _lista_fornecedor_fmt_moeda(preco_unitario),
         "total_sugerido": _lista_fornecedor_fmt_moeda(total),
@@ -11043,7 +11043,7 @@ def compras_lista_fornecedor_editar(request, pk):
                     pedidos_abertos=_lista_fornecedor_decimal_qtd(linha.get("pedidos") or "0"),
                     quantidade_sugerida=quantidade,
                     quantidade_final=quantidade,
-                    unidade=linha.get("unidade") or getattr(produto, "unidade", "") or "",
+                    unidade=linha.get("unidade") or produto.unidade_compra or produto.unidade_venda_1 or "",
                     preco_compra=preco_compra,
                     preco_unitario=preco_unitario,
                     total=total,
@@ -11161,7 +11161,7 @@ def compras_lista_fornecedor_editar(request, pk):
             "estoque_minimo": item.estoque_minimo or Decimal("0"),
             "quantidade_vendida": Decimal(vendidos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0),
             "quantidade_pedidos_abertos": Decimal(pedidos_abertos_por_produto_edicao.get(item.produto_id, Decimal("0.000")) or 0),
-            "unidade": item.unidade or getattr(produto, "unidade", "") or "",
+            "unidade": item.unidade or produto.unidade_compra or produto.unidade_venda_1 or "",
             "preco_compra": item.preco_compra or Decimal("0"),
             "preco_unitario_calculado": item.preco_unitario or Decimal("0"),
             "total_sugerido": item.total or Decimal("0"),
@@ -11602,12 +11602,15 @@ def _linhas_item_compra(compra=None):
 
     linhas = []
     for item in itens_qs:
+        unidade_base = (item.produto.unidade_venda_1 or item.produto.unidade_compra or "") if item.produto else ""
         linhas.append({
             "item_id": item.pk,
             "produto_id": item.produto_id or "",
             "produto_nome": item.produto.nome if item.produto else "",
             "quantidade": str(item.quantidade).replace(".", ","),
-            "unidade": item.unidade or "",
+            "unidade": item.unidade or unidade_base,
+            "unidade_estoque": unidade_base,
+            "unidade_divergente": bool(item.unidade and unidade_base and _normalizar_unidade_estoque(item.unidade) != _normalizar_unidade_estoque(unidade_base)),
             "preco_unitario": f"{item.preco_unitario:.2f}".replace(".", ","),
             "estoque": _estoque_produto_texto(item.produto),
             "observacao": item.observacao or "",
@@ -12087,6 +12090,18 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             return
         itens = list(compra.itens.all())
         produtos = bloquear_produtos_precos(item.produto_id for item in itens if item.produto_id)
+        # Purchase quantities and costs are expressed in stock base packages.
+        # Never reinterpret a divergent label by multiplying/dividing silently.
+        for item in itens:
+            if not item.produto_id:
+                continue
+            produto = produtos[item.produto_id]
+            unidade_base = produto.unidade_venda_1 or produto.unidade_compra or ""
+            if item.unidade and unidade_base and _normalizar_unidade_estoque(item.unidade) != _normalizar_unidade_estoque(unidade_base):
+                raise ValueError(
+                    f"Unidade {item.unidade} de {produto.nome} diverge do estoque em {unidade_base}. "
+                    "Confira a quantidade e o preco por embalagem antes de finalizar. Nenhuma conversao automatica foi aplicada."
+                )
         fornecedores = []
         for item in itens:
             if not item.produto_id:

@@ -3145,7 +3145,10 @@
                 </div>
               </td>
               <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
-              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="UN" value="{{ linha.unidade }}" list="unidadesCompraMobile"></td>
+              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="Unidade" value="{{ linha.unidade }}" list="unidadesCompraMobile">
+                {% if linha.unidade_estoque %}<small>Estoque em {{ linha.unidade_estoque }}.</small>{% endif %}
+                {% if linha.unidade_divergente %}<small role="alert">Unidade divergente. Confira quantidade e preco por embalagem antes de finalizar.</small>{% endif %}
+              </td>
               <td data-label="Valor">
                 <input type="hidden" name="preco_unitario[]" value="{{ linha.preco_unitario }}">
                 <input type="text" class="campo-preco-unitario-compra" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="{{ linha.preco_unitario }}" placeholder="0,00">
