@@ -152,7 +152,7 @@ class CompraUnidadesTests(UnidadesFixture, TestCase):
                 results.append(len(queries))
                 print(f"UNIDADES_PERFORMANCE version={label} queries={len(queries)} seconds={elapsed:.4f}", flush=True)
                 transaction.set_rollback(True)  # Restore this synthetic fixture for a fair comparison.
-        self.assertEqual(results[0], results[1])
+        self.assertLessEqual(results[1], results[0])  # Later price batching may reduce the baseline further.
         self.assert_sem_efeitos()
 
     def test_un_gravado_divergente_bloqueia_post_sem_efeitos(self):

@@ -62,6 +62,7 @@ from .services.sincronizacao_firebird import (
 from .services.vendas import ErroGravarVenda, criar_ou_atualizar_venda
 from .services.estoque_manual import conferir_ou_ajustar_estoque
 from inventario.rastreabilidade import identificar, referenciar_venda
+from .services.diagnostico_finalizacao_compra import diagnosticar_finalizacao_http, etapa_finalizacao_compra
 from .services.separacao_vendas import (
     consolidar_alteracoes_fisicas_apos_separacao,
     criar_ou_obter_separacao_venda,
@@ -11924,11 +11925,17 @@ def _produtos_preco_venda_atualizar_post(request):
 
 @serializar_grupos
 def _atualizar_custos_produtos_compra(itens, produto_ids, compra=None):
-    from .services.precos_compra import aplicar_precos_compra
+    from .services.precos_compra import aplicar_precos_compra_em_lote
     produto_ids = set(produto_ids or [])
     if not produto_ids:
         return
 
+    itens = list(itens)
+    itens_compra = {}
+    if compra:
+        for registro in compra.itens.filter(produto_id__in=produto_ids).order_by('pk'):
+            itens_compra.setdefault(registro.produto_id, registro)
+    comandos = []
     for item in itens:
         produto = item.get("produto")
         if not produto or produto.pk not in produto_ids:
@@ -11940,16 +11947,18 @@ def _atualizar_custos_produtos_compra(itens, produto_ids, compra=None):
         fator = Decimal(str(produto.fator_conversao or "0"))
         if produto.vende_fracionado and fator > 0:
             atualizacoes["preco_compra_fracionado"] = (preco_unitario / fator).quantize(Decimal("0.01"))
-        item_compra = compra.itens.filter(produto_id=produto.pk).first() if compra else None
+        item_compra = itens_compra.get(produto.pk)
         if item_compra:
-            aplicar_precos_compra(item_compra, atualizacoes)
+            comandos.append({'item': item_compra, 'atualizacoes': atualizacoes})
         else:
             Produto.objects.filter(pk=produto.pk).update(**atualizacoes, atualizado_em=timezone.now())
+    if comandos:
+        aplicar_precos_compra_em_lote(compra, comandos)
 
 
 @serializar_grupos
 def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
-    from .services.precos_compra import aplicar_precos_compra
+    from .services.precos_compra import aplicar_precos_compra_em_lote
     if not precos_por_produto:
         return
 
@@ -11983,21 +11992,28 @@ def _atualizar_precos_venda_produtos_compra(precos_por_produto, compra=None):
         if any(getattr(produtos[registro['produto_id']], campo) == valor for campo, valor in registro['valores'].items()):
             raise ValueError('Revisao ambigua com iniciadores diferentes. Reabra uma unica revisao do grupo; nenhum preco foi salvo.')
     trabalhos += [(r['produto_id'],r['valores'],r['versao']) for r in por_grupo.values() if r['valores']]
+    itens_compra = {}
+    if compra:
+        for registro in compra.itens.filter(produto_id__in=por_produto).order_by('pk'):
+            itens_compra.setdefault(registro.produto_id, registro)
+    comandos = []
     for produto_id, atualizacoes, versao in trabalhos:
         if 'preco_vista' in atualizacoes:
             atualizacoes = {**atualizacoes, 'preco_venda': atualizacoes['preco_vista']}
-        item_compra = compra.itens.filter(produto_id=produto_id).first() if compra else None
+        item_compra = itens_compra.get(produto_id)
         if item_compra:
-            aplicar_precos_compra(item_compra, atualizacoes,
+            comandos.append(dict(item=item_compra, atualizacoes=atualizacoes,
                 operador=getattr(precos_por_produto,'operador',None), versao_esperada=versao,
                 selecionados=getattr(precos_por_produto,'selecionados',{}).get(produto_id),
                 confirmar=produto_id in getattr(precos_por_produto,'confirmados',set()),
-                assinatura_esperada=getattr(precos_por_produto,'assinaturas',{}).get(produto_id))
+                assinatura_esperada=getattr(precos_por_produto,'assinaturas',{}).get(produto_id)))
         else:
             try:
                 Produto.objects.filter(pk=produto_id, excluido=False).update(**atualizacoes, atualizado_em=timezone.now())
             except ValidationError as exc:
                 raise ValueError(' '.join(exc.messages)) from exc
+    if comandos:
+        aplicar_precos_compra_em_lote(compra, comandos)
 
 
 def _parcelas_financeiras_compra(compra):
@@ -12085,6 +12101,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
+        etapa_finalizacao_compra('bloqueios_estoque')
         compra = Compra.objects.select_for_update().get(pk=compra.pk)
         if compra.status == Compra.STATUS_FINALIZADA or compra.estoque_entrada_realizada:
             return
@@ -12103,6 +12120,8 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                     "Confira a quantidade e o preco por embalagem antes de finalizar. Nenhuma conversao automatica foi aplicada."
                 )
         fornecedores = []
+        custos = []
+        etapa_finalizacao_compra('estoque')
         for item in itens:
             if not item.produto_id:
                 continue
@@ -12126,12 +12145,16 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             produto.save(update_fields=["quantidade", "atualizado_em"])
             identificar(produto.pk, produto.quantidade - item.quantidade, produto.quantidade, "compra", f"Compra #{compra.pk}")
             if produto.pk in atualizar_custo_produto_ids and produto.preco_compra != item.preco_unitario:
-                _atualizar_custos_produtos_compra([{"produto": produto, "preco_unitario": item.preco_unitario}], atualizar_custo_produto_ids, compra=compra)
+                custos.append({"produto": produto, "preco_unitario": item.preco_unitario})
             if compra.fornecedor_id:
                 fornecedores.append(ProdutoFornecedor(
                     produto_id=produto.pk, fornecedor_id=compra.fornecedor_id,
                     ultimo_preco_compra=item.preco_unitario, ultima_compra_em=compra.data_compra,
                 ))
+
+        if custos:
+            etapa_finalizacao_compra('custos')
+            _atualizar_custos_produtos_compra(custos, atualizar_custo_produto_ids, compra=compra)
 
         if fornecedores:
             # Preserve supplier metadata, active flag and creation timestamp on
@@ -12142,6 +12165,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                 update_fields=["ultimo_preco_compra", "ultima_compra_em", "atualizado_em"],
             )
 
+        etapa_finalizacao_compra('precos_venda')
         _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
 
         compra.revisao_precos_pendente = bool(revisao_precos_pendente)
@@ -12150,6 +12174,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
         compra.status = Compra.STATUS_FINALIZADA
         compra.save(update_fields=["revisao_precos_pendente", "estoque_entrada_realizada", "estoque_entrada_realizada_em", "status", "atualizado_em"])
 
+        etapa_finalizacao_compra('financeiro')
         if _compra_pagamento_a_prazo(compra.tipo_pagamento):
             _criar_contas_pagar_compra(compra)
         elif _compra_pagamento_cartao_credito(compra.tipo_pagamento):
@@ -12379,6 +12404,7 @@ def compra_editar(request, pk):
 
 
 @proteger_precos_http()
+@diagnosticar_finalizacao_http
 def compra_finalizar(request, pk):
     compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
     if not _compra_editavel_ou_redireciona(compra):
@@ -12419,10 +12445,12 @@ def compra_finalizar(request, pk):
                 messages.error(request, _mensagem_vencimento_compra(dados["tipo_pagamento"]))
                 return redirect("estoque:compra_editar", pk=compra.pk)
             try:
+                etapa_finalizacao_compra('catalogo')
                 with transaction.atomic(), bloquear_catalogo():
                     compra = Compra.objects.select_for_update().get(pk=compra.pk)
                     if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
                         return redirect("estoque:compras_detalhe", pk=compra.pk)
+                    etapa_finalizacao_compra('salvar_itens_plano')
                     _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
                     _salvar_pagamento_nota_compra(request, compra, dados)
                     _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))

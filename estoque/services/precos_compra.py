@@ -20,70 +20,129 @@ def aplicar_precos_compra(item, atualizacoes, operador=None, versao_esperada=Non
     with transaction.atomic(using=using):
         compra=Compra.objects.using(using).select_for_update().get(pk=item.compra_id)
         item = ItemCompra.objects.using(using).select_for_update().get(pk=item.pk)
-        bloquear_produtos_precos([item.produto_id],using)
-        produto = Produto.objects.using(using).select_for_update().get(pk=item.produto_id)
-        vinculo=getattr(produto,'vinculo_grupo',None)
-        compartilhados={campo:value for campo,value in atualizacoes.items() if campo in PRECOS_VINCULADOS}
-        if vinculo:
-            compartilhados={campo:value for campo,value in compartilhados.items() if getattr(produto,campo)!=value}
-        if vinculo and compartilhados:
-            # Purchase callers must provide a version from the operator's review,
-            # never silently use the latest version after a competing update.
-            if versao_esperada is None:
-                raise ValueError('Revisao de produto vinculado exige versao do grupo. Reabra a revisao; nenhuma alteracao foi salva.')
-            from estoque.models import MembroGrupoProduto
-            obrigatorios=set(MembroGrupoProduto.objects.using(using).filter(
-                grupo_id=vinculo.grupo_id,produto_id__in=compra.itens.values_list('produto_id',flat=True)
-            ).values_list('produto_id',flat=True))
-            if selecionados is None or not obrigatorios.issubset({int(pk) for pk in selecionados}):
-                raise ValueError('Confirme todos os integrantes que participaram da mesma compra.')
-            custos={campo:value for campo,value in atualizacoes.items() if campo in ('preco_compra','preco_compra_fracionado')}
-            if custos:
-                # Validate shared sale prices against the final individual cost,
-                # with both writes under this same outer transaction.
-                aplicar_precos_compra(item,custos,operador=operador)
-                produto.refresh_from_db();item.refresh_from_db()
-            try:
-                evento=alterar_precos_grupo(produto.pk,compartilhados,versao_esperada=versao_esperada,
-                    operador=operador,origem='compra',selecionados=selecionados,confirmar=confirmar,assinatura_esperada=assinatura_esperada,evidencia_extra={'compra_id':item.compra_id,'item_id':item.pk,'produto_id':item.produto_id},using=using)
-            except ValidationError as exc:
-                raise ValueError(' '.join(exc.messages)) from exc
-            if evento:
-                item.alteracoes_precos_vinculados=[*item.alteracoes_precos_vinculados,str(evento.operation_id)]
-                item.save(update_fields=['alteracoes_precos_vinculados'])
-                compra.alteracoes_precos_vinculados=[*compra.alteracoes_precos_vinculados,str(evento.operation_id)]
-                compra.save(update_fields=['alteracoes_precos_vinculados'])
-            produto.refresh_from_db()
-            atualizacoes={campo:value for campo,value in atualizacoes.items() if campo not in (*PRECOS_VINCULADOS,'preco_venda',*custos)}
-        elif vinculo:
-            atualizacoes={campo:value for campo,value in atualizacoes.items() if campo not in (*PRECOS_VINCULADOS,'preco_venda')}
-        snapshot = dict(item.alteracoes_precos or {})
-        autoria = dict(produto.autoria_precos or {})
-        alterados = {}
-        for campo, novo in atualizacoes.items():
-            if campo not in PRECOS_PRODUTO_CONTROLADOS:
-                raise ValueError("Campo de preco nao permitido.")
-            anterior = getattr(produto, campo)
-            if anterior == novo:
-                continue
-            token = uuid4().hex
-            registro = snapshot.get(campo)
-            # Uma revisao da mesma compra pode ampliar seu efeito anterior.
-            if registro and autoria.get(campo) == registro.get("alteracao_id") and _valor_json(anterior) == registro.get("novo"):
-                valor_anterior = registro["anterior"]
-            else:
-                valor_anterior = _valor_json(anterior)
-            snapshot[campo] = {"anterior": valor_anterior, "novo": _valor_json(novo), "alteracao_id": token}
-            autoria[campo] = token
-            alterados[campo] = novo
-        if alterados:
-            # Bypass restrito: valores e autoria sao gravados juntos, sob bloqueio.
-            models.QuerySet.update(
-                Produto.objects.using(using).filter(pk=produto.pk),
-                **alterados, autoria_precos=autoria, atualizado_em=timezone.now(),
+        produtos = bloquear_produtos_precos([item.produto_id],using)
+        produto = produtos[item.produto_id]
+        from django.db.models import prefetch_related_objects
+        prefetch_related_objects([produto], 'vinculo_grupo')
+        return _aplicar_precos_compra_bloqueada(
+            compra, item, produto, atualizacoes, operador, versao_esperada,
+            selecionados, confirmar, assinatura_esperada, using,
+        )
+
+
+@serializar_grupos
+def aplicar_precos_compra_em_lote(compra, comandos):
+    """Same price rules, with one ordered lock/load pass per purchase batch.
+
+    No cross-request cache: membership and rows live only inside this locked
+    transaction. Group commands retain their own version/signature/actor checks.
+    """
+    from django.db.models import prefetch_related_objects
+    comandos = list(comandos)
+    if not comandos:
+        return
+    using = compra._state.db or 'default'
+    with transaction.atomic(using=using):
+        compra = Compra.objects.using(using).select_for_update().get(pk=compra.pk)
+        ids = {c['item'].pk for c in comandos}
+        itens = {i.pk: i for i in ItemCompra.objects.using(using).select_for_update()
+                 .filter(compra=compra, pk__in=ids).order_by('pk')}
+        if set(itens) != ids:
+            raise ValueError('Item nao pertence a compra ou foi alterado. Reabra a compra.')
+        produtos = bloquear_produtos_precos([i.produto_id for i in itens.values()], using)
+        prefetch_related_objects(list(produtos.values()), 'vinculo_grupo')
+        grupos = {pk: getattr(p, 'vinculo_grupo', None) for pk, p in produtos.items()}
+        integrantes = {}
+        for pk, vinculo in grupos.items():
+            if vinculo:
+                integrantes.setdefault(vinculo.grupo_id, set()).add(pk)
+        atualizar = set()
+        for comando in comandos:
+            item = itens[comando['item'].pk]
+            produto = produtos[item.produto_id]
+            if produto.pk in atualizar:
+                # A preceding group command may have changed this peer's prices
+                # and provenance. Membership is stable under the catalog mutex.
+                produto.refresh_from_db()
+                Produto._meta.get_field('vinculo_grupo').set_cached_value(produto, grupos[produto.pk])
+            valores = comando['atualizacoes']
+            _aplicar_precos_compra_bloqueada(
+                compra, item, produto, valores,
+                comando.get('operador'), comando.get('versao_esperada'),
+                comando.get('selecionados'), comando.get('confirmar', False),
+                comando.get('assinatura_esperada'), using,
             )
-            item.alteracoes_precos = snapshot
-            item.save(update_fields=["alteracoes_precos"])
+            atualizar.add(produto.pk)
+            vinculo = grupos[produto.pk]
+            if vinculo and set(valores).intersection(PRECOS_VINCULADOS):
+                atualizar.update(integrantes[vinculo.grupo_id])
+
+
+def _aplicar_precos_compra_bloqueada(compra, item, produto, atualizacoes, operador,
+                                    versao_esperada, selecionados, confirmar,
+                                    assinatura_esperada, using):
+    vinculo=getattr(produto,'vinculo_grupo',None)
+    compartilhados={campo:value for campo,value in atualizacoes.items() if campo in PRECOS_VINCULADOS}
+    if vinculo:
+        compartilhados={campo:value for campo,value in compartilhados.items() if getattr(produto,campo)!=value}
+    if vinculo and compartilhados:
+        # Purchase callers must provide a version from the operator's review,
+        # never silently use the latest version after a competing update.
+        if versao_esperada is None:
+            raise ValueError('Revisao de produto vinculado exige versao do grupo. Reabra a revisao; nenhuma alteracao foi salva.')
+        from estoque.models import MembroGrupoProduto
+        obrigatorios=set(MembroGrupoProduto.objects.using(using).filter(
+            grupo_id=vinculo.grupo_id,produto_id__in=compra.itens.values_list('produto_id',flat=True)
+        ).values_list('produto_id',flat=True))
+        if selecionados is None or not obrigatorios.issubset({int(pk) for pk in selecionados}):
+            raise ValueError('Confirme todos os integrantes que participaram da mesma compra.')
+        custos={campo:value for campo,value in atualizacoes.items() if campo in ('preco_compra','preco_compra_fracionado')}
+        if custos:
+            # Validate shared sale prices against the final individual cost,
+            # with both writes under this same outer transaction.
+            aplicar_precos_compra(item,custos,operador=operador)
+            produto.refresh_from_db();item.refresh_from_db()
+        try:
+            evento=alterar_precos_grupo(produto.pk,compartilhados,versao_esperada=versao_esperada,
+                operador=operador,origem='compra',selecionados=selecionados,confirmar=confirmar,assinatura_esperada=assinatura_esperada,evidencia_extra={'compra_id':item.compra_id,'item_id':item.pk,'produto_id':item.produto_id},using=using)
+        except ValidationError as exc:
+            raise ValueError(' '.join(exc.messages)) from exc
+        if evento:
+            item.alteracoes_precos_vinculados=[*item.alteracoes_precos_vinculados,str(evento.operation_id)]
+            item.save(update_fields=['alteracoes_precos_vinculados'])
+            compra.alteracoes_precos_vinculados=[*compra.alteracoes_precos_vinculados,str(evento.operation_id)]
+            compra.save(update_fields=['alteracoes_precos_vinculados'])
+        produto.refresh_from_db()
+        atualizacoes={campo:value for campo,value in atualizacoes.items() if campo not in (*PRECOS_VINCULADOS,'preco_venda',*custos)}
+    elif vinculo:
+        atualizacoes={campo:value for campo,value in atualizacoes.items() if campo not in (*PRECOS_VINCULADOS,'preco_venda')}
+    snapshot = dict(item.alteracoes_precos or {})
+    autoria = dict(produto.autoria_precos or {})
+    alterados = {}
+    for campo, novo in atualizacoes.items():
+        if campo not in PRECOS_PRODUTO_CONTROLADOS:
+            raise ValueError("Campo de preco nao permitido.")
+        anterior = getattr(produto, campo)
+        if anterior == novo:
+            continue
+        token = uuid4().hex
+        registro = snapshot.get(campo)
+        # Uma revisao da mesma compra pode ampliar seu efeito anterior.
+        if registro and autoria.get(campo) == registro.get("alteracao_id") and _valor_json(anterior) == registro.get("novo"):
+            valor_anterior = registro["anterior"]
+        else:
+            valor_anterior = _valor_json(anterior)
+        snapshot[campo] = {"anterior": valor_anterior, "novo": _valor_json(novo), "alteracao_id": token}
+        autoria[campo] = token
+        alterados[campo] = novo
+    if alterados:
+        # Bypass restrito: valores e autoria sao gravados juntos, sob bloqueio.
+        models.QuerySet.update(
+            Produto.objects.using(using).filter(pk=produto.pk),
+            **alterados, autoria_precos=autoria, atualizado_em=timezone.now(),
+        )
+        item.alteracoes_precos = snapshot
+        item.save(update_fields=["alteracoes_precos"])
 
 
 @serializar_grupos
