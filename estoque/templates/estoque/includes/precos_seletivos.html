@@ -12,6 +12,8 @@
 .ps-confirm-header { padding: 22px 24px 18px; border-bottom: 1px solid #e2e8f0; background: #fff; }
 .ps-confirm-title { margin: 0 0 6px; font: 750 22px/1.25 system-ui, sans-serif; color: #0f172a; }
 .ps-confirm-description { margin: 0; color: #475569; font-size: 14px; }
+.ps-confirm-scope { margin-top: 8px; }
+.ps-confirm-reason { display: block; margin-top: 4px; color: #475569; font-size: 11px; }
 .ps-confirm-body { min-height: 0; overflow-y: auto; padding: 18px 24px; overscroll-behavior: contain; }
 .ps-confirm-card { min-width: 0; padding: 16px; margin-bottom: 12px; border: 1px solid #dbe3ef; border-radius: 12px; background: #fff; overflow-wrap: anywhere; }
 .ps-confirm-card:last-child { margin-bottom: 0; }
@@ -85,6 +87,10 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
   cabecalho.append(aviso);dialog.append(cabecalho);
   const lista=document.createElement('div');lista.className='ps-confirm-body';dialog.append(lista);
   const campos = {preco_vista:'À vista',preco_prazo:'A prazo',preco_vista_fracionado:'À vista fracionado',preco_prazo_fracionado:'A prazo fracionado'};
+  const escopo=document.createElement('p');escopo.className='ps-confirm-description ps-confirm-scope';
+  const incluidos=Object.entries(campos).filter(([campo])=>grupo.campos.includes(campo) && campo in novos).map(([,nome])=>nome);
+  escopo.textContent='Campos inclu\u00eddos neste reajuste: '+(incluidos.join(', ') || 'nenhum')+'. Os demais mant\u00eam o valor individual de cada produto; participar do grupo n\u00e3o iguala todos os pre\u00e7os automaticamente.';
+  cabecalho.append(escopo);
   const moeda = valor => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(valor || 0));
   const efetivo = p => p.adotado ? p.precos.preco_vista : Number(p.legados.preco_venda_1 || 0) || Number(p.preco_venda || 0);
   const produtosApresentacao = [
@@ -108,7 +114,7 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
       const linha=document.createElement('div');
       const antes=p.precos[campo];
       linhasPreco.push({linha,campo,texto,antes});
-      linha.className='ps-confirm-price';precos.append(linha);
+      linha.className='ps-confirm-price';linha.dataset.campoPreco=campo;precos.append(linha);
     });
     const detalhes=document.createElement('details');detalhes.className='ps-confirm-details';
     const resumo=document.createElement('summary');resumo.textContent='Pedidos e custos individuais';detalhes.append(resumo);
@@ -133,7 +139,9 @@ window.confirmarPrecosSeletivos = async function(url, fonte, novos, comprados) {
         const atual=document.createElement('strong');atual.className='ps-confirm-after';atual.textContent=moeda(depois);valores.append(atual);
         const diferenca=document.createElement('span');diferenca.className='ps-confirm-difference';
         diferenca.textContent=mudou?((Number(depois)-Number(antes)>0?'+ ':'')+moeda(Number(depois)-Number(antes))):'Sem altera\u00e7\u00e3o';
-        linha.append(tituloPreco,valores,diferenca);
+        const motivo=document.createElement('span');motivo.className='ps-confirm-reason';
+        motivo.textContent=!box.checked?'Produto n\u00e3o selecionado; valor mantido.':!(campo in novos)?'Fora deste reajuste; valor individual mantido.':!mudou?'J\u00e1 est\u00e1 no valor proposto.':'';
+        linha.append(tituloPreco,valores,diferenca,motivo);
       });
       const atualEmbalagem=efetivo(p);
       const novoEmbalagem=box.checked ? (novos.preco_vista ?? p.precos.preco_vista) : atualEmbalagem;
