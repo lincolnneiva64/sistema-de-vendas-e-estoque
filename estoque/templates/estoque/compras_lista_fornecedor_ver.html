@@ -516,7 +516,7 @@
                       <div class="lista-ver-historico-desktop-item">
                         <div>{{ compra.data|default:"-" }}</div>
                         <div>{{ compra.fornecedor|default:"-" }}</div>
-                        <div class="lista-ver-historico-desktop-quantidade">{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                        <div class="lista-ver-historico-desktop-quantidade">{{ compra.quantidade|floatformat:3 }} {{ compra.unidade_exibicao|default:compra.unidade|default:"Não informada" }}</div>
                         <div class="lista-ver-historico-desktop-preco">R$ {{ compra.preco|floatformat:2 }}</div>
                       </div>
                     {% endfor %}
@@ -574,7 +574,7 @@
                   <div class="lista-ver-historico-item">
                     <div>{{ compra.data|default:"-" }}</div>
                     <div>{{ compra.fornecedor|default:"-" }}</div>
-                    <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                    <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade_exibicao|default:compra.unidade|default:"Não informada" }}</div>
                     <div class="lista-ver-historico-preco">R$ {{ compra.preco|floatformat:2 }}</div>
                   </div>
                 {% endfor %}

@@ -180,7 +180,7 @@ class CompraUnidadesTests(UnidadesFixture, TestCase):
         self.assertTrue(all(l["unidade"] == "" for l in linhas_antes))
         response = self.client.get(reverse("estoque:compra_editar", args=[self.compra.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["item_linhas"][0]["unidade"], "PCT")
+        self.assertEqual(response.context["item_linhas"][0]["unidade"], "")
         self.assertNotContains(response, 'placeholder="UN"')
         self.assertEqual(self.compra.itens.filter(unidade="").count(), 15)
 
@@ -203,14 +203,14 @@ class CompraUnidadesTests(UnidadesFixture, TestCase):
         item.save(update_fields=["unidade"])
         self.assertEqual(views._lista_fornecedor_produto_payload(p, item=item)["unidade"], "UN")
 
-    def test_lista_sem_rotulo_gera_compra_com_base_sem_alterar_lista(self):
+    def test_lista_sem_rotulo_gera_compra_sem_inferir_unidade(self):
         self.lista.itens.update(unidade="")
         self.compra.delete()  # Only this test's synthetic draft; one purchase per list.
         from django.test import RequestFactory
         request = RequestFactory().post("/")
         request.user = self.user
         compra = views._criar_compra_rascunho_da_lista_fornecedor(self.lista, request)
-        self.assertEqual(compra.itens.first().unidade, "PCT")
+        self.assertEqual(compra.itens.first().unidade, "")
         self.assertEqual(self.lista.itens.filter(unidade="").count(), 15)
         self.assertEqual(compra.total, Decimal("2180"))
 
@@ -262,7 +262,7 @@ class CompraUnidadesBrowserTests(UnidadesFixture, LiveServerTestCase):
                     tab.wait("document.readyState === 'complete' && !!document.getElementById('formCompra')")
                     units = tab.evaluate("Array.from(document.querySelectorAll('#tabelaItensCompra tbody [name=\"unidade[]\"]')).map(e=>({value:e.value,placeholder:e.placeholder}))")
                     self.assertEqual(len(units), 15)
-                    self.assertEqual([u["value"] for u in units[:5]], ["PCT", "UN", "FD", "CX", "FD"])
+                    self.assertEqual([u["value"] for u in units[:5]], ["", "UN", "FD", "CX", "FD"])
                     self.assertTrue(all(u["placeholder"] != "UN" for u in units))
                     self.assertIn("Unidade divergente", tab.evaluate("document.body.textContent"))
             finally:

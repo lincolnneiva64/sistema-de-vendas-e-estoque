@@ -2129,7 +2129,7 @@
                         <div class="sugestao-historico-desktop-item">
                           <div>{{ compra.data|default:"-" }}</div>
                           <div>{{ compra.fornecedor|default:"-" }}</div>
-                          <div class="sugestao-historico-desktop-quantidade">{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                          <div class="sugestao-historico-desktop-quantidade">{{ compra.quantidade|floatformat:3 }} {{ compra.unidade_exibicao|default:compra.unidade|default:"Não informada" }}</div>
                           <div class="sugestao-historico-desktop-preco">R$ {{ compra.preco|floatformat:2 }}</div>
                         </div>
                       {% endfor %}
@@ -2177,7 +2177,7 @@
                     <div class="sugestao-historico-item">
                       <div>{{ compra.data|default:"-" }}</div>
                       <div>{{ compra.fornecedor|default:"-" }}</div>
-                      <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
+                      <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade_exibicao|default:compra.unidade|default:"Não informada" }}</div>
                       <div class="sugestao-historico-preco">R$ {{ compra.preco|floatformat:2 }}</div>
                     </div>
                   {% endfor %}
@@ -3242,7 +3242,7 @@
 
     const comprasHtml = historico.map((compra) => {
       const quantidade = String(compra.quantidade || "0.000");
-      const unidade = String(compra.unidade || "").trim();
+      const unidade = String(compra.unidade_exibicao || compra.unidade || "Não informada").trim();
       const preco = String(compra.preco || "0.00");
 
       return `
@@ -3485,7 +3485,7 @@
           </div>
           ${historico.map((compra) => {
             const quantidade = String(compra.quantidade || "0.000");
-            const unidade = String(compra.unidade || "").trim();
+            const unidade = String(compra.unidade_exibicao || compra.unidade || "Não informada").trim();
             const preco = String(compra.preco || "0.00");
             return `
               <div class="sugestao-historico-desktop-item">
@@ -3551,7 +3551,7 @@
 
     const comprasHtml = historico.map((compra) => {
       const quantidade = String(compra.quantidade || "0.000");
-      const unidade = String(compra.unidade || "").trim();
+      const unidade = String(compra.unidade_exibicao || compra.unidade || "Não informada").trim();
       const preco = String(compra.preco || "0.00");
 
       return `
