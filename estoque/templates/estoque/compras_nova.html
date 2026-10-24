@@ -3145,7 +3145,6 @@
               </td>
               <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
               <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="Unidade" value="{{ linha.unidade }}" list="unidadesCompraMobile">
-                {% if linha.unidade_historica_ausente %}<small role="status">Unidade histórica não informada. O cadastro atual não comprova a unidade desta compra.</small>{% endif %}
                 {% if linha.unidade_estoque %}<small>Estoque em {{ linha.unidade_estoque }}.</small>{% endif %}
                 {% if linha.unidade_divergente %}<small role="alert">Unidade divergente. Confira quantidade e preco por embalagem antes de finalizar.</small>{% endif %}
               </td>
@@ -4495,7 +4494,7 @@
         <div class="produto-historico-item">
           <div>${compra.data || "-"}</div>
           <div>${compra.fornecedor || "-"}</div>
-          <div>${compra.quantidade || "-"} ${compra.unidade_exibicao || compra.unidade || "Não informada"}</div>
+          <div>${compra.quantidade || "-"} ${compra.unidade || ""}</div>
           <div class="produto-historico-preco">${formatarMoedaHistorico(compra.preco)}</div>
         </div>
       `;

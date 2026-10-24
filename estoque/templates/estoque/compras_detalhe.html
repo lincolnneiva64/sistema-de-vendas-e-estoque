@@ -730,7 +730,7 @@
             <tr>
               <td>{{ item.produto.nome|default:"Produto não identificado" }}</td>
               <td class="numero">{{ item.quantidade }}</td>
-              <td>{{ item.unidade_exibicao }}</td>
+              <td>{{ item.unidade|default:"-" }}</td>
               <td class="numero">R$ {{ item.preco_unitario }}</td>
               <td class="numero">R$ {{ item.valor_total }}</td>
             </tr>
