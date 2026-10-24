@@ -2082,7 +2082,7 @@ class Compra(models.Model):
     cancelada_em = models.DateTimeField(blank=True, null=True)
     motivo_cancelamento = models.TextField(blank=True)
     revisao_precos_pendente = models.BooleanField(default=False, db_index=True)
-    conciliacao_automatica = models.BooleanField(default=False, editable=False)
+    conciliacao_automatica = models.BooleanField(default=False, db_default=False, editable=False)
     estoque_entrada_realizada = models.BooleanField(default=False)
     estoque_entrada_realizada_em = models.DateTimeField(blank=True, null=True)
     fechamento_token = models.CharField(max_length=32, unique=True, blank=True, null=True, editable=False)

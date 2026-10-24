@@ -1,10 +1,11 @@
-"""Release gate for exactly inventory cancellation and the previous pickup approval."""
+"""Release gate for the explicit inventory, pickup and purchase approvals."""
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.management import create_permissions
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, migrations, models, transaction
 from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.writer import MigrationWriter
 from django.db.migrations.operations.models import CreateModel
 
 from locacoes.management.commands.publicar_recolhimento import (
@@ -13,11 +14,12 @@ from locacoes.management.commands.publicar_recolhimento import (
 
 
 TARGET = ('inventario', '0008_inventario_cancelamento')
-AUTHORIZED = frozenset((RECOLHIMENTO, TARGET))
+COMPRA = ('estoque', '0135_conciliacao_compra')
+AUTHORIZED = frozenset((RECOLHIMENTO, TARGET, COMPRA))
 
 
 class Command(BaseCommand):
-    help = 'Valida todas as pendências e aplica exclusivamente inventario.0008 e, se pendente, locacoes.0017.'
+    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017 e estoque.0135 autorizadas.'
     requires_system_checks = []
 
     def add_arguments(self, parser):
@@ -46,7 +48,7 @@ class Command(BaseCommand):
             plan = self.checked_plan(executor)
             if not plan:
                 return
-            executor.migrate([RECOLHIMENTO, TARGET], plan=plan)
+            executor.migrate([RECOLHIMENTO, TARGET, COMPRA], plan=plan)
             if any((m.app_label, m.name) == RECOLHIMENTO for m, _ in plan):
                 create_permissions(apps.get_app_config('locacoes'), verbosity=0, interactive=False)
             # A later failure here also rolls back both DDL and migration records.
@@ -96,6 +98,30 @@ class Command(BaseCommand):
                     or operation.name != name or not operation.preserve_default
                     or operation.field.deconstruct()[1:] != field.deconstruct()[1:]):
                 raise CommandError('Publicação recusada: inventario.0008 deve adicionar somente os campos opcionais autorizados.')
+        compra = loader.disk_migrations.get(COMPRA)
+        expected_compra = [
+            migrations.AddField(model_name='compra', name='conciliacao_automatica',
+                field=models.BooleanField(default=False, db_default=False, editable=False)),
+            migrations.AddField(model_name='itemcompra', name='estoque_base_registrado',
+                field=models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, editable=False)),
+            migrations.CreateModel(name='ConciliacaoCompra', fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('tipo', models.CharField(max_length=24)),
+                ('valor_pago', models.DecimalField(max_digits=12, decimal_places=2)),
+                ('valor_devolvido', models.DecimalField(max_digits=12, decimal_places=2, default=0)),
+                ('credito_fornecedor', models.DecimalField(max_digits=12, decimal_places=2, default=0)),
+                ('saldo_a_pagar', models.DecimalField(max_digits=12, decimal_places=2, default=0)),
+                ('efeitos', models.JSONField(default=dict)),
+                ('atualizado_em', models.DateTimeField(auto_now=True)),
+                ('compra', models.OneToOneField(on_delete=models.PROTECT, related_name='conciliacao', to='estoque.compra')),
+                ('edicao', models.OneToOneField(on_delete=models.PROTECT, related_name='conciliacao', to='estoque.edicaocompra')),
+            ]),
+        ]
+        if (compra is None or not compra.atomic or compra.replaces
+                or compra.dependencies != [('estoque', '0134_edicao_compra')]
+                or compra.run_before
+                or MigrationWriter.serialize(compra.operations)[0] != MigrationWriter.serialize(expected_compra)[0]):
+            raise CommandError('Publicação recusada: estoque.0135 diverge da definição autorizada.')
 
     @staticmethod
     def verify_schema():
@@ -104,3 +130,34 @@ class Command(BaseCommand):
         for name in ('cancelada_em', 'cancelada_por_id'):
             if name not in columns or not columns[name].null_ok:
                 raise CommandError('Publicação recusada: estrutura de cancelamento ausente ou incompatível.')
+        expected = {
+            'estoque_compra': {'conciliacao_automatica': ('boolean', True, 'false')},
+            'estoque_itemcompra': {'estoque_base_registrado': ('numeric(12,3)', False, None)},
+            'estoque_conciliacaocompra': {
+                'id': ('bigint', True, None), 'tipo': ('character varying(24)', True, None),
+                'valor_pago': ('numeric(12,2)', True, None),
+                'valor_devolvido': ('numeric(12,2)', True, None),
+                'credito_fornecedor': ('numeric(12,2)', True, None),
+                'saldo_a_pagar': ('numeric(12,2)', True, None),
+                'efeitos': ('jsonb', True, None),
+                'atualizado_em': ('timestamp with time zone', True, None),
+                'compra_id': ('bigint', True, None), 'edicao_id': ('bigint', True, None),
+            },
+        }
+        with connection.cursor() as cursor:
+            for table, fields in expected.items():
+                cursor.execute('''SELECT a.attname, format_type(a.atttypid, a.atttypmod),
+                        a.attnotnull, pg_get_expr(d.adbin, d.adrelid)
+                    FROM pg_attribute a LEFT JOIN pg_attrdef d
+                      ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                    WHERE a.attrelid = to_regclass(%s) AND a.attnum > 0 AND NOT a.attisdropped''', [table])
+                actual = {name: (kind, required, default) for name, kind, required, default in cursor.fetchall()}
+                if any(actual.get(name) != definition for name, definition in fields.items()):
+                    raise CommandError('Publicação recusada: estrutura/default de estoque.0135 ausente ou incompatível.')
+            constraints = connection.introspection.get_constraints(cursor, 'estoque_conciliacaocompra')
+            for column, target in [('compra_id', 'estoque_compra'), ('edicao_id', 'estoque_edicaocompra')]:
+                if (not any(c['columns'] == [column] and c['unique'] for c in constraints.values())
+                        or not any(c['columns'] == [column] and c['foreign_key'] == (target, 'id') for c in constraints.values())):
+                    raise CommandError('Publicação recusada: vínculos de estoque.0135 ausentes ou incompatíveis.')
+            if not any(c['columns'] == ['id'] and c['primary_key'] for c in constraints.values()):
+                raise CommandError('Publicação recusada: chave de estoque.0135 ausente ou incompatível.')
