@@ -1841,28 +1841,28 @@ td.listas-fornecedor-total {
             </div>
 
             <dl class="listas-fornecedor-mobile-dados">
-              <div>
+              <div class="listas-fornecedor-mobile-fornecedor">
                 <dt>Fornecedor</dt>
                 <dd>{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</dd>
               </div>
-              <div>
+              <div class="listas-fornecedor-mobile-data">
                 <dt>Data</dt>
                 <dd>{{ lista.data_lista|date:"d/m/Y" }}</dd>
               </div>
-              <div>
+              <div class="listas-fornecedor-mobile-valor">
                 <dt>Total</dt>
                 <dd class="listas-fornecedor-mobile-total">R$ {{ lista.total_lista|floatformat:2 }}</dd>
               </div>
-              <div>
-                <dt>Situacao</dt>
-                <dd>
-                  {% if lista.compra_gerada %}
-                    Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }} - {{ lista.compra_gerada.get_status_display }}
-                  {% else %}
-                    {{ lista.get_status_display }} - {{ lista.data_inicio_periodo|date:"d/m/Y" }} ate {{ lista.data_fim_periodo|date:"d/m/Y" }}
-                  {% endif %}
-                </dd>
+              <div class="listas-fornecedor-mobile-periodo">
+                <dt>Período</dt>
+                <dd>{{ lista.data_inicio_periodo|date:"d/m/Y" }} a {{ lista.data_fim_periodo|date:"d/m/Y" }}</dd>
               </div>
+              {% if lista.compra_gerada %}
+              <div class="listas-fornecedor-mobile-situacao">
+                <dt>Situação</dt>
+                <dd>Lista #{{ lista.id }} virou Compra #{{ lista.compra_gerada.id }} - {{ lista.compra_gerada.get_status_display }}</dd>
+              </div>
+              {% endif %}
             </dl>
 
             <div class="listas-fornecedor-mobile-acoes" aria-label="Acoes da Lista #{{ lista.id }}">
@@ -2731,14 +2731,14 @@ td.listas-fornecedor-total {
 
   .listas-fornecedor-mobile-cards {
     display: grid !important;
-    gap: 12px !important;
+    gap: 8px !important;
   }
 
   .listas-fornecedor-mobile-card {
     display: grid !important;
-    gap: 12px !important;
+    gap: 8px !important;
     width: 100% !important;
-    padding: 14px !important;
+    padding: 10px !important;
     border: 1px solid #e9b8c0 !important;
     border-radius: 12px !important;
     background: #fff !important;
@@ -2753,9 +2753,9 @@ td.listas-fornecedor-total {
 
   .listas-fornecedor-mobile-card-topo {
     display: flex !important;
-    align-items: flex-start !important;
+    align-items: center !important;
     justify-content: space-between !important;
-    gap: 10px !important;
+    gap: 6px !important;
   }
 
   .listas-fornecedor-mobile-card-topo strong {
@@ -2767,14 +2767,16 @@ td.listas-fornecedor-total {
 
   .listas-fornecedor-mobile-dados {
     display: grid !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px 10px !important;
     margin: 0 !important;
   }
 
   .listas-fornecedor-mobile-dados div {
     display: grid !important;
-    grid-template-columns: 88px minmax(0, 1fr) !important;
-    gap: 8px !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 2px !important;
+    min-width: 0 !important;
     align-items: start !important;
   }
 
@@ -2796,14 +2798,15 @@ td.listas-fornecedor-total {
   }
 
   .listas-fornecedor-mobile-total {
+    font-size: .85rem;
     color: #991b1b !important;
     font-weight: 950 !important;
   }
 
   .listas-fornecedor-mobile-acoes {
     display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
     position: relative !important;
     z-index: 3 !important;
   }
@@ -2812,10 +2815,10 @@ td.listas-fornecedor-total {
   .listas-fornecedor-mobile-acoes .listas-fornecedor-btn-compra {
     width: 100% !important;
     min-width: 0 !important;
-    min-height: 42px !important;
+    min-height: 44px !important;
     height: auto !important;
-    padding: 9px 8px !important;
-    font-size: .82rem !important;
+    padding: 8px 3px !important;
+    font-size: .78rem !important;
     line-height: 1.15 !important;
     white-space: normal !important;
     text-align: center !important;
@@ -2824,17 +2827,55 @@ td.listas-fornecedor-total {
     pointer-events: auto !important;
     user-select: none !important;
   }
-}
 
-@media (max-width: 420px) {
-  .listas-fornecedor-mobile-dados div {
-    grid-template-columns: 1fr !important;
-    gap: 3px !important;
+  .listas-fornecedor-mobile-card-topo > span {
+    min-width: 0;
+    max-width: 62%;
+    padding: 4px 7px !important;
+    font-size: .72rem !important;
+    text-align: center;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
   }
 
-  .listas-fornecedor-mobile-acoes {
-    grid-template-columns: 1fr !important;
+  .listas-fornecedor-mobile-dados .listas-fornecedor-mobile-fornecedor,
+  .listas-fornecedor-mobile-dados .listas-fornecedor-mobile-periodo,
+  .listas-fornecedor-mobile-dados .listas-fornecedor-mobile-situacao {
+    grid-column: 1 / -1;
   }
+
+  .listas-fornecedor-mobile-fornecedor dt {
+    display: none;
+  }
+
+  .listas-fornecedor-mobile-fornecedor dd {
+    font-size: 1rem;
+    font-weight: 950 !important;
+    color: #7f1d1d !important;
+  }
+
+  .listas-fornecedor-mobile-dados .listas-fornecedor-mobile-periodo,
+  .listas-fornecedor-mobile-dados .listas-fornecedor-mobile-situacao {
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    gap: 6px !important;
+  }
+
+  .listas-fornecedor-mobile-periodo dt,
+  .listas-fornecedor-mobile-situacao dt {
+    font-size: .65rem !important;
+    line-height: 1.5;
+  }
+
+  .listas-fornecedor-mobile-periodo dd,
+  .listas-fornecedor-mobile-situacao dd {
+    font-size: .73rem;
+  }
+
+  .listas-fornecedor-mobile-acoes form {
+    min-width: 0;
+    margin: 0;
+  }
+
 }
 
 @media (max-width: 640px) {
