@@ -122,12 +122,14 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
             finally:chrome.stop()
 
     def test_manual_search_addition_cannot_overwrite_total_with_zero(self):
+        ProdutoFornecedor.objects.filter(produto=self.products[1]).delete()
         with TemporaryDirectory(prefix='purchase-mobile-manual-') as profile:
             chrome=Chrome(CHROME,profile).start()
             try:
                 tab=self.open_page(chrome);self.add(tab,0)
                 identifier=str(self.products[1].pk)
                 tab.evaluate('document.getElementById("produtoManualSugestao").value='+json.dumps(identifier)+';document.getElementById("produtoManualQtd").value="4";document.getElementById("produtoManualPrecoCompra").value="35,40";document.getElementById("produtoManualQtd").dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("btnAdicionarProdutoSugestao").click();true')
+                tab.evaluate('adicionarCardSugestaoNaLista([...document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card")].find(c=>c.dataset.produtoId==='+json.dumps(identifier)+'));true')
                 tab.wait('document.querySelectorAll(".sugestao-item-lista-mobile").length===2')
                 self.assertEqual(self.total(tab),'R$ 331,20')
             finally:chrome.stop()
@@ -150,24 +152,46 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 saved.refresh_from_db();self.assertEqual(saved.total_lista,Decimal('331.20'))
             finally:chrome.stop()
 
-    def test_desktop_keeps_existing_total_and_does_not_select_mobile_items(self):
+    def test_desktop_pending_edits_do_not_count_until_explicit_confirmation(self):
         with TemporaryDirectory(prefix='purchase-desktop-total-') as profile:
             chrome=Chrome(CHROME,profile).start()
             try:
                 tab=self.open_page(chrome,width=1280)
-                self.assertFalse(tab.evaluate('atualizarTotalListaPedidoMobile()'))
+                self.assertTrue(tab.evaluate('atualizarTotalListaPedidoMobile()'))
                 tab.evaluate('window.row=document.querySelector("#tbodySugestaoProdutos tr[data-produto-id]");row.querySelector(".sugestao-qtd-input").value="4";row.querySelector(".sugestao-qtd-input").dispatchEvent(new Event("input",{bubbles:true}));true')
                 self.assertTrue(tab.evaluate('[...document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card")].every(c=>c.dataset.naLista!=="1")'))
-                self.assertTrue(tab.evaluate('(()=>{const number=v=>Number(v.includes(",")?v.replace(/\\./g,"").replace(",","."):v);const sum=[...document.querySelectorAll("#tbodySugestaoProdutos .sugestao-total-input")].reduce((s,c)=>s+number(c.value),0);return document.querySelector("[data-total-lista-pedido]").textContent==="R$ "+sum.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})})()'))
+                self.assertEqual(self.total(tab), 'R$ 0,00')
+                tab.evaluate('row.querySelector("[data-confirmar-pre-lista]").click();true')
+                self.assertEqual(self.total(tab), 'R$ 189,60')
+                self.assertTrue(tab.evaluate('row.hidden'))
             finally:chrome.stop()
 
 
     def test_saved_desktop_list_mobile_edit_confirm_persist_and_reopen(self):
-        from offline.test_sales_sidebars_browser import SalesSidebarBrowserTests
         def click(tab, selector):
             tab.evaluate(f'document.querySelector({selector!r}).scrollIntoView({{block:"center",behavior:"instant"}});true')
             tab.wait(f'(()=>{{const r=document.querySelector({selector!r}).getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight;}})()')
-            SalesSidebarBrowserTests.click(self, tab, selector)
+            # Layout/scroll can still move after becoming visible, especially
+            # after switching from desktop to mobile. A pointer press/release
+            # must land on the same settled control; do not replace it by .click().
+            point = tab.evaluate(f'''(async () => {{
+                const button = document.querySelector({selector!r});
+                let previous = null, stable = 0;
+                for (let frame=0;frame<180;frame++) {{
+                    await new Promise(requestAnimationFrame);
+                    const r=button.getBoundingClientRect();
+                    const current=[r.x,r.y,r.width,r.height,scrollY];
+                    stable=previous && current.every((v,i)=>Math.abs(v-previous[i])<0.25) ? stable+1 : 0;
+                    previous=current;
+                    const x=r.x+r.width/2,y=r.y+r.height/2;
+                    const hit=document.elementFromPoint(x,y);
+                    if(stable>=8 && r.width>0 && r.height>0 && y>=0 && y<=innerHeight && (hit===button || button.contains(hit)))
+                        return {{x,y}};
+                }}
+                throw new Error('Pointer target did not settle: ' + {selector!r});
+            }})()''')
+            for kind in ('mousePressed', 'mouseReleased'):
+                tab.call('Input.dispatchMouseEvent', {'type':kind,'x':point['x'],'y':point['y'],'button':'left','clickCount':1})
         payload = {"fornecedorId": self.supplier.pk, "dataInicio": timezone.localdate().isoformat(), "dataFim": timezone.localdate().isoformat(), "linhas": [
             {"produtoId": p.pk, "sugestao": "4", "precoCompra": str(p.preco_compra),
              "precoUnitario": str(p.preco_compra), "total": str(p.preco_compra * 4), "unidade": "PCT"}
@@ -182,19 +206,19 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
             chrome = Chrome(CHROME, profile).start()
             try:
                 tab = self.open_page(chrome, width=1280, path=path)
-                self.assertFalse(tab.evaluate('document.querySelector("#tbodySugestaoProdutos .sugestao-qtd-input").readOnly'))
+                self.assertTrue(tab.evaluate('document.querySelector("#itensListaMobileLista .sugestao-item-lista-qtd-input").readOnly'))
                 tab.call("Emulation.setDeviceMetricsOverride", {"width":390,"height":844,"deviceScaleFactor":1,"mobile":True})
                 for product, qty, price in [(self.products[0], "2", "50,00"), (self.products[1], "3", "40,00")]:
-                    card = '#mobileSugestaoProdutos [data-produto-id="' + str(product.pk) + '"]'
-                    button = card + " .sugestao-confirmar-card-mobile"
+                    card = '#itensListaMobileLista [data-produto-id="' + str(product.pk) + '"]'
+                    button = card + " .sugestao-editar-lista-mobile"
                     self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")
-                    self.assertTrue(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
+                    self.assertTrue(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-item-lista-qtd-input").readOnly'))
                     click(tab, button)
                     # Synchronize with the real pointer event's UI response.
-                    tab.wait(f'document.querySelector({button!r}).textContent==="Confirmar"')
-                    self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Confirmar")
-                    self.assertFalse(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-qtd-input").readOnly'))
-                    tab.evaluate(f'window.editCard=document.querySelector({card!r});editCard.querySelector(".sugestao-qtd-input").value={qty!r};editCard.querySelector(".sugestao-preco-input").value={price!r};editCard.querySelector(".sugestao-preco-input").dispatchEvent(new Event("input",{{bubbles:true}}));true')
+                    tab.wait(f'document.querySelector({button!r}).textContent==="Salvar edi\u00e7\u00e3o"')
+                    self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Salvar edi\u00e7\u00e3o")
+                    self.assertFalse(tab.evaluate(f'document.querySelector({card!r}+" .sugestao-item-lista-qtd-input").readOnly'))
+                    tab.evaluate(f'window.editCard=document.querySelector({card!r});editCard.querySelector(".sugestao-item-lista-qtd-input").value={qty!r};editCard.querySelector(".sugestao-item-lista-preco-input").value={price!r};editCard.querySelector(".sugestao-item-lista-preco-input").dispatchEvent(new Event("input",{{bubbles:true}}));true')
                     click(tab, button)
                     tab.wait(f'document.querySelector({button!r}).textContent==="Editar"')
                     self.assertEqual(tab.evaluate(f'document.querySelector({button!r}).textContent'), "Editar")

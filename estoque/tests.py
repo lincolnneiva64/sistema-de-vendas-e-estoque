@@ -11562,7 +11562,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
             bloco_fornecedor,
         )
 
-    def test_mobile_produto_manual_entra_direto_em_itens_da_lista(self):
+    def test_mobile_produto_manual_entra_na_pre_lista_sem_confirmacao_automatica(self):
         resposta = self.client.get(
             reverse("estoque:sugestao_compra_fornecedor"),
             secure=True,
@@ -11578,18 +11578,8 @@ class ComprasListaFornecedorGravarTests(TestCase):
             'mobile.insertAdjacentHTML("beforeend", cardMobile(produto));',
             bloco_adicionar,
         )
-        self.assertIn(
-            "const mobileVisivel = Boolean(",
-            bloco_adicionar,
-        )
-        self.assertIn(
-            'typeof window.adicionarCardSugestaoNaLista === "function"',
-            bloco_adicionar,
-        )
-        self.assertIn(
-            "window.adicionarCardSugestaoNaLista(cardManual, false);",
-            bloco_adicionar,
-        )
+        self.assertIn("window.prepararProdutoListaFornecedor?.(cardManual);", bloco_adicionar)
+        self.assertNotIn("window.adicionarCardSugestaoNaLista(cardManual, false);", bloco_adicionar)
         self.assertIn(
             "window.adicionarCardSugestaoNaLista = adicionarCardNaLista;",
             html,
@@ -11695,7 +11685,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
         self.assertContains(
             resposta,
-            "${historicoMobileProdutoHtml(produto)}",
+            "card.querySelector(\".sugestao-historico-mobile\").outerHTML = historicoMobileProdutoHtml(produto)",
         )
         self.assertContains(
             resposta,
@@ -11883,7 +11873,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
         self.assertContains(
             resposta,
-            "${historicoMobileProdutoHtml(produto)}",
+            "card.querySelector(\".sugestao-historico-mobile\").outerHTML = historicoMobileProdutoHtml(produto)",
         )
         self.assertContains(
             resposta,
@@ -12610,7 +12600,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         self.assertNotContains(resposta, "window.setTimeout(selecionar, 80)")
         self.assertContains(resposta, "precoValidado.valor < 0")
         self.assertContains(resposta, "qtdValidada.valor <= 0")
-        self.assertContains(resposta, "campo.readOnly = modoEdicaoLista ? false : adicionado")
+        self.assertContains(resposta, "campo.readOnly = adicionado")
         self.assertContains(resposta, "contador.dataset.count = String(total);")
         self.assertContains(resposta, 'contador.querySelector("[data-itens-lista-mobile-total]")')
         self.assertContains(resposta, "totalEl.textContent = String(total);")
@@ -12663,9 +12653,10 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertEqual(resposta.status_code, 200)
         self.assertContains(resposta, "const modoEdicaoLista = true;")
-        self.assertContains(resposta, "prepararEdicaoDiretaMobile();")
+        self.assertContains(resposta, 'cards().filter(card => card.dataset.naLista === "1").forEach(card => {')
         self.assertContains(resposta, "sugestao-mobile-edicao-direta")
-        self.assertContains(resposta, "sugestao-itens-lista-edicao-direta")
+        self.assertNotContains(resposta, 'id="itensListaMobile" class="sugestao-itens-lista-edicao-direta"')
+        self.assertContains(resposta, '<section class="sugestao-itens-lista-mobile"')
         self.assertContains(resposta, "sugestao-confirmar-card-mobile")
         self.assertContains(resposta, "confirmarCardEdicaoDireta")
         self.assertContains(resposta, 'data-na-lista="1"')

@@ -1385,6 +1385,7 @@
     .sugestao-manual-toggle-mobile { order: 7; }
     .sugestao-manual { order: 8; }
     .sugestao-resumo-final { order: 9; }
+    #itensListaMobile { order: 10; }
 
     .sugestao-header {
       align-items: stretch;
@@ -1515,6 +1516,19 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
       margin-top: 2px;
+    }
+
+    #mobileSugestaoProdutos .sugestao-mobile-edit-actions {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+    }
+
+    #mobileSugestaoProdutos .sugestao-mobile-edit-actions > .sugestao-btn {
+      min-width: 0;
+      min-height: 32px;
+      padding: 4px 2px;
+      font-size: .82rem;
+      white-space: nowrap;
     }
 
     .sugestao-itens-lista-mobile {
@@ -1746,6 +1760,74 @@
       white-space: normal;
     }
 
+    /* Compact selection preview only; pending and confirmed cards are untouched. */
+    #linhaProdutoManualSugestao {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 6px 8px;
+      padding: 10px;
+      background: #fff3f4;
+    }
+
+    #linhaProdutoManualSugestao > td {
+      grid-column: span 3;
+      order: 1;
+      min-width: 0;
+    }
+
+    #linhaProdutoManualSugestao > td::before {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    #linhaProdutoManualSugestao > td:nth-child(6),
+    #linhaProdutoManualSugestao > td:nth-child(8),
+    #linhaProdutoManualSugestao > td:nth-child(9),
+    #linhaProdutoManualSugestao > td:nth-child(10) {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    #linhaProdutoManualSugestao > .sugestao-col-produto {
+      grid-column: 1 / -1;
+      order: 0;
+    }
+
+    #linhaProdutoManualSugestao > td:nth-child(6),
+    #linhaProdutoManualSugestao > td:nth-child(9) {
+      grid-column: 1 / span 3;
+      order: 2;
+    }
+
+    #linhaProdutoManualSugestao > td:nth-child(8),
+    #linhaProdutoManualSugestao > td:nth-child(10) {
+      grid-column: 4 / span 3;
+      order: 2;
+    }
+
+    #linhaProdutoManualSugestao > .sugestao-col-acao {
+      grid-column: 1 / -1;
+      order: 3;
+    }
+
+    #areaAdicionarProdutosManual .sugestao-manual-historico-detalhes > summary {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    @media (min-width: 360px) {
+      #linhaProdutoManualSugestao > td:nth-child(2),
+      #linhaProdutoManualSugestao > td:nth-child(3),
+      #linhaProdutoManualSugestao > td:nth-child(4),
+      #linhaProdutoManualSugestao > td:nth-child(5),
+      #linhaProdutoManualSugestao > td:nth-child(7) {
+        grid-column: span 2;
+      }
+    }
+
     .produto-manual-historico-mobile:not([hidden]) {
       display: block;
       width: 100%;
@@ -1853,6 +1935,44 @@
       opacity: 1;
       pointer-events: auto;
     }
+  }
+  /* The desktop keeps its table; confirmed products use the same controls as mobile. */
+  @media (min-width: 861px) {
+    #itensListaMobile { display: grid; gap: 10px; margin: 12px; padding: 12px; border: 2px solid #16a34a; border-radius: 10px; background: #f8fff9; }
+    #itensListaMobileLista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+    #itensListaMobile h2 { margin: 0; color: #14532d; font-size: 1rem; }
+    #itensListaMobile .sugestao-item-lista-mobile { display: grid; gap: 8px; padding: 10px; border: 1px solid #16a34a; border-left-width: 5px; border-radius: 9px; background: #f0fdf4; }
+    #itensListaMobile .sugestao-item-lista-mobile-topo { display: flex; justify-content: space-between; gap: 8px; font-weight: 950; }
+    #itensListaMobile .sugestao-item-lista-mobile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(1) { grid-area: 1 / 1; }
+    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(2) { grid-area: 2 / 1; }
+    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(3) { grid-area: 1 / 2; }
+    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(4) { grid-area: 2 / 2; }
+    #itensListaMobile .sugestao-mobile-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    #itensListaMobile .sugestao-input { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; }
+    #itensListaMobile .sugestao-mobile-edit-actions .sugestao-btn { width: auto; min-height: 40px; }
+    #itensListaMobile .sugestao-item-lista-mobile-total { font-weight: 850; }
+    #tbodySugestaoProdutos tr[data-produto-id] { background: #fff3f4; }
+    #tbodySugestaoProdutos .sugestao-col-acao { min-width: 140px; }
+  }
+  @media (max-width: 860px) { .sugestao-pre-lista-desktop { display: none; } }
+  #itensListaMobile .sugestao-item-lista-unidade-input { max-width: 85px; }
+  #itensListaMobile .sugestao-item-lista-mobile-erro:empty,
+  #itensListaMobileVazia.oculto { display: none; }
+  .sugestao-confirmados-rodape {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #bbf7d0;
+    color: #14532d;
+    font-size: .75rem;
+  }
+  .sugestao-confirmados-rodape > span { min-width: 0; }
+  .sugestao-confirmados-rodape strong {
+    display: block;
+    font-size: .95rem;
+    font-variant-numeric: tabular-nums;
   }
 </style>
 
@@ -2058,6 +2178,7 @@
     </div>
   </div>
   <section class="sugestao-card">
+      <h2 class="sugestao-pre-lista-titulo sugestao-pre-lista-desktop">Pré-lista — Falta comprar</h2>
       <div class="sugestao-table-wrap sugestao-desktop">
         <table class="sugestao-table">
           <colgroup>
@@ -2147,7 +2268,7 @@
       </div>
 
       <div class="sugestao-mobile{% if modo_edicao_lista %} sugestao-mobile-edicao-direta{% endif %}" id="mobileSugestaoProdutos">
-        {% if not modo_edicao_lista %}<h2 class="sugestao-pre-lista-titulo" id="preListaMobileTitulo">Pré-lista — Falta comprar</h2>{% endif %}
+        <h2 class="sugestao-pre-lista-titulo" id="preListaMobileTitulo">Pré-lista — Falta comprar</h2>
         <div class="sugestao-progresso-mobile" role="status" aria-live="polite" aria-atomic="true">
           <span>Pendentes: <strong data-produtos-pendentes>0</strong></span>
           <span>Confirmados: <strong data-produtos-confirmados>0</strong></span>
@@ -2156,63 +2277,19 @@
         {% if modo_edicao_lista %}<p>Toque em Editar no produto, confirme os valores e use Salvar alterações para gravar a lista.</p>{% endif %}
         {% if linhas %}
         {% for linha in linhas %}
-          <article class="sugestao-mobile-card{% if modo_edicao_lista %} item-adicionado-lista{% endif %}" data-produto-id="{{ linha.produto_id }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}"{% if modo_edicao_lista %} data-na-lista="1"{% endif %}>
-            <div class="sugestao-mobile-top">
-              <div class="sugestao-mobile-produto">{{ linha.produto.nome }}</div>
-            </div>
-            <div class="sugestao-mobile-grid">
-              <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">{{ linha.estoque_atual|floatformat:3 }}</span></div>
-              <div><span class="sugestao-mobile-label">Estoque minimo</span><span class="sugestao-mobile-value">{{ linha.estoque_minimo|floatformat:3 }}</span></div>
-              <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">{{ linha.quantidade_vendida|floatformat:3 }}</span></div>
-              <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos {% if linha.quantidade_pedidos_abertos > 0 %}tem-pedido{% endif %}">{{ linha.quantidade_pedidos_abertos|floatformat:3 }}</span></span></div>
-              <div class="sugestao-mobile-static"><span class="sugestao-mobile-label">Sugestao compra</span><span>{{ linha.sugestao|floatformat:3 }}</span></div>
-              <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">{{ linha.unidade }}</span></div>
-            </div>
-            <div class="sugestao-historico-mobile" data-historico-lista-mobile>
-              <button type="button" class="sugestao-historico-toggle" data-historico-toggle aria-expanded="false">Ver últimas compras</button>
-              <div class="sugestao-historico-card" data-historico-card hidden>
-                {% if linha.historico_ultimas_compras %}
-                  <div class="sugestao-historico-titulo">Últimas 3 compras deste produto</div>
-                  {% for compra in linha.historico_ultimas_compras %}
-                    <div class="sugestao-historico-item">
-                      <div>{{ compra.data|default:"-" }}</div>
-                      <div>{{ compra.fornecedor|default:"-" }}</div>
-                      <div>{{ compra.quantidade|floatformat:3 }} {{ compra.unidade|default:"" }}</div>
-                      <div class="sugestao-historico-preco">R$ {{ compra.preco|floatformat:2 }}</div>
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <div class="sugestao-historico-titulo">Últimas compras</div>
-                  <div class="sugestao-historico-vazio">Nenhuma compra anterior encontrada para este produto.</div>
-                {% endif %}
-              </div>
-            </div>
-            <div class="sugestao-mobile-edit">
-              <label class="sugestao-mobile-label">Quantidade / compra</label>
-              <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="{{ linha.sugestao|floatformat:3 }}" aria-label="Quantidade de compra para {{ linha.produto.nome }}">
-              <label class="sugestao-mobile-label">Preco compra</label>
-              <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="{{ linha.preco_compra|floatformat:2 }}" aria-label="Preco de compra para {{ linha.produto.nome }}">
-              <label class="sugestao-mobile-label">Preco unitario</label>
-              <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="{{ linha.fator_conversao|floatformat:3 }}" value="{{ linha.preco_unitario_calculado|floatformat:2 }}" aria-label="Preco unitario para {{ linha.produto.nome }}">
-              <label class="sugestao-mobile-label">Total sugerido</label>
-              <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="{{ linha.total_sugerido|floatformat:2 }}" aria-label="Total sugerido para {{ linha.produto.nome }}">
-              <div class="sugestao-mobile-edit-actions">
-                {% if modo_edicao_lista %}
-                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>
-                {% else %}
-                  <button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Peguei</button>
-                {% endif %}
-                <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
-              </div>
-            </div>
-          </article>
+          {% include "estoque/includes/lista_fornecedor_produto_card.html" %}
         {% endfor %}
         {% endif %}
       </div>
-      <section class="sugestao-itens-lista-mobile{% if modo_edicao_lista %} sugestao-itens-lista-edicao-direta{% endif %}" id="itensListaMobile" aria-labelledby="listaConfirmadaMobileTitulo">
+      <template id="modeloCardListaFornecedor">{% include "estoque/includes/lista_fornecedor_produto_card.html" %}</template>
+      <section class="sugestao-itens-lista-mobile" id="itensListaMobile" aria-labelledby="listaConfirmadaMobileTitulo">
         <h2 id="listaConfirmadaMobileTitulo">Lista confirmada — Já peguei</h2>
       <div class="sugestao-itens-lista-vazia" id="itensListaMobileVazia">Toque em Peguei nos produtos da pré-lista.</div>
         <div id="itensListaMobileLista"></div>
+        <footer class="sugestao-confirmados-rodape" aria-live="polite" aria-atomic="true">
+          <span>Produtos confirmados: <strong data-produtos-confirmados>0</strong></span>
+          <span>Total confirmado: <strong data-total-lista-pedido>R$ 0,00</strong></span>
+        </footer>
       </section>
       <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
@@ -2877,8 +2954,12 @@
     return sinal + (centavos / 100n).toLocaleString("pt-BR") + "," + String(centavos % 100n).padStart(2, "0");
   }
 
+  window.temProdutosListaFornecedor = function () {
+    return [...document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card")].some(card =>
+      card.dataset.naLista === "1" || !card.classList.contains("sugestao-tratada-mobile"));
+  };
+
   window.atualizarTotalListaPedidoMobile = function () {
-    if (!window.matchMedia("(max-width: 860px)").matches) return false;
     const mobile = document.getElementById("mobileSugestaoProdutos");
     if (!mobile) return false;
     const itens = Array.from(document.querySelectorAll("#itensListaMobileLista .sugestao-item-lista-mobile[data-produto-id]"));
@@ -2984,17 +3065,14 @@
   }
 
   function atualizarContagemProdutos() {
-    const mobileVisivel = visivel(document.getElementById("mobileSugestaoProdutos"));
-    const total = mobileVisivel
-      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
-      : document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]").length;
+    const total = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(total);
     });
 
     const vazio = document.getElementById("sugestaoListaVazia");
     if (vazio) {
-      vazio.classList.toggle("oculto", total > 0);
+      vazio.classList.toggle("oculto", window.temProdutosListaFornecedor());
     }
   }
 
@@ -3191,6 +3269,8 @@
 
   function htmlHistoricoManual(conteudoHtml) {
     return `
+      <details class="sugestao-manual-historico-detalhes">
+      <summary class="sugestao-historico-toggle">Ver últimas compras</summary>
       <div class="sugestao-historico-desktop-card">
         <div class="sugestao-historico-titulo">
           &Uacute;ltimas 3 compras deste produto
@@ -3208,6 +3288,7 @@
 
         <div>${conteudoHtml}</div>
       </div>
+      </details>
     `;
   }
 
@@ -3308,15 +3389,9 @@
   }
 
   function existeNaLista(produtoId) {
-    const ehMobile = window.matchMedia("(max-width: 860px)").matches;
-    if (ehMobile && typeof window.sugestaoMobileCardsParaLista === "function") {
-      return window.sugestaoMobileCardsParaLista(
-        mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]")
-      ).some((card) => String(card.dataset.produtoId) === String(produtoId));
-    }
-    return Array.from(tbody.querySelectorAll("tr[data-produto-id]")).some((el) => {
-      return String(el.dataset.produtoId) === String(produtoId);
-    });
+    return [...mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]")].some(card =>
+      card.dataset.produtoId === String(produtoId) &&
+      (card.dataset.naLista === "1" || !card.classList.contains("sugestao-tratada-mobile")));
   }
 
   function fecharSugestoes() {
@@ -3576,43 +3651,28 @@
   }
 
   function cardMobile(produto) {
-    const classesCard = modoEdicaoLista
-      ? "sugestao-mobile-card item-adicionado-lista"
-      : "sugestao-mobile-card";
-    const atributosLista = modoEdicaoLista ? ' data-na-lista="1"' : "";
-    const botaoAcao = modoEdicaoLista
-      ? '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-confirmar-card-mobile">Editar</button>'
-      : '<button type="button" class="sugestao-btn sugestao-btn-secondary sugestao-adicionar-lista-mobile">Peguei</button>';
-    return `
-      <article class="${classesCard}" data-produto-id="${produto.id}" data-sugestao-original="${escapeHtml(produto.sugestao)}"${atributosLista}>
-        <div class="sugestao-mobile-top">
-          <div class="sugestao-mobile-produto">${escapeHtml(produto.nome)}</div>
-        </div>
-        <div class="sugestao-mobile-grid">
-          <div><span class="sugestao-mobile-label">Estoque atual</span><span class="sugestao-mobile-value">${escapeHtml(produto.estoque_atual)}</span></div>
-          <div><span class="sugestao-mobile-label">Estoque minimo</span><span class="sugestao-mobile-value">${escapeHtml(produto.estoque_minimo)}</span></div>
-          <div><span class="sugestao-mobile-label">Vendido no periodo</span><span class="sugestao-mobile-value">${escapeHtml(produto.quantidade_vendida)}</span></div>
-          <div><span class="sugestao-mobile-label">Pedidos em aberto</span><span class="sugestao-mobile-value"><span class="sugestao-pedidos ${classePedido(produto)}">${escapeHtml(produto.quantidade_pedidos_abertos)}</span></span></div>
-          <div class="sugestao-mobile-static"><span class="sugestao-mobile-label">Sugestao compra</span><span>${escapeHtml(produto.sugestao)}</span></div>
-          <div><span class="sugestao-mobile-label">Unidade</span><span class="sugestao-mobile-value">${escapeHtml(produto.unidade)}</span></div>
-        </div>
-        ${historicoMobileProdutoHtml(produto)}
-        <div class="sugestao-mobile-edit">
-          <label class="sugestao-mobile-label">Quantidade / compra</label>
-          <input type="text" inputmode="decimal" class="sugestao-input sugestao-qtd-input" value="${escapeHtml(produto.sugestao)}" aria-label="Quantidade de compra para ${escapeHtml(produto.nome)}">
-          <label class="sugestao-mobile-label">Preco compra</label>
-          <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-input" value="${escapeHtml(produto.preco_compra)}" aria-label="Preco de compra para ${escapeHtml(produto.nome)}">
-          <label class="sugestao-mobile-label">Preco unitario</label>
-          <input type="text" inputmode="decimal" class="sugestao-input sugestao-preco-unitario-input" data-fator="${escapeHtml(produto.fator_conversao)}" value="${escapeHtml(produto.preco_unitario_calculado)}" aria-label="Preco unitario para ${escapeHtml(produto.nome)}">
-          <label class="sugestao-mobile-label">Total sugerido</label>
-          <input type="text" inputmode="decimal" class="sugestao-input sugestao-total-input" value="${escapeHtml(produto.total_sugerido)}" aria-label="Total sugerido para ${escapeHtml(produto.nome)}">
-          <div class="sugestao-mobile-edit-actions">
-            ${botaoAcao}
-            <button type="button" class="sugestao-btn sugestao-btn-danger sugestao-remover-item">Excluir</button>
-          </div>
-        </div>
-      </article>
-    `;
+    // Initial and manually added products share the same Django component.
+    const card = document.getElementById("modeloCardListaFornecedor").content.firstElementChild.cloneNode(true);
+    card.dataset.produtoId = String(produto.id);
+    card.dataset.sugestaoOriginal = produto.sugestao;
+    card.dataset.naLista = "0";
+    card.classList.remove("item-adicionado-lista");
+    card.querySelector(".sugestao-mobile-produto").textContent = produto.nome;
+    const values = [produto.estoque_atual, produto.estoque_minimo, produto.quantidade_vendida,
+                    produto.quantidade_pedidos_abertos, produto.unidade];
+    card.querySelectorAll(".sugestao-mobile-value").forEach((el, i) => { el.textContent = values[i] || ""; });
+    card.querySelector(".sugestao-mobile-static > span:last-child").textContent = produto.sugestao;
+    const fields = {".sugestao-qtd-input": produto.sugestao, ".sugestao-preco-input": produto.preco_compra,
+      ".sugestao-preco-unitario-input": produto.preco_unitario_calculado, ".sugestao-total-input": produto.total_sugerido,
+      ".sugestao-unidade-input": produto.unidade};
+    Object.entries(fields).forEach(([selector, value]) => {
+      const field = card.querySelector(selector); field.value = value || "";
+      field.setAttribute("value", field.value);
+      field.setAttribute("aria-label", field.getAttribute("aria-label") + " " + produto.nome);
+    });
+    card.querySelector(".sugestao-preco-unitario-input").dataset.fator = produto.fator_conversao;
+    card.querySelector(".sugestao-historico-mobile").outerHTML = historicoMobileProdutoHtml(produto);
+    return card.outerHTML;
   }
 
   function atualizarResumoDepoisDeAdicionar() {
@@ -3636,14 +3696,12 @@
       });
     }
 
-    const totalProdutos = listaMobileVisivel
-      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
-      : tbody.querySelectorAll("tr[data-produto-id]").length;
+    const totalProdutos = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(totalProdutos);
     });
 
-    document.getElementById("sugestaoListaVazia")?.classList.toggle("oculto", totalProdutos > 0);
+    document.getElementById("sugestaoListaVazia")?.classList.toggle("oculto", window.temProdutosListaFornecedor());
   }
 
   function fatorManual() {
@@ -3704,14 +3762,16 @@
     }
 
     const produto = produtoComValoresManuais(produtoBase);
-    // Substitui o par visual de um produto removido ao adicionar novamente pela busca.
-    if (window.matchMedia("(max-width: 860px)").matches) {
-      [tbody, mobile].forEach((raiz) => {
-        raiz.querySelectorAll("[data-produto-id]").forEach((elemento) => {
-          if (String(elemento.dataset.produtoId) === String(produto.id)) elemento.remove();
-        });
+    // A removed product can be added again, but a pending/confirmed one is never overwritten.
+    [tbody, mobile].forEach((root) => {
+      root.querySelectorAll("[data-produto-id]").forEach((element) => {
+        if (element.dataset.produtoId === String(produto.id)) {
+          if (element.nextElementSibling?.matches("[data-historico-desktop-row]")) element.nextElementSibling.remove();
+          element.remove();
+        }
       });
-    }
+    });
+    window.__sugestaoProdutosRemovidos.delete(String(produto.id));
     tbody.insertAdjacentHTML("beforeend", linhaDesktop(produto));
     mobile.insertAdjacentHTML("beforeend", cardMobile(produto));
 
@@ -3730,21 +3790,7 @@
       return String(card.dataset.produtoId || "") === String(produto.id);
     }) || null;
 
-    const mobileVisivel = Boolean(
-      mobile &&
-      (
-        mobile.offsetWidth ||
-        mobile.offsetHeight ||
-        mobile.getClientRects().length
-      )
-    );
-
-    if (
-      mobileVisivel &&
-      typeof window.adicionarCardSugestaoNaLista === "function"
-    ) {
-      window.adicionarCardSugestaoNaLista(cardManual, false);
-    }
+    window.prepararProdutoListaFornecedor?.(cardManual);
 
     atualizarResumoDepoisDeAdicionar();
     continuarDepoisProdutoId = String(produto.id);
@@ -3917,6 +3963,7 @@
 
     document.querySelectorAll("[data-produto-id]").forEach((el) => {
       if (String(el.dataset.produtoId) === String(produtoId)) {
+        if (el.nextElementSibling?.matches("[data-historico-desktop-row]")) el.nextElementSibling.remove();
         el.remove();
       }
     });
@@ -3973,8 +4020,33 @@
   const modalRemoverMensagem = document.getElementById("modalRemoverItemListaMobileMensagem");
   const btnCancelarRemover = document.getElementById("btnCancelarRemoverItemListaMobile");
   const btnConfirmarRemover = document.getElementById("btnConfirmarRemoverItemListaMobile");
-  const modoEdicaoLista = {% if modo_edicao_lista %}true{% else %}false{% endif %};
   if (!mobile || !lista) return;
+  const secaoConfirmada = document.getElementById("itensListaMobile");
+  const resumoFinal = document.querySelector(".sugestao-resumo-final");
+  const posicaoOriginalConfirmados = document.createComment("Posicao desktop da lista confirmada");
+  secaoConfirmada.before(posicaoOriginalConfirmados);
+  const mediaListaMobile = window.matchMedia("(max-width: 860px)");
+
+  function posicionarSecaoConfirmada() {
+    if (mediaListaMobile.matches) {
+      // Keep the approved card width when leaving the original bordered parent.
+      const parent = posicaoOriginalConfirmados.parentElement;
+      const parentStyle = getComputedStyle(parent);
+      const sectionStyle = getComputedStyle(secaoConfirmada);
+      const width = parent.clientWidth - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight)
+        - parseFloat(sectionStyle.marginLeft) - parseFloat(sectionStyle.marginRight);
+      secaoConfirmada.style.width = width + "px";
+      secaoConfirmada.style.alignSelf = "center";
+      if (secaoConfirmada.previousElementSibling !== resumoFinal) resumoFinal.after(secaoConfirmada);
+    } else {
+      posicaoOriginalConfirmados.after(secaoConfirmada);
+      secaoConfirmada.style.removeProperty("width");
+      secaoConfirmada.style.removeProperty("align-self");
+    }
+  }
+
+  posicionarSecaoConfirmada();
+  window.addEventListener("resize", posicionarSecaoConfirmada);
   let itemEmEdicao = null;
   let itemPendenteRemocao = null;
   let cardPendenteRemocao = null;
@@ -3988,9 +4060,11 @@
   }
 
   function ocultarProdutoTratado(card) {
-    if (!ehMobileLista() || !card) return;
+    if (!card) return;
     produtosTratadosMobile.add(String(card.dataset.produtoId));
     card.classList.add("sugestao-tratada-mobile");
+    const row = linhaDesktopDoCard(card);
+    if (row) { row.hidden = true; const history = row.nextElementSibling; if (history?.matches("[data-historico-desktop-row]")) history.hidden = true; }
   }
 
   function rolarProximoProdutoMobile(proximo) {
@@ -4003,7 +4077,6 @@
   window.rolarProximoProdutoSugestaoMobile = rolarProximoProdutoMobile;
 
   function confirmarAdicaoMobile(card) {
-    if (!ehMobileLista() || modoEdicaoLista) return;
     // One synchronous transfer: never jump to the confirmed list and back.
     ocultarProdutoTratado(card);
   }
@@ -4014,7 +4087,6 @@
   };
 
   window.sugestaoMobileItemEmEdicaoAberta = function() {
-    if (modoEdicaoLista) return cards().find(card => card.dataset.editando === "1") || null;
     return itemEmEdicao;
   };
 
@@ -4059,25 +4131,10 @@
     }
   }
 
-  function prepararCardEdicaoDireta(card) {
-    if (!card) return;
-    card.dataset.naLista = "1";
-    card.classList.add("item-adicionado-lista");
-    card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input").forEach((campo) => {
-      campo.readOnly = card.dataset.editando !== "1";
-    });
-  }
-
-  function prepararEdicaoDiretaMobile() {
-    cards().forEach(prepararCardEdicaoDireta);
-    if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
-    if (window.atualizarContagemSugestaoFornecedor) window.atualizarContagemSugestaoFornecedor();
-  }
-
   function confirmarCardEdicaoDireta(card) {
     if (!card) return;
     const botao = card.querySelector(".sugestao-confirmar-card-mobile");
-    const campos = card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input");
+    const campos = card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input, .sugestao-unidade-input");
     if (card.dataset.editando !== "1") {
       card.dataset.editando = "1";
       campos.forEach(campo => { campo.readOnly = false; });
@@ -4154,7 +4211,7 @@
     const pendentes = origem.filter(card => card.dataset.naLista !== "1" &&
       !produtosTratadosMobile.has(String(card.dataset.produtoId))).length;
     mobile.querySelector("[data-produtos-pendentes]").textContent = String(pendentes);
-    mobile.querySelector("[data-produtos-confirmados]").textContent = String(total);
+    document.querySelectorAll("[data-produtos-confirmados]").forEach(el => { el.textContent = String(total); });
     if (!contador) return;
     contador.dataset.count = String(total);
     const totalEl = contador.querySelector("[data-itens-lista-mobile-total]");
@@ -4163,12 +4220,65 @@
     }
   }
 
+  function linhaDesktopDoCard(card) {
+    return [...document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]")]
+      .find(row => row.dataset.produtoId === card.dataset.produtoId);
+  }
+
+  function sincronizarDesktop(card, origemDesktop = false) {
+    const row = linhaDesktopDoCard(card);
+    if (!row) return;
+    [".sugestao-qtd-input", ".sugestao-preco-input", ".sugestao-preco-unitario-input", ".sugestao-total-input"].forEach(selector => {
+      const source = (origemDesktop ? row : card).querySelector(selector);
+      const target = (origemDesktop ? card : row).querySelector(selector);
+      if (source && target) target.value = source.value;
+    });
+    const unit = card.querySelector(".sugestao-unidade-input");
+    if (origemDesktop) unit.value = row.querySelector(".sugestao-unidade-input").value;
+    else row.querySelector(".sugestao-unidade-input").value = unit.value;
+    const values = card.querySelectorAll(".sugestao-mobile-value");
+    values[4].textContent = unit.value;
+  }
+
+  window.prepararProdutoListaFornecedor = function(card) {
+    produtosTratadosMobile.delete(String(card.dataset.produtoId));
+    const row = linhaDesktopDoCard(card);
+    if (!row || row.dataset.acoesPreparadas === "1") return;
+    row.dataset.acoesPreparadas = "1";
+    const unitCell = row.children[6];
+    const unit = document.createElement("input");
+    unit.type = "text"; unit.className = "sugestao-input sugestao-unidade-input";
+    unit.value = card.querySelector(".sugestao-unidade-input").value;
+    unit.setAttribute("aria-label", "Unidade de " + texto(card.querySelector(".sugestao-mobile-produto")));
+    unitCell.replaceChildren(unit);
+    const actions = row.querySelector(".sugestao-col-acao");
+    actions.insertAdjacentHTML("afterbegin", '<button type="button" class="sugestao-btn sugestao-btn-secondary" data-editar-pre-lista>Editar</button><button type="button" class="sugestao-btn sugestao-btn-secondary" data-confirmar-pre-lista>Peguei</button>');
+  };
+
+  document.getElementById("tbodySugestaoProdutos").addEventListener("click", event => {
+    const row = event.target.closest("tr[data-produto-id]");
+    if (!row) return;
+    const card = cardPorId(row.dataset.produtoId);
+    if (event.target.closest("[data-editar-pre-lista]")) row.querySelector(".sugestao-qtd-input").focus({preventScroll:true});
+    if (event.target.closest("[data-confirmar-pre-lista]")) {
+      sincronizarDesktop(card, true); adicionarCardNaLista(card);
+    }
+  });
+  document.addEventListener("input", event => {
+    const row = event.target.closest("#tbodySugestaoProdutos tr[data-produto-id]");
+    if (row) { const card = cardPorId(row.dataset.produtoId); if (card) sincronizarDesktop(card, true); }
+    const card = event.target.closest("#mobileSugestaoProdutos .sugestao-mobile-card");
+    if (card) sincronizarDesktop(card);
+    window.atualizarTotalListaPedidoMobile();
+  });
+
   function marcarBotao(card, adicionado) {
     const botao = card.querySelector(".sugestao-adicionar-lista-mobile");
+    sincronizarDesktop(card);
     card.dataset.naLista = adicionado ? "1" : "0";
     card.classList.toggle("item-adicionado-lista", adicionado);
-    card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input").forEach((campo) => {
-      campo.readOnly = modoEdicaoLista ? false : adicionado;
+    card.querySelectorAll(".sugestao-qtd-input, .sugestao-preco-input, .sugestao-preco-unitario-input, .sugestao-total-input, .sugestao-unidade-input").forEach((campo) => {
+      campo.readOnly = adicionado;
     });
     if (!botao) return;
     botao.disabled = adicionado;
@@ -4181,6 +4291,7 @@
     if (existente && existente.dataset.editando === "1") return existente;
     if (existente) {
       // Keep the existing controls, history expansion and focus intact.
+      existente.querySelector(".sugestao-item-lista-unidade-input").value = dados.unidade;
       existente.querySelector(".sugestao-item-lista-qtd-input").value = dados.quantidade;
       existente.querySelector(".sugestao-item-lista-preco-input").value = dados.precoCompra;
       existente.querySelector(".sugestao-item-lista-mobile-total span").textContent = dados.total;
@@ -4192,7 +4303,7 @@
     const conteudo = `
       <div class="sugestao-item-lista-mobile-topo">
         <span>${html(dados.produto)}</span>
-        <span>${html(dados.unidade)}</span>
+        <input type="text" class="sugestao-input sugestao-item-lista-unidade-input" aria-label="Unidade de ${html(dados.produto)} na lista" value="${html(dados.unidade)}" readonly>
       </div>
       <div class="sugestao-item-lista-mobile-grid">
         <label class="sugestao-mobile-label">Quantidade</label>
@@ -4223,6 +4334,7 @@
   }
 
   function confirmarValoresAtuais(item) {
+    item.dataset.unidadeConfirmada = item.querySelector(".sugestao-item-lista-unidade-input")?.value || "";
     item.dataset.qtdConfirmada = item.querySelector(".sugestao-item-lista-qtd-input")?.value || "";
     item.dataset.precoConfirmado = item.querySelector(".sugestao-item-lista-preco-input")?.value || "";
     item.dataset.totalConfirmado = item.querySelector(".sugestao-item-lista-mobile-total span")?.textContent || "";
@@ -4232,6 +4344,8 @@
     const card = cardPorId(item.dataset.produtoId);
     if (!card) return;
 
+    const unit = item.querySelector(".sugestao-item-lista-unidade-input");
+    if (unit) card.querySelector(".sugestao-unidade-input").value = unit.value;
     const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
     const preco = item.querySelector(".sugestao-item-lista-preco-input");
     const qtdCard = card.querySelector(".sugestao-qtd-input");
@@ -4250,6 +4364,9 @@
 
     const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
     if (totalItem) totalItem.textContent = decimal(total, 2);
+    sincronizarDesktop(card);
+    const unitDetail = item.querySelectorAll(".sugestao-mobile-value")[4];
+    if (unitDetail && unit) unitDetail.textContent = unit.value;
     if (window.atualizarTotaisSugestaoFornecedor) window.atualizarTotaisSugestaoFornecedor();
   }
 
@@ -4292,6 +4409,8 @@
     const editar = item.querySelector(".sugestao-editar-lista-mobile");
     const cancelar = item.querySelector(".sugestao-cancelar-edicao-lista-mobile");
     item.dataset.editando = editando ? "1" : "0";
+    const unit = item.querySelector(".sugestao-item-lista-unidade-input");
+    if (unit) unit.readOnly = !editando;
     if (qtd) qtd.readOnly = !editando;
     if (preco) preco.readOnly = !editando;
     if (editar) editar.textContent = editando ? "Salvar edição" : "Editar";
@@ -4304,6 +4423,7 @@
       return;
     }
     itemEmEdicao = item;
+    item.dataset.unidadeAnterior = item.querySelector(".sugestao-item-lista-unidade-input")?.value || "";
     item.dataset.qtdAnterior = item.querySelector(".sugestao-item-lista-qtd-input")?.value || "";
     item.dataset.precoAnterior = item.querySelector(".sugestao-item-lista-preco-input")?.value || "";
     item.dataset.totalAnterior = item.querySelector(".sugestao-item-lista-mobile-total span")?.textContent || "";
@@ -4348,6 +4468,7 @@
     const qtd = item.querySelector(".sugestao-item-lista-qtd-input");
     const preco = item.querySelector(".sugestao-item-lista-preco-input");
     const totalItem = item.querySelector(".sugestao-item-lista-mobile-total span");
+    item.querySelector(".sugestao-item-lista-unidade-input").value = item.dataset.unidadeAnterior ?? item.dataset.unidadeConfirmada ?? "";
     if (qtd) qtd.value = item.dataset.qtdAnterior || item.dataset.qtdConfirmada || "";
     if (preco) preco.value = item.dataset.precoAnterior || item.dataset.precoConfirmado || "";
     if (totalItem) totalItem.textContent = item.dataset.totalAnterior || item.dataset.totalConfirmado || "";
@@ -4359,6 +4480,7 @@
 
   function adicionarCardNaLista(card, confirmarFluxo = true) {
     if (!card || card.dataset.naLista === "1") return;
+    if (card.dataset.editando === "1") { confirmarCardEdicaoDireta(card); if (card.dataset.editando === "1") return; }
     marcarBotao(card, true);
     renderItem(card);
     if (confirmarFluxo) confirmarAdicaoMobile(card);
@@ -4376,6 +4498,7 @@
     marcarBotao(card, false);
     produtosTratadosMobile.delete(String(card.dataset.produtoId));
     card.classList.remove("sugestao-tratada-mobile");
+    const row = linhaDesktopDoCard(card); if (row) row.hidden = false;
     item.remove();
     atualizarVazio();
   }
@@ -4525,11 +4648,6 @@
     const card = event.target.closest(".sugestao-mobile-card[data-produto-id]");
     if (!card || card.dataset.naLista !== "1") return;
     window.setTimeout(function() {
-      if (modoEdicaoLista) {
-        card.classList.remove("item-conferido-lista");
-        atualizarVazio();
-        return;
-      }
       renderItem(card);
       atualizarVazio();
     }, 0);
@@ -4651,9 +4769,10 @@
     cancelarRemocaoItem();
   });
 
-  if (modoEdicaoLista) {
-    prepararEdicaoDiretaMobile();
-  }
+  cards().forEach(window.prepararProdutoListaFornecedor);
+  cards().filter(card => card.dataset.naLista === "1").forEach(card => {
+    card.dataset.naLista = "0"; adicionarCardNaLista(card, false);
+  });
   // Manual addition/removal uses the same source cards and delegated handlers.
   const observadorCards = new MutationObserver(atualizarContadorItensLista);
   observadorCards.observe(mobile, { childList: true });
@@ -4951,7 +5070,7 @@
   }
 
   function linhasAtuais() {
-    const linhas = tabelaDesktopVisivel() ? linhasDesktop() : linhasMobile();
+    const linhas = linhasMobile();
     const removidos = window.__sugestaoProdutosRemovidos || new Set();
     return linhas.filter((linha) => linha.produto && !removidos.has(String(linha.produtoId)));
   }
@@ -5307,10 +5426,7 @@
   }
 
   function usarItensDesktop() {
-    const desktop = document.querySelector(".sugestao-desktop");
-    const linhasDesktop = document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]");
-    const cardsMobile = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
-    return estaVisivel(desktop) || cardsMobile.length === 0 || linhasDesktop.length > 0 && !estaVisivel(document.getElementById("mobileSugestaoProdutos"));
+    return false; // Both layouts save the explicit confirmed selection.
   }
 
   function linhasDesktop() {

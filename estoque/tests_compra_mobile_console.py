@@ -167,7 +167,7 @@ class CompraMobileConsoleTests(StaticLiveServerTestCase):
                     tab.evaluate('document.querySelector("#fornecedorSugestoes .sugestao-autocomplete-opcao").click();true')
                     self.assertEqual(tab.evaluate('[document.getElementById("data_inicio").value,document.getElementById("data_fim").value]'),dates)
                     self.assertEqual(tab.evaluate('document.getElementById("fornecedor").value'),str(self.supplier.pk))
-                    tab.evaluate('window.card=document.querySelector("#mobileSugestaoProdutos .sugestao-mobile-card");card.querySelector(".sugestao-confirmar-card-mobile").click();card.querySelector(".sugestao-qtd-input").value="2";card.querySelector(".sugestao-preco-input").value="51,00";card.querySelector(".sugestao-preco-input").dispatchEvent(new Event("input",{bubbles:true}));card.querySelector(".sugestao-confirmar-card-mobile").click();true')
+                    tab.evaluate('window.card=document.querySelector("#itensListaMobileLista .sugestao-item-lista-mobile");card.querySelector(".sugestao-editar-lista-mobile").click();card.querySelector(".sugestao-item-lista-qtd-input").value="2";card.querySelector(".sugestao-item-lista-preco-input").value="51,00";card.querySelector(".sugestao-item-lista-preco-input").dispatchEvent(new Event("input",{bubbles:true}));card.querySelector(".sugestao-editar-lista-mobile").click();true')
                     self.assertEqual(self.total(tab),'R$ 102,00')
                     self.assert_console_clean(tab,f'{width} saved list editing')
                     tab.evaluate('document.getElementById("btnSalvarAlteracoesListaMobile").click();true')
