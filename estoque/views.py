@@ -8189,7 +8189,13 @@ def _situacao_financeira_compra_lista(compra, hoje=None):
     if compra.status in {Compra.STATUS_RASCUNHO, Compra.STATUS_FINALIZACAO_INICIADA}:
         return "Rascunho", "alerta"
     if _compra_pagamento_imediato(compra.tipo_pagamento):
-        return "Nota paga", "paga"
+        # Old immediate purchases retain their existing behavior. A reconciled
+        # purchase can have a proved supplementary obligation, not a new payment.
+        if not compra.conciliacao_automatica or not any(
+            c.status != ContaPagar.STATUS_CANCELADA and c.valor_em_aberto > 0
+            for c in _contas_pagar_da_compra(compra)
+        ):
+            return "Nota paga", "paga"
 
     contas_pagar = _contas_pagar_da_compra(compra)
     if not contas_pagar:
@@ -12341,22 +12347,36 @@ def compra_editar(request, pk):
     compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
     compra = get_object_or_404(compra_qs, pk=pk)
     if compra.status == Compra.STATUS_FINALIZADA and (
-        request.method == "GET" or request.POST.get("acao_compra") == "salvar_edicao_finalizada"
+        request.method == "GET" or request.POST.get("acao_compra") in {"salvar_edicao_finalizada", "prever_correcao", "salvar_correcao_automatica"}
     ):
         if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
             return HttpResponseForbidden("Entre com um usuario autorizado a editar compras.")
         from .services.edicao_compra import contexto_edicao, salvar_edicao
         if request.method == "POST":
+            resposta_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
             try:
-                _, alterou = salvar_edicao(request, pk)
+                if request.POST.get("acao_compra") == "prever_correcao":
+                    from .services.correcao_compra import prever
+                    return JsonResponse(prever(request, compra))
+                if request.POST.get("acao_compra") == "salvar_correcao_automatica":
+                    from .services.correcao_compra import aplicar
+                    _, alterou = aplicar(request, pk)
+                else:
+                    _, alterou = salvar_edicao(request, pk)
             except (ValueError, ValidationError) as exc:
+                if resposta_json:
+                    return JsonResponse({"sucesso": False, "erro": str(exc)}, status=422)
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_editar", pk=pk)
             except Exception:
                 logger.exception("Falha na edicao historica da compra %s", pk)
+                if resposta_json:
+                    return JsonResponse({"sucesso": False, "erro": "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; seus dados continuam nesta tela."}, status=500)
                 messages.error(request, "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; recarregue a compra.")
                 return redirect("estoque:compra_editar", pk=pk)
             messages.success(request, "Compra corrigida com historico preservado." if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
+            if resposta_json:
+                return JsonResponse({"sucesso": True, "redirect_url": reverse("estoque:compras_detalhe", kwargs={"pk": pk})})
             return redirect("estoque:compras_detalhe", pk=pk)
         contexto = _contexto_form_compra(compra)
         contexto.update(contexto_edicao(compra, request.user))
@@ -13126,6 +13146,11 @@ def compra_corrigir_itens(request, pk):
         pk=pk,
     )
 
+    from .models import ConciliacaoCompra
+    if ConciliacaoCompra.objects.filter(compra=compra).exists():
+        messages.warning(request, "Esta compra já possui conciliação auditada. Utilize Salvar correção na edição para preservar seus ajustes.")
+        return redirect("estoque:compra_editar", pk=compra.pk)
+
     if request.method == "POST":
         novo_tipo_pagamento_compra = request.POST.get("tipo_pagamento_compra", "").strip()
         try:
@@ -13143,6 +13168,8 @@ def compra_corrigir_itens(request, pk):
         try:
             with transaction.atomic():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
+                if ConciliacaoCompra.objects.filter(compra=compra).exists():
+                    raise ValueError("Utilize Salvar correção para esta compra conciliada.")
 
                 lancamento_cartao = (
                     LancamentoCartao.objects
@@ -13496,6 +13523,11 @@ def compra_corrigir_financeiro(request, pk):
         ),
         pk=pk,
     )
+    from .models import ConciliacaoCompra
+    if ConciliacaoCompra.objects.filter(compra=compra).exists():
+        messages.warning(request, "Esta compra já possui conciliação auditada. Utilize Salvar correção na edição para preservar seus ajustes.")
+        return redirect("estoque:compra_editar", pk=compra.pk)
+
     if not _compra_pagamento_a_prazo(compra.tipo_pagamento):
         messages.error(
             request,
@@ -13517,6 +13549,8 @@ def compra_corrigir_financeiro(request, pk):
             try:
                 with transaction.atomic():
                     compra_bloqueada = Compra.objects.select_for_update().get(pk=compra.pk)
+                    if ConciliacaoCompra.objects.filter(compra=compra_bloqueada).exists():
+                        raise ValueError("Utilize Salvar correção para esta compra conciliada.")
                     alterou = _corrigir_parcelas_financeiras_compra(request, compra_bloqueada)
             except ValueError as exc:
                 messages.error(request, str(exc))
@@ -13534,6 +13568,8 @@ def compra_corrigir_financeiro(request, pk):
 
         with transaction.atomic():
             compra = Compra.objects.select_for_update().get(pk=compra.pk)
+            if ConciliacaoCompra.objects.filter(compra=compra).exists():
+                raise ValueError("Utilize Salvar correção para esta compra conciliada.")
             conta_pagar = (
                 ContaPagar.objects.select_for_update()
                 .prefetch_related("pagamentos")
@@ -13770,6 +13806,11 @@ def compra_corrigir_financeiro(request, pk):
 
 def compra_corrigir_origem_pagamento(request, pk):
     compra = get_object_or_404(Compra.objects.select_related("fornecedor"), pk=pk)
+    from .models import ConciliacaoCompra
+    if ConciliacaoCompra.objects.filter(compra=compra).exists():
+        messages.warning(request, "Esta compra já possui conciliação auditada. Utilize Salvar correção na edição para preservar seus ajustes.")
+        return redirect("estoque:compra_editar", pk=compra.pk)
+
     if not _compra_pagamento_imediato(compra.tipo_pagamento):
         messages.error(request, "A correcao de origem do pagamento se aplica apenas a compra a vista.")
         return redirect("estoque:compras_detalhe", pk=compra.pk)
@@ -13791,6 +13832,8 @@ def compra_corrigir_origem_pagamento(request, pk):
 
         with transaction.atomic():
             compra = Compra.objects.select_for_update().get(pk=compra.pk)
+            if ConciliacaoCompra.objects.filter(compra=compra).exists():
+                raise ValueError("Utilize Salvar correção para esta compra conciliada.")
             alocacao_atual = _alocacao_financeira_compra(compra)
             movimentos_criados = 0
             diferencas = {}
@@ -13855,6 +13898,7 @@ def compra_corrigir_origem_pagamento(request, pk):
 
 
 @serializar_grupos
+
 def _compra_excluir_transacional(request, pk):
     from .services.precos_compra import restaurar_precos_compra, restaurar_precos_da_compra
     if request.method != "POST":
@@ -13865,6 +13909,10 @@ def _compra_excluir_transacional(request, pk):
             Compra.objects.select_for_update().prefetch_related("itens__produto"),
             pk=pk,
         )
+
+        from .models import ConciliacaoCompra
+        if ConciliacaoCompra.objects.filter(compra=compra).exists():
+            raise ValueError("Compra com conciliação auditada: use o motivo Devolução ao fornecedor para preservar estoque, pagamentos e histórico.")
 
         contas_ids = list(
             ContaPagar.objects.select_for_update()

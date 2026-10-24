@@ -2846,9 +2846,42 @@
     <input type="hidden" name="edicao_token" value="{{ edicao_token }}">
     <div class="compras-alerta" id="avisoEdicaoFinalizada">
       {% if bloqueio_edicao %}<p role="alert">{{ bloqueio_edicao }} Nesta edição, preserve esses dados e corrija somente observações ou vencimentos das contas ativas.</p>{% endif %}
-      <label for="motivoEdicaoCompra">Motivo da correção</label>
+      <label for="motivoEdicaoCompra">Justificativa da correção</label>
       <input type="text" name="motivo_edicao" id="motivoEdicaoCompra" required maxlength="1000" style="width:100%;">
-      <p>Pagamentos e devoluções reais são tratados no financeiro. Esta edição não cria entradas ou saídas de dinheiro.</p>
+      <details id="painelCorrecaoAutomatica">
+        <summary>Corrigir itens e conciliar automaticamente</summary>
+        <div class="compras-field">
+          <label for="tipoCorrecaoCompra">Motivo da correção</label>
+          <select name="tipo_correcao" id="tipoCorrecaoCompra">
+            <option value="">Edição comum de observações ou vencimentos</option>
+            <option value="erro_lancamento">Erro de lançamento — nota e pagamento reais corretos</option>
+            <option value="devolucao">Devolução ao fornecedor — mercadoria fisicamente devolvida</option>
+            <option value="diferenca">Diferença de preço ou quantidade</option>
+          </select>
+        </div>
+        <div id="dadosCorrecaoAutomatica" hidden>
+          <p>Revise os itens e a justificativa acima. Antes de aplicar, confira a prévia de estoque e financeiro. Pagamentos realizados serão preservados; valores pagos a maior permanecem como crédito do fornecedor. Só haverá entrada de dinheiro se você informar uma devolução efetivamente recebida, com conta e data.</p>
+          <div class="compras-field"><label for="valorPagoRealCorrecao">Valor efetivamente pago, sem juros bancários (R$)</label><input type="text" inputmode="decimal" name="valor_pago_real" id="valorPagoRealCorrecao" value=""></div>
+          <p>Valor registrado no sistema: R$ {{ pago_comprovado_correcao|default:"não identificado" }}. Esse registro pode estar incorreto. Informe acima o pagamento real, conferido na nota e no comprovante.</p>
+          <p><label><input type="checkbox" name="pagamento_real_confirmado" value="1"> Conferi o valor efetivamente pago. Não estou apenas repetindo o lançamento do sistema.</label></p>
+          <p><label><input type="checkbox" name="credito_real_confirmado" value="1"> Se houver crédito na prévia, confirmo que houve pagamento real a maior e que essa diferença não foi devolvida pelo fornecedor.</label></p>
+          <div id="areaDevolucaoFinanceiraCorrecao" hidden>
+            <div class="compras-field"><label for="valorDevolvidoRealCorrecao">Dinheiro efetivamente devolvido nesta correção (R$) — zero se não recebeu</label><input type="text" inputmode="decimal" name="valor_devolvido_real" id="valorDevolvidoRealCorrecao" value="0,00"></div>
+            <div id="destinoDevolucaoFinanceiraCorrecao" hidden>
+              <div class="compras-field"><label>Conta que recebeu o dinheiro</label><select name="conta_devolucao"><option value="">Selecione...</option>{% for conta in contas_devolucao_correcao %}<option value="{{ conta.pk }}">{{ conta.nome }}</option>{% endfor %}</select></div>
+              <div class="compras-field"><label>Data em que recebeu</label><input type="date" name="data_devolucao" value="{{ hoje|date:'Y-m-d' }}"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <dialog id="previaCorrecaoCompra" style="width:min(600px,calc(100vw - 24px));max-height:85vh;overflow:auto;box-sizing:border-box;">
+        <h2>Confirmar correção da compra</h2>
+        <div id="resumoPreviaCorrecaoCompra"></div>
+        <p>Confirme somente se os itens, valores e a devolução informada correspondem ao que realmente ocorreu.</p>
+        <button type="button" class="compras-btn" id="aplicarPreviaCorrecaoCompra">Confirmar e salvar correção</button>
+        <button type="button" class="compras-btn compras-btn-secondary" id="cancelarPreviaCorrecaoCompra">Voltar e revisar</button>
+      </dialog>
+      <p id="avisoFinanceiroEdicaoComum">Pagamentos e devoluções reais são tratados no financeiro. Esta edição não cria entradas ou saídas de dinheiro.</p>
       {% for movimento in contas_financeiras_edicao %}<p>Conta registrada: {{ movimento.conta.nome }} — {{ movimento.get_tipo_display }} R$ {{ movimento.valor|floatformat:2 }}.</p>{% endfor %}
       <a href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Abrir correção antiga</a>
     </div>
@@ -4078,6 +4111,7 @@
   function confirmarItemProvisorio(linha) {
     if (!itemProvisorio(linha)) return;
     delete linha.dataset.itemProvisorio;
+    delete linha.dataset.pendenteManual;
     recalcular();
   }
 
@@ -4431,6 +4465,8 @@
     fecharSugestoes(linha);
     if (opcoes.provisorio) {
       marcarItemProvisorio(linha);
+    } else if (itemProvisorio(linha)) {
+      linha.dataset.pendenteManual = "1";
     }
     limparConferenciaNotaLinha(linha);
     conferenciaPrecosConfirmada = false;
@@ -4745,6 +4781,7 @@
   }
 
   function limparLinhaItem(linha) {
+    delete linha.dataset.pendenteManual;
     const itemEdicaoId = linha.querySelector('[name="item_edicao_id[]"]');
     if (itemEdicaoId) itemEdicaoId.value = "";
     const observacaoItem = linha.querySelector('[name="observacao_item[]"]');
@@ -4795,6 +4832,7 @@
     linha.dataset.edicaoUnidadeOriginal = campos.unidade ? campos.unidade.value : "";
     linha.dataset.edicaoPrecoOriginal = campos.preco ? campos.preco.value : "";
     linha.dataset.edicaoProdutoOriginal = campos.produto ? campos.produto.value : "";
+    linha.dataset.edicaoNomeOriginal = linha.querySelector('[name="produto_busca[]"]')?.value || "";
   }
 
   function limparEstadoEdicaoItemMobile(linha) {
@@ -4802,7 +4840,8 @@
       "edicaoQuantidadeOriginal",
       "edicaoUnidadeOriginal",
       "edicaoPrecoOriginal",
-      "edicaoProdutoOriginal"
+      "edicaoProdutoOriginal",
+      "edicaoNomeOriginal"
     ].forEach(function(chave) {
       delete linha.dataset[chave];
     });
@@ -4821,6 +4860,9 @@
   function cancelarEdicaoItemMobile(linha) {
     if (!linha || !linha.classList.contains("item-editando-mobile")) return;
     const campos = camposEdicaoItemMobile(linha);
+    if (campos.produto) campos.produto.value = linha.dataset.edicaoProdutoOriginal || "";
+    const busca = linha.querySelector('[name="produto_busca[]"]');
+    if (busca) busca.value = linha.dataset.edicaoNomeOriginal || "";
     if (campos.quantidade) campos.quantidade.value = linha.dataset.edicaoQuantidadeOriginal || "";
     if (campos.unidade) campos.unidade.value = linha.dataset.edicaoUnidadeOriginal || "";
     if (campos.preco) campos.preco.value = linha.dataset.edicaoPrecoOriginal || "";
@@ -4840,9 +4882,16 @@
     const campos = camposEdicaoItemMobile(linha);
     const produtoOriginal = linha.dataset.edicaoProdutoOriginal || "";
 
-    if (!campos.produto || campos.produto.value !== produtoOriginal) {
+    if (!campos.produto || (!edicaoFinalizada && campos.produto.value !== produtoOriginal)) {
       mostrarErroEdicaoItemMobile(linha, "O produto deste item nao pode ser alterado por aqui.");
       if (campos.produto) campos.produto.value = produtoOriginal;
+      const busca = linha.querySelector('[name="produto_busca[]"]');
+      if (busca) busca.value = linha.dataset.edicaoNomeOriginal || "";
+      return;
+    }
+
+    if (!produtoSelecionadoValido(linha)) {
+      mostrarErroEdicaoItemMobile(linha, "Selecione um produto valido.");
       return;
     }
 
@@ -5038,7 +5087,7 @@
       } else {
         const primeiraOpcao = opcoesProduto(linha)[0];
         if (primeiraOpcao) {
-          selecionarProduto(linha, primeiraOpcao);
+          selecionarProduto(linha, primeiraOpcao, {provisorio: true});
           produtoBusca.select();
         } else {
           mostrarSugestoes(linha, true);
@@ -5088,6 +5137,7 @@
     linha.querySelectorAll("input, select").forEach((campo) => {
       if (campo.classList.contains("conferencia-nota-checkbox")) return;
       campo.addEventListener("input", function() {
+        if (itemProvisorio(linha)) linha.dataset.pendenteManual = "1";
         if (campo !== produtoBusca && campo !== produto) {
           limparConferenciaNotaLinha(linha);
         }
@@ -5321,6 +5371,12 @@
       return;
     }
 
+    const pendente = Array.from(tabela.querySelectorAll(".linha-item")).find(linha =>
+      itemProvisorio(linha) && linha.dataset.pendenteManual === "1");
+    if (pendente) {
+      if (!validarConclusaoItem(pendente)) return;
+      confirmarItemProvisorio(pendente);
+    }
     const nova = criarLinhaItem();
     if (!nova) return;
     focarCampo(nova.querySelector('[name="produto_busca[]"]'));
@@ -6138,8 +6194,128 @@
     }
   }
 
+  function validarItensManuaisPendentes() {
+    const linha = Array.from(document.querySelectorAll(".linha-item")).find(item =>
+      itemProvisorio(item) && item.dataset.pendenteManual === "1");
+    if (!linha) return true;
+    const erro = document.getElementById("erroSalvarPreRevisaoCompra");
+    erro.textContent = `${nomeProdutoLinha(linha)}: confirme em Concluir item${compraMobile() ? "" : " (+ Adicionar item no computador)"} antes de salvar a compra.`;
+    erro.hidden = false;
+    linha.scrollIntoView({behavior: "smooth", block: "center"});
+    focarCampo(linha.querySelector('[name="produto_busca[]"]'));
+    return false;
+  }
+
+  const tipoCorrecaoCompra = document.getElementById("tipoCorrecaoCompra");
+  const valorDevolvidoCorrecao = document.getElementById("valorDevolvidoRealCorrecao");
+  function atualizarModoCorrecao() {
+    if (!tipoCorrecaoCompra) return;
+    const ativo = Boolean(tipoCorrecaoCompra.value);
+    const avisoComum = document.querySelector("#avisoEdicaoFinalizada p[role=alert]");
+    if (avisoComum) avisoComum.hidden = ativo;
+    document.getElementById("avisoFinanceiroEdicaoComum").hidden = ativo;
+    document.getElementById("dadosCorrecaoAutomatica").hidden = !ativo;
+    document.getElementById("valorPagoRealCorrecao").required = ativo;
+    document.getElementById("areaDevolucaoFinanceiraCorrecao").hidden = !ativo || tipoCorrecaoCompra.value === "erro_lancamento";
+    if (tipoCorrecaoCompra.value === "erro_lancamento") valorDevolvidoCorrecao.value = "0,00";
+    document.getElementById("destinoDevolucaoFinanceiraCorrecao").hidden = numero(valorDevolvidoCorrecao.value) <= 0;
+    if (btnSalvarCompra) btnSalvarCompra.textContent = ativo ? "Salvar correção" : "Salvar alterações";
+  }
+  tipoCorrecaoCompra?.addEventListener("change", atualizarModoCorrecao);
+  valorDevolvidoCorrecao?.addEventListener("input", atualizarModoCorrecao);
+
+  function confirmarPreviaCorrecao(previa) {
+    const dialogo = document.getElementById("previaCorrecaoCompra");
+    const resumo = document.getElementById("resumoPreviaCorrecaoCompra");
+    resumo.replaceChildren();
+    const mostrar = (rotulo, valor) => {
+      const p = document.createElement("p"); p.textContent = rotulo + ": " + valor; resumo.appendChild(p);
+    };
+    mostrar("Total anterior", moeda(Number(previa.total_anterior)));
+    mostrar("Total corrigido", moeda(Number(previa.total_corrigido)));
+    mostrar("Diferença", moeda(Number(previa.diferenca)));
+    mostrar("Pagamento registrado anteriormente (pode conter erro)", moeda(Number(previa.pago_registrado_antes)));
+    mostrar("Pagamento real confirmado", moeda(Number(previa.pago_preservado)));
+    if (previa.correcao_registro_financeiro) {
+      const ajuste = previa.correcao_registro_financeiro;
+      mostrar("Correção do registro financeiro #" + ajuste.id + " — " + ajuste.conta,
+        moeda(Number(ajuste.valor_anterior)) + " → " + moeda(Number(ajuste.valor_real_informado)) + " efetivamente pago. Nenhum novo pagamento será feito.");
+    }
+    mostrar("Dinheiro devolvido agora", moeda(Number(previa.devolvido_agora)));
+    mostrar("Crédito do fornecedor", moeda(Number(previa.credito_fornecedor)));
+    mostrar("Saldo a pagar", moeda(Number(previa.saldo_a_pagar)));
+    previa.itens.forEach(item => mostrar("Item", (item.nome_anterior || "Novo") + " → " + item.nome_corrigido + " — " + item.quantidade + " " + item.unidade + " a " + moeda(Number(item.preco))));
+    previa.removidos.forEach(item => mostrar("Item removido", item.nome));
+    previa.deltas_estoque.forEach(item => mostrar("Ajuste no estoque de " + item.produto, item.delta + " na unidade base cadastrada"));
+    return new Promise(resolve => {
+      const fechar = valor => { dialogo.close(); resolve(valor); };
+      document.getElementById("aplicarPreviaCorrecaoCompra").onclick = () => fechar(true);
+      document.getElementById("cancelarPreviaCorrecaoCompra").onclick = () => fechar(false);
+      dialogo.oncancel = event => { event.preventDefault(); fechar(false); };
+      dialogo.showModal();
+    });
+  }
+
+  async function salvarEdicaoFinalizada() {
+    const erro = document.getElementById("erroSalvarPreRevisaoCompra");
+    const controles = Array.from(formCompra.querySelectorAll("input, select, textarea"))
+      .map(campo => ({campo, disabled: campo.disabled}));
+    desabilitarItensProvisoriosParaEnvio();
+    const payload = new FormData(formCompra);
+    controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
+    formCompra.dataset.enviando = "1";
+    controles.forEach(({campo}) => { campo.disabled = true; });
+    erro.hidden = true;
+    if (btnSalvarCompra) btnSalvarCompra.disabled = true;
+    try {
+      const enviar = async () => {
+        const resposta = await fetch(formCompra.action || location.href, {
+          method: "POST", body: payload,
+          headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}, credentials: "same-origin"
+        });
+        const dados = await resposta.json();
+        if (!resposta.ok || !dados.sucesso) throw new Error(dados.erro || "Não foi possível confirmar o salvamento. Seus dados continuam nesta tela.");
+        return {resposta, dados};
+      };
+      if (tipoCorrecaoCompra?.value) {
+        formCompra.dataset.etapaCorrecao = "previa";
+        if (btnSalvarCompra) btnSalvarCompra.textContent = "Preparando prévia...";
+        payload.set("acao_compra", "prever_correcao");
+        const previa = (await enviar()).dados;
+        formCompra.dataset.etapaCorrecao = "confirmacao";
+        if (btnSalvarCompra) btnSalvarCompra.textContent = "Aguardando confirmação...";
+        if (!await confirmarPreviaCorrecao(previa.previa)) {
+          delete formCompra.dataset.enviando;
+          delete formCompra.dataset.etapaCorrecao;
+          controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
+          if (btnSalvarCompra) btnSalvarCompra.disabled = false;
+          atualizarModoCorrecao();
+          return;
+        }
+        formCompra.dataset.etapaCorrecao = "aplicando";
+        if (btnSalvarCompra) btnSalvarCompra.textContent = "Salvando correção...";
+        payload.set("previa_token", previa.previa_token);
+        payload.set("acao_compra", "salvar_correcao_automatica");
+      }
+      const {resposta, dados} = await enviar();
+      if (!resposta.ok || !dados.sucesso || !dados.redirect_url) {
+        throw new Error(dados.erro || "Nao foi possivel confirmar o salvamento. Seus dados continuam nesta tela.");
+      }
+      location.assign(dados.redirect_url);
+    } catch (falha) {
+      erro.textContent = falha.message;
+      erro.hidden = false;
+      erro.scrollIntoView({behavior: "smooth", block: "center"});
+      delete formCompra.dataset.enviando;
+      delete formCompra.dataset.etapaCorrecao;
+      controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
+      if (btnSalvarCompra) { btnSalvarCompra.disabled = false; btnSalvarCompra.textContent = tipoCorrecaoCompra?.value ? "Salvar correção" : "Salvar alterações"; }
+    }
+  }
+
   function enviarCompraComAcao(acao, botao) {
-    if (formCompra.dataset.salvandoPreRevisao === "1") return;
+    if (formCompra.dataset.salvandoPreRevisao === "1" || formCompra.dataset.enviando === "1") return;
+    if (!validarItensManuaisPendentes()) return;
     if (compraMobile()) {
       if (acao === "salvar_rascunho") {
         fecharEdicoesItensMobile();
@@ -6238,10 +6414,10 @@
       atualizarFluxoMobileCompra();
 
       if (edicaoFinalizada) {
+        event.preventDefault();
+        if (!validarItensManuaisPendentes()) return;
         acaoCompra.value = "salvar_edicao_finalizada";
-        desabilitarItensProvisoriosParaEnvio();
-        formCompra.dataset.enviando = "1";
-        if (btnSalvarCompra) { btnSalvarCompra.disabled = true; btnSalvarCompra.textContent = "Salvando alterações..."; }
+        salvarEdicaoFinalizada();
         return;
       }
 
@@ -9939,7 +10115,8 @@
     if (!botao || !select) return;
     var formulario = document.getElementById("formCompra");
     if (formulario && formulario.dataset.edicaoFinalizada === "1") {
-      botao.textContent = formulario.dataset.enviando === "1" ? "Salvando alterações..." : "Salvar alterações";
+      var etapa = formulario.dataset.etapaCorrecao;
+      botao.textContent = etapa === "previa" ? "Preparando prévia..." : etapa === "confirmacao" ? "Aguardando confirmação..." : etapa === "aplicando" ? "Salvando correção..." : formulario.dataset.enviando === "1" ? "Salvando alterações..." : (document.getElementById("tipoCorrecaoCompra")?.value ? "Salvar correção" : "Salvar alterações");
       return;
     }
 

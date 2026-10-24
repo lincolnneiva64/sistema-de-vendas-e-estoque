@@ -761,12 +761,12 @@
   <section class="nota-compra-card">
     <div class="nota-compra-card-titulo">Financeiro</div>
 
-    {% if aviso_financeiro_avista %}
+    {% if aviso_financeiro_avista and not compra.conciliacao %}
       <div class="nota-compra-alerta-financeiro">O total da compra e as origens do dinheiro estão diferentes. Para compra à vista, use “Corrigir origem”; esta etapa não altera Conta a Pagar.</div>
     {% endif %}
 
     {% if conta_pagar %}
-      {% if correcao_financeira.divergente %}
+      {% if correcao_financeira.divergente and not compra.conciliacao %}
         <div class="nota-compra-alerta-financeiro">
           <strong>Esta compra foi corrigida e o financeiro ainda está diferente.</strong>
           <div class="nota-compra-alerta-valores">
@@ -873,10 +873,16 @@
         <h3>Resumo do pagamento</h3>
         <p class="nota-compra-resumo-pagamento-subtitulo">Compra à vista paga no fechamento. Nenhuma conta a pagar foi gerada.</p>
         <div class="nota-compra-resumo-valores">
+          {% if compra.conciliacao %}
+            {% for movimento in movimentos_financeiros %}
+              <div class="nota-compra-resumo-valor banco" data-conta-conciliada="{{ movimento.conta_id }}"><span>{{ movimento.conta.nome }} — {{ movimento.get_tipo_display }}</span><strong>R$ {{ movimento.valor|floatformat:2 }}</strong></div>
+            {% endfor %}
+          {% else %}
           <div class="nota-compra-resumo-valor caixa"><span>Caixa</span><strong>R$ {{ alocacao_financeira.caixa|floatformat:2 }}</strong></div>
           <div class="nota-compra-resumo-valor reserva"><span>Sangria / Reserva</span><strong>R$ {{ alocacao_financeira.reserva|floatformat:2 }}</strong></div>
           <div class="nota-compra-resumo-valor banco"><span>Banco / Pix</span><strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</strong></div>
-          <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {{ compra.total|floatformat:2 }}</strong></div>
+          {% endif %}
+          <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {% if compra.conciliacao %}{{ compra.conciliacao.valor_pago|floatformat:2 }}{% else %}{{ compra.total|floatformat:2 }}{% endif %}</strong></div>
         </div>
         <p class="nota-compra-resumo-confirmacao">Pagamento registrado automaticamente no financeiro.</p>
         {% if movimentos_financeiros %}
@@ -895,6 +901,28 @@
       </div>
     {% endif %}
   </section>
+
+  {% if compra.conciliacao %}
+  <section class="nota-compra-card">
+    <div class="nota-compra-card-titulo">Conciliação da correção</div>
+    <p>Pagamento preservado: R$ {{ compra.conciliacao.valor_pago|floatformat:2 }}</p>
+    <p>Dinheiro devolvido registrado: R$ {{ compra.conciliacao.valor_devolvido|floatformat:2 }}</p>
+    <p>Crédito do fornecedor apurado na correção: R$ {{ compra.conciliacao.credito_fornecedor|floatformat:2 }}</p>
+    <p>Saldo a pagar apurado na correção: R$ {{ compra.conciliacao.saldo_a_pagar|floatformat:2 }}</p>
+    <p>Os valores acima refletem a conciliação registrada; pagamentos posteriores permanecem no histórico financeiro.</p>
+    <details><summary>Antes/depois e ajustes auditados</summary>
+    {% for edicao in compra.edicoes.all %}{% if edicao.depois.ajustes %}
+      <p><strong>{{ edicao.criado_em|date:"d/m/Y H:i" }} — {{ edicao.usuario }}</strong>: {{ edicao.motivo }}</p>
+      <p>Total anterior R$ {{ edicao.depois.ajustes.total_anterior }} → corrigido R$ {{ edicao.depois.ajustes.total_corrigido }}.</p>
+      {% for item in edicao.depois.ajustes.itens %}<p>{{ item.nome_anterior|default:"Novo item" }} → {{ item.nome_corrigido }} — {{ item.quantidade }} {{ item.unidade }}; R$ {{ item.preco }}. Item original #{{ item.item_id|default:"novo" }} → item corrigido #{{ item.item_corrigido_id }}.</p>{% endfor %}
+      {% for item in edicao.depois.ajustes.removidos %}<p>Removido: {{ item.nome }} (item #{{ item.item_id }}).</p>{% endfor %}
+      {% for delta in edicao.depois.ajustes.deltas_estoque %}<p>Estoque {{ delta.produto }}: {{ delta.delta }} na unidade base.</p>{% endfor %}
+      {% if edicao.depois.ajustes.correcao_registro_financeiro %}<p>Registro financeiro #{{ edicao.depois.ajustes.correcao_registro_financeiro.id }} corrigido de R$ {{ edicao.depois.ajustes.correcao_registro_financeiro.valor_anterior }} para R$ {{ edicao.depois.ajustes.correcao_registro_financeiro.valor_real_informado }}, conforme pagamento real informado. Nenhum novo pagamento.</p>{% endif %}
+      <p>Crédito: R$ {{ edicao.depois.ajustes.credito_fornecedor }}; saldo a pagar: R$ {{ edicao.depois.ajustes.saldo_a_pagar }}; devolvido nesta correção: R$ {{ edicao.depois.ajustes.devolvido_agora }}.</p>
+    {% endif %}{% endfor %}
+    </details>
+  </section>
+  {% endif %}
 
   {% if compra.observacao %}
     <section class="nota-compra-card nota-compra-historico">

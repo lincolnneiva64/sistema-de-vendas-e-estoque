@@ -2082,6 +2082,7 @@ class Compra(models.Model):
     cancelada_em = models.DateTimeField(blank=True, null=True)
     motivo_cancelamento = models.TextField(blank=True)
     revisao_precos_pendente = models.BooleanField(default=False, db_index=True)
+    conciliacao_automatica = models.BooleanField(default=False, editable=False)
     estoque_entrada_realizada = models.BooleanField(default=False)
     estoque_entrada_realizada_em = models.DateTimeField(blank=True, null=True)
     fechamento_token = models.CharField(max_length=32, unique=True, blank=True, null=True, editable=False)
@@ -2133,6 +2134,19 @@ class EdicaoCompra(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
 
 
+class ConciliacaoCompra(models.Model):
+    """Financial reconciliation of a corrected purchase, never a cash payment."""
+    compra = models.OneToOneField(Compra, on_delete=models.PROTECT, related_name="conciliacao")
+    edicao = models.OneToOneField(EdicaoCompra, on_delete=models.PROTECT, related_name="conciliacao")
+    tipo = models.CharField(max_length=24)
+    valor_pago = models.DecimalField(max_digits=12, decimal_places=2)
+    valor_devolvido = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credito_fornecedor = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    saldo_a_pagar = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    efeitos = models.JSONField(default=dict)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+
 class ParcelaCompra(models.Model):
     """Programacao da compra direta; nao representa divida nem pagamento."""
 
@@ -2166,6 +2180,7 @@ class ItemCompra(models.Model):
         null=True,
         related_name="itens_compra",
     )
+    estoque_base_registrado = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, editable=False)
     quantidade = models.DecimalField(max_digits=12, decimal_places=3)
     unidade = models.CharField(max_length=20, blank=True)
     preco_unitario = models.DecimalField(max_digits=12, decimal_places=2)

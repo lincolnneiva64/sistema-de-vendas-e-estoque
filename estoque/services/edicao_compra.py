@@ -173,8 +173,16 @@ def contexto_edicao(compra, usuario):
     )
     if _compra_pagamento_a_prazo(compra.tipo_pagamento) and not contas:
         motivo = motivo or "Compra a prazo sem obrigacoes ativas; reconcilie as contas antes de editar."
+    from estoque.services.correcao_compra import _financeiro
+    from estoque.models import ContaFinanceira
+    try:
+        pago_comprovado = _financeiro(compra)[0]
+    except ValueError:
+        pago_comprovado = ""
     return {
         "edicao_finalizada": True, "bloqueio_edicao": motivo,
+        "pago_comprovado_correcao": str(pago_comprovado),
+        "contas_devolucao_correcao": ContaFinanceira.objects.filter(ativo=True).order_by("nome"),
         "tipo_pagamento_form": _tipo_formulario(compra.tipo_pagamento),
         "edicao_token": signing.dumps({"compra": compra.pk, "usuario": usuario.pk,
                                       "versao": _hash(estado), "operacao": uuid4().hex}, salt=SALT),
@@ -229,6 +237,7 @@ def salvar_edicao(request, compra_id):
             if anterior.compra_id != compra_id or anterior.usuario_id != request.user.pk or anterior.payload_hash != payload_hash:
                 raise ValueError("Identificacao ja utilizada em outra correcao. Recarregue a compra.")
             return anterior, False
+        from estoque.models import ConciliacaoCompra
         if compra.cancelada or compra.status != Compra.STATUS_FINALIZADA or not compra.estoque_entrada_realizada:
             raise ValueError("Compra cancelada ou nao finalizada com estoque confirmado. Nenhuma alteracao foi salva.")
         itens = list(ItemCompra.objects.select_for_update().filter(compra=compra).order_by("pk"))
@@ -284,6 +293,8 @@ def salvar_edicao(request, compra_id):
         )) or compra.fornecedor_id != dados["fornecedor"].pk or compra.cartao_id != (dados["cartao"].pk if dados["cartao"] else None)
         antigo_prazo = _compra_pagamento_a_prazo(compra.tipo_pagamento)
         mudou_pagamento = _tipo_formulario(compra.tipo_pagamento) != _tipo_formulario(dados["tipo_pagamento"])
+        if ConciliacaoCompra.objects.filter(compra=compra).exists() and (mudou_base or mudou_pagamento):
+            raise ValueError("Esta compra possui conciliação auditada. Utilize Salvar correção para alterar itens ou valores.")
         ativos = [c for c in contas if c.status != ContaPagar.STATUS_CANCELADA]
         movimentos_para_reverter = _movimentos_automaticos_reversiveis(compra, antes, bloquear=True)
         converter_para_prazo = (
