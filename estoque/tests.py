@@ -39455,7 +39455,10 @@ class SeparacaoVendaFase1Tests(TestCase):
             self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
             self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
         })
-        resposta = self._post_checklist(separacao, {})
+        resposta = self._post_checklist(separacao, {
+            self.item_a.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+            self.item_b.id: SeparacaoVendaItem.STATUS_CONFERIDO,
+        })
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(resposta.url, reverse("estoque:separacao_vendas_fila"))
@@ -39981,7 +39984,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, 'data-status="conferido"')
         self.assertContains(resposta, 'value="peso_separado" checked')
         self.assertContains(resposta, 'value="14.300"')
-        self.assertContains(resposta, "const itemJaConfirmado = card.dataset.status === \"conferido\";")
+        self.assertContains(resposta, "const itemJaConfirmado = card.dataset.confirmado === \"true\";")
         self.assertContains(resposta, "!itemJaConfirmado")
         self.assertContains(resposta, "Conferencia dos itens concluida")
 

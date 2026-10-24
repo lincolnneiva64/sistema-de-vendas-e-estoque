@@ -25331,6 +25331,12 @@ def _validar_item_checklist_separacao(item, post_data):
         except ValueError:
             return status, None, f"Informe a quantidade encontrada de {item.produto_nome_snapshot}."
 
+        if not quantidade_separada.is_finite():
+            return status, None, f"Informe um peso ou quantidade valido para {item.produto_nome_snapshot}."
+        if item_separacao_registra_peso_real(item):
+            texto = str(post_data.get(f"quantidade_separada_{item.id}") or "").strip()
+            if not re.fullmatch(r"(?:[0-9]+(?:[.,][0-9]{1,3})?|[.,][0-9]{1,3})", texto):
+                return status, None, f"Informe um peso valido para {item.produto_nome_snapshot}, com ate tres casas decimais."
         quantidade_solicitada = Decimal(item.quantidade_solicitada or 0)
         if quantidade_separada <= Decimal("0.000"):
             return status, None, f"A quantidade encontrada de {item.produto_nome_snapshot} deve ser maior que zero."
@@ -25678,8 +25684,18 @@ def separacao_venda_detalhe(request, pk):
                 if item.status == SeparacaoVendaItem.STATUS_PENDENTE
             ]
 
-            if itens_pendentes:
-                messages.warning(request, "Confira todos os itens antes de concluir a separacao.")
+            erro_confirmacao = ""
+            for item in itens_bloqueados:
+                if f"status_{item.pk}" not in request.POST:
+                    continue
+                status_enviado, quantidade_enviada, erro = _validar_item_checklist_separacao(item, request.POST)
+                if erro or status_enviado != item.status or quantidade_enviada != item.quantidade_separada:
+                    acao = "toque no OK do campo Peso separado" if item_separacao_registra_peso_real(item) else "confirme a opcao do item"
+                    erro_confirmacao = f"{item.produto_nome_snapshot}: {erro or 'quantidade/opcao ainda nao confirmada no servidor.'} Revise e {acao} antes de concluir."
+                    break
+            if itens_pendentes or erro_confirmacao:
+                nomes = ", ".join(item.produto_nome_snapshot for item in itens_pendentes)
+                messages.warning(request, "Confira todos os itens antes de concluir a separacao. " + (erro_confirmacao or f"Falta confirmar: {nomes}. Abra cada produto e confirme a opcao; para peso, toque no OK do campo Peso separado."))
                 itens = [
                     _preparar_item_checklist_separacao(item)
                     for item in separacao.itens.select_related("item_venda", "item_venda__produto").all()

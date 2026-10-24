@@ -142,7 +142,7 @@
                 <button class="sep-step-btn" type="button" data-step="-{{ item.quantidade_passo_data }}">-</button>
                 <input
                   class="sep-step-input"
-                  type="number"
+                  type="{% if item.registra_peso_real %}text{% else %}number{% endif %}"
                   inputmode="{% if item.registra_peso_real %}decimal{% else %}numeric{% endif %}"
                   step="{{ item.quantidade_passo_data }}"
                   min="{{ item.quantidade_minima_data }}"
@@ -192,6 +192,29 @@
     return number.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
   };
 
+  const lerPeso = (value) => {
+    const texto = String(value || "").trim();
+    if (!/^(?:[0-9]+(?:[.,][0-9]{1,3})?|[.,][0-9]{1,3})$/.test(texto)) return null;
+    const peso = Number(texto.replace(",", "."));
+    return Number.isFinite(peso) && peso > 0 ? peso : null;
+  };
+
+  const nomeProduto = (card) => card.querySelector(".sep-prod")?.textContent?.trim() || "Produto";
+  const faltaConfirmar = (card) => card._sepSaving
+    ? `${nomeProduto(card)}: aguarde o registro da confirmacao.`
+    : card.querySelector("[data-peso-ok]") && statusUsaQuantidade(statusSelecionado(card))
+      ? `${nomeProduto(card)}: ${lerPeso(card.querySelector("[data-qtd-input]")?.value) === null ? "informe um peso valido e " : ""}toque no botao OK do campo Peso separado para confirmar.`
+      : `${nomeProduto(card)}: confirme a opcao do item e aguarde o registro.`;
+  const marcarAlterado = (card) => {
+    card._sepRevision = (card._sepRevision || 0) + 1;
+    card.dataset.confirmado = "false";
+  };
+  const assinatura = (card) => {
+    const status = statusSelecionado(card);
+    const value = card.querySelector("[data-qtd-input]")?.value || "";
+    return status + ":" + (statusUsaQuantidade(status) ? String(value).trim().replace(",", ".") : "");
+  };
+
   const clampInsuficiente = (card, value) => {
     const min = Number(card.dataset.minima || 0.001);
     const max = Number(card.dataset.maxima || 0);
@@ -223,17 +246,20 @@
   const syncQuantidadeValidation = (card) => {
     const input = card.querySelector("[data-qtd-input]");
     if (!input) return;
-    const itemJaConfirmado = card.dataset.status === "conferido";
+    const itemJaConfirmado = card.dataset.confirmado === "true";
     const deveValidar = (
       !itemJaConfirmado
       && card.classList.contains("is-active")
       && statusUsaQuantidade(statusSelecionado(card))
     );
     input.required = deveValidar;
+    // Removing step from a number input restores the browser default of 1.
+    input.step = card.dataset.passo || "any";
+    input.setCustomValidity(card.querySelector("[data-peso-ok]") && deveValidar && lerPeso(input.value) === null
+      ? "Informe um peso valido, maior que zero, com ate tres casas decimais." : "");
     if (!deveValidar) {
       input.removeAttribute("min");
       input.removeAttribute("max");
-      input.removeAttribute("step");
       return;
     }
     input.min = card.dataset.minima || "";
@@ -316,7 +342,7 @@
       card.classList.toggle("is-done", quantidade > 0);
       card.classList.toggle("is-pending", quantidade <= 0);
     } else if (status === "peso_separado") {
-      const quantidade = input && input.value ? clampInsuficiente(card, input.value) : 0;
+      const quantidade = input ? (lerPeso(input.value) || 0) : 0;
       const diferenca = quantidade - solicitada;
       classe = "ok";
       icone = "✓";
@@ -328,6 +354,16 @@
     } else {
       card.classList.remove("is-done");
       card.classList.add("is-pending");
+    }
+
+    if (card.dataset.confirmado !== "true") {
+      card.classList.remove("is-done");
+      card.classList.add("is-pending");
+      classe = "pendente";
+      icone = "";
+      resumo = status === "peso_separado"
+        ? "Peso ainda nao confirmado. Toque no OK do campo Peso separado."
+        : "Item ainda nao confirmado no servidor.";
     }
 
     if (icon) {
@@ -355,6 +391,9 @@
     if (radio) radio.checked = true;
     if (input) input.value = item.quantidade_separada || "";
     card.dataset.status = item.status;
+    card.dataset.confirmado = "true";
+    const box = card.querySelector("[data-insuficiente-box]");
+    if (box) box.classList.toggle("is-visible", statusUsaQuantidade(statusSelecionado(card)));
     const icon = card.querySelector("[data-resultado-icone]");
     const text = card.querySelector("[data-resultado-texto]");
     if (icon) {
@@ -375,6 +414,13 @@
     const checked = card.querySelector("input[type='radio']:checked");
     const state = card.querySelector("[data-save-state]");
     if (!checked || checked.value === "pendente") return false;
+    const pedido = assinatura(card);
+    if (card._sepSaving) {
+      await card._sepSaving;
+      return assinatura(card) === pedido ? saveItem(card, {advance}) : false;
+    }
+    if (card.dataset.confirmado === "true") return true;
+    const revision = card._sepRevision || 0;
     const input = card.querySelector("[data-qtd-input]");
     if (checked.value === "quantidade_insuficiente" || checked.value === "peso_separado") {
       const min = Number(card.dataset.minima || 0);
@@ -394,7 +440,16 @@
         }
         return false;
       }
-      input.value = formatQtd(clampInsuficiente(card, input.value));
+      if (card.querySelector("[data-peso-ok]")) {
+        const peso = lerPeso(input.value);
+        if (peso === null) {
+          if (state) { state.textContent = faltaConfirmar(card); state.classList.add("is-error"); }
+          return false;
+        }
+        input.value = formatQtd(peso);
+      } else {
+        input.value = formatQtd(clampInsuficiente(card, input.value));
+      }
     }
 
     const body = new URLSearchParams();
@@ -406,50 +461,63 @@
     }
     if (submitFeedback) submitFeedback.classList.remove("is-visible");
 
-    try {
-      const response = await fetch(card.dataset.saveUrl, {
-        method: "POST",
-        headers: {
-          "X-CSRFToken": csrfInput ? csrfInput.value : "",
-          "X-Requested-With": "XMLHttpRequest",
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: body.toString(),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.sucesso) {
-        throw new Error(data.mensagem || "Nao foi possivel salvar o item.");
-      }
-      applySavedItem(card, data);
-      if (state) state.textContent = "Registrado.";
-      window.setTimeout(() => {
-        const next = nextPending(card);
-        if (advance && next) {
-          setActive(next);
-        } else if (!next) {
-          setActive(null);
-          updateCompletion();
+    const executar = async () => {
+      try {
+        const response = await fetch(card.dataset.saveUrl, {
+          method: "POST",
+          headers: {
+            "X-CSRFToken": csrfInput ? csrfInput.value : "",
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.sucesso) {
+          throw new Error(data.mensagem || "Nao foi possivel salvar o item.");
         }
-        if (state) state.textContent = "";
-      }, confirmDelay);
-      return true;
-    } catch (error) {
-      if (state) {
-        state.textContent = error.message;
-        state.classList.add("is-error");
+        if ((card._sepRevision || 0) !== revision) {
+          card.dataset.status = data.item.status;
+          if (state) state.textContent = `${nomeProduto(card)}: valor alterado durante o registro. Confirme novamente a opcao ou o OK do peso.`;
+          return false;
+        }
+        applySavedItem(card, data);
+        if (state) state.textContent = "Registrado.";
+        window.setTimeout(() => {
+          if ((card._sepRevision || 0) !== revision) return;
+          const next = nextPending(card);
+          if (advance && next) {
+            setActive(next);
+          } else if (!next) {
+            setActive(null);
+            updateCompletion();
+          }
+          if (state) state.textContent = "";
+        }, confirmDelay);
+        return true;
+      } catch (error) {
+        if (state) {
+          state.textContent = error.message;
+          state.classList.add("is-error");
+        }
+        card.classList.remove("is-done");
+        card.classList.add("is-pending");
+        setActive(card);
+        updateCompletion();
+        return false;
       }
-      card.classList.remove("is-done");
-      card.classList.add("is-pending");
-      setActive(card);
-      updateCompletion();
-      return false;
-    }
+    };
+    card._sepSaving = executar();
+    try { return await card._sepSaving; }
+    finally { card._sepSaving = null; }
   };
 
   cards.forEach((card) => {
+    card.dataset.confirmado = card.classList.contains("is-done") ? "true" : "false";
     card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card));
     card.querySelectorAll("input[type='radio']").forEach((input) => {
       input.addEventListener("change", () => {
+        marcarAlterado(card);
         refreshCard(card);
         if (input.value !== "quantidade_insuficiente" && input.value !== "peso_separado") saveItem(card);
       });
@@ -458,6 +526,7 @@
       button.addEventListener("click", () => {
         const input = card.querySelector("[data-qtd-input]");
         if (input) input.value = button.dataset.qtdRapida || "";
+        marcarAlterado(card);
         card.querySelectorAll("[data-qtd-rapida]").forEach((item) => item.classList.remove("is-selected"));
         button.classList.add("is-selected");
         refreshCard(card);
@@ -468,13 +537,19 @@
       button.addEventListener("click", () => {
         const input = card.querySelector("[data-qtd-input]");
         if (!input) return;
+        if (card.querySelector("[data-peso-ok]") && input.value && lerPeso(input.value) === null) {
+          const state = card.querySelector("[data-save-state]");
+          if (state) { state.textContent = faltaConfirmar(card); state.classList.add("is-error"); }
+          return;
+        }
         const step = Number(button.dataset.step || 0);
-        input.value = formatQtd(clampInsuficiente(card, Number(input.value || 0) + step));
+        input.value = formatQtd(clampInsuficiente(card, Number(String(input.value || 0).replace(",", ".")) + step));
+        marcarAlterado(card);
         refreshCard(card);
         saveItem(card, {advance: false});
       });
     });
-    card.querySelector("[data-qtd-input]")?.addEventListener("input", () => refreshCard(card));
+    card.querySelector("[data-qtd-input]")?.addEventListener("input", () => { marcarAlterado(card); refreshCard(card); });
     const qtdInput = card.querySelector("[data-qtd-input]");
     qtdInput?.addEventListener("change", () => {
       if (!card.querySelector("[data-peso-ok]")) saveItem(card);
@@ -492,10 +567,10 @@
     const itemComErro = cards.find((card) => card.querySelector("[data-save-state].is-error"));
     if (itemComErro) {
       event.preventDefault();
-      focarItemBloqueado(itemComErro, "Corrija o item destacado antes de concluir a separacao.");
+      focarItemBloqueado(itemComErro, faltaConfirmar(itemComErro));
       return;
     }
-    const itensPendentes = cards.filter((card) => !card.classList.contains("is-done"));
+    const itensPendentes = cards.filter((card) => (card.dataset.confirmado !== "true" || card._sepSaving || !card.classList.contains("is-done")));
     if (itensPendentes.length) {
       event.preventDefault();
 
@@ -503,18 +578,18 @@
         .map((card) => card.querySelector(".sep-prod")?.textContent?.trim())
         .filter(Boolean);
 
-      const mensagem = nomesPendentes.length === 1
-        ? `Falta conferir: ${nomesPendentes[0]}.`
-        : `Faltam conferir: ${nomesPendentes.join(", ")}.`;
+      const mensagem = nomesPendentes.length > 1
+        ? `Faltam conferir: ${nomesPendentes.join(", ")}. `
+        : "";
 
-      focarItemBloqueado(itensPendentes[0], mensagem);
+      focarItemBloqueado(itensPendentes[0], mensagem + faltaConfirmar(itensPendentes[0]));
     }
   });
 
   document.getElementById("separacaoChecklistForm")?.addEventListener("invalid", (event) => {
     const card = event.target.closest("[data-sep-item]");
     if (card) {
-      focarItemBloqueado(card, "Revise a quantidade informada antes de concluir a separacao.");
+      focarItemBloqueado(card, `${nomeProduto(card)}: revise a quantidade informada. ` + faltaConfirmar(card));
     }
   }, true);
 
