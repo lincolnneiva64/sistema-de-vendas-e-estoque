@@ -1673,7 +1673,7 @@ td.listas-fornecedor-total {
       {% if mostrando_canceladas %}
         <a class="listas-fornecedor-btn listas-fornecedor-top-canceladas" href="{% url 'estoque:compras_listas_fornecedor' %}">Listas ativas</a>
       {% else %}
-        <a class="listas-fornecedor-btn listas-fornecedor-top-canceladas" href="{% url 'estoque:compras_listas_fornecedor' %}?status=cancelada">Canceladas</a>
+        <a class="listas-fornecedor-btn listas-fornecedor-top-canceladas" href="{% url 'estoque:compras_listas_fornecedor' %}?aba=todas&amp;status=cancelada">Canceladas</a>
       {% endif %}
       <a class="listas-fornecedor-btn primary" href="{% url 'estoque:sugestao_compra_fornecedor' %}">Nova Lista</a>
     </div>
@@ -1693,6 +1693,7 @@ td.listas-fornecedor-total {
 
   <section class="listas-fornecedor-filter-card">
     <form method="get">
+      <input type="hidden" name="aba" value="{{ aba_desktop }}">
       <div class="listas-fornecedor-filtros">
         <div class="listas-fornecedor-field">
           <label for="fornecedor">Fornecedor</label>
@@ -1741,9 +1742,39 @@ td.listas-fornecedor-total {
 
   </div>
 
+  <style>
+    .listas-fornecedor-abas-desktop,
+    .listas-fornecedor-empty-desktop { display: none; }
+    @media (min-width: 769px) {
+      .listas-fornecedor-abas-desktop { display: flex; gap: 8px; margin: 0 0 12px; }
+      .listas-fornecedor-abas-desktop [aria-current="page"] { background: #8f1d2c !important; border-color: #8f1d2c !important; color: #fff !important; }
+      .listas-fornecedor-empty-desktop { display: block; }
+    }
+  </style>
+  <nav class="listas-fornecedor-abas-desktop" data-aba="{{ aba_desktop }}" aria-label="Consulta de listas por fornecedor">
+    {% for aba in abas_desktop %}
+      <a class="listas-fornecedor-btn" href="{{ aba.url }}"{% if aba.chave == aba_desktop %} aria-current="page"{% endif %}>{{ aba.titulo }}</a>
+    {% endfor %}
+  </nav>
+  <script>
+  (function () {
+    const abas = document.querySelector(".listas-fornecedor-abas-desktop");
+    const opcao = document.querySelector('#status option[value=""]');
+    if (!abas || !opcao) return;
+    const textoMobile = opcao.textContent;
+    const desktop = window.matchMedia("(min-width: 769px)");
+    function atualizarRotulo() {
+      opcao.textContent = desktop.matches && abas.dataset.aba !== "ativas"
+        ? "Todos os status" : textoMobile;
+    }
+    atualizarRotulo();
+    desktop.addEventListener("change", atualizarRotulo);
+  })();
+  </script>
+
   <section class="listas-fornecedor-table-card">
-    {% if listas or listas_mobile %}
-      {% if listas %}
+    {% if listas or listas_mobile or listas_desktop %}
+      {% if listas_desktop %}
         <div class="listas-fornecedor-table-wrap">
         <table class="listas-fornecedor-table">
           <thead>
@@ -1758,7 +1789,7 @@ td.listas-fornecedor-total {
           </thead>
 
           <tbody>
-            {% for lista in listas %}
+            {% for lista in listas_desktop %}
               {% if lista.compra_gerada %}
                 <tr class="listas-fornecedor-linha-com-compra">
                   <td class="listas-fornecedor-numero">#{{ lista.id }}</td>
@@ -1826,6 +1857,8 @@ td.listas-fornecedor-total {
           </tbody>
         </table>
       </div>
+      {% else %}
+      <div class="listas-fornecedor-empty listas-fornecedor-empty-desktop">Nenhuma lista encontrada nesta aba com os filtros selecionados.</div>
       {% endif %}
       <div class="listas-fornecedor-mobile-cards" aria-label="Listas por fornecedor" data-mobile-modo="{% if mostrando_canceladas_mobile %}canceladas{% elif mostrando_historico_mobile %}historico{% else %}pendentes{% endif %}">
         {% if listas_mobile %}

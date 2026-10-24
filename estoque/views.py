@@ -32,6 +32,7 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.db.models import Case, When, Value, IntegerField, F, Count, DecimalField, ExpressionWrapper
 from .forms import CategoriaForm, ClienteForm, FornecedorContatoFormSet, FornecedorForm, FuncionarioForm, MeioPagamentoForm, PixRecebidoCorrecaoForm, PixRecebidoForm, ProdutoForm, UnidadeForm
+from .services.compras_origem_consulta import anotar_compras_listas_desktop, anotar_origens_compras
 from .models import GrupoProdutoVinculado
 from .models import ParcelaCompra
 from .services.precos_vinculados import serializar_grupos, bloquear_catalogo, bloquear_produtos_precos, salvar_formulario_produto, proteger_precos_http, exigir_operador_precos
@@ -9607,11 +9608,33 @@ def compras_listas_fornecedor(request):
             if not lista.compra_gerada
         ]
 
+    aba_desktop = request.GET.get("aba", "ativas")
+    if aba_desktop not in {"ativas", "compras", "todas"}:
+        aba_desktop = "ativas"
+    listas_desktop_base = listas_base.filter(status=status_filtro) if status_filtro else listas_base.all()
+    listas_desktop = anotar_compras_listas_desktop(listas_desktop_base)
+    if aba_desktop == "ativas":
+        listas_desktop = [lista for lista in listas_desktop
+            if lista.status in {ListaCompraFornecedor.STATUS_ABERTA, ListaCompraFornecedor.STATUS_ENVIADA}
+            and not lista.compra_gerada]
+    elif aba_desktop == "compras":
+        listas_desktop = [lista for lista in listas_desktop if lista.compra_gerada]
+    abas_desktop = []
+    for chave, titulo in [("ativas", "Listas ativas"), ("compras", "Viraram compras"), ("todas", "Todas")]:
+        parametros = request.GET.copy()
+        parametros["aba"] = chave
+        parametros.pop("mobile", None)
+        abas_desktop.append({"chave": chave, "titulo": titulo,
+            "url": reverse("estoque:compras_listas_fornecedor") + "?" + parametros.urlencode()})
+
     return render(
         request,
         "estoque/compras_listas_fornecedor.html",
         {
             "listas": listas,
+            "listas_desktop": listas_desktop,
+            "aba_desktop": aba_desktop,
+            "abas_desktop": abas_desktop,
             "listas_mobile": listas_mobile,
             "fornecedor_filtro": fornecedor_filtro,
             "status_filtro": status_filtro,
@@ -10143,7 +10166,7 @@ def _resposta_lista_fornecedor_salva(request, lista):
         retorno = urlsplit("")
     if not retorno.scheme and not retorno.netloc and retorno.path == destino:
         filtros = parse_qs(retorno.query)
-        filtros = {k: v[-1] for k, v in filtros.items() if k in {"fornecedor", "status", "data_inicio", "data_fim", "mobile"}}
+        filtros = {k: v[-1] for k, v in filtros.items() if k in {"fornecedor", "status", "data_inicio", "data_fim", "mobile", "aba"}}
         if filtros:
             destino += "?" + urlencode(filtros)
     if request.headers.get("Accept") == "application/json":
@@ -11384,6 +11407,8 @@ def compras_lista(request):
         if financeiro_filtro and compra.situacao_financeira_classe != financeiro_filtro:
             continue
         compras_lista_filtrada.append(compra)
+
+    anotar_origens_compras(compras_lista_filtrada)
 
     return render(
         request,
