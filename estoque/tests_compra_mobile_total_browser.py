@@ -152,18 +152,19 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 saved.refresh_from_db();self.assertEqual(saved.total_lista,Decimal('331.20'))
             finally:chrome.stop()
 
-    def test_desktop_pending_edits_do_not_count_until_explicit_confirmation(self):
+    def test_desktop_table_edits_count_without_mobile_confirmation(self):
         with TemporaryDirectory(prefix='purchase-desktop-total-') as profile:
             chrome=Chrome(CHROME,profile).start()
             try:
                 tab=self.open_page(chrome,width=1280)
-                self.assertTrue(tab.evaluate('atualizarTotalListaPedidoMobile()'))
+                self.assertFalse(tab.evaluate('atualizarTotalListaPedidoMobile()'))
+                initial = self.total(tab)
                 tab.evaluate('window.row=document.querySelector("#tbodySugestaoProdutos tr[data-produto-id]");row.querySelector(".sugestao-qtd-input").value="4";row.querySelector(".sugestao-qtd-input").dispatchEvent(new Event("input",{bubbles:true}));true')
-                self.assertTrue(tab.evaluate('[...document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card")].every(c=>c.dataset.naLista!=="1")'))
-                self.assertEqual(self.total(tab), 'R$ 0,00')
-                tab.evaluate('row.querySelector("[data-confirmar-pre-lista]").click();true')
-                self.assertEqual(self.total(tab), 'R$ 189,60')
-                self.assertTrue(tab.evaluate('row.hidden'))
+                self.assertNotEqual(self.total(tab), initial)
+                self.assertEqual(self.total(tab), 'R$ 251,28')
+                self.assertEqual(tab.evaluate('document.querySelectorAll("#tbodySugestaoProdutos [data-confirmar-pre-lista]").length'),0)
+                self.assertFalse(tab.evaluate('row.hidden'))
+                self.assertFalse(tab.evaluate('document.getElementById("itensListaMobile").getBoundingClientRect().height>0'))
             finally:chrome.stop()
 
 

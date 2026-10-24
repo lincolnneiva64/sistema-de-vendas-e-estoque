@@ -1936,26 +1936,7 @@
       pointer-events: auto;
     }
   }
-  /* The desktop keeps its table; confirmed products use the same controls as mobile. */
-  @media (min-width: 861px) {
-    #itensListaMobile { display: grid; gap: 10px; margin: 12px; padding: 12px; border: 2px solid #16a34a; border-radius: 10px; background: #f8fff9; }
-    #itensListaMobileLista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-    #itensListaMobile h2 { margin: 0; color: #14532d; font-size: 1rem; }
-    #itensListaMobile .sugestao-item-lista-mobile { display: grid; gap: 8px; padding: 10px; border: 1px solid #16a34a; border-left-width: 5px; border-radius: 9px; background: #f0fdf4; }
-    #itensListaMobile .sugestao-item-lista-mobile-topo { display: flex; justify-content: space-between; gap: 8px; font-weight: 950; }
-    #itensListaMobile .sugestao-item-lista-mobile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
-    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(1) { grid-area: 1 / 1; }
-    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(2) { grid-area: 2 / 1; }
-    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(3) { grid-area: 1 / 2; }
-    #itensListaMobile .sugestao-item-lista-mobile-grid > :nth-child(4) { grid-area: 2 / 2; }
-    #itensListaMobile .sugestao-mobile-edit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    #itensListaMobile .sugestao-input { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; }
-    #itensListaMobile .sugestao-mobile-edit-actions .sugestao-btn { width: auto; min-height: 40px; }
-    #itensListaMobile .sugestao-item-lista-mobile-total { font-weight: 850; }
-    #tbodySugestaoProdutos tr[data-produto-id] { background: #fff3f4; }
-    #tbodySugestaoProdutos .sugestao-col-acao { min-width: 140px; }
-  }
-  @media (max-width: 860px) { .sugestao-pre-lista-desktop { display: none; } }
+  .sugestao-pre-lista-desktop { display: none; }
   #itensListaMobile .sugestao-item-lista-unidade-input { max-width: 85px; }
   #itensListaMobile .sugestao-item-lista-mobile-erro:empty,
   #itensListaMobileVazia.oculto { display: none; }
@@ -2969,6 +2950,7 @@
   };
 
   window.atualizarTotalListaPedidoMobile = function () {
+    if (!window.matchMedia("(max-width: 860px)").matches) return false;
     const mobile = document.getElementById("mobileSugestaoProdutos");
     if (!mobile) return false;
     const itens = Array.from(document.querySelectorAll("#itensListaMobileLista .sugestao-item-lista-mobile[data-produto-id]"));
@@ -3074,14 +3056,17 @@
   }
 
   function atualizarContagemProdutos() {
-    const total = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length;
+    const mobileVisivel = visivel(document.getElementById("mobileSugestaoProdutos"));
+    const total = mobileVisivel
+      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
+      : document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(total);
     });
 
     const vazio = document.getElementById("sugestaoListaVazia");
     if (vazio) {
-      vazio.classList.toggle("oculto", window.temProdutosListaFornecedor());
+      vazio.classList.toggle("oculto", mobileVisivel ? window.temProdutosListaFornecedor() : total > 0);
     }
   }
 
@@ -3705,7 +3690,9 @@
       });
     }
 
-    const totalProdutos = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length;
+    const totalProdutos = listaMobileVisivel
+      ? document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-na-lista='1']").length
+      : tbody.querySelectorAll("tr[data-produto-id]").length;
     document.querySelectorAll("[data-produtos-lista-total]").forEach((el) => {
       el.textContent = String(totalProdutos);
     });
@@ -4073,7 +4060,7 @@
     produtosTratadosMobile.add(String(card.dataset.produtoId));
     card.classList.add("sugestao-tratada-mobile");
     const row = linhaDesktopDoCard(card);
-    if (row) { row.hidden = true; const history = row.nextElementSibling; if (history?.matches("[data-historico-desktop-row]")) history.hidden = true; }
+    if (ehMobileLista() && row) { row.hidden = true; const history = row.nextElementSibling; if (history?.matches("[data-historico-desktop-row]")) history.hidden = true; }
   }
 
   function rolarProximoProdutoMobile(proximo) {
@@ -4243,8 +4230,11 @@
       if (source && target) target.value = source.value;
     });
     const unit = card.querySelector(".sugestao-unidade-input");
-    if (origemDesktop) unit.value = row.querySelector(".sugestao-unidade-input").value;
-    else row.querySelector(".sugestao-unidade-input").value = unit.value;
+    const desktopUnit = row.querySelector(".sugestao-unidade-input");
+    if (desktopUnit) {
+      if (origemDesktop) unit.value = desktopUnit.value;
+      else desktopUnit.value = unit.value;
+    }
     const values = card.querySelectorAll(".sugestao-mobile-value");
     values[4].textContent = unit.value;
   }
@@ -4252,7 +4242,7 @@
   window.prepararProdutoListaFornecedor = function(card) {
     produtosTratadosMobile.delete(String(card.dataset.produtoId));
     const row = linhaDesktopDoCard(card);
-    if (!row || row.dataset.acoesPreparadas === "1") return;
+    if (!ehMobileLista() || !row || row.dataset.acoesPreparadas === "1") return;
     row.dataset.acoesPreparadas = "1";
     const unitCell = row.children[6];
     const unit = document.createElement("input");
@@ -5435,7 +5425,10 @@
   }
 
   function usarItensDesktop() {
-    return false; // Both layouts save the explicit confirmed selection.
+    const desktop = document.querySelector(".sugestao-desktop");
+    const linhasDesktop = document.querySelectorAll("#tbodySugestaoProdutos tr[data-produto-id]");
+    const cardsMobile = document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]");
+    return estaVisivel(desktop) || cardsMobile.length === 0 || linhasDesktop.length > 0 && !estaVisivel(document.getElementById("mobileSugestaoProdutos"));
   }
 
   function linhasDesktop() {

@@ -73,15 +73,15 @@ class SelecaoManualMobileTests(StaticLiveServerTestCase):
                         self.assertFalse(metrics['overflow'])
                         self.assertTrue(metrics['labelsFit'])
                         self.assertTrue(metrics['searchFits'])
-                        self.screenshot(tab, f'selecao-manual-disponivel-{width}')
-                        # captureBeyondViewport temporarily resizes the page; let pending
-                        # resize/render tasks finish before testing the native disclosure.
+                        # Exercise the native disclosure before captureBeyondViewport,
+                        # which temporarily resizes the page.
                         tab.evaluate('(async () => {await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);return true})()')
                         tab.evaluate('document.querySelector("#produtoManualHistoricoMobile summary").click();true')
                         tab.wait('document.querySelector("#produtoManualHistoricoMobile details").open')
                         self.assertEqual(tab.evaluate('document.querySelectorAll("#produtoManualHistoricoMobile .sugestao-historico-desktop-item").length'), 3)
                         self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
                         tab.evaluate('document.querySelector("#produtoManualHistoricoMobile summary").click();true')
+                        self.screenshot(tab, f'selecao-manual-disponivel-{width}')
                         self.select(tab, self.products[0])
                         self.assertEqual(tab.evaluate('[document.getElementById("btnAdicionarProdutoSugestao").textContent.trim(),document.getElementById("btnAdicionarProdutoSugestao").disabled]'), ['Já está na lista', True])
                         count = tab.evaluate('document.querySelectorAll("#mobileSugestaoProdutos .sugestao-mobile-card").length')
