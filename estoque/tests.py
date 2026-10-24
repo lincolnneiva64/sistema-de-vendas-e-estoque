@@ -12114,7 +12114,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         self.assertRedirects(
             resposta_post,
-            reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}),
+            reverse("estoque:compras_listas_fornecedor"),
             fetch_redirect_response=False,
         )
         lista.refresh_from_db()
@@ -12517,7 +12517,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         )
 
         produto.refresh_from_db()
-        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_detalhe", kwargs={"pk": ListaCompraFornecedor.objects.get().pk}), fetch_redirect_response=False)
+        self.assertRedirects(resposta, reverse("estoque:compras_listas_fornecedor"), fetch_redirect_response=False)
         self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
         self.assertEqual(ItemListaCompraFornecedor.objects.count(), 1)
         self.assertEqual(produto.quantidade, estoque_antes)
@@ -12539,7 +12539,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
 
         lista.refresh_from_db()
         produto.refresh_from_db()
-        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), fetch_redirect_response=False)
+        self.assertRedirects(resposta, reverse("estoque:compras_listas_fornecedor"), fetch_redirect_response=False)
         self.assertEqual(ListaCompraFornecedor.objects.count(), 1)
         self.assertEqual(lista.itens.get().quantidade_final, Decimal("5.000"))
         self.assertEqual(lista.total_lista, Decimal("50.00"))
@@ -13220,7 +13220,7 @@ class ComprasListaFornecedorGravarTests(TestCase):
         lista.refresh_from_db()
         produto.refresh_from_db()
         item = lista.itens.get()
-        self.assertRedirects(resposta, reverse("estoque:compras_lista_fornecedor_ver", kwargs={"pk": lista.pk}), fetch_redirect_response=False)
+        self.assertRedirects(resposta, reverse("estoque:compras_listas_fornecedor"), fetch_redirect_response=False)
         self.assertEqual(item.produto, produto)
         self.assertEqual(item.quantidade_final, Decimal("3.000"))
         self.assertEqual(item.preco_compra, Decimal("10.00"))

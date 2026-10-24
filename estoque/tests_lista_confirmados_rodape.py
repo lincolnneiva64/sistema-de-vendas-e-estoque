@@ -31,7 +31,7 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
         self.assertTrue(tab.evaluate('''(() => {
             const spans=[...document.querySelectorAll('#itensListaMobile footer > span')];
             return spans.length===2 && spans[0].getBoundingClientRect().top===spans[1].getBoundingClientRect().top
-                && document.getElementById('itensListaMobile').lastElementChild.tagName==='FOOTER';
+                && document.querySelector('#itensListaMobile footer').previousElementSibling.id==='itensListaMobileLista';
         })()'''))
 
     def order(self, tab, width):
@@ -89,7 +89,7 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
                         self.screenshot(tab, width)
                         self.clean_console(tab)
                         tab.evaluate('document.getElementById("btnGravarListaFornecedor").click();true')
-                        tab.wait(r'/\/listas-fornecedor\/\d+\/$/.test(location.pathname) && document.readyState==="complete"')
+                        tab.wait(r'location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                         saved = ListaCompraFornecedor.objects.latest('pk')
                         self.assertEqual((saved.itens.count(),saved.total_lista), (2,Decimal('50')))
                         tab = self.open_page(AuditedChrome(browser), width=width,
@@ -139,7 +139,7 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
                         self.footer(tab, 1, 'R$ 70,00')
                         self.order(tab, width)
                         tab.evaluate('document.getElementById("btnGravarListaFornecedor").click();true')
-                        tab.wait(r'/\/listas-fornecedor\/\d+\/$/.test(location.pathname) && document.readyState==="complete"')
+                        tab.wait(r'location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                         saved = ListaCompraFornecedor.objects.latest('pk')
                         self.assertEqual((saved.itens.count(), saved.itens.get().quantidade_final, saved.total_lista), (1,Decimal('7'),Decimal('70')))
                         tab = self.open_page(AuditedChrome(browser), width=width,

@@ -74,8 +74,11 @@ class SelecaoManualMobileTests(StaticLiveServerTestCase):
                         self.assertTrue(metrics['labelsFit'])
                         self.assertTrue(metrics['searchFits'])
                         self.screenshot(tab, f'selecao-manual-disponivel-{width}')
+                        # captureBeyondViewport temporarily resizes the page; let pending
+                        # resize/render tasks finish before testing the native disclosure.
+                        tab.evaluate('(async () => {await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);return true})()')
                         tab.evaluate('document.querySelector("#produtoManualHistoricoMobile summary").click();true')
-                        self.assertTrue(tab.evaluate('document.querySelector("#produtoManualHistoricoMobile details").open'))
+                        tab.wait('document.querySelector("#produtoManualHistoricoMobile details").open')
                         self.assertEqual(tab.evaluate('document.querySelectorAll("#produtoManualHistoricoMobile .sugestao-historico-desktop-item").length'), 3)
                         self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
                         tab.evaluate('document.querySelector("#produtoManualHistoricoMobile summary").click();true')
@@ -116,7 +119,7 @@ class SelecaoManualMobileTests(StaticLiveServerTestCase):
                         self.assertEqual(tab.evaluate(f'document.querySelectorAll(\'#mobileSugestaoProdutos [data-produto-id="{self.manual.pk}"]\').length'), 1)
                         self.clean_console(tab)
                         tab.evaluate('document.getElementById("btnGravarListaFornecedor").click();true')
-                        tab.wait(r'/\/listas-fornecedor\/\d+\/$/.test(location.pathname) && document.readyState==="complete"')
+                        tab.wait(r'location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                         saved = ListaCompraFornecedor.objects.latest('pk')
                         item = saved.itens.get()
                         self.assertEqual((item.produto_id,item.quantidade_final,item.unidade,item.preco_compra,item.total),

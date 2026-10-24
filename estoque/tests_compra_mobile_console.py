@@ -148,7 +148,7 @@ class CompraMobileConsoleTests(StaticLiveServerTestCase):
                     self.assert_console_clean(tab,f'{width} all picking actions')
                     # Real browser form submission, not a payload-only assertion.
                     tab.evaluate('document.getElementById("btnGravarListaFornecedor").click();true')
-                    tab.wait(r'/\/listas-fornecedor\/\d+\/$/.test(location.pathname) && document.readyState==="complete"')
+                    tab.wait(r'location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                     saved = ListaCompraFornecedor.objects.order_by('-pk').first()
                     self.assertEqual(saved.total_lista,Decimal('75.00'))
                     self.assertEqual(saved.itens.count(),1)
@@ -171,7 +171,7 @@ class CompraMobileConsoleTests(StaticLiveServerTestCase):
                     self.assertEqual(self.total(tab),'R$ 102,00')
                     self.assert_console_clean(tab,f'{width} saved list editing')
                     tab.evaluate('document.getElementById("btnSalvarAlteracoesListaMobile").click();true')
-                    tab.wait('location.pathname.endsWith("/ver/") && document.readyState==="complete"')
+                    tab.wait('location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                     saved.refresh_from_db()
                     self.assertEqual(saved.total_lista,Decimal('102.00'))
                     self.assert_console_clean(tab,f'{width} saved modifications')

@@ -2117,6 +2117,7 @@
   <form method="post" action="{% if modo_edicao_lista %}{% url 'estoque:compras_lista_fornecedor_editar' lista_edicao.id %}{% else %}{% url 'estoque:compras_lista_fornecedor_gravar' %}{% endif %}" id="formGravarListaFornecedor" hidden>
     {% csrf_token %}
     <input type="hidden" name="lista_payload" id="listaFornecedorPayload">
+    <input type="hidden" name="retorno_consulta" value="{{ request.GET.retorno_consulta|default:'' }}">
     <input type="hidden" name="gerar_compra" id="listaFornecedorGerarCompra" value="0">
     <input type="hidden" name="fornecedor_ciclo" id="listaFornecedorCicloFornecedor" value="{{ fornecedor_ciclo_id|default:'' }}">
     <input type="hidden" name="data_visita_fornecedor" id="listaFornecedorDataVisita" value="{{ data_visita_fornecedor|date:'Y-m-d' }}">
@@ -2290,6 +2291,14 @@
           <span>Produtos confirmados: <strong data-produtos-confirmados>0</strong></span>
           <span>Total confirmado: <strong data-total-lista-pedido>R$ 0,00</strong></span>
         </footer>
+        {% if modo_edicao_lista %}
+        <div class="sugestao-salvar-mobile-rodape sugestao-salvar-edicao-mobile" id="acoesRodapeConfirmados">
+          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="btnSalvarAlteracoesConfirmados">Salvar alterações</button>
+          {% if can_gerar_compra_lista %}
+          <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnSalvarGerarCompraConfirmados">Salvar alterações e Gerar Compra</button>
+          {% endif %}
+        </div>
+        {% endif %}
       </section>
       <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}">
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
@@ -5804,14 +5813,15 @@
       method: "POST",
       body: dados,
       credentials: "same-origin",
-      headers: {
-        "X-Requested-With": "XMLHttpRequest"
-      }
+      headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
     }).then(function(resposta) {
       if (!resposta.ok) {
         throw new Error("Falha ao salvar rascunho.");
       }
-      const listaId = extrairIdListaFornecedorDaUrl(resposta.url);
+      return resposta.json();
+    }).then(function(resultado) {
+      if (!resultado.salvo) throw new Error("Salvamento nao confirmado.");
+      const listaId = resultado.lista_id;
       if (listaId) {
         atualizarUrlEdicaoListaAposRascunho(listaId);
       }
@@ -5826,6 +5836,26 @@
       alert("Nao foi possivel salvar o rascunho. Verifique a conexao e tente novamente.");
     });
     return true;
+  }
+
+  function enviarListaConfirmada() {
+    if (gerarCompraAoGravar) {
+      formGravarListaFornecedor.submit();
+      return;
+    }
+    fetch(formGravarListaFornecedor.action, {
+      method: "POST", body: new FormData(formGravarListaFornecedor), credentials: "same-origin",
+      headers: {"Accept": "application/json"}
+    }).then(function(resposta) {
+      if (!resposta.ok) throw new Error("Falha ao salvar.");
+      return resposta.json();
+    }).then(function(resultado) {
+      if (!resultado.salvo || !resultado.redirect_url) throw new Error("Salvamento nao confirmado.");
+      window.location.assign(resultado.redirect_url);
+    }).catch(function() {
+      restaurarBotoesSalvamentoLista();
+      alert("Nao foi possivel confirmar o salvamento. Os dados continuam nesta tela. Verifique e tente novamente.");
+    });
   }
 
   btnConfirmarGravar.addEventListener("click", function() {
@@ -5847,7 +5877,7 @@
       return;
     }
     if (!iniciarSalvamentoLista(btnConfirmarGravar)) return;
-    formGravarListaFornecedor.submit();
+    enviarListaConfirmada();
   });
 
   // Substituir o evento de clique do botão "Gravar lista"
@@ -5985,7 +6015,7 @@
       return;
     }
     if (!iniciarSalvamentoLista(botaoAcionado)) return;
-    formGravarListaFornecedor.submit();
+    enviarListaConfirmada();
   };
 
   // Remover listener anterior e adicionar novo

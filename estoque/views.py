@@ -10135,6 +10135,22 @@ def compras_lista_fornecedor_conferencia_externa(request, token):
     )
 
 
+def _resposta_lista_fornecedor_salva(request, lista):
+    destino = reverse("estoque:compras_listas_fornecedor")
+    try:
+        retorno = urlsplit(request.POST.get("retorno_consulta") or "")
+    except ValueError:
+        retorno = urlsplit("")
+    if not retorno.scheme and not retorno.netloc and retorno.path == destino:
+        filtros = parse_qs(retorno.query)
+        filtros = {k: v[-1] for k, v in filtros.items() if k in {"fornecedor", "status", "data_inicio", "data_fim", "mobile"}}
+        if filtros:
+            destino += "?" + urlencode(filtros)
+    if request.headers.get("Accept") == "application/json":
+        return JsonResponse({"salvo": True, "lista_id": lista.pk, "redirect_url": destino})
+    return redirect(destino)
+
+
 @require_POST
 def compras_lista_fornecedor_gravar(request):
     payload_raw = request.POST.get("lista_payload") or ""
@@ -10276,7 +10292,7 @@ def compras_lista_fornecedor_gravar(request):
     if gerar_compra:
         messages.success(request, f"Compra #{compra.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
         return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?continuar_itens=1")
-    return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
+    return _resposta_lista_fornecedor_salva(request, lista)
 
 
 
@@ -11096,7 +11112,7 @@ def compras_lista_fornecedor_editar(request, pk):
                 return redirect("estoque:compras_detalhe", pk=compra_para_abrir.pk)
             messages.success(request, f"Compra #{compra_para_abrir.id} criada em rascunho a partir da Lista #{lista.id}. Confira antes de finalizar.")
             return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra_para_abrir.pk})}?continuar_itens=1")
-        return redirect("estoque:compras_lista_fornecedor_ver", pk=lista.pk)
+        return _resposta_lista_fornecedor_salva(request, lista)
 
     fornecedor = lista.fornecedor
     fornecedor_id = fornecedor.id if fornecedor else None

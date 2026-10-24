@@ -72,7 +72,7 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('document.querySelector("[data-itens-lista-mobile-total]").textContent'),'2')
                 self.assertEqual(tab.evaluate('document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total").textContent'),original)
                 # Capture the actual serializer without submitting the form.
-                tab.evaluate('HTMLFormElement.prototype.submit=function(){window.captured=JSON.parse(document.getElementById("listaFornecedorPayload").value)};document.getElementById("btnGravarListaFornecedor").click();true')
+                tab.evaluate('window.fetch=function(url,options){window.captured=JSON.parse(options.body.get("lista_payload"));return new Promise(()=>{})};document.getElementById("btnGravarListaFornecedor").click();true')
                 tab.wait('!!window.captured')
                 payload=tab.evaluate('captured')
                 self.assertEqual(len(payload['linhas']),2)
@@ -225,7 +225,7 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(self.total(tab), "R$ 220,00")
                 tab.evaluate('localStorage.setItem("saved-list-preserved","draft");true')
                 click(tab, "#btnSalvarAlteracoesListaMobile")
-                tab.wait('location.pathname.endsWith("/ver/") && document.readyState==="complete"')
+                tab.wait('location.pathname==="/compras/listas-fornecedor/" && document.readyState==="complete"')
                 saved.refresh_from_db()
                 self.assertEqual(saved.total_lista, Decimal("220"))
                 self.assertEqual(list(saved.itens.order_by("produto_id").values_list("quantidade_final","preco_compra","total")),
