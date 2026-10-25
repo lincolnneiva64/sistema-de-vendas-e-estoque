@@ -17583,7 +17583,7 @@ class PixRecebidoTests(TestCase):
             f"{redirect_url.path}?{redirect_url.query}",
             reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?edicao_bloqueada=1",
         )
-        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertContains(resposta, "Venda quitada: alteracoes sujeitas as validacoes financeiras")
         self.assertNotContains(resposta, "Editar nota - Venda")
 
     def test_venda_quitada_nao_mostra_botoes_de_edicao_comum_no_detalhe(self):
@@ -17615,7 +17615,7 @@ class PixRecebidoTests(TestCase):
         resposta = self.client.get(reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}), secure=True)
 
         self.assertEqual(resposta.status_code, 200)
-        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertContains(resposta, "Venda quitada: alteracoes sujeitas as validacoes financeiras")
         self.assertNotContains(resposta, reverse("estoque:venda_editar_revisao", kwargs={"pk": venda.id}))
         self.assertNotContains(resposta, reverse("estoque:venda_editar_cabecalho", kwargs={"pk": venda.id}))
         self.assertNotContains(resposta, reverse("estoque:venda_adicionar_produto_item", kwargs={"pk": venda.id}))
@@ -17953,7 +17953,7 @@ class PixRecebidoTests(TestCase):
             f"{redirect_url.path}?{redirect_url.query}",
             reverse("estoque:venda_detalhe", kwargs={"pk": venda.id}) + "?edicao_bloqueada=1",
         )
-        self.assertContains(resposta, "Venda quitada: edicao comum bloqueada")
+        self.assertContains(resposta, "Venda quitada: alteracoes sujeitas as validacoes financeiras")
         self.assertFalse(ItemVenda.objects.filter(venda=venda, produto=produto_novo).exists())
 
     def test_venda_aberta_continua_permitindo_edicao_normal(self):
@@ -19228,6 +19228,7 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta_nota_resolvida, "A venda continuou ativa com os itens restantes.")
         self.assertContains(resposta_nota_resolvida, "Voltar para pendencias resolvidas")
         self.assertNotContains(resposta_nota_resolvida, "Editar nota")
+        self.assertNotContains(resposta_nota_resolvida, f'href="{reverse("estoque:vendas")}?editar={venda.id}"')
         self.assertNotContains(resposta_nota_resolvida, "Cancelar venda")
         self.assertNotContains(resposta_nota_resolvida, "Imagem / WhatsApp")
         self.assertNotContains(resposta_nota_resolvida, ">PDF</a>")
@@ -33000,6 +33001,119 @@ class VendaEdicaoUnificadaTests(TestCase):
         )
 
         return cliente, produto, venda, item
+
+    def test_editar_pela_nota_reutiliza_rota_da_consulta_e_carrega_venda_correta(self):
+        for com_pendencia in (False, True):
+            cliente, produto, venda, item = self.criar_venda_base()
+            if com_pendencia:
+                separacao, _, _ = views.criar_ou_obter_separacao_venda(venda)
+                item_sep = separacao.itens.get(item_venda=item)
+                item_sep.status = SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE
+                item_sep.quantidade_separada = Decimal("1.000")
+                item_sep.save(update_fields=["status", "quantidade_separada"])
+                separacao.status = SeparacaoVenda.STATUS_COM_PENDENCIA
+                separacao.save(update_fields=["status"])
+            modelos = (Venda, ItemVenda, Produto, ContaReceber, MovimentoFinanceiro, CreditoCliente)
+            antes = {modelo: list(modelo.objects.order_by("pk").values()) for modelo in modelos}
+            url_editar = f'{reverse("estoque:vendas")}?editar={venda.id}'
+            for agente in ("Mozilla/5.0 Desktop", "Mozilla/5.0 Mobile"):
+                with self.subTest(venda=venda.id, pendencia=com_pendencia, agente=agente):
+                    nota = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True, HTTP_USER_AGENT=agente)
+                    self.assertContains(nota, f'<a href="{url_editar}" class="editar-nota-acao">Editar venda</a>', count=1, html=True)
+                    for rota in ("venda_editar_revisao", "venda_editar_cabecalho", "venda_adicionar_produto_item"):
+                        self.assertNotContains(nota, reverse(f"estoque:{rota}", args=[venda.id]))
+                    consulta = self.client.get(reverse("estoque:consultar_vendas"), secure=True, HTTP_USER_AGENT=agente)
+                    self.assertContains(consulta, f'href="{url_editar}"')
+                    edicao = self.client.get(url_editar, secure=True, HTTP_USER_AGENT=agente)
+                    self.assertEqual(edicao.status_code, 200)
+                    dados = edicao.context["venda_edicao"]
+                    self.assertEqual(dados["id"], venda.id)
+                    self.assertEqual(dados["cliente_id"], cliente.id)
+                    self.assertEqual([i["item_id"] for i in dados["itens"]], [item.id])
+                    self.assertEqual(dados["itens"][0]["produto_id"], produto.id)
+                    self.assertEqual(Decimal(dados["itens"][0]["quantidade"]), item.quantidade)
+            for modelo in modelos:
+                self.assertEqual(list(modelo.objects.order_by("pk").values()), antes[modelo])
+
+    def test_nota_preserva_bloqueios_de_quitacao_e_comandos_existentes(self):
+        for pagamento in ("A prazo", "A vista"):
+            with self.subTest(pagamento=pagamento):
+                _, _, venda, _ = self.criar_venda_base()
+                venda.tipo_pagamento = pagamento
+                venda.save(update_fields=["tipo_pagamento"])
+                conta = ContaReceber.objects.get(venda=venda)
+                conta.status = ContaReceber.STATUS_PAGA
+                conta.valor_em_aberto = Decimal("0.00")
+                conta.save(update_fields=["status", "valor_em_aberto"])
+                modelos = (Venda, ItemVenda, Produto, ContaReceber, MovimentoFinanceiro, CreditoCliente)
+                antes = {modelo: list(modelo.objects.order_by("pk").values()) for modelo in modelos}
+                nota = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+                self.assertContains(nota, "Venda quitada: alteracoes sujeitas as validacoes financeiras")
+                url_editar = f'{reverse("estoque:vendas")}?editar={venda.id}'
+                self.assertContains(nota, f'<a href="{url_editar}" class="editar-nota-acao">Editar venda</a>', count=1, html=True)
+                consulta = self.client.get(reverse("estoque:consultar_vendas"), secure=True)
+                self.assertContains(consulta, f'href="{url_editar}"')
+                edicao = self.client.get(url_editar, secure=True)
+                self.assertEqual(edicao.status_code, 200)
+                self.assertEqual(edicao.context["venda_edicao"]["id"], venda.id)
+                for rota in ("venda_ajuste_item_quitado", "venda_cancelar", "preparar_whatsapp_venda", "venda_whatsapp_pdf", "venda_enviar_separacao"):
+                    self.assertContains(nota, reverse(f"estoque:{rota}", args=[venda.id]))
+                self.assertContains(nota, "Enviar para separacao")
+                self.assertContains(nota, 'id="btnImprimir"')
+                for modelo in modelos:
+                    self.assertEqual(list(modelo.objects.order_by("pk").values()), antes[modelo])
+
+    def test_edicao_pela_nota_a_prazo_quitada_nao_contorna_bloqueio_financeiro(self):
+        _, _, venda, item = self.criar_venda_base()
+        conta = ContaReceber.objects.get(venda=venda)
+        conta.status = ContaReceber.STATUS_PAGA
+        conta.valor_em_aberto = Decimal("0.00")
+        conta.save(update_fields=["status", "valor_em_aberto"])
+        modelos = (Venda, ItemVenda, Produto, ContaReceber, RecebimentoContaReceber, MovimentoFinanceiro, CreditoCliente)
+        antes = {modelo: list(modelo.objects.order_by("pk").values()) for modelo in modelos}
+        url_editar = f'{reverse("estoque:vendas")}?editar={venda.id}'
+        nota = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+        self.assertContains(nota, f'href="{url_editar}"')
+        edicao = self.client.get(url_editar, secure=True)
+        self.assertEqual(edicao.status_code, 200)
+        self.assertEqual(edicao.context["venda_edicao"]["id"], venda.id)
+        resposta = self.client.post(
+            reverse("estoque:gravar_venda"),
+            data=json.dumps(self.payload_edicao(venda, item, quantidade="1.000", preco="10.00")),
+            content_type="application/json", secure=True,
+        )
+        self.assertEqual(resposta.status_code, 409)
+        self.assertIn("pagamento/baixa financeira", resposta.json()["mensagem"])
+        for modelo in modelos:
+            self.assertEqual(list(modelo.objects.order_by("pk").values()), antes[modelo])
+
+    def test_nota_cancelada_nao_oferece_edicao_unificada(self):
+        _, _, venda, _ = self.criar_venda_base()
+        venda.cancelada = True
+        venda.save(update_fields=["cancelada"])
+        nota = self.client.get(reverse("estoque:venda_detalhe", args=[venda.id]), secure=True)
+        self.assertEqual(nota.status_code, 200)
+        self.assertNotContains(nota, f'href="{reverse("estoque:vendas")}?editar={venda.id}"')
+
+    @override_settings(MIDDLEWARE=[
+        "django.contrib.sessions.middleware.SessionMiddleware",
+        "django.contrib.auth.middleware.AuthenticationMiddleware",
+        "sistema.acesso.AcessoComercialMiddleware",
+    ])
+    def test_rota_unificada_nao_contorna_permissao_para_gravar_edicao(self):
+        _, _, venda, item = self.criar_venda_base()
+        payload = self.payload_edicao(venda, item, quantidade="1.000", preco="10.00")
+        modelos = (Venda, ItemVenda, Produto, ContaReceber, MovimentoFinanceiro)
+        antes = {modelo: list(modelo.objects.order_by("pk").values()) for modelo in modelos}
+        usuario = get_user_model().objects.create_user(username="leitor-sem-edicao", password="test-only")
+        for autenticado, status in ((False, 401), (True, 403)):
+            with self.subTest(autenticado=autenticado):
+                if autenticado:
+                    self.client.force_login(usuario)
+                resposta = self.client.post(reverse("estoque:gravar_venda"), data=json.dumps(payload), content_type="application/json", secure=True)
+                self.assertEqual(resposta.status_code, status)
+                for modelo in modelos:
+                    self.assertEqual(list(modelo.objects.order_by("pk").values()), antes[modelo])
 
     def criar_produto_dz_sem_fracionamento(self, nome="Skol Lata 12/350ML Teste", estoque="5.000"):
         return Produto.objects.create(

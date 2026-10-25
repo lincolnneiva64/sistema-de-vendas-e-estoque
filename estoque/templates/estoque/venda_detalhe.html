@@ -1859,15 +1859,12 @@
                         {% if not venda.cancelada %}
                         {% if contexto_venda_quitada.quitada %}
                         <span class="editar-nota-bloqueada">
-                            Venda quitada: edicao comum bloqueada.
+                            Venda quitada: alteracoes sujeitas as validacoes financeiras.
                             <small>Para produto nao entregue/nao aceito, use o fluxo proprio de ajuste financeiro/estoque.</small>
                         </span>
                         <a href="{% url 'estoque:venda_ajuste_item_quitado' venda.id %}" class="ajuste-quitado-acao">Resolver item nao entregue/nao aceito</a>
-                        {% else %}
-                        <a href="{% url 'estoque:venda_editar_revisao' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar nota</a>
-                        <a href="{% url 'estoque:venda_editar_cabecalho' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="editar-nota-acao">Editar cabeÃ§alho</a>
-                        <a href="{% url 'estoque:venda_adicionar_produto_item' venda.id %}{% if itens_adicionados_param or retorno_querystring %}?{% if itens_adicionados_param %}itens_adicionados={{ itens_adicionados_param }}{% if retorno_querystring %}&{% endif %}{% endif %}{% if retorno_querystring %}{{ retorno_querystring }}{% endif %}{% endif %}" class="editar-nota-acao">Adicionar produto</a>
                         {% endif %}
+                        <a href="{% url 'estoque:vendas' %}?editar={{ venda.id }}" class="editar-nota-acao">Editar venda</a>
                         <a href="{% url 'estoque:venda_cancelar' venda.id %}{% if retorno_querystring %}?{{ retorno_querystring }}{% endif %}" class="cancelar-venda-acao">Cancelar venda</a>
                         {% if venda.cliente %}
                         <a href="{% url 'estoque:receber_cliente' venda.cliente.id %}?next={{ request.get_full_path|urlencode }}" class="whatsapp-acao">Receber contas do cliente</a>
