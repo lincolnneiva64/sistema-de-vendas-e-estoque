@@ -33629,6 +33629,9 @@ class VendaEdicaoUnificadaTests(TestCase):
         estado_venda = list(ItemVenda.objects.filter(venda=venda).values_list("id", "quantidade", "valor_total"))
         estoque_antes = Produto.objects.get(pk=produto.pk).quantidade
         separacao_antes = list(separacao.itens.values_list("id", "status", "quantidade_separada"))
+        venda_antes = Venda.objects.filter(pk=venda.pk).values().get()
+        modelos_financeiros = (ContaReceber, MovimentoFinanceiro, CreditoCliente)
+        financeiro_antes = {modelo: list(modelo.objects.order_by("pk").values()) for modelo in modelos_financeiros}
 
         resposta = self.client.get(
             f"{reverse('estoque:vendas')}?editar={venda.id}&ajuste_separacao={separacao.id}",
@@ -33639,6 +33642,9 @@ class VendaEdicaoUnificadaTests(TestCase):
         self.assertEqual(list(ItemVenda.objects.filter(venda=venda).values_list("id", "quantidade", "valor_total")), estado_venda)
         self.assertEqual(Produto.objects.get(pk=produto.pk).quantidade, estoque_antes)
         self.assertEqual(list(separacao.itens.values_list("id", "status", "quantidade_separada")), separacao_antes)
+        self.assertEqual(Venda.objects.filter(pk=venda.pk).values().get(), venda_antes)
+        for modelo in modelos_financeiros:
+            self.assertEqual(list(modelo.objects.order_by("pk").values()), financeiro_antes[modelo])
 
     def test_modo_ajuste_separacao_aplicar_sugestao_e_salvar_usam_fluxo_normal(self):
         cliente, produto, venda, item = self.criar_venda_base(quantidade="3.000", estoque="7.000")
@@ -39048,7 +39054,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertNotContains(resposta, "Cliente Outras Hoje")
         self.assertContains(resposta, "Outras vendas (1)")
 
-    def test_fila_exibe_edicao_normal_separada_da_edicao_de_ajuste(self):
+    def test_fila_sem_pendencia_exibe_apenas_editar_venda_sem_ajuste(self):
         self._enviar()
         separacao = self._separacao()
         self._marcar_separacao_status(separacao, SeparacaoVenda.STATUS_ENVIADA)
@@ -39056,7 +39062,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
         self.assertContains(resposta, f"/vendas/?editar={self.venda.id}&next=")
-        self.assertContains(resposta, "Editar venda")
+        self.assertContains(resposta, "Editar venda", count=1)
         self.assertNotContains(resposta, f"ajuste_separacao={separacao.id}")
         self.assertNotContains(resposta, "Editar nota")
 
@@ -39269,9 +39275,11 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta, f"/vendas/?editar={self.venda.id}")
         self.assertContains(resposta, f"ajuste_separacao={separacao.id}")
         self.assertContains(resposta, "next=/separacao-vendas/")
-        self.assertContains(resposta, "Editar nota")
+        self.assertContains(resposta, "Editar venda", count=1)
+        self.assertNotContains(resposta, "Editar nota")
+        self.assertNotContains(resposta, f"/vendas/?editar={self.venda.id}&next=")
 
-    def test_fila_mostra_editar_nota_para_kg_separado_diferente_da_nota_sem_pendencia_fisica(self):
+    def test_fila_editar_venda_abre_ajuste_para_kg_divergente_sem_pendencia_fisica(self):
         produto = Produto.objects.create(
             nome="Frango Congelado 1/20Kg Fila",
             quantidade=Decimal("30.000"),
@@ -39309,7 +39317,9 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertContains(resposta_fila, "1</strong> OK")
         self.assertContains(resposta_fila, "0</strong> pendentes")
         self.assertContains(resposta_fila, "AJUSTE DA NOTA PENDENTE")
-        self.assertContains(resposta_fila, "Editar nota")
+        self.assertContains(resposta_fila, "Editar venda", count=1)
+        self.assertNotContains(resposta_fila, "Editar nota")
+        self.assertNotContains(resposta_fila, f"/vendas/?editar={venda.id}&next=")
         self.assertContains(resposta_fila, f"ajuste_separacao={separacao.id}")
 
         resposta_edicao = self.client.get(
@@ -39321,7 +39331,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(ajuste["itens"][0]["quantidade_separada"], "14.300")
         self.assertEqual(ajuste["itens"][0]["quantidade_sugerida"], "14.300")
 
-    def test_fila_remove_editar_nota_apos_reconciliar_kg_com_peso_real(self):
+    def test_fila_editar_venda_volta_ao_modo_normal_apos_reconciliar_kg(self):
         produto = Produto.objects.create(
             nome="Frango Congelado 1/20Kg Reconciliado",
             quantidade=Decimal("30.000"),
@@ -39362,18 +39372,25 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertNotContains(resposta_fila, "AJUSTE DA NOTA PENDENTE")
         self.assertNotContains(resposta_fila, f"ajuste_separacao={separacao.id}")
         self.assertNotContains(resposta_fila, "Editar nota")
+        self.assertContains(resposta_fila, "Editar venda", count=1)
+        self.assertContains(resposta_fila, f"/vendas/?editar={venda.id}&next=")
 
-    def test_fila_mostra_editar_nota_apenas_quando_ha_pendencia(self):
+    def test_fila_unico_editar_venda_seleciona_ajuste_apenas_quando_ha_pendencia(self):
         self._enviar()
         separacao = self._separacao()
         self._marcar_separacao_status(separacao, SeparacaoVenda.STATUS_ENVIADA)
 
         resposta_sem_pendencia = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
         self.assertNotContains(resposta_sem_pendencia, "Editar nota")
+        self.assertContains(resposta_sem_pendencia, "Editar venda", count=1)
+        self.assertNotContains(resposta_sem_pendencia, f"ajuste_separacao={separacao.id}")
 
         self._marcar_separacao_status(separacao, SeparacaoVenda.STATUS_COM_PENDENCIA)
         resposta_com_pendencia = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
-        self.assertContains(resposta_com_pendencia, "Editar nota")
+        self.assertContains(resposta_com_pendencia, "Editar venda", count=1)
+        self.assertNotContains(resposta_com_pendencia, "Editar nota")
+        self.assertContains(resposta_com_pendencia, f"ajuste_separacao={separacao.id}")
+        self.assertNotContains(resposta_com_pendencia, f"/vendas/?editar={self.venda.id}&next=")
         self.assertContains(resposta_com_pendencia, f"/vendas/?editar={self.venda.id}")
 
     def test_fila_ordena_pendencias_antes_das_separadas(self):
