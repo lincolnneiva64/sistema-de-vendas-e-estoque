@@ -12347,7 +12347,7 @@ def compra_editar(request, pk):
     compra_qs = Compra.objects.all() if request.method == "POST" else Compra.objects.prefetch_related("itens__produto")
     compra = get_object_or_404(compra_qs, pk=pk)
     if compra.status == Compra.STATUS_FINALIZADA and (
-        request.method == "GET" or request.POST.get("acao_compra") in {"salvar_edicao_finalizada", "prever_correcao", "salvar_correcao_automatica"}
+        request.method == "GET" or request.POST.get("acao_compra") in {"salvar_edicao_finalizada", "prever_correcao", "salvar_correcao_automatica", "salvar_correcao_simples"}
     ):
         if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
             return HttpResponseForbidden("Entre com um usuario autorizado a editar compras.")
@@ -12358,7 +12358,10 @@ def compra_editar(request, pk):
                 if request.POST.get("acao_compra") == "prever_correcao":
                     from .services.correcao_compra import prever
                     return JsonResponse(prever(request, compra))
-                if request.POST.get("acao_compra") == "salvar_correcao_automatica":
+                if request.POST.get("acao_compra") == "salvar_correcao_simples":
+                    from .services.correcao_compra import aplicar
+                    registro, alterou = aplicar(request, pk, automatica=True)
+                elif request.POST.get("acao_compra") == "salvar_correcao_automatica":
                     from .services.correcao_compra import aplicar
                     _, alterou = aplicar(request, pk)
                 else:
@@ -12374,7 +12377,13 @@ def compra_editar(request, pk):
                     return JsonResponse({"sucesso": False, "erro": "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; seus dados continuam nesta tela."}, status=500)
                 messages.error(request, "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; recarregue a compra.")
                 return redirect("estoque:compra_editar", pk=pk)
-            messages.success(request, "Compra corrigida com historico preservado." if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
+            resultado = "Compra corrigida com histórico preservado."
+            if request.POST.get("acao_compra") == "salvar_correcao_simples":
+                ajustes = registro.depois["ajustes"]
+                formatar = lambda v: f"{Decimal(v):.2f}".replace(".", ",")
+                resultado = (f"Alterações salvas. Total: R$ {formatar(ajustes['total_anterior'])} → R$ {formatar(ajustes['total_corrigido'])}. "
+                    f"Diferença: R$ {formatar(ajustes['diferenca'])}. Estoque e registros financeiros atualizados.")
+            messages.success(request, resultado if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
             if resposta_json:
                 return JsonResponse({"sucesso": True, "redirect_url": reverse("estoque:compras_detalhe", kwargs={"pk": pk})})
             return redirect("estoque:compras_detalhe", pk=pk)

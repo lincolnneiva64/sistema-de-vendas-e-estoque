@@ -181,6 +181,7 @@ def contexto_edicao(compra, usuario):
         pago_comprovado = ""
     return {
         "edicao_finalizada": True, "bloqueio_edicao": motivo,
+        "motivo_edicao_inicial": compra.edicoes.order_by("-pk").values_list("motivo", flat=True).first() or "",
         "pago_comprovado_correcao": str(pago_comprovado),
         "contas_devolucao_correcao": ContaFinanceira.objects.filter(ativo=True).order_by("nome"),
         "tipo_pagamento_form": _tipo_formulario(compra.tipo_pagamento),

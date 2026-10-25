@@ -84,13 +84,15 @@ def _financeiro(compra):
     return total.quantize(Decimal("0.01")), devolvido.quantize(Decimal("0.01")), contas, pagos
 
 
-def _planejar(request, compra):
+def _planejar(request, compra, automatica=False):
     from estoque.views import _dados_compra_post, _quantidade_estoque_para_unidade_base, _normalizar_unidade_estoque
     if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
         raise ValueError("Usuário sem permissão para corrigir compras.")
-    tipo = request.POST.get("tipo_correcao", "")
+    tipo = "erro_lancamento" if automatica else request.POST.get("tipo_correcao", "")
     motivo = str(request.POST.get("motivo_edicao") or "").strip()
     if tipo not in TIPOS or not motivo or len(motivo) > 1000:
+        if automatica:
+            raise ValueError("Informe uma justificativa de até 1000 caracteres para salvar a correção.")
         raise ValueError("Selecione o motivo da correção e informe uma justificativa de até 1000 caracteres.")
     if compra.cancelada or compra.status != Compra.STATUS_FINALIZADA or not compra.estoque_entrada_realizada:
         raise ValueError("Somente compra finalizada, não cancelada e com estoque confirmado pode ser corrigida.")
@@ -153,16 +155,41 @@ def _planejar(request, compra):
         if not ZERO <= Decimal(produtos[pk].quantidade or 0) + delta < Decimal("1000000000"):
             raise ValueError(f"A correção deixaria o estoque de {produtos[pk].nome} negativo ou fora do limite.")
     pago, ja_devolvido, contas, pagos = _financeiro(compra)
-    pago_real = dinheiro(request.POST.get("valor_pago_real"), "o valor efetivamente pago (sem juros bancários)")
     pago_registrado = pago
-    pagamento_real_confirmado = request.POST.get("pagamento_real_confirmado") == "1"
-    if not pagamento_real_confirmado:
+    # Preserve the historical freight/discount adjustment when only items change.
+    ajuste_preservado = Decimal(compra.ajuste_total or ZERO) if automatica else ZERO
+    total_corrigido = dados["total_produtos"] + ajuste_preservado
+    if automatica:
+        # Only the original, unlinked automatic posting represents a correctable
+        # bookkeeping amount. Actual account payments are immutable evidence.
+        movimentos = list(MovimentoFinanceiro.objects.filter(compra=compra))
+        conciliacao = ConciliacaoCompra.objects.filter(compra=compra).first()
+        anterior_automatico = bool(conciliacao and conciliacao.efeitos.get("registro_automatico_retificavel"))
+        automatico = (not contas and not ja_devolvido and len(movimentos) == 1
+            and movimentos[0].origem == "compra_a_vista" and movimentos[0].tipo == "saida"
+            and not movimentos[0].pagamento_conta_pagar_id and not movimentos[0].conta_destino_id
+            and movimentos[0].valor == compra.total
+            and (not conciliacao or anterior_automatico))
+        if movimentos and not contas and total_corrigido != compra.total and not automatico:
+            raise ValueError("Não foi possível identificar um lançamento automático único para retificar. Os movimentos financeiros precisam de conciliação; nenhuma alteração foi salva.")
+        pago_real = total_corrigido if automatico else pago
+        if pago_real > 0 and pago_real != pago and not request.user.has_perm("estoque.change_movimentofinanceiro"):
+            raise ValueError("Usuário sem permissão para retificar o lançamento financeiro automático. Nenhuma alteração foi salva.")
+        if automatico and total_corrigido <= 0:
+            raise ValueError("O total corrigido deve ser positivo para retificar o lançamento automático.")
+        if pago_real - ja_devolvido > total_corrigido:
+            raise ValueError("O total corrigido é menor que o pagamento comprovado. Confirme a destinação da diferença na conciliação financeira; nenhum crédito ou devolução foi criado e nenhuma alteração foi salva.")
+        pagamento_real_confirmado = False
+    else:
+        pago_real = dinheiro(request.POST.get("valor_pago_real"), "o valor efetivamente pago (sem juros bancários)")
+        pagamento_real_confirmado = request.POST.get("pagamento_real_confirmado") == "1"
+    if not automatica and not pagamento_real_confirmado:
         raise ValueError("Confirme o valor efetivamente pago consultando a nota e o comprovante. O valor lançado no sistema não comprova pagamento real.")
     ajuste_movimento = None
     if pago_real != pago:
         candidatos = list(MovimentoFinanceiro.objects.filter(compra=compra).select_related("conta"))
         elegivel = (tipo == "erro_lancamento" and pago_real > 0 and not contas and not ja_devolvido
-            and not ConciliacaoCompra.objects.filter(compra=compra).exists() and len(candidatos) == 1
+            and (automatica or not ConciliacaoCompra.objects.filter(compra=compra).exists()) and len(candidatos) == 1
             and candidatos[0].origem == "compra_a_vista" and candidatos[0].tipo == "saida"
             and not candidatos[0].pagamento_conta_pagar_id and not candidatos[0].conta_destino_id
             and _tipo_formulario(compra.tipo_pagamento) in {"avista", "cartao_debito"})
@@ -174,11 +201,12 @@ def _planejar(request, compra):
         if any(rel.related_model._base_manager.filter(**{rel.field.name: movimento}).exists() for rel in movimento._meta.related_objects):
             raise ValueError("Registro financeiro possui outros vínculos; pagamentos reais não serão alterados.")
         ajuste_movimento = {"id":movimento.pk, "conta":movimento.conta.nome,
+            "natureza":"retificacao_automatica" if automatica else "valor_real_informado",
             "valor_anterior":str(movimento.valor), "valor_real_informado":str(pago_real)}
         pago = pago_real
-    devolver = dinheiro(request.POST.get("valor_devolvido_real") or "0", "o valor efetivamente devolvido nesta correção")
-    total = dados["total_produtos"]
-    if total >= Decimal("10000000000"):
+    devolver = dinheiro("0" if automatica else request.POST.get("valor_devolvido_real") or "0", "o valor efetivamente devolvido nesta correção")
+    total = total_corrigido
+    if not total.is_finite() or total < ZERO or total >= Decimal("10000000000"):
         raise ValueError("Total corrigido fora do limite permitido.")
     disponivel = max(ZERO, pago - ja_devolvido - total)
     if devolver > disponivel or (tipo == "erro_lancamento" and devolver):
@@ -206,8 +234,10 @@ def _planejar(request, compra):
     # Locked snapshot also includes product units/conversion and stock.
     estado = _estado(compra, [p for p in Produto.objects.filter(pk__in=produtos_ids).order_by("pk").values()])
     resumo = _json({"tipo":tipo,"motivo":motivo,"total_anterior":compra.total,"total_corrigido":total,
+        "total_produtos_corrigido":dados["total_produtos"],"ajuste_preservado":ajuste_preservado,
+        "registro_automatico_retificavel":bool(automatica and automatico),
         "diferenca":total-compra.total,"pago_registrado_antes":pago_registrado,
-        "pagamento_real_confirmado":pagamento_real_confirmado,"credito_real_confirmado":bool(credito),"pago_preservado":pago,"devolvido_antes":ja_devolvido,
+        "modo_automatico":automatica,"pagamento_real_confirmado":pagamento_real_confirmado,"credito_real_confirmado":bool(credito),"pago_preservado":pago,"devolvido_antes":ja_devolvido,
         "devolvido_agora":devolver,"credito_fornecedor":credito,"saldo_a_pagar":aberto,
         "deltas_estoque":[{"produto_id":pk,"produto":produtos[pk].nome,"delta":v} for pk,v in sorted(deltas.items()) if v],
         "itens":substituicoes,"removidos":[{"item_id":i.pk,"produto_id":i.produto_id,"nome":i.produto.nome} for i in removidos],
@@ -242,15 +272,20 @@ def etapa_correcao(nome):
     """Fault-injection seam, no operational side effects."""
 
 
-def aplicar(request, compra_id):
+def aplicar(request, compra_id, automatica=False):
     if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
         raise ValueError("Usuário sem permissão para corrigir compras.")
-    try:
-        token = signing.loads(request.POST.get("previa_token", ""), salt=SALT, max_age=900)
-    except signing.BadSignature as exc:
-        raise ValueError("Confirmação expirada ou inválida. Gere novamente a prévia.") from exc
-    if not isinstance(token,dict) or token.get("compra") != compra_id or token.get("usuario") != request.user.pk or token.get("payload") != payload_hash(request.POST):
-        raise ValueError("Os dados mudaram após a prévia; revise e confirme novamente.")
+    if automatica:
+        compra = Compra.objects.get(pk=compra_id)
+        token = _token_edicao(request, compra)
+        token["payload"] = payload_hash(request.POST)
+    else:
+        try:
+            token = signing.loads(request.POST.get("previa_token", ""), salt=SALT, max_age=900)
+        except signing.BadSignature as exc:
+            raise ValueError("Confirmação expirada ou inválida. Gere novamente a prévia.") from exc
+        if not isinstance(token,dict) or token.get("compra") != compra_id or token.get("usuario") != request.user.pk or token.get("payload") != payload_hash(request.POST):
+            raise ValueError("Os dados mudaram após a prévia; revise e confirme novamente.")
     with transaction.atomic(), bloquear_catalogo():
         compra = Compra.objects.select_for_update().get(pk=compra_id)
         anterior = EdicaoCompra.objects.filter(operacao=token["operacao"]).first()
@@ -266,8 +301,10 @@ def aplicar(request, compra_id):
         list(MovimentoFinanceiro.objects.select_for_update(of=("self",)).filter(Q(compra=compra)|Q(pagamento_conta_pagar__conta__compra=compra)).order_by("pk"))
         ids = set(compra.itens.values_list("produto_id",flat=True)) | {int(v) for v in request.POST.getlist("produto_id[]") if v}
         list(Produto.objects.select_for_update().filter(pk__in=ids).order_by("pk"))
-        plano = _planejar(request,compra)
-        if _hash(plano["estado"]) != token["estado"] or _hash(plano["resumo"]) != token["resumo"]:
+        if automatica and _hash(estado_compra(compra)) != token.get("versao"):
+            raise ValueError("A compra ou pagamentos mudaram. Recarregue antes de corrigir; nenhuma alteração foi salva.")
+        plano = _planejar(request,compra,automatica=automatica)
+        if not automatica and (_hash(plano["estado"]) != token["estado"] or _hash(plano["resumo"]) != token["resumo"]):
             raise ValueError("Estoque, cadastro, compra ou pagamentos mudaram após a prévia. Gere nova confirmação.")
         antes = plano["estado"]; resumo=plano["resumo"]
         for pk, delta in plano["deltas"].items():
@@ -312,7 +349,9 @@ def aplicar(request, compra_id):
                 data=resumo["data_devolucao"],origem="compra_devolucao_correcao",operador=request.user.get_username(),
                 descricao=f"Devolução efetivamente recebida - Compra #{compra.pk} - {token['operacao']}")
         etapa_correcao("financeiro")
-        compra.total=Decimal(resumo["total_corrigido"]); compra.total_produtos=compra.total; compra.ajuste_total=ZERO
+        compra.total=Decimal(resumo["total_corrigido"])
+        compra.total_produtos=Decimal(resumo["total_produtos_corrigido"])
+        compra.ajuste_total=Decimal(resumo["ajuste_preservado"])
         compra.conciliacao_automatica=True
         compra.observacao=f"{compra.observacao or ''}\nCorreção {token['operacao']}: {TIPOS[resumo['tipo']]}. {resumo['motivo']}".strip()
         compra.save(update_fields=["total","total_produtos","ajuste_total","observacao","conciliacao_automatica","atualizado_em"])

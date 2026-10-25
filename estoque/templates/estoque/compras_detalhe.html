@@ -882,7 +882,7 @@
           <div class="nota-compra-resumo-valor reserva"><span>Sangria / Reserva</span><strong>R$ {{ alocacao_financeira.reserva|floatformat:2 }}</strong></div>
           <div class="nota-compra-resumo-valor banco"><span>Banco / Pix</span><strong>R$ {{ alocacao_financeira.banco|floatformat:2 }}</strong></div>
           {% endif %}
-          <div class="nota-compra-resumo-valor total"><span>Total pago</span><strong>R$ {% if compra.conciliacao %}{{ compra.conciliacao.valor_pago|floatformat:2 }}{% else %}{{ compra.total|floatformat:2 }}{% endif %}</strong></div>
+          <div class="nota-compra-resumo-valor total"><span>{% if compra.conciliacao.efeitos.registro_automatico_retificavel %}Valor do lançamento{% else %}Total pago{% endif %}</span><strong>R$ {% if compra.conciliacao %}{{ compra.conciliacao.valor_pago|floatformat:2 }}{% else %}{{ compra.total|floatformat:2 }}{% endif %}</strong></div>
         </div>
         <p class="nota-compra-resumo-confirmacao">Pagamento registrado automaticamente no financeiro.</p>
         {% if movimentos_financeiros %}
@@ -905,7 +905,7 @@
   {% if compra.conciliacao %}
   <section class="nota-compra-card">
     <div class="nota-compra-card-titulo">Conciliação da correção</div>
-    <p>Pagamento preservado: R$ {{ compra.conciliacao.valor_pago|floatformat:2 }}</p>
+    <p>{% if compra.conciliacao.efeitos.registro_automatico_retificavel %}Lançamento automático corrigido{% else %}Pagamento preservado{% endif %}: R$ {{ compra.conciliacao.valor_pago|floatformat:2 }}</p>
     <p>Dinheiro devolvido registrado: R$ {{ compra.conciliacao.valor_devolvido|floatformat:2 }}</p>
     <p>Crédito do fornecedor apurado na correção: R$ {{ compra.conciliacao.credito_fornecedor|floatformat:2 }}</p>
     <p>Saldo a pagar apurado na correção: R$ {{ compra.conciliacao.saldo_a_pagar|floatformat:2 }}</p>

@@ -2841,49 +2841,13 @@
     {% csrf_token %}
     <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" hidden></p>
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
-    <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if edicao_finalizada %}salvar_edicao_finalizada{% elif finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
+    <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if edicao_finalizada %}salvar_correcao_simples{% elif finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
     {% if edicao_finalizada %}
     <input type="hidden" name="edicao_token" value="{{ edicao_token }}">
     <div class="compras-alerta" id="avisoEdicaoFinalizada">
-      {% if bloqueio_edicao %}<p role="alert">{{ bloqueio_edicao }} Nesta edição, preserve esses dados e corrija somente observações ou vencimentos das contas ativas.</p>{% endif %}
       <label for="motivoEdicaoCompra">Justificativa da correção</label>
-      <input type="text" name="motivo_edicao" id="motivoEdicaoCompra" required maxlength="1000" style="width:100%;">
-      <details id="painelCorrecaoAutomatica">
-        <summary>Corrigir itens e conciliar automaticamente</summary>
-        <div class="compras-field">
-          <label for="tipoCorrecaoCompra">Motivo da correção</label>
-          <select name="tipo_correcao" id="tipoCorrecaoCompra">
-            <option value="">Edição comum de observações ou vencimentos</option>
-            <option value="erro_lancamento">Erro de lançamento — nota e pagamento reais corretos</option>
-            <option value="devolucao">Devolução ao fornecedor — mercadoria fisicamente devolvida</option>
-            <option value="diferenca">Diferença de preço ou quantidade</option>
-          </select>
-        </div>
-        <div id="dadosCorrecaoAutomatica" hidden>
-          <p>Revise os itens e a justificativa acima. Antes de aplicar, confira a prévia de estoque e financeiro. Pagamentos realizados serão preservados; valores pagos a maior permanecem como crédito do fornecedor. Só haverá entrada de dinheiro se você informar uma devolução efetivamente recebida, com conta e data.</p>
-          <div class="compras-field"><label for="valorPagoRealCorrecao">Valor efetivamente pago, sem juros bancários (R$)</label><input type="text" inputmode="decimal" name="valor_pago_real" id="valorPagoRealCorrecao" value=""></div>
-          <p>Valor registrado no sistema: R$ {{ pago_comprovado_correcao|default:"não identificado" }}. Esse registro pode estar incorreto. Informe acima o pagamento real, conferido na nota e no comprovante.</p>
-          <p><label><input type="checkbox" name="pagamento_real_confirmado" value="1"> Conferi o valor efetivamente pago. Não estou apenas repetindo o lançamento do sistema.</label></p>
-          <p><label><input type="checkbox" name="credito_real_confirmado" value="1"> Se houver crédito na prévia, confirmo que houve pagamento real a maior e que essa diferença não foi devolvida pelo fornecedor.</label></p>
-          <div id="areaDevolucaoFinanceiraCorrecao" hidden>
-            <div class="compras-field"><label for="valorDevolvidoRealCorrecao">Dinheiro efetivamente devolvido nesta correção (R$) — zero se não recebeu</label><input type="text" inputmode="decimal" name="valor_devolvido_real" id="valorDevolvidoRealCorrecao" value="0,00"></div>
-            <div id="destinoDevolucaoFinanceiraCorrecao" hidden>
-              <div class="compras-field"><label>Conta que recebeu o dinheiro</label><select name="conta_devolucao"><option value="">Selecione...</option>{% for conta in contas_devolucao_correcao %}<option value="{{ conta.pk }}">{{ conta.nome }}</option>{% endfor %}</select></div>
-              <div class="compras-field"><label>Data em que recebeu</label><input type="date" name="data_devolucao" value="{{ hoje|date:'Y-m-d' }}"></div>
-            </div>
-          </div>
-        </div>
-      </details>
-      <dialog id="previaCorrecaoCompra" style="width:min(600px,calc(100vw - 24px));max-height:85vh;overflow:auto;box-sizing:border-box;">
-        <h2>Confirmar correção da compra</h2>
-        <div id="resumoPreviaCorrecaoCompra"></div>
-        <p>Confirme somente se os itens, valores e a devolução informada correspondem ao que realmente ocorreu.</p>
-        <button type="button" class="compras-btn" id="aplicarPreviaCorrecaoCompra">Confirmar e salvar correção</button>
-        <button type="button" class="compras-btn compras-btn-secondary" id="cancelarPreviaCorrecaoCompra">Voltar e revisar</button>
-      </dialog>
-      <p id="avisoFinanceiroEdicaoComum">Pagamentos e devoluções reais são tratados no financeiro. Esta edição não cria entradas ou saídas de dinheiro.</p>
-      {% for movimento in contas_financeiras_edicao %}<p>Conta registrada: {{ movimento.conta.nome }} — {{ movimento.get_tipo_display }} R$ {{ movimento.valor|floatformat:2 }}.</p>{% endfor %}
-      <a href="{% url 'estoque:compra_corrigir_itens' compra.id %}">Abrir correção antiga</a>
+      <input type="text" name="motivo_edicao" id="motivoEdicaoCompra" value="{{ motivo_edicao_inicial }}" required maxlength="1000" style="width:100%;">
+      <p>Corrija os itens e salve. O sistema calcula as diferenças de estoque e financeiro automaticamente.</p>
     </div>
     {% endif %}
     <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
@@ -3233,7 +3197,7 @@
         <span class="compras-total-valor">Total dos produtos: <span id="totalCompra">R$ 0,00</span></span>
         <label class="compras-total-cobrado">
           <span>Valor cobrado</span>
-          <input type="text" name="valor_cobrado" id="valorCobradoCompra" inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
+          <input type="text" name="valor_cobrado" id="valorCobradoCompra" {% if edicao_finalizada %}readonly aria-label="Total calculado automaticamente"{% endif %} inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
         </label>
         <span class="compras-total-diferenca" id="diferencaCompra">Diferen&ccedil;a: R$ 0,00</span>
       </div>
@@ -4348,9 +4312,13 @@
     });
     totalCompra.textContent = moeda(total);
     const totalCentavos = Math.round(total * 100);
+    {% if edicao_finalizada %}
+    definirValorCobradoCentavos(totalCentavos + Math.round(numero("{{ compra.ajuste_total|floatformat:2 }}") * 100));
+    {% else %}
     if (valorCobradoCompra && !valorCobradoCompra.dataset.valorEditado) {
       definirValorCobradoCentavos(totalCentavos);
     }
+    {% endif %}
     const cobradoCentavos = valorCobradoCompra ? centavosMoeda(valorCobradoCompra.value) : totalCentavos;
     const valorFinanceiroCentavos = Math.max(cobradoCentavos === null ? totalCentavos : cobradoCentavos, 0);
     const diferencaCentavos = valorFinanceiroCentavos - totalCentavos;
@@ -6206,56 +6174,6 @@
     return false;
   }
 
-  const tipoCorrecaoCompra = document.getElementById("tipoCorrecaoCompra");
-  const valorDevolvidoCorrecao = document.getElementById("valorDevolvidoRealCorrecao");
-  function atualizarModoCorrecao() {
-    if (!tipoCorrecaoCompra) return;
-    const ativo = Boolean(tipoCorrecaoCompra.value);
-    const avisoComum = document.querySelector("#avisoEdicaoFinalizada p[role=alert]");
-    if (avisoComum) avisoComum.hidden = ativo;
-    document.getElementById("avisoFinanceiroEdicaoComum").hidden = ativo;
-    document.getElementById("dadosCorrecaoAutomatica").hidden = !ativo;
-    document.getElementById("valorPagoRealCorrecao").required = ativo;
-    document.getElementById("areaDevolucaoFinanceiraCorrecao").hidden = !ativo || tipoCorrecaoCompra.value === "erro_lancamento";
-    if (tipoCorrecaoCompra.value === "erro_lancamento") valorDevolvidoCorrecao.value = "0,00";
-    document.getElementById("destinoDevolucaoFinanceiraCorrecao").hidden = numero(valorDevolvidoCorrecao.value) <= 0;
-    if (btnSalvarCompra) btnSalvarCompra.textContent = ativo ? "Salvar correção" : "Salvar alterações";
-  }
-  tipoCorrecaoCompra?.addEventListener("change", atualizarModoCorrecao);
-  valorDevolvidoCorrecao?.addEventListener("input", atualizarModoCorrecao);
-
-  function confirmarPreviaCorrecao(previa) {
-    const dialogo = document.getElementById("previaCorrecaoCompra");
-    const resumo = document.getElementById("resumoPreviaCorrecaoCompra");
-    resumo.replaceChildren();
-    const mostrar = (rotulo, valor) => {
-      const p = document.createElement("p"); p.textContent = rotulo + ": " + valor; resumo.appendChild(p);
-    };
-    mostrar("Total anterior", moeda(Number(previa.total_anterior)));
-    mostrar("Total corrigido", moeda(Number(previa.total_corrigido)));
-    mostrar("Diferença", moeda(Number(previa.diferenca)));
-    mostrar("Pagamento registrado anteriormente (pode conter erro)", moeda(Number(previa.pago_registrado_antes)));
-    mostrar("Pagamento real confirmado", moeda(Number(previa.pago_preservado)));
-    if (previa.correcao_registro_financeiro) {
-      const ajuste = previa.correcao_registro_financeiro;
-      mostrar("Correção do registro financeiro #" + ajuste.id + " — " + ajuste.conta,
-        moeda(Number(ajuste.valor_anterior)) + " → " + moeda(Number(ajuste.valor_real_informado)) + " efetivamente pago. Nenhum novo pagamento será feito.");
-    }
-    mostrar("Dinheiro devolvido agora", moeda(Number(previa.devolvido_agora)));
-    mostrar("Crédito do fornecedor", moeda(Number(previa.credito_fornecedor)));
-    mostrar("Saldo a pagar", moeda(Number(previa.saldo_a_pagar)));
-    previa.itens.forEach(item => mostrar("Item", (item.nome_anterior || "Novo") + " → " + item.nome_corrigido + " — " + item.quantidade + " " + item.unidade + " a " + moeda(Number(item.preco))));
-    previa.removidos.forEach(item => mostrar("Item removido", item.nome));
-    previa.deltas_estoque.forEach(item => mostrar("Ajuste no estoque de " + item.produto, item.delta + " na unidade base cadastrada"));
-    return new Promise(resolve => {
-      const fechar = valor => { dialogo.close(); resolve(valor); };
-      document.getElementById("aplicarPreviaCorrecaoCompra").onclick = () => fechar(true);
-      document.getElementById("cancelarPreviaCorrecaoCompra").onclick = () => fechar(false);
-      dialogo.oncancel = event => { event.preventDefault(); fechar(false); };
-      dialogo.showModal();
-    });
-  }
-
   async function salvarEdicaoFinalizada() {
     const erro = document.getElementById("erroSalvarPreRevisaoCompra");
     const controles = Array.from(formCompra.querySelectorAll("input, select, textarea"))
@@ -6277,26 +6195,7 @@
         if (!resposta.ok || !dados.sucesso) throw new Error(dados.erro || "Não foi possível confirmar o salvamento. Seus dados continuam nesta tela.");
         return {resposta, dados};
       };
-      if (tipoCorrecaoCompra?.value) {
-        formCompra.dataset.etapaCorrecao = "previa";
-        if (btnSalvarCompra) btnSalvarCompra.textContent = "Preparando prévia...";
-        payload.set("acao_compra", "prever_correcao");
-        const previa = (await enviar()).dados;
-        formCompra.dataset.etapaCorrecao = "confirmacao";
-        if (btnSalvarCompra) btnSalvarCompra.textContent = "Aguardando confirmação...";
-        if (!await confirmarPreviaCorrecao(previa.previa)) {
-          delete formCompra.dataset.enviando;
-          delete formCompra.dataset.etapaCorrecao;
-          controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
-          if (btnSalvarCompra) btnSalvarCompra.disabled = false;
-          atualizarModoCorrecao();
-          return;
-        }
-        formCompra.dataset.etapaCorrecao = "aplicando";
-        if (btnSalvarCompra) btnSalvarCompra.textContent = "Salvando correção...";
-        payload.set("previa_token", previa.previa_token);
-        payload.set("acao_compra", "salvar_correcao_automatica");
-      }
+      payload.set("acao_compra", "salvar_correcao_simples");
       const {resposta, dados} = await enviar();
       if (!resposta.ok || !dados.sucesso || !dados.redirect_url) {
         throw new Error(dados.erro || "Nao foi possivel confirmar o salvamento. Seus dados continuam nesta tela.");
@@ -6309,7 +6208,7 @@
       delete formCompra.dataset.enviando;
       delete formCompra.dataset.etapaCorrecao;
       controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
-      if (btnSalvarCompra) { btnSalvarCompra.disabled = false; btnSalvarCompra.textContent = tipoCorrecaoCompra?.value ? "Salvar correção" : "Salvar alterações"; }
+      if (btnSalvarCompra) { btnSalvarCompra.disabled = false; btnSalvarCompra.textContent = "Salvar alterações"; }
     }
   }
 
@@ -6358,7 +6257,7 @@
   if (btnSalvarCompra && formCompra) {
     btnSalvarCompra.addEventListener("click", function() {
       window.compraMobileMantendoItemVisivel = false;
-      enviarCompraComAcao("{% if edicao_finalizada %}salvar_edicao_finalizada{% elif finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
+      enviarCompraComAcao("{% if edicao_finalizada %}salvar_correcao_simples{% elif finalizando %}confirmar_financeiro{% else %}finalizar{% endif %}", btnSalvarCompra);
     });
   }
 
@@ -10115,8 +10014,7 @@
     if (!botao || !select) return;
     var formulario = document.getElementById("formCompra");
     if (formulario && formulario.dataset.edicaoFinalizada === "1") {
-      var etapa = formulario.dataset.etapaCorrecao;
-      botao.textContent = etapa === "previa" ? "Preparando prévia..." : etapa === "confirmacao" ? "Aguardando confirmação..." : etapa === "aplicando" ? "Salvando correção..." : formulario.dataset.enviando === "1" ? "Salvando alterações..." : (document.getElementById("tipoCorrecaoCompra")?.value ? "Salvar correção" : "Salvar alterações");
+      botao.textContent = formulario.dataset.enviando === "1" ? "Salvando alterações..." : "Salvar alterações";
       return;
     }
 

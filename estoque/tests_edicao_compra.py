@@ -81,13 +81,15 @@ class EdicaoFixture:
 
 
 class EdicaoCompraTests(EdicaoFixture, TestCase):
-    def test_original_preenchida_e_links_preservam_alternativa(self):
+    def test_original_preenchida_e_fluxo_simples_sem_formularios_adicionais(self):
         pagina = self.client.get(self.url)
         self.assertTemplateUsed(pagina, "estoque/compras_nova.html")
         self.assertTrue(pagina.context["edicao_finalizada"])
         self.assertContains(pagina, "Salvar alterações")
         self.assertContains(pagina, f'value="{self.item.pk}"')
-        self.assertContains(pagina, reverse("estoque:compra_corrigir_itens", args=[self.compra.pk]))
+        self.assertNotContains(pagina, reverse("estoque:compra_corrigir_itens", args=[self.compra.pk]))
+        self.assertNotContains(pagina, 'name="tipo_correcao"')
+        self.assertNotContains(pagina, 'name="valor_pago_real"')
         self.assertContains(self.client.get(reverse("estoque:compras_lista")), self.url)
 
     def test_edicao_finalizada_com_varios_itens_nao_consulta_grupos_por_produto(self):
