@@ -1,0 +1,7 @@
+<span class="produto-metrica-rotulo">{{ rotulo }}</span>
+<span class="produto-preco-valores">
+  <span>{% if valor != None %}<strong>R$ {{ valor|floatformat:2 }}</strong>{% else %}<span aria-label="Não informado">—</span>{% endif %} <small>{{ produto.unidade_compra|default:produto.unidade_venda_1|default:"" }}</small></span>
+  {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
+    <span class="produto-preco-fracionado"><span aria-hidden="true"> · </span>{% if fracionado != None %}<strong>R$ {{ fracionado|floatformat:2 }}</strong>{% else %}<span aria-label="Não informado">—</span>{% endif %} <small>{{ produto.unidade_venda_2 }}</small></span>
+  {% endif %}
+</span>

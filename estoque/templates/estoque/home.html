@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load static %}
 {% block content %}
 
 <!-- AVISO PRODUTOS INCOMPLETOS - INICIO -->
@@ -2000,7 +2001,8 @@ align-items: center;
   </button>
 </div>
 {% include 'estoque/grupos_produtos.html' %}
-<div class="produtos-tabela-card" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
+<link rel="stylesheet" href="{% static 'estoque/produtos-cards-v2.css' %}">
+<div class="produtos-tabela-card produtos-cards-v2" style="max-width: 720px; margin: 0 auto 90px auto; background: #fff; border: 1px solid #e9ecef; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); overflow: hidden;">
   <table class="table table-hover mx-auto align-middle produtos-tabela" style="width: auto;">
     
     <thead style="background: #f8f9fa;">
@@ -2023,7 +2025,7 @@ align-items: center;
           <input type="checkbox" class="grupo-produto-checkbox" value="{{ produto.id }}" {% if produto.vinculo_grupo %}disabled{% endif %}>
           <span>{% if produto.vinculo_grupo %}Já vinculado{% else %}Selecionar{% endif %} {{ produto.nome }}</span>
         </label>
-        <span class="produto-nome-texto">{{ produto.nome|default:"Produto sem nome" }}</span>
+        <span class="produto-nome-texto" title="{{ produto.nome|default:'Produto sem nome' }}">{{ produto.nome|default:"Produto sem nome" }}</span>
         {% if produto.vinculo_grupo %}
           <button type="button" class="grupo-produto-vinculo" data-grupo-url="{% url 'estoque:grupos_produtos_detalhe' produto.vinculo_grupo.grupo_id %}">
             <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg>
@@ -2031,30 +2033,34 @@ align-items: center;
           </button>
         {% endif %}
       </div>
-      <div class="produto-categoria-inline">
+      <div class="produto-categoria-inline" title="{{ produto.categoria|default:'Sem categoria' }} · {{ produto.fornecedor|default:'Sem fornecedor' }}">
         {% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}
         <span class="produto-meta-separador">&middot;</span>
-        <span class="produto-data-criacao">{{ produto.criado_em|date:"d/m/Y" }}</span>
+        <span class="produto-fornecedor" title="{{ produto.fornecedor|default:'Sem fornecedor' }}">Fornecedor: {{ produto.fornecedor|default:"Sem fornecedor" }}</span>
         {% if not produto.ativo %}
           <span class="produto-inativo-badge">Inativo</span>
         {% endif %}
       </div>
     </td>
-        <td class="td-quantidade">
+        <td class="produto-preco-v2" data-label="Compra">{% include 'estoque/includes/produto_card_preco.html' with rotulo="Compra" valor=produto.preco_compra fracionado=produto.preco_compra_fracionado %}</td>
+        <td class="produto-preco-v2" data-label="Venda à vista">{% include 'estoque/includes/produto_card_preco.html' with rotulo="Venda à vista" valor=produto.preco_vista fracionado=produto.preco_vista_fracionado %}</td>
+        <td class="produto-preco-v2" data-label="Venda a prazo">{% include 'estoque/includes/produto_card_preco.html' with rotulo="Venda a prazo" valor=produto.preco_prazo fracionado=produto.preco_prazo_fracionado %}</td>
+        <td class="td-quantidade" data-label="Saldo">
+  <span class="produto-metrica-rotulo">Saldo</span>
   <div class="qtd-wrap">
     {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
       <span class="qtd-num produto-card-valor estoque-lista-duplo">
-        <span class="estoque-lista-principal">{{ produto.quantidade|floatformat:3 }} {{ produto.unidade_compra|default:"" }}</span>
+        <span class="estoque-lista-principal">{{ produto.quantidade|floatformat:"-3" }} {{ produto.unidade_compra|default:"" }}</span>
         <span class="estoque-lista-fracionado">{% widthratio produto.quantidade 1 produto.fator_conversao %} {{ produto.unidade_venda_2 }}</span>
       </span>
     {% else %}
-      <span class="qtd-num produto-card-valor">{{ produto.quantidade|default:"0" }}</span>
+      <span class="qtd-num produto-card-valor">{{ produto.quantidade|default:"0"|floatformat:"-3" }} {{ produto.unidade_compra|default:produto.unidade_venda_1|default:"" }}</span>
     {% endif %}
 
     {% if produto.quantidade == 0 %}
       <span class="badge badge-zero qtd-badge">Zerado</span>
     {% elif produto.quantidade > 0 and produto.quantidade <= produto.estoque_minimo %}
-      <span class="badge badge-critico qtd-badge">Crítico</span>
+      <span class="badge badge-critico qtd-badge">Estoque baixo</span>
     {% elif produto.quantidade > produto.estoque_minimo and produto.quantidade <= produto.estoque_minimo|add:'5' %}
       <span class="badge badge-limite qtd-badge">No limite</span>
     {% else %}
@@ -2063,17 +2069,24 @@ align-items: center;
   </div>
 </td>
 
-        <td class="text-center produto-card-minimo">
+        <td class="text-center produto-card-minimo" data-label="Mínimo">
+          <span class="produto-metrica-rotulo">Mínimo</span>
           {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
             <span class="produto-card-valor estoque-lista-duplo estoque-lista-minimo">
-              <span class="estoque-lista-principal">{{ produto.estoque_minimo|floatformat:3 }} {{ produto.unidade_compra|default:"" }}</span>
+              <span class="estoque-lista-principal">{{ produto.estoque_minimo|floatformat:"-3" }} {{ produto.unidade_compra|default:"" }}</span>
               <span class="estoque-lista-fracionado">{% widthratio produto.estoque_minimo 1 produto.fator_conversao %} {{ produto.unidade_venda_2 }}</span>
             </span>
           {% else %}
-            <span class="produto-card-valor">{{ produto.estoque_minimo|default:"0" }}</span>
+            <span class="produto-card-valor">{{ produto.estoque_minimo|default:"0" }} {{ produto.unidade_compra|default:produto.unidade_venda_1|default:"" }}</span>
           {% endif %}
         </td>
 
+        <td class="produto-conversao-v2" data-label="Conversão">
+          <span class="produto-metrica-rotulo">Conversão</span>
+          {% if produto.vende_fracionado and produto.fator_conversao and produto.unidade_venda_2 %}
+            <span class="produto-card-valor">1 {{ produto.unidade_compra|default:produto.unidade_venda_1 }} = {{ produto.fator_conversao|floatformat:"-2" }} {{ produto.unidade_venda_2 }}</span>
+          {% else %}<span class="produto-card-valor produto-sem-fracionamento">Sem fracionamento</span>{% endif %}
+        </td>
         <td class="produtos-acoes-coluna">
           <div class="produtos-acoes">
           <a
