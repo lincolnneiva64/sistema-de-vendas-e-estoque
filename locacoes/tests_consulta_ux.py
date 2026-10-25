@@ -21,7 +21,7 @@ class ConsultaLocacoesUxTests(TestCase):
         self.relogio.start()
         self.addCleanup(self.relogio.stop)
         ConfiguracaoLocacao.obter()
-        self.faixa = FaixaPrecoLocacao.objects.first()
+        self.faixa, _ = FaixaPrecoLocacao.objects.get_or_create(codigo=FaixaPrecoLocacao.CENTRO_PERTO, defaults={"nome": "Centro teste", "preco_jogo_diaria": 10})
         self.passada = self.criar(self.hoje - timedelta(days=1))
         self.atual = self.criar(self.hoje)
         self.futura = self.criar(self.hoje + timedelta(days=1))
@@ -102,7 +102,7 @@ class ConsultaLocacoesUxTests(TestCase):
     def test_status_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, status=Locacao.STATUS_ENTREGUE)
         atrasada = self.criar(self.hoje - timedelta(days=2), status=Locacao.STATUS_ENTREGUE)
-        self.assertEqual(self.ids(status=Locacao.STATUS_ENTREGUE), [atrasada.pk, alvo.pk])
+        self.assertEqual(self.ids(aba="recolhimentos", status=Locacao.STATUS_ENTREGUE), [atrasada.pk, alvo.pk])
 
     def test_financeiro_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, saldo_devedor=Decimal("10"))
@@ -113,13 +113,13 @@ class ConsultaLocacoesUxTests(TestCase):
     def test_limpar_filtros_retorna_visao_padrao(self):
         cancelada = self.criar(self.hoje + timedelta(days=1), status=Locacao.STATUS_CANCELADA)
         response = self.consultar(status="entregue", financeiro="com_saldo", data_inicio="2026-10-03")
-        self.assertContains(response, f'href="{reverse("locacoes:lista")}?aba=andamento" id="limpar-filtros-locacoes"')
+        self.assertContains(response, 'href="?aba=entregas" id="limpar-filtros-locacoes"')
         response_limpa = self.client.get(reverse("locacoes:lista"), secure=True)
         ids_limpos = [locacao.pk for locacao in response_limpa.context["locacoes"]]
         self.assertNotIn(cancelada.pk, ids_limpos)
         self.assertIn(self.passada.pk, ids_limpos)
         self.assertIn(self.futura.pk, ids_limpos)
-        self.assertContains(response_limpa, '<input type="hidden" name="aba" value="andamento">')
+        self.assertContains(response_limpa, '<input type="hidden" name="aba" value="entregas">')
         self.assertEqual(self.ids(status="", financeiro="", data_inicio="", data_fim=""), self.ids())
 
     def test_ordem_cronologica(self):

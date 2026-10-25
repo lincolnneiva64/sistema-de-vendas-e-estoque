@@ -1,0 +1,43 @@
+.consulta-operacional{display:flex;gap:8px;border-bottom:1px solid #cbd5e1;padding-bottom:8px}
+.consulta-operacional .nav-link{padding:10px 18px;border:1px solid #b8c9df;border-radius:8px;color:#214b80;text-decoration:none;background:#fff;font-weight:650}
+.consulta-operacional .nav-link.active{background:#214b80;color:#fff;border-color:#214b80}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;align-items:end}
+.filters>*{min-width:0}.filters input,.filters select{width:100%;max-width:100%;box-sizing:border-box}.filters label{display:block}
+.data-locacao{white-space:nowrap;display:inline-block}
+.filtros-ativos{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;margin:12px 0;background:#eff6ff;border:1px solid #c7daf2;border-radius:8px;color:#214b80;font-size:14px}
+.filtros-ativos span{padding:2px 6px;background:#fff;border-radius:4px;overflow-wrap:anywhere}
+.paginacao-locacoes{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;padding:18px 0;font-size:14px;color:#475569}
+.resultados-locacoes .table{width:100%;min-width:0;table-layout:auto}.resultados-locacoes td{overflow-wrap:anywhere}.resultados-locacoes .acoes-locacao{min-width:0}.resultados-locacoes .acoes-locacao-linha{flex-wrap:wrap}
+@media(min-width:1051px){
+ .resultados-locacoes .table tbody td{padding:10px 9px}
+ .resultados-locacoes .table{table-layout:fixed}
+ .resultados-locacoes .table thead th{padding:12px 8px;font-size:0.82rem;white-space:normal;overflow-wrap:anywhere}
+ .resultados-locacoes .table th:nth-child(1){width:5%}
+ .resultados-locacoes .table th:nth-child(2){width:10%}
+ .resultados-locacoes .table th:nth-child(3){width:15%}
+ .resultados-locacoes .table th:nth-child(4){width:10%}
+ .resultados-locacoes .table th:nth-child(5){width:13%}
+ .resultados-locacoes .table th:nth-child(6){width:10%}
+ .resultados-locacoes .table th:nth-child(7){width:15%}
+ .resultados-locacoes .table th:last-child{width:22%}
+ .resultados-locacoes .badge-locacoes{white-space:normal}
+ .resultados-locacoes .acoes-locacao-linha{gap:6px}
+ .resultados-locacoes .acoes-locacao .btn{display:inline-flex;align-items:center;justify-content:center;max-width:100%;white-space:normal}
+ .resultados-locacoes .acoes-locacao form{margin:0}
+ .resultados-locacoes .financeiro-resumo{min-width:145px}
+}
+@media(max-width:1050px){
+ .resultados-locacoes{overflow:visible;border:0;background:transparent}
+ .resultados-locacoes table,.resultados-locacoes tbody{display:block;width:100%;min-width:0}
+ .resultados-locacoes thead{display:none}
+ .resultados-locacoes tbody{display:grid;gap:14px}
+ .resultados-locacoes tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;border:1px solid #c7d4e4;border-radius:10px;padding:14px;background:#fff}
+ .resultados-locacoes tbody td{display:block;padding:0;border:0;min-width:0;background:transparent}
+ .resultados-locacoes td[data-label]::before{content:attr(data-label);display:block;color:#64748b;font-size:12px;font-weight:600;margin-bottom:4px}
+ .resultados-locacoes td:nth-child(3),.resultados-locacoes td:last-child{grid-column:1/-1}
+ .resultados-locacoes td[colspan]{grid-column:1/-1}
+ .resultados-locacoes .financeiro-resumo{min-width:0;width:100%;box-sizing:border-box}
+ .resultados-locacoes .acoes-locacao-linha{display:flex;flex-wrap:wrap;gap:8px}
+ .resultados-locacoes .acoes-mais-menu{min-width:0;max-width:100%}
+}
+@media(max-width:600px){.consulta-operacional .nav-link{flex:1;text-align:center;padding:10px 8px}.filters{display:grid;grid-template-columns:1fr}.page{max-width:100%;box-sizing:border-box}.cardx{min-width:0}.paginacao-locacoes{gap:8px}.resultados-locacoes .btn{min-height:40px;white-space:normal}}

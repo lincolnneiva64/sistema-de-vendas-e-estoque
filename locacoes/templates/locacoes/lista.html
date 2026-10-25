@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -448,6 +449,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="{% static 'locacoes/consulta-operacional.css' %}">
 </head>
 <body>
   {% include 'estoque/includes/sessao_usuario.html' %}
@@ -473,16 +475,33 @@
       {% endfor %}
     {% endif %}
 
-    <nav class="nav nav-tabs mb-3" aria-label="Consulta de locações">
+    <nav class="nav nav-tabs mb-3 consulta-operacional" aria-label="Consulta de locações">
       {% for item in abas %}
-        <a class="nav-link {% if aba == item.valor %}active{% endif %}" href="{{ item.url }}" {% if aba == item.valor %}aria-current="page"{% endif %}>{{ item.rotulo }}</a>
+        <a class="nav-link {% if aba == item.valor and not historico %}active{% endif %}" href="{{ item.url }}" {% if aba == item.valor and not historico %}aria-current="page"{% endif %}>{{ item.rotulo }}</a>
       {% endfor %}
     </nav>
+    <p><a class="btn btn-outline-secondary" href="{{ url_historico }}" {% if historico %}aria-current="page"{% endif %}>Histórico completo</a></p>
     <section class="cardx">
       <h2>Filtros da consulta</h2>
-      <p class="muted">Operação atual: entregas a partir de {{ marco_operacional|date:"d/m/Y" }}. Pendências recentes continuam visíveis mesmo atrasadas. Canceladas e registros anteriores ficam no Histórico; exceções com atividade operacional são sinalizadas.</p>
+      {% if historico %}
+        <p class="muted">Histórico completo: todas as locações registradas, de qualquer status ou data. Mais recentes primeiro. Os filtros abaixo podem restringir os resultados.</p>
+      {% else %}
+        <p class="muted">{{ aba|capfirst }}: {% if realizadas %}operações realizadas, com as mais recentes primeiro.{% else %}pendências operacionais; atrasadas e de hoje antes das próximas.{% endif %} Registros antigos sem atividade operacional atual continuam disponíveis no Histórico completo.</p>
+      {% endif %}
+      {% if realizadas and not historico %}<p class="muted">Sem confirmação datada no registro, a data prevista é usada como referência.</p>{% endif %}
+      <p class="muted">O período abaixo considera a data prevista de {{ periodo_rotulo }}{% if not historico %}, incluindo reagendamentos{% endif %}. Quitação financeira não encerra entrega ou recolhimento.</p>
+      {% if filtros_ativos %}<div class="filtros-ativos" role="status"><strong>Filtros ativos — resultados restritos:</strong> {% for filtro in filtros_ativos %}<span>{{ filtro.rotulo }}: {{ filtro.valor }}</span> {% endfor %}<a href="{{ url_limpar }}">Remover filtros</a></div>{% endif %}
+      {% if datas_invalidas %}<p class="alert alert-warning">Revise as datas informadas: use um período válido, com a data inicial anterior ou igual à final.</p>{% endif %}
       <form method="get" class="filters" id="filtros-locacoes" data-enter-nav>
         <input type="hidden" name="aba" value="{{ aba }}">
+        {% if historico %}<input type="hidden" name="visao" value="historico">{% else %}
+        <div>
+          <label class="form-label" for="situacao-operacional">Mostrar</label>
+          <select id="situacao-operacional" name="situacao" class="form-select">
+            <option value="pendentes" {% if not realizadas %}selected{% endif %}>Pendentes</option>
+            <option value="realizadas" {% if realizadas %}selected{% endif %}>{% if aba == 'entregas' %}Entregas realizadas{% else %}Recolhimentos concluídos{% endif %}</option>
+          </select>
+        </div>{% endif %}
         <div>
           <label class="form-label" for="cliente-consulta">Cliente</label>
           <input id="cliente-consulta" class="form-control" type="search" name="cliente" value="{{ cliente_filtro }}" placeholder="Nome do cliente ou contratante">
@@ -514,14 +533,14 @@
           <input class="form-control" type="date" name="data_fim" value="{{ data_fim }}">
         </div>
         <div>
-          <a class="btn btn-locacoes w-100" href="{% url 'locacoes:lista' %}?aba={{ aba }}" id="limpar-filtros-locacoes">Limpar filtros</a>
+          <a class="btn btn-locacoes w-100" href="{{ url_limpar }}" id="limpar-filtros-locacoes">Limpar filtros</a>
         </div>
       </form>
     </section>
 
     <section class="cardx">
-      <h2>Locações encontradas</h2>
-      <div class="table-responsive">
+      <h2>{% if historico %}Histórico completo{% else %}{{ aba|capfirst }}{% endif %} — {{ pagina.paginator.count }} registro{{ pagina.paginator.count|pluralize:"s" }}</h2>
+      <div class="table-responsive resultados-locacoes">
         <table class="table align-middle">
           <thead>
             <tr>
@@ -538,7 +557,7 @@
           <tbody>
             {% for locacao in locacoes %}
               <tr>
-                <td>
+                <td data-label="Locação">
                   {% if locacao.acoes_consulta.pode_editar %}
                     <a href="{% url 'locacoes:editar' locacao.id %}">#{{ locacao.id }}</a>
                   {% else %}
@@ -546,19 +565,19 @@
                   {% endif %}
                   {% if locacao.motivo_consulta %}<small class="d-block {% if locacao.excecao_anterior_marco %}text-danger{% else %}muted{% endif %}">{{ locacao.motivo_consulta }}</small>{% endif %}
                 </td>
-                <td>{{ locacao.nome_contratante }}</td>
-                <td><span class="badge-locacoes">{{ locacao.get_status_display }}</span>
+                <td data-label="Contratante">{{ locacao.nome_contratante }}</td>
+                <td data-label="Situação"><span class="badge-locacoes">{{ locacao.get_status_display }}</span>
                   {% if not locacao.motivo_consulta or locacao.excecao_anterior_marco %}<span class="badge-locacoes {% if locacao.indicador_operacional.atraso %}text-danger{% endif %}">{{ locacao.indicador_operacional.texto }}</span>{% endif %}
                   {% if locacao.indicador_operacional.data %}<small class="d-block">{{ locacao.indicador_operacional.data|date:"d/m/Y" }}{% if locacao.indicador_operacional.horario %} às {{ locacao.indicador_operacional.horario|time:"H:i" }}{% endif %}</small>{% endif %}
                 </td>
-                <td>{{ locacao.data_entrega|date:"d/m/Y" }} {{ locacao.horario_entrega|time:"H:i" }}</td>
-                <td>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</td>
-                <td>
+                <td data-label="Entrega prevista"><span class="data-locacao">{{ locacao.data_entrega|date:"d/m/Y" }}</span> <span class="data-locacao">{{ locacao.horario_entrega|time:"H:i" }}</span></td>
+                <td data-label="Devolução prevista"><span class="data-locacao">{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</span> <span class="data-locacao">{{ locacao.horario_previsto_devolucao|time:"H:i" }}</span></td>
+                <td data-label="Saldo de itens">
                   {{ locacao.necessidade_pendente_lista.mesas }} mesa(s) /
                   {{ locacao.necessidade_pendente_lista.cadeiras }} cadeira(s)
-                  {% if aba == 'historico' %}<small class="d-block muted">Saldo cadastral; não comprova material na rua.</small>{% endif %}
+                  {% if historico %}<small class="d-block muted">Saldo cadastral; não comprova material na rua.</small>{% endif %}
                 </td>
-                <td>
+                <td data-label="Financeiro">
                   <div class="financeiro-resumo {% if locacao.saldo_devedor > 0 %}com-saldo{% else %}quitada{% endif %} {% if locacao.saldo_vencido_lista %}vencida{% endif %}">
                     <span class="financeiro-status">{{ locacao.get_status_financeiro_display }}</span>
                     <span class="financeiro-linha">Total: R$ {{ locacao.total|floatformat:2 }}</span>
@@ -570,7 +589,7 @@
                     {% endif %}
                   </div>
                 </td>
-                <td>
+                <td data-label="Ações">
                   <div class="acoes-locacao">
                     <div class="acoes-locacao-linha principal">
                     {% if locacao.acoes_consulta.pode_editar %}
@@ -615,11 +634,16 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="9" class="muted">Nenhuma locação encontrada.</td></tr>
+              <tr><td colspan="8" class="muted">Nenhuma locação encontrada nesta seleção. Verifique os filtros ou consulte o <a href="{{ url_historico }}">Histórico completo</a>.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      <nav class="paginacao-locacoes" aria-label="Páginas da consulta">
+        {% if url_anterior %}<a class="btn btn-outline-secondary" href="{{ url_anterior }}">Anterior</a>{% endif %}
+        <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} registro{{ pagina.paginator.count|pluralize:"s" }}</span>
+        {% if url_proxima %}<a class="btn btn-outline-secondary" href="{{ url_proxima }}">Próxima</a>{% endif %}
+      </nav>
     </section>
   </main>
   {% include "locacoes/includes/filtros_consulta.html" %}

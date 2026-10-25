@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core import signing
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import prefetch_related_objects
 from django.forms import modelformset_factory
@@ -18,7 +19,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from urllib.parse import quote, urlencode
 
-from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao
+from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao, consulta_operacional
 from .services import funcionarios_operacionais_locacoes, indicador_operacional_locacao
 
 from .forms import (
@@ -780,17 +781,26 @@ def _funcionarios_checklist_recolhimento_envio(conferencia, checklist_url, funci
 
 
 def lista(request):
-    aba = request.GET.get("aba", "andamento")
+    aba_original = request.GET.get("aba", "entregas")
+    historico = request.GET.get("visao") == "historico" or aba_original == "historico"
+    realizadas = request.GET.get("situacao") == "realizadas" or aba_original == "concluidas"
+    aba = "recolhimentos" if aba_original == "concluidas" else aba_original
     if aba not in dict(ABAS):
-        aba = "andamento"
+        aba = "entregas"
     cliente = request.GET.get("cliente", "").strip()
     status = request.GET.get("status", "").strip()
     financeiro = request.GET.get("financeiro", "").strip()
     hoje = timezone.localdate()
     data_inicio_texto = request.GET.get("data_inicio", "").strip()
     data_fim_texto = request.GET.get("data_fim", "").strip()
-    data_inicio = parse_date(data_inicio_texto or "")
-    data_fim = parse_date(data_fim_texto or "")
+    def ler_data(texto):
+        try:
+            return parse_date(texto or "")
+        except ValueError:
+            return None
+    data_inicio = ler_data(data_inicio_texto)
+    data_fim = ler_data(data_fim_texto)
+    datas_invalidas = bool((data_inicio_texto and not data_inicio) or (data_fim_texto and not data_fim) or (data_inicio and data_fim and data_inicio > data_fim))
     locacoes_qs = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
@@ -803,6 +813,10 @@ def lista(request):
             "tarefas_operacionais",
         )
     )
+    if not historico:
+        locacoes_qs = consulta_operacional(locacoes_qs, aba, realizadas)
+    else:
+        locacoes_qs = locacoes_qs.order_by("-criado_em", "-id")
     if status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_CANCELADA}:
         locacoes_qs = locacoes_qs.filter(status=status)
     elif status in {
@@ -813,10 +827,11 @@ def lista(request):
         Locacao.STATUS_PENDENTE_DEVOLUCAO,
     }:
         locacoes_qs = locacoes_qs.filter(status=status)
+    campo_data = "data_entrega" if historico else "_data_operacao"
     if data_inicio:
-        locacoes_qs = locacoes_qs.filter(data_entrega__gte=data_inicio)
+        locacoes_qs = locacoes_qs.filter(**{campo_data + "__gte": data_inicio})
     if data_fim:
-        locacoes_qs = locacoes_qs.filter(data_entrega__lte=data_fim)
+        locacoes_qs = locacoes_qs.filter(**{campo_data + "__lte": data_fim})
     if cliente:
         from django.db.models import Q
         locacoes_qs = locacoes_qs.filter(
@@ -826,14 +841,14 @@ def lista(request):
         locacoes_qs = locacoes_qs.filter(saldo_devedor__gt=Decimal("0.00"))
     elif financeiro == "quitadas":
         locacoes_qs = locacoes_qs.filter(saldo_devedor__lte=Decimal("0.00"))
-    locacoes = []
-    for locacao in locacoes_qs.order_by("data_entrega", "horario_entrega", "id"):
+    if datas_invalidas:
+        locacoes_qs = locacoes_qs.none()
+    pagina = Paginator(locacoes_qs, 25).get_page(request.GET.get("pagina"))
+    locacoes = list(pagina.object_list)
+    for locacao in locacoes:
         grupo, motivo, excecao = classificar_locacao(locacao)
-        if grupo != aba:
-            continue
-        locacao.motivo_consulta = motivo
+        locacao.motivo_consulta = motivo if historico or excecao else ""
         locacao.excecao_anterior_marco = excecao
-        locacoes.append(locacao)
         locacao.necessidade_pendente_lista = Locacao.necessidades_itens(
             [
                 {"tipo": item.tipo, "quantidade": item.quantidade_pendente()}
@@ -841,9 +856,32 @@ def lista(request):
             ]
         )
         locacao.indicador_operacional = indicador_operacional_locacao(locacao, hoje)
+        if not historico:
+            entrega = aba == "entregas"
+            atrasada = not realizadas and (
+                locacao._data_operacao < hoje or (
+                    locacao._data_operacao == hoje and locacao._horario_operacao is not None
+                    and locacao._horario_operacao < timezone.localtime().time()
+                )
+            )
+            conclusao = timezone.localtime(locacao._conclusao_registrada) if realizadas and locacao._conclusao_registrada else None
+            locacao.indicador_operacional = {
+                "texto": (("Entrega realizada" if entrega else "Recolhimento concluído") if realizadas
+                          else (("Entrega atrasada" if entrega else "Recolhimento atrasado")
+                                if atrasada else ("Entrega prevista" if entrega else "Aguardando recolhimento"))),
+                "data": conclusao.date() if conclusao else locacao._data_operacao,
+                "horario": (conclusao.time() if conclusao.hour or conclusao.minute else None) if conclusao else locacao._horario_operacao,
+                "atraso": atrasada,
+            }
         locacao.acoes_consulta = _acoes_locacao(locacao, request=request, somente_leitura=True)
         locacao.saldo_vencido_lista = locacao.saldo_vencido_em(hoje)
     parametros = {key: request.GET[key] for key in ("cliente", "status", "financeiro", "data_inicio", "data_fim") if request.GET.get(key)}
+    contexto_consulta = {"aba": aba}
+    if historico:
+        contexto_consulta["visao"] = "historico"
+    elif realizadas:
+        contexto_consulta["situacao"] = "realizadas"
+    parametros_pagina = {**parametros, **contexto_consulta}
     abas = [{"valor": valor, "rotulo": rotulo, "url": "?" + urlencode({**parametros, "aba": valor})} for valor, rotulo in ABAS]
     return render(
         request,
@@ -852,6 +890,20 @@ def lista(request):
             "locacoes": locacoes,
             "aba": aba,
             "abas": abas,
+            "historico": historico,
+            "realizadas": realizadas,
+            "pagina": pagina,
+            "url_anterior": "?" + urlencode({**parametros_pagina, "pagina": pagina.previous_page_number()}) if pagina.has_previous() else "",
+            "url_proxima": "?" + urlencode({**parametros_pagina, "pagina": pagina.next_page_number()}) if pagina.has_next() else "",
+            "url_historico": "?" + urlencode({**parametros, "aba": aba, "visao": "historico"}),
+            "url_limpar": "?" + urlencode(contexto_consulta),
+            "filtros_ativos": [
+                {"rotulo": {"cliente": "Cliente", "status": "Status", "financeiro": "Financeiro", "data_inicio": "Data inicial", "data_fim": "Data final"}[chave],
+                 "valor": (dict(Locacao.STATUS_CHOICES).get(valor, valor) if chave == "status" else {"com_saldo": "Com saldo a receber", "quitadas": "Quitadas"}.get(valor, valor))}
+                for chave, valor in parametros.items() if not (chave == "status" and valor == "todos")
+            ],
+            "datas_invalidas": datas_invalidas,
+            "periodo_rotulo": "entrega" if historico or aba == "entregas" else "recolhimento",
             "marco_operacional": MARCO_OPERACIONAL,
             "cliente_filtro": cliente,
             "status_filtro": status,

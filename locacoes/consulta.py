@@ -7,7 +7,60 @@ from .models import Locacao, TarefaOperacionalLocacao
 
 
 MARCO_OPERACIONAL = date(2026, 10, 1)
-ABAS = (("andamento", "Em andamento"), ("concluidas", "Concluídas"), ("historico", "Histórico"))
+ABAS = (("entregas", "Entregas"), ("recolhimentos", "Recolhimentos"))
+
+
+def consulta_operacional(queryset, aba, realizadas=False):
+    """Filtra e ordena no banco antes da paginação; não cria tarefas nem altera status."""
+    from django.db.models import DateTimeField, Exists, F, OuterRef, Q, Subquery
+    from django.db.models.functions import Cast, Coalesce
+    from .models import ConferenciaEntregaLocacao, ConferenciaRecolhimentoLocacao, EventoLocacao
+
+    entrega = aba == "entregas"
+    tipo = "entrega" if entrega else "recolhimento"
+    tarefas = TarefaOperacionalLocacao.objects.filter(locacao_id=OuterRef("pk"), tipo=tipo)
+    abertas = tarefas.filter(status__in=["pendente", "parcial", "nao_possivel"])
+    campo_data = "data_entrega" if entrega else "data_prevista_devolucao"
+    campo_hora = "horario_entrega" if entrega else "horario_previsto_devolucao"
+    queryset = queryset.annotate(
+        _tem_tarefa=Exists(tarefas), _tarefa_aberta=Exists(abertas),
+        _data_operacao=Coalesce(Subquery(tarefas.values("data_agendada")[:1]), F(campo_data)),
+        _horario_operacao=Coalesce(Subquery(tarefas.values("horario_agendado")[:1]), F(campo_hora)),
+    )
+    if realizadas:
+        encerradas = [Locacao.STATUS_DEVOLVIDA, Locacao.STATUS_DEVOLVIDA_COM_AVARIA]
+        if entrega:
+            encerradas += [Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO]
+        conferencia = ConferenciaEntregaLocacao if entrega else ConferenciaRecolhimentoLocacao
+        eventos = EventoLocacao.objects.filter(locacao_id=OuterRef("pk"), tipo__in=(
+            ["entregue", "checklist_entrega_completa", "entrega_confirmada_operacional"] if entrega
+            else ["devolucao", "checklist_recolhimento_completo"]
+        )).order_by("-criado_em")
+        return queryset.filter(status__in=encerradas).annotate(
+            _conclusao_registrada=Coalesce(
+                Subquery(eventos.values("criado_em")[:1]),
+                Subquery(conferencia.objects.filter(locacao_id=OuterRef("pk")).order_by("-criado_em").values("criado_em")[:1]),
+                Subquery(tarefas.order_by("-confirmado_em").values("confirmado_em")[:1]),
+            ),
+        ).annotate(
+            _concluida_em=Coalesce(F("_conclusao_registrada"), Cast(F(campo_data), DateTimeField())),
+        ).order_by("-_concluida_em", "-id")
+
+    # Mantém a proteção existente contra reservas antigas sem evidência operacional atual.
+    # Reagendar ou registrar pagamento, isoladamente, não reabre o legado.
+    todas_tarefas = TarefaOperacionalLocacao.objects.filter(locacao_id=OuterRef("pk"))
+    queryset = queryset.annotate(
+        _entrega_recente=Exists(ConferenciaEntregaLocacao.objects.filter(locacao_id=OuterRef("pk"), criado_em__date__gte=MARCO_OPERACIONAL)),
+        _recolhimento_recente=Exists(ConferenciaRecolhimentoLocacao.objects.filter(locacao_id=OuterRef("pk"), criado_em__date__gte=MARCO_OPERACIONAL)),
+        _tentativa_recente=Exists(todas_tarefas.filter(status__in=["pendente", "parcial", "nao_possivel"], tentativa_em__date__gte=MARCO_OPERACIONAL)),
+    )
+    estados = [Locacao.STATUS_RESERVADA, Locacao.STATUS_SAIU_PARA_ENTREGA] if entrega else [Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO]
+    return queryset.filter(status__in=estados).filter(
+        Q(_tem_tarefa=False) | Q(_tarefa_aberta=True)
+    ).filter(
+        Q(data_entrega__gte=MARCO_OPERACIONAL) | Q(_entrega_recente=True) |
+        Q(_recolhimento_recente=True) | Q(_tentativa_recente=True)
+    ).order_by("_data_operacao", F("_horario_operacao").asc(nulls_last=True), "id")
 
 
 def _desde_marco(instante):
