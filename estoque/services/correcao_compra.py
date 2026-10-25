@@ -31,7 +31,11 @@ def payload_hash(post):
 
 
 def _estado(compra, produtos):
+    from estoque.models import ProdutoFornecedor
+    produtos = list(produtos)
     return {"compra": estado_compra(compra), "produtos": list(produtos),
+        "fornecedores":list(ProdutoFornecedor.objects.filter(
+            produto_id__in=[p['id'] for p in produtos],fornecedor_id=compra.fornecedor_id).order_by('pk').values()),
         "conciliacao": list(ConciliacaoCompra.objects.filter(compra=compra).values())}
 
 
@@ -307,6 +311,8 @@ def aplicar(request, compra_id, automatica=False):
         if not automatica and (_hash(plano["estado"]) != token["estado"] or _hash(plano["resumo"]) != token["resumo"]):
             raise ValueError("Estoque, cadastro, compra ou pagamentos mudaram após a prévia. Gere nova confirmação.")
         antes = plano["estado"]; resumo=plano["resumo"]
+        afetados_catalogo = []
+        itens_anteriores = {i['id']:i for i in antes['compra']['itens']}
         for pk, delta in plano["deltas"].items():
             if delta:
                 p = plano["produtos"][pk]; velho=Decimal(p.quantidade or 0); novo=velho+delta
@@ -325,6 +331,10 @@ def aplicar(request, compra_id, automatica=False):
                 item.preco_compra_anterior=None; item.revisao_preco_concluida=False
             item.produto=linha["produto"]; item.estoque_base_registrado=linha["base"]; item.save()
             resumo["itens"][indice]["item_corrigido_id"]=item.pk
+            original = itens_anteriores.get(item.pk)
+            if not original or any(str(getattr(item,c)) != str(original[c]) for c in (
+                'produto_id','preco_unitario','unidade')):
+                afetados_catalogo.append(item.pk)
         for item in plano["removidos"]:
             item.delete()
         etapa_correcao("itens")
@@ -355,6 +365,9 @@ def aplicar(request, compra_id, automatica=False):
         compra.conciliacao_automatica=True
         compra.observacao=f"{compra.observacao or ''}\nCorreção {token['operacao']}: {TIPOS[resumo['tipo']]}. {resumo['motivo']}".strip()
         compra.save(update_fields=["total","total_produtos","ajuste_total","observacao","conciliacao_automatica","atualizado_em"])
+        from .catalogo_correcao_compra import sincronizar
+        resumo['catalogo'] = sincronizar(compra, afetados_catalogo, anteriores=antes['compra']['itens'])
+        etapa_correcao('catalogo')
         resumo["movimento_devolucao_id"]=movimento.pk if movimento else None
         edicao=EdicaoCompra.objects.create(compra=compra,operacao=token["operacao"],usuario=request.user,motivo=resumo["motivo"],
             payload_hash=token["payload"],antes=_json(antes),depois={})

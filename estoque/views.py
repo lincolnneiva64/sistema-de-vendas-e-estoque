@@ -12363,9 +12363,9 @@ def compra_editar(request, pk):
                     registro, alterou = aplicar(request, pk, automatica=True)
                 elif request.POST.get("acao_compra") == "salvar_correcao_automatica":
                     from .services.correcao_compra import aplicar
-                    _, alterou = aplicar(request, pk)
+                    registro, alterou = aplicar(request, pk)
                 else:
-                    _, alterou = salvar_edicao(request, pk)
+                    registro, alterou = salvar_edicao(request, pk)
             except (ValueError, ValidationError) as exc:
                 if resposta_json:
                     return JsonResponse({"sucesso": False, "erro": str(exc)}, status=422)
@@ -12383,6 +12383,12 @@ def compra_editar(request, pk):
                 formatar = lambda v: f"{Decimal(v):.2f}".replace(".", ",")
                 resultado = (f"Alterações salvas. Total: R$ {formatar(ajustes['total_anterior'])} → R$ {formatar(ajustes['total_corrigido'])}. "
                     f"Diferença: R$ {formatar(ajustes['diferenca'])}. Estoque e registros financeiros atualizados.")
+            catalogo = registro.depois.get('ajustes', registro.depois).get('catalogo', [])
+            if any(e.get('revisao_criada') for e in catalogo):
+                resultado += ' Custos atualizados; revisão de preços de venda pendente. Os preços de venda foram preservados.'
+            posteriores = [str(e['compra_posterior_id']) for e in catalogo if e['status']=='compra_posterior']
+            if posteriores:
+                resultado += ' Custos do cadastro preservados por compras posteriores: #' + ', #'.join(posteriores) + '.'
             messages.success(request, resultado if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
             if resposta_json:
                 return JsonResponse({"sucesso": True, "redirect_url": reverse("estoque:compras_detalhe", kwargs={"pk": pk})})
@@ -16209,6 +16215,7 @@ def _itens_revisao_precos_posterior():
 
 @require_GET
 def revisao_precos_posterior_pendentes(request):
+    from .services.catalogo_correcao_compra import custo_base_item
     itens = []
     campos = (
         "preco_vista", "preco_prazo", "preco_vista_fracionado",
@@ -16236,7 +16243,7 @@ def revisao_precos_posterior_pendentes(request):
             "nome": produto.nome if produto else "Produto removido",
             "disponivel": bool(produto and not produto.excluido),
             "custo_anterior": str(item.preco_compra_anterior),
-            "custo_novo": str(item.preco_unitario),
+            "custo_novo": str(custo_base_item(item,produto)) if produto else str(item.preco_unitario),
             "vende_fracionado": bool(produto and produto.vende_fracionado),
             "produto": dados,
             "grupo_precos": {'id': vinculo.grupo_id, 'nome': vinculo.grupo.nome,
@@ -16295,6 +16302,12 @@ def revisao_precos_posterior_salvar(request):
                     match = re.fullmatch(r"novo_preco_venda_produto_(\d+)_(.+)", chave)
                     if not match or int(match[1]) != produto_id or match[2] not in campos_permitidos:
                         raise ValueError("Produto ou campo de preco nao permitido.")
+            if enviados:
+                from .services.catalogo_correcao_compra import custo_base_item
+                snapshot = (item.alteracoes_precos or {}).get('preco_compra', {})
+                if produto.preco_compra != custo_base_item(item, produto) or (snapshot and
+                        produto.autoria_precos.get('preco_compra') != snapshot.get('alteracao_id')):
+                    raise ValueError('O custo do cadastro mudou após esta compra. Reabra a revisão atual antes de aprovar preços de venda.')
             for id_enviado, campo, valor in enviados:
                 if int(id_enviado) != produto_id or campo not in campos_permitidos:
                     raise ValueError("Produto ou campo de preco nao permitido.")

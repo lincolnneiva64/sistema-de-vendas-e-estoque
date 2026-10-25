@@ -123,7 +123,7 @@ class EdicaoCompraTests(EdicaoFixture, TestCase):
             "Produto Historico", "Produto Da Compra 2", "Produto Da Compra 3",
         })
 
-    def test_delta_de_estoque_preserva_ids_e_precos_catalogo(self):
+    def test_delta_de_estoque_preserva_ids_atualiza_custo_e_preserva_venda(self):
         dados = self.payload(**{"quantidade[]": ["12"], "preco_unitario[]": ["11"],
             "valor_cobrado": "132", "compra_valor_nota_boleto": "132", "compra_parcela_valor_1": "132"})
         self.client.post(self.url, dados)
@@ -132,7 +132,7 @@ class EdicaoCompraTests(EdicaoFixture, TestCase):
         self.assertEqual(self.item.quantidade, Decimal("12"))
         self.assertEqual(self.item.preco_unitario, Decimal("11"))
         self.assertEqual(self.conta.valor_original, Decimal("132"))
-        self.assertEqual(self.produto.preco_compra, Decimal("15"))
+        self.assertEqual(self.produto.preco_compra, Decimal("11"))
         self.assertEqual(self.produto.preco_vista, Decimal("25"))
         self.assertEqual(self.produto.preco_prazo, Decimal("30"))
         self.assertEqual(self.compra.itens.count(), 1)

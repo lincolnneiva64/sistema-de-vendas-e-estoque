@@ -360,6 +360,8 @@ def salvar_edicao(request, compra_id):
                 Produto.objects.filter(pk=pk).update(quantidade=(produtos[pk].quantidade or Decimal("0")) + delta, atualizado_em=timezone.now())
                 from inventario.rastreabilidade import identificar
                 identificar(pk, produtos[pk].quantidade, (produtos[pk].quantidade or Decimal("0")) + delta, "edicao_compra", f"Compra #{compra.pk}")
+        afetados_catalogo = []
+        originais_catalogo = {i['id']:i for i in antes['itens']}
         for item, linha in planos:
             if item is None:
                 item = ItemCompra(compra=compra)
@@ -368,6 +370,9 @@ def salvar_edicao(request, compra_id):
                     setattr(item, campo, linha[campo])
             item.produto = linha["produto"]
             item.save()
+            original = originais_catalogo.get(item.pk)
+            if not original or any(str(getattr(item,c)) != str(original[c]) for c in ('produto_id','preco_unitario','unidade')):
+                afetados_catalogo.append(item.pk)
         for item in removidos:
             item.delete()
         if parcelas:
@@ -403,6 +408,12 @@ def salvar_edicao(request, compra_id):
         if dados["observacao"] != (compra.observacao or ""):
             compra.observacao = f"{compra.observacao or ''}\nObservacao informada na edicao: {dados['observacao']}".strip()
         compra.save()
+        from .catalogo_correcao_compra import sincronizar
+        from estoque.models import ProdutoFornecedor
+        antes['catalogo_antes'] = _json(list(Produto.objects.filter(pk__in=deltas).order_by('pk').values()))
+        antes['fornecedores_antes'] = _json(list(ProdutoFornecedor.objects.filter(
+            produto_id__in=deltas,fornecedor=compra.fornecedor).order_by('pk').values()))
+        efeitos_catalogo = sincronizar(compra, afetados_catalogo, anteriores=antes['itens'])
         observacao_edicao = (
             f"Edicao {token['operacao']} por {request.user.get_username()}. Motivo: {motivo}. "
             "Estoque corrigido por diferenca; nenhum movimento financeiro criado."
@@ -414,6 +425,11 @@ def salvar_edicao(request, compra_id):
                 f"Movimentos automaticos de compra a vista {ids_revertidos} revertidos e preservados na auditoria."
             )
         _registrar_observacao_compra(compra, observacao_edicao)
+        depois = estado_compra(compra)
+        depois['catalogo'] = efeitos_catalogo
+        depois['catalogo_depois'] = _json(list(Produto.objects.filter(pk__in=deltas).order_by('pk').values()))
+        depois['fornecedores_depois'] = _json(list(ProdutoFornecedor.objects.filter(
+            produto_id__in=deltas,fornecedor=compra.fornecedor).order_by('pk').values()))
         registro = EdicaoCompra.objects.create(compra=compra, operacao=token["operacao"], usuario=request.user,
-            motivo=motivo, payload_hash=payload_hash, antes=antes, depois=estado_compra(compra))
+            motivo=motivo, payload_hash=payload_hash, antes=antes, depois=depois)
         return registro, True

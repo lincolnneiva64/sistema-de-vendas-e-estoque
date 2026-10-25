@@ -2775,7 +2775,7 @@
   <header class="compras-header">
     <div>
       <h1 class="compras-title">{% if compra %}Compra #{{ compra.id }}{% else %}Nova Compra{% endif %}</h1>
-      <p class="compras-subtitle">{% if edicao_finalizada %}Corrija os dados da compra finalizada. O estoque acompanha somente a diferença; preços atuais do catálogo são preservados.{% elif finalizando %}Confirme a origem do dinheiro para finalizar de verdade.{% else %}Salve como rascunho quantas vezes precisar, sem lancar financeiro.{% endif %}</p>
+      <p class="compras-subtitle">{% if edicao_finalizada %}Corrija os dados da compra finalizada. Estoque e custos são ajustados; preços de venda são preservados até sua aprovação.{% elif finalizando %}Confirme a origem do dinheiro para finalizar de verdade.{% else %}Salve como rascunho quantas vezes precisar, sem lancar financeiro.{% endif %}</p>
       {% if compra %}
         <div class="compras-meta">
           <span>Status: {{ compra.get_status_display }}</span>
