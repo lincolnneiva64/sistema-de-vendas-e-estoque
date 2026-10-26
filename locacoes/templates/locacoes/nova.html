@@ -463,6 +463,11 @@
       font-weight: 750;
     }
 
+    .erros-reserva { margin: 16px 0; padding: 16px; border: 2px solid #b91c1c; border-radius: 8px; background: #fef2f2; color: #991b1b; }
+    .erros-reserva[hidden] { display: none; }
+    .erros-reserva a { color: inherit; text-decoration: underline; }
+    form [aria-invalid="true"] { border: 2px solid #b91c1c; scroll-margin-top: 24px; }
+
     .btn-locacoes,
     button[type="submit"].btn-success {
       min-height: 48px;
@@ -656,12 +661,20 @@
 
     <form
       method="post"
+      {% if locacao_form.errors or itens_form.errors %}data-preservar-dados="true"{% endif %}
       data-enter-nav
       data-disponibilidade-url="{% url 'locacoes:disponibilidade_dinamica' %}"
       data-resumo-url="{% url 'locacoes:resumo_valores_dinamico' %}"
       {% if modo_edicao %}data-excluir-id="{{ locacao.id }}"{% endif %}
     >
       {% csrf_token %}
+      <div class="erros-reserva" id="erros-reserva" role="alert" tabindex="-1" {% if not locacao_form.errors and not itens_form.errors %}hidden{% endif %}>
+        <strong>LOCAÇÃO NÃO GRAVADA — corrija os campos indicados.</strong>
+        <ul>
+          {% for campo in locacao_form %}{% if campo.errors %}<li><a href="#{{ campo.id_for_label }}">{{ campo.label }}</a>: {{ campo.errors|striptags }}</li>{% endif %}{% endfor %}
+          {% for campo in itens_form %}{% if campo.errors %}<li><a href="#{{ campo.id_for_label }}">{{ campo.label }}</a>: {{ campo.errors|striptags }}</li>{% endif %}{% endfor %}
+        </ul>
+      </div>
       {{ locacao_form.non_field_errors }}
       {{ itens_form.non_field_errors }}
 
@@ -1090,12 +1103,12 @@
       });
 
       atualizarRotulosContratante();
-      if (!campoDataDevolucao?.value) {
+      if (!campoDataDevolucao?.value && form.dataset.preservarDados !== "true") {
         sugerirDevolucao();
       }
       if (
         campoTipoPessoa?.value === "cliente" &&
-        campoCliente?.value
+        campoCliente?.value && form.dataset.preservarDados !== "true"
       ) {
         carregarDadosCliente();
       }
@@ -1179,7 +1192,7 @@
           ) < 0.005
         );
 
-        if (campoFormaPagamento) {
+        if (campoFormaPagamento && form.dataset.preservarDados !== "true") {
           if (
             sinal > 0
             && !campoFormaPagamento.value
@@ -1191,10 +1204,10 @@
         }
 
         if (blocoVencimentoSaldo) {
-          blocoVencimentoSaldo.hidden = quitada;
+          blocoVencimentoSaldo.hidden = quitada && form.dataset.preservarDados !== "true";
         }
 
-        if (campoVencimentoSaldo) {
+        if (campoVencimentoSaldo && form.dataset.preservarDados !== "true") {
           if (quitada) {
             campoVencimentoSaldo.value = "";
           } else if (!campoVencimentoSaldo.value) {
@@ -1268,6 +1281,7 @@
 
         if (
           campoSinal
+          && form.dataset.preservarDados !== "true"
           && !pagamentoAlteradoManualmente
         ) {
           aplicandoPagamentoAutomatico = true;
@@ -1755,6 +1769,46 @@
           controles[proximoIndice].focus();
         }
       );
+    })();
+  </script>
+  <script>
+    (function () {
+      const resumo = document.getElementById("erros-reserva");
+      const form = resumo.closest("form");
+      const visivel = campo => !campo.disabled && campo.type !== "hidden" && campo.getClientRects().length > 0;
+      function focar(campo) {
+        campo.focus({preventScroll: true});
+        campo.scrollIntoView({block: "center", behavior: "auto"});
+      }
+      resumo.addEventListener("click", function (event) {
+        const link = event.target.closest("a[href^='#']");
+        if (!link) return;
+        const campo = Array.from(form.querySelectorAll("input, select, textarea")).find(c => c.id === link.hash.slice(1) && visivel(c));
+        if (campo) { event.preventDefault(); focar(campo); }
+      });
+      form.addEventListener("invalid", function (event) {
+        resumo.hidden = false;
+        event.target.setAttribute("aria-invalid", "true");
+        const lista = resumo.querySelector("ul");
+        if (!Array.from(lista.querySelectorAll("a")).some(a => a.hash === "#" + event.target.id)) {
+          const item = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = "#" + event.target.id;
+          link.textContent = event.target.closest("div")?.querySelector("label")?.textContent || event.target.name;
+          item.append(link, ": " + event.target.validationMessage);
+          lista.append(item);
+        }
+      }, true);
+      function dadosAlterados() { delete form.dataset.preservarDados; }
+      form.addEventListener("input", dadosAlterados, true);
+      form.addEventListener("change", dadosAlterados, true);
+      if (!resumo.hidden) {
+        // Aguarda a inicialização da página e substitui o autofocus do cadastro.
+        window.addEventListener("load", function () {
+          const campo = Array.from(form.querySelectorAll('[aria-invalid="true"]')).find(visivel);
+          focar(campo || resumo);
+        }, {once: true});
+      }
     })();
   </script>
 {% include "estoque/includes/atalho_despesa_global.html" %}

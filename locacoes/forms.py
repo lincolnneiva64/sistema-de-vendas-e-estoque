@@ -248,12 +248,6 @@ class LocacaoForm(forms.Form):
             (cleaned_data.get("endereco_entrega") or "").split()
         ).title()
 
-        if not endereco_entrega:
-            self.add_error(
-                "endereco_entrega",
-                "Informe o endereco da entrega.",
-            )
-
         cleaned_data["endereco_entrega"] = endereco_entrega
         cleaned_data["observacao"] = (cleaned_data.get("observacao") or "").strip()
         cleaned_data["sinal_observacao"] = (cleaned_data.get("sinal_observacao") or "").strip()
