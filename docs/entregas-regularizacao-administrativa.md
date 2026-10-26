@@ -57,6 +57,15 @@ python manage.py consultar_pendencias_entrega_admin | Out-File -Encoding utf8 ma
 ```
 
 O comando usa transação READ ONLY no PostgreSQL e `query_only` no SQLite.
+Sua saída JSON usa escapes Unicode (`ensure_ascii=True`) para atravessar
+terminais e redirecionamentos sem substituir acentos ou outros caracteres.
+Ao ler o JSON, os nomes originais são restaurados. O hash continua calculado
+sobre o corpo sem `hash`, em JSON canônico (`sort_keys=True`, separadores
+compactos, `ensure_ascii=False`) codificado em UTF-8. Indentação, escapes Unicode
+e BOM não mudam os valores lidos; substituição de caracteres na saída muda.
+Não recalcular o hash para aceitar um arquivo divergente: descartar a cópia
+corrompida e gerar um novo manifesto com este comando corrigido, conferindo-o
+novamente. Os hashes de banco, identidade e versão não foram alterados.
 Exporta rota, venda, cliente, produto (ou bloco sem item), quantidade, unidade,
 situação, chave completa, identificador e versão. Inclui total real, lote e hash;
 o manifesto é vinculado ao banco por impressão da configuração sem credenciais.
@@ -118,8 +127,8 @@ A ocorrência volta à lista se ainda atender às regras físicas originais.
 
 Dados fictícios, SQLite temporário e PostgreSQL descartável com schema criado
 diretamente; migrations bloqueadas e configurações sem carregar `.env`.
-43 testes: 37 passam no SQLite (seis exclusivos do PostgreSQL)
-e 43 passam no PostgreSQL. Abrangem itens, blocos, parcial/cancelada, lote de
+45 testes: 39 passam no SQLite (seis exclusivos do PostgreSQL)
+e 45 passam no PostgreSQL. Abrangem itens, blocos, parcial/cancelada, lote de
 35 com nova ocorrência posterior, idempotência, reversão, manifesto divergente,
 rollback integral, permissões, concorrência, IDs antigos, contadores, sugestões,
 GET sem gravação e snapshots de preservação comercial/física/financeira.
@@ -127,6 +136,9 @@ Incluem os 12 testes existentes da listagem e regressão do erro 500.
 Incluem mudanças secundárias em item/bloco, transição para apresentação de bloco
 cancelado, nova ocorrência, proteção contra IDs reutilizados e ambas as ordens de
 regularização/reversão concorrentes com comprovação de espera pelo bloqueio.
+Incluem manifesto com 35 ocorrências serializado em JSON e relido de arquivo,
+com/sem escapes Unicode e BOM, além de saída por terminal ASCII com substituição
+de caracteres, simulação do arquivo exportado e rejeição de conteúdo adulterado.
 
 Limites: SQLite valida regras funcionais, mas não oferece `SELECT FOR UPDATE`;
 a garantia de concorrência foi comprovada em PostgreSQL. Uma reutilização exata

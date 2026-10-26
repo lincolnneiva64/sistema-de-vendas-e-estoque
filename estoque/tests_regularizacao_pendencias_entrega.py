@@ -1,7 +1,7 @@
 """Regularização administrativa em fixtures, sem alterar fatos físicos/comerciais."""
 import copy
 import json
-from io import StringIO
+from io import BytesIO, StringIO, TextIOWrapper
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from concurrent.futures import ThreadPoolExecutor
@@ -306,6 +306,59 @@ class RegularizacaoPendenciasTests(RegularizacaoFixtures, TestCase):
 
 
 class RegularizacaoComandosTests(RegularizacaoFixtures, TransactionTestCase):
+    def test_manifesto_serializado_e_relido_mantem_hash(self):
+        self.cliente.nome = 'João — ação, "aspas", quebra\n e água 💧'
+        self.cliente.save(update_fields=['nome'])
+        for i in range(35):
+            bloco, checklist = self.criar(sem_checklist=i % 2 == 0)
+            if checklist:
+                produto = checklist.item_venda.produto
+                produto.nome = 'Água sanitária — 12/1L 💧'
+                produto.save(update_fields=['nome'])
+        manifesto = admin.consultar()
+        self.assertEqual(manifesto['total'], 35)
+        for ensure_ascii in (False, True):
+            with self.subTest(ensure_ascii=ensure_ascii), TemporaryDirectory(prefix='manifesto-json-') as pasta:
+                caminho = Path(pasta) / 'manifesto.json'
+                caminho.write_text(json.dumps(manifesto, ensure_ascii=ensure_ascii, indent=2), encoding='utf-8-sig')
+                relido = json.loads(caminho.read_text(encoding='utf-8-sig'))
+                self.assertEqual(relido, manifesto)
+                self.assertEqual(admin._hash({k: v for k, v in relido.items() if k != 'hash'}), relido['hash'])
+                saida = StringIO()
+                call_command('regularizar_pendencias_entrega_admin', str(caminho), usuario=self.user.pk,
+                    justificativa=MOTIVO, stdout=saida)
+                self.assertFalse(json.loads(saida.getvalue())['executado'])
+        self.assertFalse(EventoVenda.objects.exists())
+
+    def test_saida_do_comando_preserva_unicode_em_terminal_restrito(self):
+        self.cliente.nome = 'João — ação 💧'
+        self.cliente.save(update_fields=['nome'])
+        self.criar()
+        buffer = BytesIO()
+        terminal = TextIOWrapper(buffer, encoding='ascii', errors='replace')
+        try:
+            call_command('consultar_pendencias_entrega_admin', stdout=terminal)
+            terminal.flush()
+            dados = buffer.getvalue()
+            manifesto = json.loads(dados.decode('ascii'))
+            self.assertEqual(admin._hash({k: v for k, v in manifesto.items() if k != 'hash'}), manifesto['hash'])
+            self.assertEqual(manifesto['ocorrencias'][0]['cliente'], self.cliente.nome)
+            admin._validar_manifesto(manifesto, manifesto['hash'])
+            with TemporaryDirectory(prefix='manifesto-terminal-') as pasta:
+                caminho = Path(pasta) / 'manifesto.json'
+                caminho.write_bytes(dados)
+                saida = StringIO()
+                call_command('regularizar_pendencias_entrega_admin', str(caminho), usuario=self.user.pk,
+                    justificativa=MOTIVO, stdout=saida)
+                self.assertFalse(json.loads(saida.getvalue())['executado'])
+            adulterado = copy.deepcopy(manifesto)
+            adulterado['ocorrencias'][0]['cliente'] += ' modificado'
+            with self.assertRaises(ValidationError):
+                admin._validar_manifesto(adulterado, manifesto['hash'])
+        finally:
+            terminal.close()
+        self.assertFalse(EventoVenda.objects.exists())
+
     def test_consulta_bloqueia_ate_escrita_acidental(self):
         bloco, _ = self.criar()
         def escrever(*args, **kwargs):

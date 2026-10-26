@@ -30,7 +30,10 @@ class Command(BaseCommand):
                 elif not sqlite:
                     raise CommandError("Consulta protegida disponível apenas em PostgreSQL ou SQLite.")
                 manifesto = consultar(options["identificador"])
-            self.stdout.write(json.dumps(manifesto, ensure_ascii=False, indent=2))
+            # stdout pode atravessar codificações de terminal/PowerShell. Escapes
+            # Unicode preservam os valores assinados sem depender dessa codificação.
+            # O hash continua sendo o do conteúdo canônico UTF-8, não desta formatação.
+            self.stdout.write(json.dumps(manifesto, ensure_ascii=True, indent=2))
         except ValidationError as exc:
             raise CommandError("; ".join(exc.messages)) from exc
         finally:
