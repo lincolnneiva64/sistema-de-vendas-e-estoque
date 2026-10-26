@@ -1047,6 +1047,9 @@ class LocacoesPagamentosTermoTests(TestCase):
             ativo=True,
             pode_operar_caixa=True,
         )
+        token = self.client.get(
+            reverse("locacoes:registrar_pagamento", kwargs={"pk": locacao.pk}), secure=True,
+        ).context["operacao_token"]
 
         response = self.client.post(
             reverse("locacoes:registrar_pagamento", kwargs={"pk": locacao.pk}),
@@ -1055,6 +1058,7 @@ class LocacoesPagamentosTermoTests(TestCase):
                 "forma_pagamento": PagamentoLocacao.FORMA_PIX,
                 "responsavel": str(operador.pk),
                 "observacao": "Pagamento no caixa.",
+                "operacao_token": token,
             },
             secure=True,
         )

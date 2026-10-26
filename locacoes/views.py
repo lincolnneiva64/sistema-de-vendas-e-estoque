@@ -1,5 +1,8 @@
 ﻿from decimal import Decimal
 
+import logging
+from uuid import UUID, uuid4
+
 from django.conf import settings
 from django.contrib import messages
 from django.core import signing
@@ -63,6 +66,8 @@ from .services import (
     url_publica_checklist,
     whatsapp_web_url,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _faixa_padrao():
@@ -1322,20 +1327,19 @@ def nova(request):
                 dados_locacao["data_vencimento_saldo"] = None
 
             try:
-                locacao = Locacao.criar_reserva(
-                    dados_locacao,
-                    itens,
-                    responsavel="",
-                )
-                if sinal_valor and sinal_valor > 0:
-                    pagamento = locacao.registrar_pagamento(
-                        sinal_valor,
-                        locacao_form.cleaned_data.get("sinal_forma_pagamento"),
-                        observacao=locacao_form.cleaned_data.get("sinal_observacao", "") or "Sinal da locacao.",
+                with transaction.atomic():
+                    locacao = Locacao.criar_reserva(
+                        dados_locacao,
+                        itens,
                         responsavel="",
                     )
-                    messages.success(request, f"Reserva #{locacao.id} criada com sinal registrado.")
-                    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
+                    if sinal_valor and sinal_valor > 0:
+                        pagamento = locacao.registrar_pagamento(
+                            sinal_valor,
+                            locacao_form.cleaned_data.get("sinal_forma_pagamento"),
+                            observacao=locacao_form.cleaned_data.get("sinal_observacao", "") or "Sinal da locacao.",
+                            responsavel="",
+                        )
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
                     for campo, erros in exc.message_dict.items():
@@ -1344,7 +1348,13 @@ def nova(request):
                 else:
                     locacao_form.add_error(None, exc)
                 messages.warning(request, "Nao foi possivel salvar a reserva.")
+            except Exception:
+                logger.exception("Falha na gravação transacional da reserva e pagamento inicial")
+                locacao_form.add_error(None, "Não foi possível gravar a locação. Nenhuma reserva ou pagamento foi gravado neste envio. Tente novamente.")
             else:
+                if sinal_valor and sinal_valor > 0:
+                    messages.success(request, f"Reserva #{locacao.id} criada com sinal registrado.")
+                    return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
                 messages.success(
                     request,
                     (
@@ -2583,6 +2593,14 @@ def registrar_pagamento(request, pk):
     locacao = get_object_or_404(Locacao.objects.prefetch_related("itens").select_related("cliente"), pk=pk)
     if request.method == "POST":
         form = PagamentoLocacaoForm(request.POST)
+        operacao_token = request.POST.get("operacao_token", "")
+        try:
+            operacao = signing.loads(operacao_token, salt="locacoes.pagamento-direto")
+            if operacao["locacao"] != pk or operacao["usuario"] != request.user.pk:
+                raise ValueError
+            recibo_token = UUID(operacao["recibo"])
+        except (signing.BadSignature, ValueError, KeyError, TypeError):
+            form.add_error(None, "Não foi possível identificar este envio. Reabra Registrar pagamento para tentar novamente; os dados digitados estão abaixo.")
         if form.is_valid():
             try:
                 pagamento = locacao.registrar_pagamento(
@@ -2591,9 +2609,13 @@ def registrar_pagamento(request, pk):
                     data_hora=form.cleaned_data.get("data_hora"),
                     observacao=form.cleaned_data.get("observacao", ""),
                     responsavel=form.cleaned_data.get("responsavel", ""),
+                    recibo_token=recibo_token,
                 )
             except ValidationError as exc:
                 messages.warning(request, "; ".join(exc.messages))
+            except Exception:
+                logger.exception("Falha na gravação transacional do pagamento direto")
+                form.add_error(None, "Não foi possível confirmar o pagamento. Tente novamente usando este mesmo formulário, para evitar duplicidade.")
             else:
                 messages.success(request, "Pagamento de locacao registrado.")
                 return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
@@ -2601,7 +2623,8 @@ def registrar_pagamento(request, pk):
             messages.warning(request, "Revise o pagamento antes de salvar.")
     else:
         form = PagamentoLocacaoForm()
-    return render(request, "locacoes/pagamento.html", {"locacao": locacao, "form": form})
+        operacao_token = signing.dumps({"locacao": pk, "usuario": request.user.pk, "recibo": str(uuid4())}, salt="locacoes.pagamento-direto")
+    return render(request, "locacoes/pagamento.html", {"locacao": locacao, "form": form, "operacao_token": operacao_token})
 
 
 @require_POST

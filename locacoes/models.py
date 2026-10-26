@@ -1009,18 +1009,31 @@ class Locacao(models.Model):
         responsavel="",
         criar_movimento_financeiro=True,
         operacao_recebimento_cliente=None,
+        recibo_token=None,
     ):
         valor = Decimal(valor or "0").quantize(Decimal("0.01"))
         if valor <= Decimal("0.00"):
             raise ValidationError("Informe um valor de pagamento maior que zero.")
-        saldo_atual = (self.saldo_devedor or self.total or Decimal("0.00")).quantize(Decimal("0.01"))
-        if valor > saldo_atual:
-            raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
         if forma_pagamento not in dict(PagamentoLocacao.FORMA_CHOICES):
             raise ValidationError("Forma de pagamento invalida.")
 
         with transaction.atomic():
             locacao = Locacao.objects.select_for_update().get(pk=self.pk)
+            if recibo_token is not None:
+                # O UUID identifica o envio e seu recibo. O lock serializa
+                # reenvios antes de qualquer baixa ou movimento financeiro.
+                existente = locacao.pagamentos.filter(recibo_token=recibo_token).first()
+                if existente:
+                    if (
+                        existente.valor != valor
+                        or existente.forma_pagamento != forma_pagamento
+                        or existente.observacao != str(observacao or "").strip()
+                        or existente.responsavel != str(responsavel or "").strip()
+                        or (data_hora is not None and existente.data_hora != data_hora)
+                    ):
+                        raise ValidationError("Este envio já foi registrado com outros dados. Abra um novo pagamento para registrar outro recebimento.")
+                    self.refresh_from_db()
+                    return existente
             locacao.atualizar_financeiro()
             if valor > locacao.saldo_devedor:
                 raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
@@ -1032,6 +1045,7 @@ class Locacao(models.Model):
                 forma_pagamento=forma_pagamento,
                 observacao=str(observacao or "").strip(),
                 responsavel=str(responsavel or "").strip(),
+                **({"recibo_token": recibo_token} if recibo_token is not None else {}),
             )
             if criar_movimento_financeiro:
                 pagamento.criar_movimento_financeiro()

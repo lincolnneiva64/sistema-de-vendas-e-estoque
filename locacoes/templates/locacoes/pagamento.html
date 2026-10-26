@@ -32,6 +32,7 @@
     </section>
     <form method="post" class="cardx" data-enter-nav>
       {% csrf_token %}
+      <input type="hidden" name="operacao_token" value="{{ operacao_token }}">
       {{ form.non_field_errors }}
       <div class="grid">
         <div>
