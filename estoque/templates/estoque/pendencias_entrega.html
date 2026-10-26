@@ -229,6 +229,7 @@
                         <div class="pend-tratar-section">
                           <p class="pend-future-title">Acoes</p>
                           <p class="pend-danger-note">Esta pendencia continua aberta e aparecera automaticamente na proxima criacao de rota relacionada, enquanto nao for removida da nota ou resolvida.</p>
+                          {% if pendencia.id %}
                           <div class="pend-action-group pend-danger-group">
                             <p class="pend-action-group-title">Acao delicada</p>
                             <div class="pend-future-actions">
@@ -236,6 +237,7 @@
                             </div>
                             <p class="pend-danger-note">Abre uma revisao antes de alterar a venda original.</p>
                           </div>
+                          {% endif %}
                         </div>
                       </div>
                     </div>
