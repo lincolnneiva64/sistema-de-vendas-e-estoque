@@ -227,10 +227,10 @@ def _dados_evento_quantidade_alterada(evento):
     }
 
 
-def alteracoes_fisicas_apos_separacao(separacao):
+def alteracoes_fisicas_apos_separacao(separacao, eventos=None):
     alteracoes = []
 
-    for evento in eventos_fisicos_apos_separacao(separacao):
+    for evento in eventos if eventos is not None else eventos_fisicos_apos_separacao(separacao):
         dados = None
 
         if evento.tipo_evento in {
@@ -262,8 +262,8 @@ def _decimal_quantidade(valor):
         return None
 
 
-def consolidar_alteracoes_fisicas_apos_separacao(separacao):
-    alteracoes = alteracoes_fisicas_apos_separacao(separacao)
+def consolidar_alteracoes_fisicas_apos_separacao(separacao, eventos=None):
+    alteracoes = alteracoes_fisicas_apos_separacao(separacao, eventos=eventos)
     quantidades = {}
     outras = []
 

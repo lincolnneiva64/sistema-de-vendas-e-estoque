@@ -22,7 +22,7 @@
   .sep-card { padding: 11px; transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
   .sep-card.is-active { border-color: #2563eb; box-shadow: 0 10px 28px rgba(37, 99, 235, 0.16); }
   .sep-card.is-done:not(.is-active) { padding: 9px 10px; background: #fbfdff; }
-  .sep-card.is-done:not(.is-active) .sep-work { display: none; }
+  .sep-card:not(.is-active) .sep-work { display: none; }
   .sep-card.is-pending:not(.is-active) { opacity: 0.88; }
   .sep-compact { width: 100%; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: start; border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
   .sep-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #e2e8f0; color: #334155; font-size: 1rem; font-weight: 950; }
@@ -70,6 +70,11 @@
       <p class="sep-sub">{{ venda.cliente.nome|default:"Consumidor" }} - enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</p>
       <p class="sep-sub">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</p>
       <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+      {% if modo_consulta %}
+        <p class="sep-sub"><strong>Consulta do checklist concluído</strong></p>
+        <p class="sep-sub">Conclusão: {{ separacao.finalizado_em|date:"d/m/Y H:i"|default:"Data não registrada" }} · Conferido por: {{ separacao.separado_por|default:"Não registrado" }}</p>
+        <p class="sep-sub">Quantidades e resultados preservados da conferência original.</p>
+      {% endif %}
     </header>
 
     {% if messages %}
@@ -80,7 +85,12 @@
       </div>
     {% endif %}
 
-    {% if divergencias %}
+    {% if modo_consulta and revisao_para_exibicao %}
+      <section class="sep-alert" role="status">
+        A venda possui alterações posteriores à conclusão que necessitam de conferência. O checklist original foi preservado.
+        {% if alteracoes_posteriores %}<ul>{% for alteracao in alteracoes_posteriores %}<li>{{ alteracao.produto }} — {% if alteracao.tipo == 'retirar' or alteracao.tipo == 'removido' %}Retirar{% else %}Acrescentar{% endif %} {{ alteracao.quantidade }} {{ alteracao.unidade }}</li>{% endfor %}</ul>{% endif %}
+      </section>
+    {% elif divergencias and not modo_consulta %}
       <section class="sep-alert">
         A venda foi alterada apos o envio para separacao. Este checklist nao deve ser processado ate ser atualizado/reemitido.
         <ul>
@@ -91,8 +101,9 @@
       </section>
     {% endif %}
 
-    <form class="sep-form" method="post" id="separacaoChecklistForm">
-      {% csrf_token %}
+    {% if modo_consulta %}<section class="sep-form" data-consulta-checklist>
+    {% else %}<form class="sep-form" method="post" id="separacaoChecklistForm">
+      {% csrf_token %}{% endif %}
       {% for item in itens %}
         <article
           class="sep-card {% if item.conferido %}is-done{% else %}is-pending{% endif %}"
@@ -106,15 +117,20 @@
           data-passo="{{ item.quantidade_passo_data }}"
           data-permite-acima="{{ item.permite_quantidade_acima|yesno:'true,false' }}"
         >
-          <button class="sep-compact" type="button" data-reabrir-item>
+          <button class="sep-compact" type="button" data-reabrir-item aria-expanded="false" aria-controls="sep-detalhes-{{ item.id }}">
             <span class="sep-icon {{ item.resultado_classe }}" data-resultado-icone>{{ item.resultado_icone }}</span>
             <span>
               <span class="sep-prod">{{ item.produto_nome_snapshot }}</span>
               <span class="sep-result {{ item.resultado_classe }}" data-resultado-texto>{{ item.resultado_texto }}</span>
             </span>
           </button>
-          <div class="sep-work">
+          <div class="sep-work" id="sep-detalhes-{{ item.id }}">
             <p class="sep-qtd">Solicitado: {{ item.quantidade_solicitada_formatada }} {{ item.unidade_snapshot }}</p>
+            {% if modo_consulta %}
+              <p class="sep-qtd">Separado: {{ item.quantidade_separada_formatada|default:"Não registrado" }} {{ item.unidade_snapshot }}</p>
+              <p class="sep-qtd">Resultado: {{ item.resultado_texto }}</p>
+              {% if item.observacao %}<p class="sep-qtd">Observação: {{ item.observacao }}</p>{% endif %}
+            {% else %}
             <div class="sep-options">
               <label class="sep-option">
                 <input type="radio" name="status_{{ item.id }}" value="conferido" {% if item.status == "conferido" %}checked{% endif %} {% if divergencias %}disabled{% endif %}>
@@ -165,25 +181,38 @@
               {% endif %}
             </div>
             <p class="sep-save-state" data-save-state></p>
+            {% endif %}
           </div>
         </article>
       {% endfor %}
-      <div class="sep-done-all {% if checklist_resumo.concluida %}is-visible{% endif %}" id="sepDoneAll">
+      {% if not modo_consulta %}<div class="sep-done-all {% if checklist_resumo.concluida %}is-visible{% endif %}" id="sepDoneAll">
         <span>✓</span>
         <span>Conferencia dos itens concluida</span>
-      </div>
+      </div>{% endif %}
       <div class="sep-actions">
+        {% if not modo_consulta %}
         <p class="sep-submit-feedback" id="sepSubmitFeedback"></p>
         <button class="sep-btn" type="submit" id="sepSubmitBtn" {% if divergencias %}disabled{% endif %}>CONCLUIR SEPARACAO</button>
+        {% endif %}
         <a class="sep-btn secondary" href="{% url 'estoque:separacao_vendas_fila' %}">Voltar para fila</a>
       </div>
-    </form>
+    {% if modo_consulta %}</section>{% else %}</form>{% endif %}
   </div>
 </main>
 <script>
 (() => {
   const cards = Array.from(document.querySelectorAll("[data-sep-item]"));
   if (!cards.length) return;
+  if (document.querySelector("[data-consulta-checklist]")) {
+    cards.forEach((card) => card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => {
+      const abrir = !card.classList.contains("is-active");
+      cards.forEach((item) => {
+        item.classList.toggle("is-active", abrir && item === card);
+        item.querySelector("[data-reabrir-item]")?.setAttribute("aria-expanded", String(abrir && item === card));
+      });
+    }));
+    return;
+  }
   const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
   const submitBtn = document.getElementById("sepSubmitBtn");
   const submitFeedback = document.getElementById("sepSubmitFeedback");
@@ -283,7 +312,10 @@
   };
 
   const setActive = (card) => {
-    cards.forEach((item) => item.classList.toggle("is-active", item === card));
+    cards.forEach((item) => {
+      item.classList.toggle("is-active", item === card);
+      item.querySelector("[data-reabrir-item]")?.setAttribute("aria-expanded", String(item === card));
+    });
     cards.forEach((item) => syncQuantidadeValidation(item));
   };
 
@@ -530,7 +562,7 @@
 
   cards.forEach((card) => {
     card.dataset.confirmado = card.classList.contains("is-done") ? "true" : "false";
-    card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card));
+    card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card.classList.contains("is-active") ? null : card));
     card.querySelectorAll("input[type='radio']").forEach((input) => {
       input.addEventListener("change", () => {
         const quantidade = card.querySelector("[data-qtd-input]");
@@ -625,7 +657,7 @@
     }
   }, true);
 
-  setActive(cards.find((card) => card.classList.contains("is-pending")) || cards[0]);
+  setActive(null);
   updateCompletion();
 })();
 </script>

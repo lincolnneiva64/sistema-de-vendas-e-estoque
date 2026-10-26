@@ -68,6 +68,7 @@ from .services.separacao_vendas import (
     consolidar_alteracoes_fisicas_apos_separacao,
     criar_ou_obter_separacao_venda,
     divergencias_separacao_venda,
+    eventos_fisicos_apos_separacao,
     item_separacao_registra_peso_real,
     item_separacao_tem_pendencia,
     marcar_revisao_pendente_se_necessario,
@@ -25079,6 +25080,19 @@ def _resumo_item_pendencia_separacao(item):
     }
 
 
+def _checklist_separacao_em_consulta(separacao):
+    return bool(separacao.finalizado_em or separacao.teve_revisao
+                or separacao.revisao_concluida_em or separacao.status == SeparacaoVenda.STATUS_SEPARADA)
+
+
+def _revisao_separacao_para_exibicao(separacao):
+    # A leitura dos eventos já exclui alterações atendidas e anteriores à revisão.
+    # Divergência com snapshot histórico, sozinha, não recria uma revisão.
+    eventos = eventos_fisicos_apos_separacao(separacao)
+    alteracoes = consolidar_alteracoes_fisicas_apos_separacao(separacao, eventos=eventos)
+    return bool(separacao.revisao_pendente or eventos), alteracoes
+
+
 def _montar_grupos_rota_separacao(separacoes):
     grupos = {}
     for separacao in separacoes:
@@ -25089,13 +25103,10 @@ def _montar_grupos_rota_separacao(separacoes):
         itens = list(separacao.itens.all())
 
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
-        separacao.alteracoes_fisicas_fila = (
-            consolidar_alteracoes_fisicas_apos_separacao(separacao)
-        )
-        separacao.tem_revisao_pendente_fila = bool(separacao.revisao_pendente)
+        separacao.tem_revisao_pendente_fila, separacao.alteracoes_fisicas_fila = _revisao_separacao_para_exibicao(separacao)
         separacao.tem_alteracao_fisica_fila = (
-            bool(separacao.alteracoes_fisicas_fila)
-            and separacao.tem_revisao_pendente_fila
+            separacao.tem_revisao_pendente_fila
+            and _checklist_separacao_em_consulta(separacao)
         )
 
         acrescimos_apos_separacao = {
@@ -25635,6 +25646,8 @@ def separacao_venda_item_salvar(request, pk, item_id):
         SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel"),
         pk=pk,
     )
+    if _checklist_separacao_em_consulta(separacao):
+        return JsonResponse({"sucesso": False, "mensagem": "Checklist concluído disponível somente para consulta."}, status=409)
     sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
     if sincronizou_checklist_aberto:
         separacao.refresh_from_db()
@@ -25650,6 +25663,8 @@ def separacao_venda_item_salvar(request, pk, item_id):
 
     with transaction.atomic():
         separacao = SeparacaoVenda.objects.select_for_update().get(pk=separacao.pk)
+        if _checklist_separacao_em_consulta(separacao):
+            return JsonResponse({"sucesso": False, "mensagem": "Checklist concluído disponível somente para consulta."}, status=409)
         item = get_object_or_404(
             SeparacaoVendaItem.objects.select_for_update(),
             pk=item_id,
@@ -25725,17 +25740,21 @@ def separacao_venda_alteracao_atendida(request, pk):
 
 def separacao_venda_detalhe(request, pk):
     separacao = get_object_or_404(
-        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel")
+        SeparacaoVenda.objects.select_related("venda", "venda__cliente", "responsavel", "separado_por")
         .prefetch_related("itens__item_venda__produto"),
         pk=pk,
     )
-    sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
-    if sincronizou_checklist_aberto:
-        separacao.refresh_from_db()
-
+    modo_consulta = _checklist_separacao_em_consulta(separacao)
+    if request.method == "POST" and modo_consulta:
+        return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
+    if request.method == "POST":
+        sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
+        if sincronizou_checklist_aberto:
+            separacao.refresh_from_db()
     divergencias = divergencias_separacao_venda(separacao)
-    if divergencias:
+    if divergencias and request.method == "POST":
         marcar_revisao_pendente_se_necessario(separacao)
+    revisao_para_exibicao, alteracoes = _revisao_separacao_para_exibicao(separacao) if modo_consulta else (False, [])
 
     if request.method == "POST":
         if divergencias:
@@ -25751,6 +25770,8 @@ def separacao_venda_detalhe(request, pk):
                 .prefetch_related("itens")
                 .get(pk=separacao.pk)
             )
+            if _checklist_separacao_em_consulta(separacao):
+                return redirect("estoque:separacao_venda_detalhe", pk=separacao.pk)
             itens_bloqueados = list(separacao.itens.all())
             itens_pendentes = [
                 item for item in itens_bloqueados
@@ -25806,6 +25827,9 @@ def separacao_venda_detalhe(request, pk):
             "itens": itens,
             "divergencias": divergencias,
             "checklist_resumo": _resumo_checklist_separacao(separacao),
+            "modo_consulta": modo_consulta,
+            "revisao_para_exibicao": revisao_para_exibicao,
+            "alteracoes_posteriores": alteracoes,
         },
     )
 

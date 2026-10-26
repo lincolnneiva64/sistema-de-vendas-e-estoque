@@ -209,6 +209,9 @@
                 {% if separacao.tem_alteracao_fisica_fila %}
                   <div class="sep-alert">
                     <strong>ALTERACAO APOS SEPARACAO</strong>
+                    {% if not separacao.alteracoes_fisicas_fila %}
+                      <div>Há alterações posteriores à conclusão que necessitam de conferência. O checklist original foi preservado.</div>
+                    {% endif %}
                     {% for alteracao in separacao.alteracoes_fisicas_fila %}
                       <div>
                         {{ alteracao.produto }} -
