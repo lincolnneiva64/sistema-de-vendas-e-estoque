@@ -158,6 +158,28 @@ class ConsultaOperacionalTests(TestCase):
         self.assertEqual(len(resposta.context["locacoes"]), 25)
         self.assertTrue(any("LIMIT 25" in q["sql"].upper() for q in queries))
 
+    def test_destaque_entrega_depende_da_operacao_e_nao_do_financeiro(self):
+        import re
+        futura = self.criar(2, saldo_devedor=0, status_financeiro="quitada")
+        atrasada = self.criar(-2, status="saiu_para_entrega")
+        entregue = self.criar(status="entregue", saldo_devedor=30)
+        for filtros in ({}, {"aba": "recolhimentos"}, {"visao": "historico"}):
+            resposta = self.consultar(**filtros)
+            linhas = re.findall(r'<tr([^>]*)>(.*?)</tr>', resposta.content.decode(), re.S)
+            for atributos, conteudo in linhas:
+                if 'data-label=' not in conteudo:
+                    continue
+                pendente = not filtros and (f'#{futura.pk}</a>' in conteudo or f'#{atrasada.pk}</a>' in conteudo)
+                self.assertEqual('entrega-pendente' in atributos, bool(pendente))
+                if not filtros and f'#{futura.pk}</a>' in conteudo:
+                    self.assertIn('Aguardando entrega', conteudo)
+                    self.assertNotIn('entrega-atrasada', atributos)
+                if not filtros and f'#{atrasada.pk}</a>' in conteudo:
+                    self.assertIn('entrega-atrasada', atributos)
+                    self.assertIn('Entrega atrasada', conteudo)
+                if f'#{entregue.pk}</a>' in conteudo:
+                    self.assertNotIn('entrega-pendente', atributos)
+
     def test_cenarios_sinteticos_77_98_99_101_102_sem_trocar_filtros(self):
         self.criar(pk=77, dias=-2, pessoa_avulsa_nome="Cliente fict?cio 77")
         self.criar(pk=98, dias=2, pessoa_avulsa_nome="Cliente fict?cio 98")

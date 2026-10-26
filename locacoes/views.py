@@ -873,7 +873,8 @@ def lista(request):
             locacao.indicador_operacional = {
                 "texto": (("Entrega realizada" if entrega else "Recolhimento concluído") if operacao_realizada
                           else (("Entrega atrasada" if entrega else "Recolhimento atrasado")
-                                if atrasada else ("Entrega prevista" if entrega else "Aguardando recolhimento"))),
+                                if atrasada else ("Aguardando entrega" if entrega else "Aguardando recolhimento"))),
+                "entrega_pendente": entrega and not operacao_realizada,
                 "data": conclusao.date() if conclusao else locacao._data_operacao,
                 "horario": (conclusao.time() if conclusao.hour or conclusao.minute else None) if conclusao else locacao._horario_operacao,
                 "atraso": atrasada,

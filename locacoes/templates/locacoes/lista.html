@@ -558,7 +558,7 @@
           </thead>
           <tbody>
             {% for locacao in locacoes %}
-              <tr>
+              <tr{% if aba == 'entregas' and not historico and locacao.indicador_operacional.entrega_pendente %} class="entrega-pendente{% if locacao.indicador_operacional.atraso %} entrega-atrasada{% endif %}"{% endif %}>
                 <td data-label="Locação">
                   {% if locacao.acoes_consulta.pode_editar %}
                     <a href="{% url 'locacoes:editar' locacao.id %}">#{{ locacao.id }}</a>
