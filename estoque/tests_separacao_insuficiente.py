@@ -138,6 +138,6 @@ class InsuficienteBrowserTests(PesoFixtures, StaticLiveServerTestCase):
                         self.assertEqual(antes, [list(m.objects.order_by("pk").values()) for m in modelos])
                         tab.call("Page.navigate", {"url": self.live_server_url + reverse("estoque:separacao_vendas_fila")})
                         tab.wait('document.readyState==="complete" && !!document.querySelector(".pend-list")')
-                        self.assertIn("Faltam:", tab.evaluate("document.body.textContent"))
+                        self.assertIn("falta", tab.evaluate("document.body.textContent"))
             finally:
                 browser.stop()

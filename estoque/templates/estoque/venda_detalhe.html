@@ -2361,7 +2361,7 @@
                                             {% for evento in grupo.list %}
                                                 <div class="historico-linha">
                                                     <span class="historico-hora">{{ evento.criado_em|date:"H:i" }}</span>
-                                                    <span class="historico-descricao">&mdash; {{ evento.descricao }}</span>
+                                                    <span class="historico-descricao">&mdash; {{ evento.descricao_exibicao }}</span>
                                                 </div>
                                             {% endfor %}
                                         </div>
@@ -2380,7 +2380,7 @@
                                 <div class="comunicacao-linha">
                                     <span class="comunicacao-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
                                     <span class="comunicacao-descricao">
-                                        {{ evento.descricao }}
+                                        {{ evento.descricao_exibicao }}
                                         {% if evento.numero_whatsapp %}
                                             <span class="comunicacao-meta">- numero {{ evento.numero_whatsapp }}</span>
                                         {% endif %}

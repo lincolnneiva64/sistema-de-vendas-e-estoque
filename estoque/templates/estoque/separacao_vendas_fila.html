@@ -51,6 +51,8 @@
   .pend-name { font-weight: 950; color: #9a3412; overflow-wrap: anywhere; }
   .pend-grid { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 5px; color: #7c2d12; font-size: 0.82rem; font-weight: 850; }
   .pend-obs { margin-top: 5px; color: #64748b; font-size: 0.82rem; font-weight: 750; overflow-wrap: anywhere; }
+  .pend-resolvidos .pend-item { border-color: #b7d8c3; background: #f7fbf8; }
+  .pend-resolvidos .pend-name, .pend-resolvidos .pend-grid { color: #166534; }
   .sep-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .sep-count { border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 8px; color: #475569; font-size: 0.78rem; font-weight: 850; }
   .sep-count strong { color: #111827; }
@@ -272,9 +274,9 @@
                         <div class="pend-name">{{ item.produto }}</div>
                         <div class="pend-grid">
                           <span>{{ item.status_texto }}</span>
-                          <span>Solicitado: {{ item.quantidade_solicitada }}</span>
-                          <span>Separado: {{ item.quantidade_separada }}</span>
-                          <span>Faltam: {{ item.quantidade_faltante }}</span>
+                          <span>Solicitado: {{ item.quantidade_solicitada }} {{ item.unidade }}</span>
+                          <span>Separado: {{ item.quantidade_separada }} {{ item.unidade }}</span>
+                          <span>Nota atual: {{ item.quantidade_atual_nota }} {{ item.unidade_atual }}</span>
                         </div>
                         {% if item.observacao %}
                           <div class="pend-obs">{{ item.observacao }}</div>
@@ -284,13 +286,28 @@
                   </div>
                 {% endif %}
 
+                {% if separacao.itens_resolvidos %}
+                  <details class="pend-list pend-resolvidos">
+                    <summary>{{ separacao.total_resolvidos }} resolvido{{ separacao.total_resolvidos|pluralize:"s" }}</summary>
+                    {% for item in separacao.itens_resolvidos %}
+                      <div class="pend-item">
+                        <div class="pend-name">{{ item.produto }}</div>
+                        <div>{{ item.resolucao_texto }}</div>
+                        <div class="pend-grid">
+                          <span>Solicitado originalmente: {{ item.quantidade_solicitada }} {{ item.unidade }}</span>
+                          <span>Separado na conferência: {{ item.quantidade_separada }} {{ item.unidade }}</span>
+                          <span>Nota atual: {{ item.quantidade_atual_nota }} {{ item.unidade_atual }}</span>
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </details>
+                {% endif %}
                 <div class="sep-counts">
                   <span class="sep-count"><strong>{{ separacao.total_itens }}</strong> itens</span>
-                  <span class="sep-count"><strong>{{ separacao.total_conferidos }}</strong> OK</span>
-                  <span class="sep-count"><strong>{{ separacao.total_pendentes }}</strong> pendentes</span>
-                  {% if separacao.total_pendencias %}
-                    <span class="sep-count"><strong>{{ separacao.total_pendencias }}</strong> com problema</span>
-                  {% endif %}
+                  <span class="sep-count">OK originais: <strong>{{ separacao.total_conferidos }}</strong></span>
+                  <span class="sep-count">A conferir: <strong>{{ separacao.total_pendentes }}</strong></span>
+                  <span class="sep-count">Problemas ativos: <strong>{{ separacao.total_pendencias }}</strong></span>
+                  <span class="sep-count">Resolvidos: <strong>{{ separacao.total_resolvidos }}</strong></span>
                 </div>
 
                 <div class="sep-actions">

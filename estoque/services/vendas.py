@@ -355,11 +355,17 @@ def criar_ou_atualizar_venda(*, usuario, dados):
 
                 itens_atuais = list(
                     ItemVenda.objects
-                    .select_for_update()
+                    .select_for_update(of=("self",))
+                    .select_related("produto")
                     .filter(venda=venda)
                     .order_by("id")
                 )
                 itens_atuais_por_id = {item.id: item for item in itens_atuais}
+                identidades_separacao_antes = {
+                    item.pk: (item.produto_id, item.produto.nome if item.produto else "", item.unidade)
+                    for item in itens_atuais
+                }
+                eventos_quantidade_separacao = {}
                 ids_recebidos = set()
 
                 # Impede item_id de outra venda e IDs duplicados no payload.
@@ -496,7 +502,7 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                             unidade_nova,
                         )
 
-                        _registrar_evento_venda(
+                        evento_quantidade = _registrar_evento_venda(
                             venda,
                             "quantidade_item_alterada",
                             (
@@ -508,6 +514,8 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                             canal="sistema",
                             usuario=str(dados.get("operador") or "").strip() or venda.operador,
                         )
+                        if not produto_ou_unidade_mudou:
+                            eventos_quantidade_separacao.setdefault(item_id, []).append(evento_quantidade.pk)
 
                     if snapshot_estoque is not None:
                         if produto_mudou:
@@ -752,7 +760,9 @@ def criar_ou_atualizar_venda(*, usuario, dados):
                         venda,
                         "edicao unificada da venda",
                     )
-                _recalcular_status_separacao_da_venda(venda, usuario)
+                _recalcular_status_separacao_da_venda(venda, usuario,
+                    identidades_antes=identidades_separacao_antes,
+                    eventos_quantidade=eventos_quantidade_separacao)
 
 
         except ValueError as exc:

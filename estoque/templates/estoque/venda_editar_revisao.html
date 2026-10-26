@@ -340,7 +340,7 @@
               {% for evento in eventos %}
                 <div class="edit-review-list-item">
                   <span class="edit-review-list-title">{{ evento.criado_em|date:"d/m/Y H:i" }} - {{ evento.tipo_evento }}</span>
-                  <span class="edit-review-list-meta">{{ evento.descricao|default:"Sem descricao." }}</span>
+                  <span class="edit-review-list-meta">{{ evento.descricao_exibicao|default:"Sem descricao." }}</span>
                 </div>
               {% endfor %}
             </div>

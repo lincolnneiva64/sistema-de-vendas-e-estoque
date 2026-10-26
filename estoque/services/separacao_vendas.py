@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+import re
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -21,20 +22,23 @@ def resolver_pendencia_nota_com_conferencia(separacao_id, usuario=None):
     separacao = SeparacaoVenda.objects.select_for_update().select_related("venda").get(pk=separacao_id)
     if separacao.venda.cancelada or not separacao.finalizado_em:
         return False
-    if not separacao.revisao_pendente and not eventos_fisicos_apos_separacao(separacao):
+    from .pendencias_separacao import ler_resolucoes, preparar_pendencias
+    eventos_pendentes = eventos_fisicos_apos_separacao(separacao)
+    if not separacao.revisao_pendente and not eventos_pendentes and not ler_resolucoes(separacao):
         return False
     # Sale and separation are already locked above. The optional item/product
     # joins must remain readable (including removed items), not lock targets:
     # PostgreSQL rejects FOR UPDATE on the nullable side of an outer join.
     itens = list(separacao.itens.select_for_update(of=("self",)).select_related("item_venda__produto"))
+    preparar_pendencias(separacao, itens)
     atuais = list(ItemVenda.objects.filter(venda_id=separacao.venda_id).values_list("id", flat=True))
     if not itens or set(atuais) != {item.item_venda_id for item in itens}:
         return False
     for item in itens:
         atual = item.item_venda
-        if item.status != SeparacaoVendaItem.STATUS_CONFERIDO:
+        if item.status != SeparacaoVendaItem.STATUS_CONFERIDO and not item.falta_resolvida:
             return False
-        if (not atual.produto_id or item.produto_nome_snapshot != atual.produto.nome
+        if (not atual.produto_id or (item.produto_nome_snapshot != atual.produto.nome and not item.falta_resolvida)
                 or item.unidade_snapshot != atual.unidade
                 or item.quantidade_separada is None or item.quantidade_separada <= 0
                 or atual.quantidade != item.quantidade_separada):
@@ -42,6 +46,11 @@ def resolver_pendencia_nota_com_conferencia(separacao_id, usuario=None):
     # Uma observacao livre nao constitui uma regra verificavel.
     if any(item.observacao for item in itens):
         return False
+    if any(item.falta_resolvida for item in itens) and eventos_pendentes:
+        return False  # Uma resolução por item nunca atende outras alterações.
+    if (separacao.status == SeparacaoVenda.STATUS_SEPARADA and not separacao.revisao_pendente
+            and not eventos_pendentes):
+        return False  # Reenvio não cria um novo atendimento global.
     agora = timezone.now()
     separacao.revisao_pendente = False
     separacao.teve_revisao = True
@@ -96,12 +105,14 @@ def eventos_fisicos_apos_separacao(separacao):
     if ultimo_atendimento is not None:
         marco = ultimo_atendimento.criado_em
 
+    from .pendencias_separacao import eventos_resolvidos
+    atendidos_por_item = eventos_resolvidos(separacao)
     return list(
         EventoVenda.objects.filter(
             venda_id=separacao.venda_id,
             tipo_evento__in=TIPOS_EVENTO_ALTERACAO_FISICA,
             criado_em__gt=marco,
-        ).order_by("criado_em", "id")
+        ).exclude(pk__in=atendidos_por_item).order_by("criado_em", "id")
     )
 
 
@@ -205,16 +216,10 @@ def _dados_evento_quantidade_alterada(evento):
         return None
 
     produto, restante = detalhe.split(". De ", 1)
-    anterior_texto, novo_texto = restante.split(" para ", 1)
-    novo_texto = novo_texto.split(".", 1)[0].strip()
-
-    quantidade_anterior, unidade_anterior = _separar_quantidade_unidade(
-        anterior_texto
-    )
-    quantidade_nova, unidade_nova = _separar_quantidade_unidade(novo_texto)
-
-    if quantidade_anterior is None or quantidade_nova is None:
+    valores = re.match(r"([0-9]+(?:[.,][0-9]+)?)\s+(\S+)\s+para\s+([0-9]+(?:[.,][0-9]+)?)\s+([^\s.]+)(?:\.|\s|$)", restante)
+    if not valores:
         return None
+    quantidade_anterior, unidade_anterior, quantidade_nova, unidade_nova = valores.groups()
 
     return {
         "tipo": "quantidade_alterada",
@@ -320,6 +325,8 @@ def item_separacao_registra_peso_real(item):
 
 
 def item_separacao_tem_pendencia(item):
+    if getattr(item, "falta_resolvida", False):
+        return False
     if item.status == SeparacaoVendaItem.STATUS_NAO_ENCONTRADO:
         return True
     if item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
@@ -539,7 +546,9 @@ def criar_ou_obter_separacao_venda(venda, usuario=None, responsavel=None):
 
 
 def recalcular_status_separacao(separacao, usuario=None):
-    itens = list(separacao.itens.all())
+    from .pendencias_separacao import preparar_pendencias
+    itens = list(separacao.itens.select_related("item_venda__produto"))
+    preparar_pendencias(separacao, itens)
     status_anterior = separacao.status
     agora = timezone.now()
 
@@ -547,10 +556,13 @@ def recalcular_status_separacao(separacao, usuario=None):
         novo_status = SeparacaoVenda.STATUS_ENVIADA
     elif any(item_separacao_tem_pendencia(item) for item in itens):
         novo_status = SeparacaoVenda.STATUS_COM_PENDENCIA
-    elif all(item.status == SeparacaoVendaItem.STATUS_CONFERIDO for item in itens):
+    elif all(item.status == SeparacaoVendaItem.STATUS_CONFERIDO or item.falta_resolvida for item in itens):
         novo_status = SeparacaoVenda.STATUS_SEPARADA
     else:
         novo_status = SeparacaoVenda.STATUS_EM_SEPARACAO
+
+    if any(item.falta_resolvida for item in itens) and eventos_fisicos_apos_separacao(separacao):
+        novo_status = SeparacaoVenda.STATUS_COM_PENDENCIA
 
     campos = []
     if separacao.status != novo_status:
@@ -569,7 +581,7 @@ def recalcular_status_separacao(separacao, usuario=None):
         if usuario and not separacao.separado_por_id:
             separacao.separado_por = usuario
             campos.append("separado_por")
-        if novo_status == SeparacaoVenda.STATUS_SEPARADA and separacao.revisao_pendente:
+        if novo_status == SeparacaoVenda.STATUS_SEPARADA and separacao.revisao_pendente and not eventos_fisicos_apos_separacao(separacao):
             separacao.revisao_pendente = False
             separacao.teve_revisao = True
             separacao.revisao_concluida_em = agora
@@ -592,6 +604,8 @@ def divergencias_separacao_venda(separacao):
         itens_separacao = list(itens_separacao_prefetch)
     else:
         itens_separacao = list(separacao.itens.select_related("item_venda", "item_venda__produto"))
+    from .pendencias_separacao import preparar_pendencias
+    preparar_pendencias(separacao, itens_separacao)
 
     itens_venda_prefetch = getattr(separacao.venda, "_prefetched_objects_cache", {}).get("itens")
     if itens_venda_prefetch is not None:
@@ -625,7 +639,7 @@ def divergencias_separacao_venda(separacao):
         nome_atual = item_atual.produto.nome if item_atual.produto else "Produto nao identificado"
         unidade_atual = item_atual.unidade or ""
 
-        if nome_atual != item_sep.produto_nome_snapshot:
+        if nome_atual != item_sep.produto_nome_snapshot and not item_sep.falta_resolvida:
             divergencias.append(
                 f"Produto alterado no item #{item_atual.id}: {item_sep.produto_nome_snapshot} -> {nome_atual}."
             )
@@ -645,7 +659,7 @@ def divergencias_separacao_venda(separacao):
             and quantidade_atual == quantidade_peso_real
         )
 
-        if quantidade_atual != quantidade_snapshot and not peso_real_reconciliado:
+        if quantidade_atual != quantidade_snapshot and not peso_real_reconciliado and not item_sep.falta_resolvida:
             divergencias.append(
                 f"Quantidade alterada em {nome_atual}: {quantidade_snapshot} -> {quantidade_atual}."
             )

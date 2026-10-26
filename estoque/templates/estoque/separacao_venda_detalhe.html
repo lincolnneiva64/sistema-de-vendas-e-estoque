@@ -129,6 +129,9 @@
             {% if modo_consulta %}
               <p class="sep-qtd">Separado: {{ item.quantidade_separada_formatada|default:"Não registrado" }} {{ item.unidade_snapshot }}</p>
               <p class="sep-qtd">Resultado: {{ item.resultado_texto }}</p>
+              {% if item.falta_resolvida %}
+                <p class="sep-qtd">Ocorrência original: {{ item.get_status_display }} · Nota atual: {{ item.quantidade_atual_nota|floatformat:"-3" }} {{ item.unidade_snapshot }}</p>
+              {% endif %}
               {% if item.observacao %}<p class="sep-qtd">Observação: {{ item.observacao }}</p>{% endif %}
             {% else %}
             <div class="sep-options">

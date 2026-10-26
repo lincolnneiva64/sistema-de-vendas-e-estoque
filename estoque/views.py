@@ -75,6 +75,7 @@ from .services.separacao_vendas import (
     recalcular_status_separacao,
     sincronizar_checklist_aberto_com_venda,
 )
+from .services.pendencias_separacao import preparar_pendencias
 from .services.precos_antigo_snapshot import (
     buscar_registro_antigo_por_codigo,
     carregar_snapshot_precos,
@@ -16063,8 +16064,11 @@ def _montar_payload_ajuste_separacao_venda(separacao):
         .select_related("item_venda", "item_venda__produto")
         .order_by("item_venda_id")
     )
+    itens = preparar_pendencias(separacao, list(itens))
     itens_payload = []
     for item in itens:
+        if item.falta_resolvida:
+            continue
         item_venda = item.item_venda
         quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
         quantidade_separada_item = (
@@ -16098,7 +16102,9 @@ def _montar_payload_ajuste_separacao_venda(separacao):
             tipo_sugestao = "remover_item"
             sugestao = "Remover item"
         elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE or ajuste_peso_real:
-            if _quantidade_sugerida_ajuste_separacao_valida(item, quantidade_separada):
+            if item_venda and quantidade_atual_venda == quantidade_separada:
+                sugestao = "Quantidade já corresponde à separação. Salve a venda para validar o ajuste."
+            elif _quantidade_sugerida_ajuste_separacao_valida(item, quantidade_separada):
                 tipo_sugestao = "alterar_quantidade"
                 quantidade_sugerida = _formatar_decimal_payload_separacao(quantidade_separada)
                 sugestao = f"Alterar quantidade para {_formatar_quantidade(quantidade_separada)}"
@@ -16179,10 +16185,13 @@ def _ajustes_separacao_foram_aplicados(venda, payload_ajuste):
     return True
 
 
-def _recalcular_status_separacao_da_venda(venda, usuario=None):
+def _recalcular_status_separacao_da_venda(venda, usuario=None, *, identidades_antes=None, eventos_quantidade=None):
     separacao = SeparacaoVenda.objects.filter(venda=venda).first()
     if not separacao:
         return None
+    if separacao.finalizado_em and identidades_antes is not None:
+        from .services.pendencias_separacao import registrar_ajustes_compativeis
+        registrar_ajustes_compativeis(venda, identidades_antes, eventos_quantidade or {}, usuario)
 
     sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
 
@@ -16200,10 +16209,18 @@ def _recalcular_status_separacao_da_venda(venda, usuario=None):
     }
     recalcular_status_separacao(separacao, usuario)
     if revisao_anterior["revisao_pendente"]:
-        # Recalcular o status fisico nao comprova atendimento da revisao da nota.
-        for campo, valor in revisao_anterior.items():
-            setattr(separacao, campo, valor)
-        separacao.save(update_fields=[*revisao_anterior, "atualizado_em"])
+        from .services.pendencias_separacao import ler_resolucoes
+        ajustes_comprovados = (bool(ler_resolucoes(separacao))
+            and not eventos_fisicos_apos_separacao(separacao)
+            and not divergencias_separacao_venda(separacao))
+        if ajustes_comprovados:
+            separacao.revisao_pendente = False
+            separacao.save(update_fields=["revisao_pendente", "atualizado_em"])
+        else:
+            # Recalcular o estado físico não comprova atendimento de outra alteração.
+            for campo, valor in revisao_anterior.items():
+                setattr(separacao, campo, valor)
+            separacao.save(update_fields=[*revisao_anterior, "atualizado_em"])
     marcar_revisao_pendente_se_necessario(separacao)
     return separacao
 
@@ -25068,15 +25085,25 @@ def _ordem_status_separacao(status):
 def _resumo_item_pendencia_separacao(item):
     quantidade_solicitada = Decimal(item.quantidade_solicitada or 0)
     quantidade_separada = Decimal(item.quantidade_separada or 0)
-    quantidade_faltante = max(Decimal("0.000"), quantidade_solicitada - quantidade_separada)
+    quantidade_faltante = getattr(item, "quantidade_faltante_atual", max(Decimal("0.000"), quantidade_solicitada - quantidade_separada))
+    texto = item.get_status_display()
+    if getattr(item, "falta_resolvida", False):
+        texto = item.resolucao_texto
+    elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
+        texto = f"Quantidade insuficiente — falta {_formatar_quantidade(quantidade_faltante)}" if quantidade_faltante > 0 and getattr(item, "quantidades_comparaveis", True) else "Necessita conferência"
     return {
         "produto": item.produto_nome_snapshot,
         "status": item.status,
-        "status_texto": item.get_status_display(),
+        "status_texto": texto,
         "quantidade_solicitada": _formatar_quantidade(quantidade_solicitada),
         "quantidade_separada": _formatar_quantidade(quantidade_separada),
         "quantidade_faltante": _formatar_quantidade(quantidade_faltante),
         "observacao": item.observacao,
+        "unidade": item.unidade_snapshot,
+        "unidade_atual": item.item_venda.unidade if item.item_venda else "",
+        "resolvido": getattr(item, "falta_resolvida", False),
+        "resolucao_texto": getattr(item, "resolucao_texto", ""),
+        "quantidade_atual_nota": _formatar_quantidade(item.quantidade_atual_nota) if getattr(item, "quantidade_atual_nota", None) is not None else "",
     }
 
 
@@ -25100,7 +25127,8 @@ def _montar_grupos_rota_separacao(separacoes):
         if sincronizou_checklist_aberto:
             separacao.refresh_from_db()
 
-        itens = list(separacao.itens.all())
+        cache_itens = getattr(separacao, "_prefetched_objects_cache", {}).get("itens")
+        itens = preparar_pendencias(separacao, list(cache_itens if cache_itens is not None else separacao.itens.select_related("item_venda__produto")))
 
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_revisao_pendente_fila, separacao.alteracoes_fisicas_fila = _revisao_separacao_para_exibicao(separacao)
@@ -25171,11 +25199,21 @@ def _montar_grupos_rota_separacao(separacoes):
             for item in itens_checklist_fila
             if item_separacao_tem_pendencia(item)
         )
+        separacao.total_resolvidos = sum(item.falta_resolvida for item in itens_checklist_fila)
+        separacao.itens_resolvidos = [_resumo_item_pendencia_separacao(item) for item in itens_checklist_fila if item.falta_resolvida]
         separacao.itens_com_pendencia = [
             _resumo_item_pendencia_separacao(item)
             for item in itens_checklist_fila
             if item_separacao_tem_pendencia(item)
         ]
+        chaves_ativas = {(i.produto_nome_snapshot, i.unidade_snapshot)
+                         for i in itens_checklist_fila if item_separacao_tem_pendencia(i)}
+        revisoes_adicionais = {(a["produto"], a.get("unidade", a.get("unidade_nova", "")))
+            for a in separacao.alteracoes_fisicas_fila
+            if (a["produto"], a.get("unidade", a.get("unidade_nova", ""))) not in chaves_ativas}
+        if separacao.tem_revisao_pendente_fila and not separacao.alteracoes_fisicas_fila:
+            revisoes_adicionais.add(("Revisão pendente", ""))
+        separacao.total_pendencias += len(revisoes_adicionais)
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
         separacao.tem_divergencia_fila = (
             bool(separacao.divergencias_fila)
@@ -25606,6 +25644,10 @@ def _preparar_item_checklist_separacao(item):
         item.resultado_classe = "pendente"
         item.resultado_icone = ""
         item.resultado_texto = "Pendente"
+    if getattr(item, "falta_resolvida", False):
+        item.resultado_classe = "ok"
+        item.resultado_icone = "✓"
+        item.resultado_texto = item.resolucao_texto
     return item
 
 
@@ -25816,7 +25858,7 @@ def separacao_venda_detalhe(request, pk):
 
     itens = [
         _preparar_item_checklist_separacao(item)
-        for item in separacao.itens.select_related("item_venda", "item_venda__produto").all()
+        for item in preparar_pendencias(separacao, list(separacao.itens.select_related("item_venda", "item_venda__produto").all()))
     ]
     return render(
         request,

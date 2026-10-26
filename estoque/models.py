@@ -575,6 +575,13 @@ class EventoVenda(models.Model):
     def __str__(self):
         return f"{self.tipo_evento} - Venda #{self.venda_id}"
 
+    @property
+    def descricao_exibicao(self):
+        if self.tipo_evento == "separacao_quantidade_ajustada":
+            from .services.pendencias_separacao import descricao_resolucao
+            return descricao_resolucao(self.descricao)
+        return self.descricao
+
 
 class ItemVenda(models.Model):
     venda = models.ForeignKey(
