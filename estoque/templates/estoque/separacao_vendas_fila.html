@@ -205,7 +205,7 @@
                     <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
                     <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
                   </div>
-                  <span class="sep-status {{ separacao.status_operacional }}">{{ separacao.operacional.mensagem }}</span>
+                  <span class="sep-status {{ separacao.status_operacional }}">{{ separacao.texto_selo_fila }}</span>
                 </div>
 
                 {% if separacao.tem_alteracao_fisica_fila %}

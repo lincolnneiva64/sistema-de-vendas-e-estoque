@@ -25212,6 +25212,14 @@ def _montar_grupos_rota_separacao(separacoes):
             resumo_item = _resumo_item_pendencia_separacao(item)
             resumo_item["aguardando_conferencia"] = aguardando
             separacao.itens_com_pendencia.append(resumo_item)
+        separacao.texto_selo_fila = operacional["mensagem"]
+        tem_ocorrencia_real = (bool(operacional["motivo_global"])
+                              or any(not item["aguardando_conferencia"] for item in separacao.itens_com_pendencia))
+        if not operacional["concluida"] and not tem_ocorrencia_real:
+            if separacao.checklist_nao_iniciado_fila:
+                separacao.texto_selo_fila = "Aguardando separação"
+            elif separacao.mostrar_checklist_incompleto_fila:
+                separacao.texto_selo_fila = "Em separação"
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
         separacao.tem_divergencia_fila = (
             bool(separacao.divergencias_fila)

@@ -48,10 +48,15 @@ class AndamentoFilaFixtures(OperacionalFixtures):
 
 
 class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
+    def conferir_selo(self, resposta, separacao, texto):
+        self.assertEqual(separacao.texto_selo_fila, texto)
+        self.assertContains(resposta, f'<span class="sep-status {separacao.status_operacional}">{texto}</span>')
+
     def test_tres_produtos_nao_iniciados_sem_listagem(self):
         sep, itens, linhas = self.checklist(3)
         r = self.consultar(sep)
         self.assertContains(r, "Aguardando separação — 3 produtos")
+        self.conferir_selo(r, sep, "Aguardando separação")
         self.assertEqual((sep.total_itens, sep.total_resolvidos, sep.total_pendencias), (3, 0, 3))
         self.assertTrue(sep.checklist_nao_iniciado_fila)
         self.assertFalse(sep.itens_com_pendencia)
@@ -62,6 +67,7 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         sep, itens, linhas = self.checklist(30)
         r = self.consultar(sep)
         self.assertContains(r, "Aguardando separação — 30 produtos")
+        self.conferir_selo(r, sep, "Aguardando separação")
         self.assertEqual((sep.total_itens, sep.total_resolvidos, sep.total_pendencias), (30, 0, 30))
         self.assertFalse(sep.itens_com_pendencia)
         self.assertNotContains(r, 'class="pend-item"')
@@ -73,6 +79,7 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         for _ in range(2):
             r = self.consultar(sep)
             self.assertContains(r, "Em separação — faltam conferir 10 produtos")
+            self.conferir_selo(r, sep, "Em separação")
             self.assertFalse(sep.checklist_nao_iniciado_fila)
             self.assertEqual((sep.total_itens, sep.total_resolvidos, sep.total_pendencias), (20, 10, 10))
             self.assertEqual(len(sep.itens_com_pendencia), 10)
@@ -90,6 +97,7 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         r = self.consultar(sep)
         self.assertFalse(sep.checklist_nao_iniciado_fila)
         self.assertContains(r, "Em separação — faltam conferir 10 produtos")
+        self.conferir_selo(r, sep, "Em separação")
         self.assertEqual(len(sep.itens_com_pendencia), 10)
 
     def test_marco_de_inicio_com_itens_pendentes_nao_volta_a_nao_iniciado(self):
@@ -98,6 +106,7 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         r = self.consultar(sep)
         self.assertFalse(sep.checklist_nao_iniciado_fila)
         self.assertContains(r, "Em separação — faltam conferir 3 produtos")
+        self.conferir_selo(r, sep, "Em separação")
         self.assertEqual(len(sep.itens_com_pendencia), 3)
 
     def test_nao_encontrado_falta_e_ainda_nao_conferido_sao_distintos(self):
@@ -109,6 +118,7 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         self.assertContains(r, "Quantidade insuficiente — falta 1", count=1)
         self.assertContains(r, "Ainda não conferido", count=1)
         self.assertContains(r, "Não encontrado", count=1)
+        self.conferir_selo(r, sep, "Separação com pendências")
         self.assertEqual(sum(i["aguardando_conferencia"] for i in sep.itens_com_pendencia), 1)
         self.assertEqual(sep.total_pendencias, 3)
         self.assertEqual(sep.itens_com_pendencia[0]["status"], "nao_encontrado")
@@ -124,11 +134,13 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         self.assertFalse(sep.itens_com_pendencia[0]["aguardando_conferencia"])
         self.assertContains(r, "Necessita conferência")
         self.assertNotContains(r, "Separação concluída — nota pronta")
+        self.conferir_selo(r, sep, "Separação com pendências")
 
     def test_revisao_real_nao_e_ocultada_por_itens_ainda_nao_conferidos(self):
         sep, _, _ = self.checklist(3)
         SeparacaoVenda.objects.filter(pk=sep.pk).update(revisao_pendente=True)
-        self.consultar(sep)
+        r = self.consultar(sep)
+        self.conferir_selo(r, sep, "Separação com pendências")
         self.assertEqual(len(sep.itens_com_pendencia), 3)
         self.assertTrue(all(not i["aguardando_conferencia"] for i in sep.itens_com_pendencia))
 
@@ -137,6 +149,15 @@ class AndamentoFilaTests(AndamentoFilaFixtures, TestCase):
         r = self.consultar(sep)
         self.assertEqual((sep.total_itens, sep.total_resolvidos, sep.total_pendencias), (13, 13, 0))
         self.assertContains(r, "Separação concluída — nota pronta")
+        self.conferir_selo(r, sep, "Separação concluída — nota pronta")
         self.assertFalse(sep.itens_com_pendencia)
         self.assertEqual(len(sep.itens_resolvidos), 2)
         self.assertContains(r, '<details class="pend-list pend-resolvidos">')
+
+    def test_selo_concluido_sem_ocorrencias(self):
+        sep, _, _ = self.checklist(3, 3)
+        r = self.consultar(sep)
+        self.conferir_selo(r, sep, "Separação concluída — nota pronta")
+        self.assertEqual((sep.total_itens, sep.total_resolvidos, sep.total_pendencias), (3, 3, 0))
+        self.assertFalse(sep.checklist_nao_iniciado_fila)
+        self.assertFalse(sep.mostrar_checklist_incompleto_fila)
