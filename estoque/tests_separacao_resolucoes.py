@@ -249,9 +249,9 @@ class ResolucaoSeparacaoBrowserTests(ResolucaoFixtures, StaticLiveServerTestCase
                         tab.wait('document.readyState==="complete" && !!document.querySelector(".sep-list")')
                         tab.evaluate(f"window.card=[...document.querySelectorAll('article.sep-card')].find(c=>c.querySelector('.sep-venda')?.textContent.trim()==='Nota #{venda.pk}');true")
                         texto = tab.evaluate("card.textContent")
-                        self.assertIn("A conferir", texto)
-                        self.assertIn("Problemas ativos", texto)
-                        self.assertIn("Resolvidos", texto)
+                        self.assertIn("produtos", texto)
+                        self.assertIn("pendências", texto.lower())
+                        self.assertIn("resolvidos", texto.lower())
                         self.fila(sep)
                         self.assertEqual((sep.total_pendencias, sep.total_resolvidos), (ativos, resolvidos))
                         if resolvidos:

@@ -190,6 +190,16 @@
           </div>
         {% endif %}
 
+        {% if operacional %}
+          <div class="edit-review-notice" data-resumo-separacao>
+            <strong>{{ operacional.mensagem }}</strong><br>
+            {{ operacional.produtos }} produto{{ operacional.produtos|pluralize:"s" }} | {{ operacional.resolvidos }} resolvido{{ operacional.resolvidos|pluralize:"s" }} | {{ operacional.pendencias }} pendência{{ operacional.pendencias|pluralize:"s" }}
+            {% if operacional.ajustada %}<div>Nota ajustada após a separação — alterações resolvidas.</div>{% endif %}
+            {% if operacional.motivo_global %}<div>{{ operacional.motivo_global }}</div>{% endif %}
+            {% for item in operacional.itens %}{% if item.pendencia_operacional %}<div>{{ item.produto_nome_snapshot }} — {{ item.texto_operacional }}{% if item.motivo_operacional %}: {{ item.motivo_operacional }}{% endif %}</div>{% endif %}{% endfor %}
+          </div>
+        {% endif %}
+
         <div class="edit-review-notice">
           Modo de edicao segura. Nesta etapa, cabecalho pode ter data, vencimento e pagamento alterados; produto pode ser acrescentado, quantidade de item existente pode ser alterada e item pode ser removido com confirmacao.
         </div>

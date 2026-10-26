@@ -75,7 +75,7 @@ from .services.separacao_vendas import (
     recalcular_status_separacao,
     sincronizar_checklist_aberto_com_venda,
 )
-from .services.pendencias_separacao import preparar_pendencias
+from .services.pendencias_separacao import classificar_separacao
 from .services.precos_antigo_snapshot import (
     buscar_registro_antigo_por_codigo,
     carregar_snapshot_precos,
@@ -16064,10 +16064,10 @@ def _montar_payload_ajuste_separacao_venda(separacao):
         .select_related("item_venda", "item_venda__produto")
         .order_by("item_venda_id")
     )
-    itens = preparar_pendencias(separacao, list(itens))
+    itens = classificar_separacao(separacao, list(itens))["itens"]
     itens_payload = []
     for item in itens:
-        if item.falta_resolvida:
+        if item.falta_resolvida and not item.motivo_operacional:
             continue
         item_venda = item.item_venda
         quantidade_solicitada = Decimal(item.quantidade_solicitada or 0).quantize(Decimal("0.001"))
@@ -16103,7 +16103,7 @@ def _montar_payload_ajuste_separacao_venda(separacao):
             sugestao = "Remover item"
         elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE or ajuste_peso_real:
             if item_venda and quantidade_atual_venda == quantidade_separada:
-                sugestao = "Quantidade já corresponde à separação. Salve a venda para validar o ajuste."
+                sugestao = "Necessita conferência: o histórico não comprova o ajuste deste produto."
             elif _quantidade_sugerida_ajuste_separacao_valida(item, quantidade_separada):
                 tipo_sugestao = "alterar_quantidade"
                 quantidade_sugerida = _formatar_decimal_payload_separacao(quantidade_separada)
@@ -16125,7 +16125,7 @@ def _montar_payload_ajuste_separacao_venda(separacao):
             "diferenca": _formatar_decimal_payload_separacao(diferenca),
             "diferenca_formatada": _formatar_quantidade(diferenca),
             "status": item.status,
-            "status_texto": item.get_status_display(),
+            "status_texto": item.texto_operacional,
             "tipo_sugestao": tipo_sugestao,
             "quantidade_sugerida": quantidade_sugerida,
             "sugestao": sugestao,
@@ -24020,11 +24020,14 @@ def venda_editar_revisao(request, pk):
     existe_pendencia = EntregaRotaItem.objects.filter(venda=venda, is_pendencia=True).exists()
     whatsapp_atualizacao = _montar_whatsapp_atualizacao_nota(request, venda)
     contexto_venda_quitada = _contexto_venda_quitada(venda)
+    separacao = SeparacaoVenda.objects.filter(venda=venda).first()
+    operacional = classificar_separacao(separacao) if separacao else None
 
     return render(
         request,
         "estoque/venda_editar_revisao.html",
         {
+            "operacional": operacional,
             "venda": venda,
             "eventos": EventoVenda.objects.filter(venda=venda),
             "entregas": entregas,
@@ -25091,8 +25094,10 @@ def _resumo_item_pendencia_separacao(item):
         texto = item.resolucao_texto
     elif item.status == SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE:
         texto = f"Quantidade insuficiente — falta {_formatar_quantidade(quantidade_faltante)}" if quantidade_faltante > 0 and getattr(item, "quantidades_comparaveis", True) else "Necessita conferência"
+    texto = getattr(item, "texto_operacional", texto)
     return {
         "produto": item.produto_nome_snapshot,
+        "motivo": getattr(item, "motivo_operacional", ""),
         "status": item.status,
         "status_texto": texto,
         "quantidade_solicitada": _formatar_quantidade(quantidade_solicitada),
@@ -25123,13 +25128,12 @@ def _revisao_separacao_para_exibicao(separacao):
 def _montar_grupos_rota_separacao(separacoes):
     grupos = {}
     for separacao in separacoes:
-        sincronizou_checklist_aberto = sincronizar_checklist_aberto_com_venda(separacao)
-        if sincronizou_checklist_aberto:
-            separacao.refresh_from_db()
-
         cache_itens = getattr(separacao, "_prefetched_objects_cache", {}).get("itens")
-        itens = preparar_pendencias(separacao, list(cache_itens if cache_itens is not None else separacao.itens.select_related("item_venda__produto")))
+        itens = list(cache_itens if cache_itens is not None else separacao.itens.select_related("item_venda__produto"))
 
+        operacional = classificar_separacao(separacao, itens)
+        separacao.operacional = operacional
+        separacao.status_operacional = operacional["status"]
         separacao.divergencias_fila = divergencias_separacao_venda(separacao)
         separacao.tem_revisao_pendente_fila, separacao.alteracoes_fisicas_fila = _revisao_separacao_para_exibicao(separacao)
         separacao.tem_alteracao_fisica_fila = (
@@ -25194,26 +25198,13 @@ def _montar_grupos_rota_separacao(separacoes):
                 SeparacaoVenda.STATUS_COM_PENDENCIA,
             }
         )
-        separacao.total_pendencias = sum(
-            1
-            for item in itens_checklist_fila
-            if item_separacao_tem_pendencia(item)
-        )
-        separacao.total_resolvidos = sum(item.falta_resolvida for item in itens_checklist_fila)
-        separacao.itens_resolvidos = [_resumo_item_pendencia_separacao(item) for item in itens_checklist_fila if item.falta_resolvida]
-        separacao.itens_com_pendencia = [
-            _resumo_item_pendencia_separacao(item)
-            for item in itens_checklist_fila
-            if item_separacao_tem_pendencia(item)
-        ]
-        chaves_ativas = {(i.produto_nome_snapshot, i.unidade_snapshot)
-                         for i in itens_checklist_fila if item_separacao_tem_pendencia(i)}
-        revisoes_adicionais = {(a["produto"], a.get("unidade", a.get("unidade_nova", "")))
-            for a in separacao.alteracoes_fisicas_fila
-            if (a["produto"], a.get("unidade", a.get("unidade_nova", ""))) not in chaves_ativas}
-        if separacao.tem_revisao_pendente_fila and not separacao.alteracoes_fisicas_fila:
-            revisoes_adicionais.add(("Revisão pendente", ""))
-        separacao.total_pendencias += len(revisoes_adicionais)
+        separacao.total_itens = operacional["produtos"]
+        separacao.total_pendencias = operacional["pendencias"]
+        separacao.total_resolvidos = operacional["resolvidos"]
+        separacao.itens_resolvidos = [_resumo_item_pendencia_separacao(item) for item in itens
+                                    if item.falta_resolvida and not item.pendencia_operacional]
+        separacao.itens_com_pendencia = [_resumo_item_pendencia_separacao(item) for item in itens
+                                        if item.pendencia_operacional]
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
         separacao.tem_divergencia_fila = (
             bool(separacao.divergencias_fila)
@@ -25224,21 +25215,8 @@ def _montar_grupos_rota_separacao(separacoes):
             if separacao.revisao_pendente or separacao.teve_revisao
             else "durante_separacao"
         )
-        separacao.nota_pronta_fila = (
-            separacao.status == SeparacaoVenda.STATUS_SEPARADA
-            and separacao.total_pendentes == 0
-            and separacao.total_pendencias == 0
-            and not separacao.tem_revisao_pendente_fila
-            and not separacao.tem_ajuste_nota
-        )
-        if separacao.nota_pronta_fila:
-            separacao.mensagem_pronta_fila = (
-                "ALTERACAO REVISADA - NOTA PRONTA PARA ENVIO"
-                if separacao.teve_revisao
-                else "SEPARACAO CONCLUIDA - NOTA PRONTA PARA ENVIO"
-            )
-        else:
-            separacao.mensagem_pronta_fila = ""
+        separacao.nota_pronta_fila = operacional["concluida"]
+        separacao.mensagem_pronta_fila = operacional["mensagem"]
 
         localidade = _localidade_operacional_cliente(separacao.venda.cliente)
         chave = ("localidade", localidade.lower()) if localidade else ("sem_rota", "")
@@ -25261,19 +25239,19 @@ def _montar_grupos_rota_separacao(separacoes):
         grupo = grupos[chave]
         grupo["separacoes"].append(separacao)
         grupo["total_notas"] += 1
-        if separacao.status == SeparacaoVenda.STATUS_SEPARADA:
+        if separacao.status_operacional == SeparacaoVenda.STATUS_SEPARADA:
             grupo["total_separadas"] += 1
-        elif separacao.status == SeparacaoVenda.STATUS_COM_PENDENCIA:
+        elif separacao.status_operacional == SeparacaoVenda.STATUS_COM_PENDENCIA:
             grupo["total_com_pendencia"] += 1
-        elif separacao.status == SeparacaoVenda.STATUS_EM_SEPARACAO:
+        elif separacao.status_operacional == SeparacaoVenda.STATUS_EM_SEPARACAO:
             grupo["total_em_separacao"] += 1
-        elif separacao.status == SeparacaoVenda.STATUS_ENVIADA:
+        elif separacao.status_operacional == SeparacaoVenda.STATUS_ENVIADA:
             grupo["total_enviadas"] += 1
 
     for grupo in grupos.values():
         grupo["separacoes"].sort(
             key=lambda separacao: (
-                _ordem_status_separacao(separacao.status),
+                _ordem_status_separacao(separacao.status_operacional),
                 separacao.numero_sequencial_dia or 999999,
                 separacao.enviado_em,
                 separacao.id,
@@ -25648,6 +25626,11 @@ def _preparar_item_checklist_separacao(item):
         item.resultado_classe = "ok"
         item.resultado_icone = "✓"
         item.resultado_texto = item.resolucao_texto
+    if hasattr(item, "texto_operacional") and item.situacao_operacional != "conferido":
+        item.resultado_texto = item.texto_operacional
+        if item.pendencia_operacional:
+            item.resultado_classe = "pendencia"
+            item.resultado_icone = "!"
     return item
 
 
@@ -25724,6 +25707,10 @@ def separacao_venda_item_salvar(request, pk, item_id):
         recalcular_status_separacao(separacao, request.user)
         separacao.refresh_from_db()
         resumo = _resumo_checklist_separacao(separacao)
+        operacional = classificar_separacao(separacao)
+        resumo["operacional"] = {k: operacional[k] for k in
+            ("produtos", "resolvidos", "pendencias", "concluida", "mensagem", "status")}
+        item = next(i for i in operacional["itens"] if i.pk == item.pk)
 
     return JsonResponse({
         "sucesso": True,
@@ -25856,10 +25843,8 @@ def separacao_venda_detalhe(request, pk):
             return redirect('estoque:separacao_venda_detalhe', pk=separacao.pk)
         return redirect("estoque:separacao_vendas_fila")
 
-    itens = [
-        _preparar_item_checklist_separacao(item)
-        for item in preparar_pendencias(separacao, list(separacao.itens.select_related("item_venda", "item_venda__produto").all()))
-    ]
+    operacional = classificar_separacao(separacao)
+    itens = [_preparar_item_checklist_separacao(item) for item in operacional["itens"]]
     return render(
         request,
         "estoque/separacao_venda_detalhe.html",
@@ -25872,6 +25857,7 @@ def separacao_venda_detalhe(request, pk):
             "modo_consulta": modo_consulta,
             "revisao_para_exibicao": revisao_para_exibicao,
             "alteracoes_posteriores": alteracoes,
+            "operacional": operacional,
         },
     )
 

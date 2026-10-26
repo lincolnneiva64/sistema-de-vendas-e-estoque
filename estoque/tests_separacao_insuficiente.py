@@ -124,7 +124,7 @@ class InsuficienteBrowserTests(PesoFixtures, StaticLiveServerTestCase):
                         self.assertEqual(item.quantidade_solicitada, Decimal("4"))
                         self.assertEqual(item.status, "quantidade_insuficiente")
                         self.assertEqual(sep.status, "com_pendencia")
-                        self.assertIn("faltam", tab.evaluate("card.querySelector('[data-resultado-texto]').textContent"))
+                        self.assertIn("Quantidade insuficiente — falta", tab.evaluate("card.querySelector('[data-resultado-texto]').textContent"))
                         tab.evaluate("card.querySelector('[data-reabrir-item]').click();true")
                         self.assertEqual(tab.evaluate("q.value"), esperado)
                         self.assertLessEqual(tab.evaluate("document.documentElement.scrollWidth"), width)

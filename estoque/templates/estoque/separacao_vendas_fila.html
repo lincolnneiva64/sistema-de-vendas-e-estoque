@@ -192,7 +192,7 @@
 
           <div class="sep-list">
             {% for separacao in grupo.separacoes %}
-              <article class="sep-card {{ separacao.status }}{% if separacao.tem_ajuste_nota %} tem-ajuste-nota{% endif %}{% if separacao.tem_divergencia_fila %} tem-divergencia{% endif %}">
+              <article class="sep-card {{ separacao.status_operacional }}{% if separacao.tem_ajuste_nota %} tem-ajuste-nota{% endif %}{% if separacao.tem_divergencia_fila %} tem-divergencia{% endif %}">
                 <div class="sep-card-top">
                   <div class="sep-main">
                     <div class="sep-line">
@@ -205,7 +205,7 @@
                     <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
                     <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
                   </div>
-                  <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+                  <span class="sep-status {{ separacao.status_operacional }}">{{ separacao.operacional.mensagem }}</span>
                 </div>
 
                 {% if separacao.tem_alteracao_fisica_fila %}
@@ -243,7 +243,7 @@
                     </form>
                   </div>
                 {% elif separacao.nota_pronta_fila %}
-                  <div class="sep-alert ok">{{ separacao.mensagem_pronta_fila }}</div>
+                  <div class="sep-alert ok">{% if separacao.teve_revisao %}ALTERACAO REVISADA - NOTA PRONTA PARA ENVIO{% else %}SEPARACAO CONCLUIDA - NOTA PRONTA PARA ENVIO{% endif %}</div>
                 {% endif %}
 
                 {% if separacao.tem_ajuste_nota and not separacao.itens_com_pendencia %}
@@ -273,7 +273,7 @@
                       <div class="pend-item">
                         <div class="pend-name">{{ item.produto }}</div>
                         <div class="pend-grid">
-                          <span>{{ item.status_texto }}</span>
+                          <span{% if item.motivo %} title="{{ item.motivo }}"{% endif %}>{{ item.status_texto }}</span>
                           <span>Solicitado: {{ item.quantidade_solicitada }} {{ item.unidade }}</span>
                           <span>Separado: {{ item.quantidade_separada }} {{ item.unidade }}</span>
                           <span>Nota atual: {{ item.quantidade_atual_nota }} {{ item.unidade_atual }}</span>
@@ -288,7 +288,7 @@
 
                 {% if separacao.itens_resolvidos %}
                   <details class="pend-list pend-resolvidos">
-                    <summary>{{ separacao.total_resolvidos }} resolvido{{ separacao.total_resolvidos|pluralize:"s" }}</summary>
+                    <summary>{{ separacao.itens_resolvidos|length }} resolvido{{ separacao.itens_resolvidos|length|pluralize:"s" }}</summary>
                     {% for item in separacao.itens_resolvidos %}
                       <div class="pend-item">
                         <div class="pend-name">{{ item.produto }}</div>
@@ -303,11 +303,9 @@
                   </details>
                 {% endif %}
                 <div class="sep-counts">
-                  <span class="sep-count"><strong>{{ separacao.total_itens }}</strong> itens</span>
-                  <span class="sep-count">OK originais: <strong>{{ separacao.total_conferidos }}</strong></span>
-                  <span class="sep-count">A conferir: <strong>{{ separacao.total_pendentes }}</strong></span>
-                  <span class="sep-count">Problemas ativos: <strong>{{ separacao.total_pendencias }}</strong></span>
+                  <span class="sep-count"><strong>{{ separacao.total_itens }}</strong> produto{{ separacao.total_itens|pluralize:"s" }}</span>
                   <span class="sep-count">Resolvidos: <strong>{{ separacao.total_resolvidos }}</strong></span>
+                  <span class="sep-count">Pendências: <strong>{{ separacao.total_pendencias }}</strong></span>
                 </div>
 
                 <div class="sep-actions">

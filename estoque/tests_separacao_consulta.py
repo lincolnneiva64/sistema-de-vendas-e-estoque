@@ -93,7 +93,7 @@ class ConsultaChecklistTests(ConsultaFixtures, TestCase):
         SeparacaoVenda.objects.filter(pk=sep.pk).update(revisao_pendente=True)
         r = self.consultar_sem_gravar(sep)
         self.assertContains(r, "Separado: 3")
-        self.assertContains(r, "faltam 1")
+        self.assertContains(r, "falta 1")
         self.assertContains(r, "necessitam de conferência")
 
     def test_post_direto_nao_modifica_checklist_concluido(self):

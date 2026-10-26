@@ -69,7 +69,7 @@
       <h1 class="sep-title">Separacao da venda #{{ venda.id }}</h1>
       <p class="sep-sub">{{ venda.cliente.nome|default:"Consumidor" }} - enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</p>
       <p class="sep-sub">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</p>
-      <span class="sep-status {{ separacao.status }}">{{ separacao.get_status_display }}</span>
+      <span class="sep-status {{ operacional.status|default:separacao.status }}">{{ operacional.mensagem|default:separacao.get_status_display }}</span>
       {% if modo_consulta %}
         <p class="sep-sub"><strong>Consulta do checklist concluído</strong></p>
         <p class="sep-sub">Conclusão: {{ separacao.finalizado_em|date:"d/m/Y H:i"|default:"Data não registrada" }} · Conferido por: {{ separacao.separado_por|default:"Não registrado" }}</p>
@@ -129,6 +129,7 @@
             {% if modo_consulta %}
               <p class="sep-qtd">Separado: {{ item.quantidade_separada_formatada|default:"Não registrado" }} {{ item.unidade_snapshot }}</p>
               <p class="sep-qtd">Resultado: {{ item.resultado_texto }}</p>
+              {% if item.motivo_operacional %}<p class="sep-qtd">{{ item.motivo_operacional }}</p>{% endif %}
               {% if item.falta_resolvida %}
                 <p class="sep-qtd">Ocorrência original: {{ item.get_status_display }} · Nota atual: {{ item.quantidade_atual_nota|floatformat:"-3" }} {{ item.unidade_snapshot }}</p>
               {% endif %}
@@ -433,6 +434,11 @@
 
   const applySavedItem = (card, data) => {
     if (!data || !data.item) return;
+    if (data.operacional) {
+      const status = document.querySelector('.sep-head .sep-status');
+      const op = data.operacional;
+      if (status) { status.textContent = op.mensagem; status.className = `sep-status ${op.status}`; }
+    }
     const item = data.item;
     const input = card.querySelector("[data-qtd-input]");
     const radio = card.querySelector(`input[type='radio'][value='${item.status_input || item.status}']`);

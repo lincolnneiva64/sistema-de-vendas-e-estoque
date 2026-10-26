@@ -39894,7 +39894,7 @@ class SeparacaoVendaFase1Tests(TestCase):
         self.assertEqual(item.status, SeparacaoVendaItem.STATUS_QUANTIDADE_INSUFICIENTE)
         self.assertEqual(item.quantidade_separada, Decimal("1.000"))
         self.assertEqual(dados["item"]["quantidade_faltante"], "1")
-        self.assertIn("faltam 1", dados["item"]["resultado_texto"])
+        self.assertIn("Quantidade insuficiente — falta 1", dados["item"]["resultado_texto"])
 
     def test_quantidade_insuficiente_embalagem_com_fator_rejeita_fracao_incompativel(self):
         produto = Produto.objects.create(
@@ -40676,7 +40676,7 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         resposta = self.client.get(reverse("estoque:separacao_vendas_fila"), secure=True)
 
-        self.assertContains(resposta, "SEPARACAO CONCLUIDA - NOTA PRONTA PARA ENVIO")
+        self.assertContains(resposta, "Separação concluída — nota pronta")
         self.assertNotContains(resposta, "VENDA ALTERADA - REVISAO NECESSARIA")
 
     def test_alteracao_apos_separacao_concluida_exige_revisao(self):
@@ -40692,7 +40692,7 @@ class SeparacaoVendaFase1Tests(TestCase):
 
         self.assertTrue(separacao.revisao_pendente)
         self.assertContains(resposta, "VENDA ALTERADA DURANTE A SEPARACAO")
-        self.assertNotContains(resposta, "NOTA PRONTA PARA ENVIO")
+        self.assertNotContains(resposta, "Separação concluída — nota pronta")
 
     def test_divergencia_historica_sem_revisao_pendente_nao_mostra_alerta_vermelho(self):
         self._enviar()
