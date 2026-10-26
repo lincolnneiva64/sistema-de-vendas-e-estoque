@@ -3,25 +3,25 @@
 .produtos-cards-v2 .produtos-tabela{display:block!important;width:100%!important;max-width:none!important;margin:0!important;border:0!important;table-layout:auto!important;background:transparent!important}
 .produtos-cards-v2 thead{display:none}
 .produtos-cards-v2 tbody{display:grid!important;gap:18px;width:100%}
-.produtos-cards-v2 .linha-produto{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 120px 95px 145px 164px;gap:0 12px;position:relative;padding:12px 18px!important;border:1px solid #b8c5d5!important;border-radius:10px!important;background:#fff!important;box-shadow:0 2px 5px #1e334d11!important;color:#1f2937!important}
+.produtos-cards-v2 .linha-produto{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) 120px 95px 145px 164px;gap:0 12px;position:relative;padding:12px 18px!important;border:1px solid #94a6bb!important;border-radius:10px!important;background:#fff!important;box-shadow:0 2px 5px #1e334d11!important;color:#1f2937!important}
 .produtos-cards-v2 .produtos-tabela tr.linha-produto>td{display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:center;width:auto!important;max-width:none!important;min-width:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;text-align:left!important;line-height:1.45!important}
-.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-card-nome{grid-column:1/-1;flex-direction:row;align-items:center!important;justify-content:flex-start;gap:14px;border-bottom:1px solid #e5eaf0!important;padding:0 115px 7px 0!important;margin-bottom:8px;overflow:hidden}
+.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-card-nome{grid-column:1/-1;flex-direction:row;align-items:center!important;justify-content:flex-start;gap:14px;border-bottom:1px solid #d4dde7!important;padding:0 115px 7px 0!important;margin-bottom:8px;overflow:hidden}
 .produtos-cards-v2 .produto-nome-linha{display:flex!important;align-items:center;gap:8px;min-width:0;flex:0 1 auto;max-width:65%}
 .produtos-cards-v2 .produto-nome-texto{display:block!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#111827!important;font:750 17px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif!important}
-.produtos-cards-v2 .produto-categoria-inline{margin:0!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif!important;color:#667085!important}
+.produtos-cards-v2 .produto-categoria-inline{margin:0!important;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif!important;color:#465467!important}
 .produtos-cards-v2 .produto-meta-separador{display:inline!important}
-.produtos-cards-v2 .produto-metrica-rotulo{display:block;color:#596779;font:500 13px/20px system-ui,-apple-system,"Segoe UI",sans-serif!important;white-space:nowrap}
-.produtos-cards-v2 .produto-preco-valores,.produtos-cards-v2 .produto-card-valor{display:flex!important;align-items:baseline;gap:4px;font:400 14px/23px system-ui,-apple-system,"Segoe UI",sans-serif!important;color:#263447!important;white-space:nowrap;font-variant-numeric:tabular-nums}
+.produtos-cards-v2 .produto-metrica-rotulo{display:block;color:#405168;font:500 13px/20px system-ui,-apple-system,"Segoe UI",sans-serif!important;white-space:nowrap}
+.produtos-cards-v2 .produto-preco-valores,.produtos-cards-v2 .produto-card-valor{display:flex!important;align-items:baseline;gap:4px;font:500 14px/23px system-ui,-apple-system,"Segoe UI",sans-serif!important;color:#263447!important;white-space:nowrap;font-variant-numeric:tabular-nums}
 .produtos-cards-v2 .produto-preco-valores{gap:0 5px;flex-wrap:wrap}
 .produtos-cards-v2 .produto-preco-valores strong{font-weight:650}
-.produtos-cards-v2 .produto-preco-valores small{font-size:13px;color:#667085}
+.produtos-cards-v2 .produto-preco-valores small{font-size:13px;font-weight:500;color:#465467}
 .produtos-cards-v2 .qtd-wrap{position:static!important;display:flex!important;flex-direction:row!important;justify-content:flex-start!important;align-items:center!important;gap:4px!important;padding:0!important;width:100%!important}
 .produtos-cards-v2 .estoque-lista-duplo{flex-direction:row!important;width:auto!important;min-width:0!important;max-width:none!important}
 .produtos-cards-v2 .qtd-num{width:auto!important;min-width:0!important;max-width:none!important;white-space:nowrap!important}
 .produtos-cards-v2 .estoque-lista-principal,.produtos-cards-v2 .estoque-lista-fracionado{display:inline!important;font:inherit!important;white-space:nowrap}
-.produtos-cards-v2 .estoque-lista-fracionado{font-size:13px!important;color:#667085!important}
-.produtos-cards-v2 .estoque-lista-fracionado::before{content:"· ";color:#a3afbf}
-.produtos-cards-v2 .qtd-badge{position:absolute!important;top:12px;right:15px;margin:0!important;padding:3px 8px!important;border:1px solid #dce3eb;border-radius:5px!important;background:#f1f5f9!important;color:#596779!important;font:600 12px/18px system-ui,-apple-system,"Segoe UI",sans-serif!important;white-space:nowrap}
+.produtos-cards-v2 .estoque-lista-fracionado{font-size:13px!important;color:#465467!important}
+.produtos-cards-v2 .estoque-lista-fracionado::before{content:"· ";color:#596779}
+.produtos-cards-v2 .qtd-badge{position:absolute!important;top:12px;right:15px;margin:0!important;padding:3px 8px!important;border:1px solid #dce3eb;border-radius:5px!important;background:#f1f5f9!important;color:#405168!important;font:600 12px/18px system-ui,-apple-system,"Segoe UI",sans-serif!important;white-space:nowrap}
 .produtos-cards-v2 tr[data-status="critico"],.produtos-cards-v2 tr[data-status="zerado"]{border-left:3px solid #ba9036!important}
 .produtos-cards-v2 tr[data-status="critico"] .qtd-badge,.produtos-cards-v2 tr[data-status="zerado"] .qtd-badge{background:#fff7e6!important;border-color:#e3cf9c;color:#805d10!important}
 .produtos-cards-v2 .produtos-tabela tr.linha-produto>.produtos-acoes-coluna{justify-content:flex-end;align-items:flex-end!important}
@@ -29,9 +29,17 @@
 .produtos-cards-v2 .produtos-acoes .btn{min-height:36px!important;padding:7px 12px!important;font:400 14px/20px system-ui,-apple-system,"Segoe UI",sans-serif!important;border-radius:6px!important;white-space:nowrap;box-shadow:none!important;transform:none!important}
 .produtos-cards-v2 .btn-editar-produto{background:#edf5ff!important;color:#164173!important;border:1px solid #8eb7e9!important}
 .produtos-cards-v2 .btn-desativar-produto{background:white!important;color:#a33e47!important;border:1px solid #e3b4b8!important}
-.produtos-cards-v2 .produto-inativo{opacity:.7}
+.produtos-cards-v2 .produto-inativo{opacity:1}
 .produtos-cards-v2 .linha-produto.linha-selecionada{outline:2px solid #7aa7ff!important;outline-offset:2px;background:#f5f9ff!important}
 .produtos-cards-v2 .grupo-produto-vinculo{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(min-width:1100px) and (max-width:1350px){.produtos-cards-v2 .linha-produto{padding:12px!important;gap:0 8px;grid-template-columns:repeat(3,minmax(0,1fr)) 105px 80px 125px 152px}.produtos-cards-v2 .produtos-acoes .btn{padding:7px 9px!important}.produtos-cards-v2 .produto-nome-texto{font-size:16px!important}}
 @media(max-width:1099px){.produtos-cards-v2 .linha-produto{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 16px}.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-card-nome{margin:0;flex-wrap:wrap;gap:4px 10px}.produtos-cards-v2 .produto-nome-linha{max-width:100%;flex-basis:100%}.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produtos-acoes-coluna{grid-column:1/-1;align-items:flex-start!important}.produtos-cards-v2 .produto-preco-valores{flex-wrap:wrap}.produtos-cards-v2 .produto-card-valor{white-space:normal;flex-wrap:wrap}}
 @media(max-width:600px){.produtos-cards-v2.produtos-tabela-card{width:calc(100% - 16px)!important}.produtos-cards-v2 .linha-produto{grid-template-columns:repeat(2,minmax(0,1fr));padding:14px!important;gap:12px 10px}.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-card-nome{padding:27px 0 9px!important}.produtos-cards-v2 .produto-nome-linha{flex-wrap:wrap}.produtos-cards-v2 .produto-nome-texto{white-space:normal;overflow-wrap:anywhere;font-size:17px!important}.produtos-cards-v2 .produto-categoria-inline{white-space:normal;overflow-wrap:anywhere;font-size:13px!important}.produtos-cards-v2 .produto-preco-v2:nth-child(2){grid-column:1/-1}.produtos-cards-v2 .produto-preco-valores{display:flex!important;flex-direction:column;align-items:flex-start}.produtos-cards-v2 .produto-preco-fracionado>span:first-child{display:none}.produtos-cards-v2 .qtd-badge{left:14px;right:auto;top:10px}.produtos-cards-v2 .produtos-acoes .btn{min-height:44px!important;padding:10px 14px!important}.produtos-cards-v2 .produtos-tabela td::before{content:none!important}}
+
+/* Refinamento de leitura: cores firmes sem alterar a grade ou os espaçamentos. */
+.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-preco-v2{background:#f4f7fa!important;border-radius:5px!important}
+.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-preco-v2[data-label="Venda à vista"]{background:#f0f6f4!important}
+.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-preco-v2[data-label="Venda a prazo"]{background:#f2f5fa!important}
+.produtos-cards-v2 .produto-fornecedor{color:#35465b;font-weight:500}
+.produtos-cards-v2 .produto-meta-separador{color:#596779;margin:0 3px}
+.produtos-cards-v2 .produto-sem-fracionamento{font-weight:400!important}
