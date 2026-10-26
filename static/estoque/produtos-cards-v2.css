@@ -43,3 +43,10 @@
 .produtos-cards-v2 .produto-fornecedor{color:#35465b;font-weight:500}
 .produtos-cards-v2 .produto-meta-separador{color:#596779;margin:0 3px}
 .produtos-cards-v2 .produto-sem-fracionamento{font-weight:400!important}
+.produtos-cards-v2 .produto-fornecedores{display:inline-block;max-width:100%;vertical-align:top}
+.produtos-cards-v2 .produto-fornecedores summary{cursor:pointer;list-style:revert;overflow-wrap:anywhere}
+.produtos-cards-v2 .produto-fornecedores summary:focus-visible{outline:2px solid #164173;outline-offset:2px;border-radius:2px}
+.produtos-cards-v2 .produto-fornecedores-lista{margin:6px 0 0;padding:6px 10px 6px 24px;background:#f4f7fa;border:1px solid #d4dde7;border-radius:5px;white-space:normal;overflow-wrap:anywhere;font-weight:400}
+.produtos-cards-v2 .produto-fornecedores-lista small{color:#465467;font-size:12px;margin-left:6px}
+.produtos-cards-v2 .produtos-tabela tr.linha-produto>.produto-card-nome:has(.produto-fornecedores[open]){flex-wrap:wrap;overflow:visible}
+.produtos-cards-v2 .produto-categoria-inline:has(.produto-fornecedores[open]){white-space:normal;overflow:visible;flex-basis:100%}

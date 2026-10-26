@@ -41,7 +41,7 @@ class ProdutosCardsV2Tests(TestCase):
         Produto.objects.filter(pk=p.pk).update(preco_compra=None)
         resposta = self.client.get(reverse("estoque:home"))
         self.assertContains(resposta, p.nome)
-        for texto in ("Sem categoria", "Sem fornecedor", "Sem fracionamento", 'aria-label="Não informado"'):
+        for texto in ("Sem categoria", "Fornecedor não informado", "Sem fracionamento", 'aria-label="Não informado"'):
             self.assertContains(resposta, texto)
         self.assertNotContains(resposta, "produto-preco-fracionado")
 

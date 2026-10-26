@@ -2033,10 +2033,10 @@ align-items: center;
           </button>
         {% endif %}
       </div>
-      <div class="produto-categoria-inline" title="{{ produto.categoria|default:'Sem categoria' }} · {{ produto.fornecedor|default:'Sem fornecedor' }}">
+      <div class="produto-categoria-inline">
         {% if produto.categoria %}{{ produto.categoria }}{% else %}Sem categoria{% endif %}
         <span class="produto-meta-separador">&middot;</span>
-        <span class="produto-fornecedor" title="{{ produto.fornecedor|default:'Sem fornecedor' }}">Fornecedor: {{ produto.fornecedor|default:"Sem fornecedor" }}</span>
+        {% include 'estoque/includes/produto_card_fornecedores.html' %}
         {% if not produto.ativo %}
           <span class="produto-inativo-badge">Inativo</span>
         {% endif %}

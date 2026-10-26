@@ -1,0 +1,15 @@
+{% with dados=produto.fornecedores_card %}
+{% if dados.expansivel %}
+<details class="produto-fornecedores produto-fornecedor">
+  <summary>{{ dados.resumo }}</summary>
+  <ul class="produto-fornecedores-lista" aria-label="Fornecedores de {{ produto.nome }}">
+    {% for item in dados.itens %}
+    <li><span>{{ item.nome }}</span> <small>{{ item.origem }}{% if not item.cadastro_ativo %} · Cadastro inativo{% endif %}</small></li>
+    {% endfor %}
+    {% if dados.legado %}<li><span>{{ dados.legado }}</span> <small>Informado no cadastro · texto legado</small></li>{% endif %}
+  </ul>
+</details>
+{% else %}
+<span class="produto-fornecedor" title="{{ dados.resumo }}">{{ dados.resumo }}</span>
+{% endif %}
+{% endwith %}

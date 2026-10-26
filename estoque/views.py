@@ -1795,6 +1795,9 @@ def home(request):
         quantidade__gt=F("estoque_minimo") + Value(5),
     ).count()
 
+    from .services.fornecedores_cards import preparar_fornecedores_cards
+    produtos = preparar_fornecedores_cards(produtos)
+
     # Financeiro
     total_investido = sum((p.preco_compra or 0) * (p.quantidade or 0) for p in produtos)
     total_faturamento = sum((p.preco_venda or 0) * (p.quantidade or 0) for p in produtos)
