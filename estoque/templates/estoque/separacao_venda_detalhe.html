@@ -143,7 +143,7 @@
                 <input
                   class="sep-step-input"
                   type="{% if item.registra_peso_real %}text{% else %}number{% endif %}"
-                  inputmode="{% if item.registra_peso_real %}decimal{% else %}numeric{% endif %}"
+                  inputmode="{% if item.registra_peso_real or item.quantidade_passo_data != '1.000' %}decimal{% else %}numeric{% endif %}"
                   step="{{ item.quantidade_passo_data }}"
                   min="{{ item.quantidade_minima_data }}"
                   {% if item.quantidade_maxima_data %}
@@ -159,6 +159,10 @@
                   <button class="sep-step-btn sep-peso-ok" type="button" data-peso-ok>OK</button>
                 {% endif %}
               </div>
+              {% if not item.registra_peso_real %}
+                <span>Ajuste para a quantidade encontrada e confirme.</span>
+                <button class="sep-btn" type="button" data-insuficiente-confirmar {% if divergencias or not item.quantidade_insuficiente_permitida %}disabled{% endif %}>Confirmar quantidade</button>
+              {% endif %}
             </div>
             <p class="sep-save-state" data-save-state></p>
           </div>
@@ -204,10 +208,17 @@
     ? `${nomeProduto(card)}: aguarde o registro da confirmacao.`
     : card.querySelector("[data-peso-ok]") && statusUsaQuantidade(statusSelecionado(card))
       ? `${nomeProduto(card)}: ${lerPeso(card.querySelector("[data-qtd-input]")?.value) === null ? "informe um peso valido e " : ""}toque no botao OK do campo Peso separado para confirmar.`
-      : `${nomeProduto(card)}: confirme a opcao do item e aguarde o registro.`;
+      : statusSelecionado(card) === "quantidade_insuficiente"
+        ? `${nomeProduto(card)}: ajuste a quantidade encontrada e toque em Confirmar quantidade.`
+        : `${nomeProduto(card)}: confirme a opcao do item e aguarde o registro.`;
   const marcarAlterado = (card) => {
     card._sepRevision = (card._sepRevision || 0) + 1;
     card.dataset.confirmado = "false";
+    if (statusSelecionado(card) === "quantidade_insuficiente") {
+      const state = card.querySelector("[data-save-state]");
+      if (state) { state.textContent = ""; state.classList.remove("is-error"); }
+      if (submitFeedback) submitFeedback.classList.remove("is-visible");
+    }
   };
   const assinatura = (card) => {
     const status = statusSelecionado(card);
@@ -363,7 +374,9 @@
       icone = "";
       resumo = status === "peso_separado"
         ? "Peso ainda nao confirmado. Toque no OK do campo Peso separado."
-        : "Item ainda nao confirmado no servidor.";
+        : status === "quantidade_insuficiente"
+          ? "Quantidade ainda nao confirmada. Toque em Confirmar quantidade."
+          : "Item ainda nao confirmado no servidor.";
     }
 
     if (icon) {
@@ -448,7 +461,10 @@
         }
         input.value = formatQtd(peso);
       } else {
-        input.value = formatQtd(clampInsuficiente(card, input.value));
+        // O valor solicitado é apenas o ponto de partida da edição. Nunca
+        // reduzi-lo silenciosamente e registrá-lo como quantidade encontrada.
+        syncQuantidadeValidation(card);
+        if (!input.reportValidity()) return false;
       }
     }
 
@@ -517,6 +533,10 @@
     card.querySelector("[data-reabrir-item]")?.addEventListener("click", () => setActive(card));
     card.querySelectorAll("input[type='radio']").forEach((input) => {
       input.addEventListener("change", () => {
+        const quantidade = card.querySelector("[data-qtd-input]");
+        if (input.value === "quantidade_insuficiente" && quantidade && (!quantidade.value || Number(quantidade.value) <= 0)) {
+          quantidade.value = formatQtd(Number(card.dataset.solicitada));
+        }
         marcarAlterado(card);
         refreshCard(card);
         if (input.value !== "quantidade_insuficiente" && input.value !== "peso_separado") saveItem(card);
@@ -530,7 +550,7 @@
         card.querySelectorAll("[data-qtd-rapida]").forEach((item) => item.classList.remove("is-selected"));
         button.classList.add("is-selected");
         refreshCard(card);
-        saveItem(card);
+        if (statusSelecionado(card) !== "quantidade_insuficiente") saveItem(card);
       });
     });
     card.querySelectorAll("[data-step]").forEach((button) => {
@@ -546,13 +566,25 @@
         input.value = formatQtd(clampInsuficiente(card, Number(String(input.value || 0).replace(",", ".")) + step));
         marcarAlterado(card);
         refreshCard(card);
-        saveItem(card, {advance: false});
+        if (statusSelecionado(card) !== "quantidade_insuficiente") saveItem(card, {advance: false});
       });
     });
     card.querySelector("[data-qtd-input]")?.addEventListener("input", () => { marcarAlterado(card); refreshCard(card); });
     const qtdInput = card.querySelector("[data-qtd-input]");
     qtdInput?.addEventListener("change", () => {
-      if (!card.querySelector("[data-peso-ok]")) saveItem(card);
+      if (!card.querySelector("[data-peso-ok]") && statusSelecionado(card) !== "quantidade_insuficiente") saveItem(card);
+    });
+    card.querySelector("[data-insuficiente-confirmar]")?.addEventListener("click", async () => {
+      if (await saveItem(card, {advance: false})) {
+        setActive(null);
+        card.querySelector("[data-reabrir-item]")?.focus();
+      }
+    });
+    qtdInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && statusSelecionado(card) === "quantidade_insuficiente") {
+        event.preventDefault();
+        card.querySelector("[data-insuficiente-confirmar]")?.click();
+      }
     });
     card.querySelector("[data-peso-ok]")?.addEventListener("click", () => {
       if (!qtdInput) return;
