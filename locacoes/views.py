@@ -22,7 +22,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from urllib.parse import quote, urlencode
 
-from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao, consulta_operacional
+from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao, consulta_operacional, resumo_financeiro_locacoes
+from .periodos import periodos_consulta
 from .services import funcionarios_operacionais_locacoes, indicador_operacional_locacao
 
 from .forms import (
@@ -799,6 +800,10 @@ def lista(request):
     hoje = timezone.localdate()
     data_inicio_texto = request.GET.get("data_inicio", "").strip()
     data_fim_texto = request.GET.get("data_fim", "").strip()
+    periodos = periodos_consulta()
+    periodo = request.GET.get("periodo", "escolha")
+    if periodo not in periodos or (data_inicio_texto, data_fim_texto) != (periodos[periodo]["inicio"], periodos[periodo]["fim"]):
+        periodo = "escolha"
     def ler_data(texto):
         try:
             return parse_date(texto or "")
@@ -807,6 +812,9 @@ def lista(request):
     data_inicio = ler_data(data_inicio_texto)
     data_fim = ler_data(data_fim_texto)
     datas_invalidas = bool((data_inicio_texto and not data_inicio) or (data_fim_texto and not data_fim) or (data_inicio and data_fim and data_inicio > data_fim))
+    resumo_financeiro = None if datas_invalidas else resumo_financeiro_locacoes(
+        cliente, status, financeiro, data_inicio, data_fim,
+    )
     locacoes_qs = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
@@ -895,12 +903,19 @@ def lista(request):
     elif realizadas:
         contexto_consulta["situacao"] = "realizadas"
     parametros_pagina = {**parametros, **contexto_consulta}
-    abas = [{"valor": valor, "rotulo": rotulo, "url": "?" + urlencode({**parametros, "aba": valor})} for valor, rotulo in ABAS]
+    parametros_navegacao = dict(parametros)
+    if request.GET.get("periodo"):
+        parametros_navegacao["periodo"] = periodo
+        parametros_pagina["periodo"] = periodo
+    abas = [{"valor": valor, "rotulo": rotulo, "url": "?" + urlencode({**parametros_navegacao, "aba": valor})} for valor, rotulo in ABAS]
     return render(
         request,
         "locacoes/lista.html",
         {
             "locacoes": locacoes,
+            "resumo_financeiro": resumo_financeiro,
+            "periodos_consulta": periodos,
+            "periodo_selecionado": periodo,
             "aba": aba,
             "abas": abas,
             "historico": historico,
@@ -909,7 +924,7 @@ def lista(request):
             "pagina": pagina,
             "url_anterior": "?" + urlencode({**parametros_pagina, "pagina": pagina.previous_page_number()}) if pagina.has_previous() else "",
             "url_proxima": "?" + urlencode({**parametros_pagina, "pagina": pagina.next_page_number()}) if pagina.has_next() else "",
-            "url_historico": "?" + urlencode({**parametros, "aba": aba, "visao": "historico"}),
+            "url_historico": "?" + urlencode({**parametros_navegacao, "aba": aba, "visao": "historico"}),
             "url_limpar": "?" + urlencode(contexto_consulta),
             "filtros_ativos": [
                 {"rotulo": {"cliente": "Cliente", "status": "Status", "financeiro": "Financeiro", "data_inicio": "Data inicial", "data_fim": "Data final"}[chave],

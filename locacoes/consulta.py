@@ -10,6 +10,61 @@ MARCO_OPERACIONAL = date(2026, 10, 1)
 ABAS = (("entregas", "Entregas"), ("recolhimentos", "Recolhimentos"))
 
 
+def resumo_financeiro_locacoes(cliente="", status="", financeiro="", inicio=None, fim=None):
+    """Duas agregações independentes, sem filas operacionais ou paginação."""
+    from datetime import datetime, time
+    from decimal import Decimal
+    from django.db.models import Count, Q, Sum
+    from .models import PagamentoLocacao
+
+    contratos = Locacao.objects.all()
+    if cliente:
+        contratos = contratos.filter(Q(cliente__nome__icontains=cliente) | Q(pessoa_avulsa_nome__icontains=cliente))
+    if status in dict(Locacao.STATUS_CHOICES):
+        contratos = contratos.filter(status=status)
+    if financeiro == "com_saldo":
+        contratos = contratos.filter(saldo_devedor__gt=0)
+    elif financeiro == "quitadas":
+        contratos = contratos.filter(saldo_devedor__lte=0)
+
+    # Pagamentos de contratos anteriores também entram; não limitar pelo cadastro.
+    pagamentos = PagamentoLocacao.objects.filter(locacao_id__in=contratos.values("pk"))
+    def periodo(queryset, campo):
+        if inicio:
+            limite = timezone.make_aware(datetime.combine(inicio, time.min), timezone.get_current_timezone())
+            queryset = queryset.filter(**{campo + "__gte": limite})
+        if fim:
+            limite = timezone.make_aware(datetime.combine(fim, time.max), timezone.get_current_timezone())
+            queryset = queryset.filter(**{campo + "__lte": limite})
+        return queryset
+
+    cancelada = Q(status=Locacao.STATUS_CANCELADA)
+    valores = periodo(contratos, "criado_em").aggregate(
+        quantidade=Count("pk", filter=~cancelada),
+        contratado=Sum("total", filter=~cancelada, default=Decimal("0.00")),
+        saldo=Sum("saldo_devedor", filter=~cancelada, default=Decimal("0.00")),
+        canceladas_quantidade=Count("pk", filter=cancelada),
+        canceladas_contratado=Sum("total", filter=cancelada, default=Decimal("0.00")),
+    )
+    cancelada = Q(locacao__status=Locacao.STATUS_CANCELADA)
+    valores.update(periodo(pagamentos, "data_hora").aggregate(
+        recebido=Sum("valor", filter=~cancelada, default=Decimal("0.00")),
+        canceladas_recebido=Sum("valor", filter=cancelada, default=Decimal("0.00")),
+    ))
+    valores["somente_canceladas"] = status == Locacao.STATUS_CANCELADA
+    valores["inicio"] = inicio
+    valores["fim"] = fim
+    restricoes = []
+    if cliente:
+        restricoes.append("Cliente: " + cliente)
+    if status in dict(Locacao.STATUS_CHOICES):
+        restricoes.append("Status atual: " + dict(Locacao.STATUS_CHOICES)[status])
+    if financeiro in {"com_saldo", "quitadas"}:
+        restricoes.append("Financeiro atual: " + {"com_saldo": "Com saldo a receber", "quitadas": "Quitadas"}[financeiro])
+    valores["restricoes"] = restricoes
+    return valores
+
+
 def consulta_operacional(queryset, aba, realizadas=False, todas=False):
     """Filtra e ordena no banco antes da paginação; não cria tarefas nem altera status."""
     from django.db.models import DateTimeField, Exists, F, OuterRef, Q, Subquery

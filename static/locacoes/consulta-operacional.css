@@ -3,7 +3,19 @@
 .consulta-operacional .nav-link.active{background:#214b80;color:#fff;border-color:#214b80}
 .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;align-items:end}
 .filters>*{min-width:0}.filters input,.filters select{width:100%;max-width:100%;box-sizing:border-box}.filters label{display:block}
+.filters .periodo-datas{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:12px;grid-column:span 3;align-items:end}
+.periodo-datas>*{min-width:0}
+@media(min-width:1051px){#filtros-locacoes{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:1050px){.filters .periodo-datas{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}.periodo-atalho{grid-column:1/-1}}
 .data-locacao{white-space:nowrap;display:inline-block}
+.resumo-financeiro-blocos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+.resumo-financeiro-blocos>div{min-width:0;border:1px solid var(--locacoes-border);border-radius:8px;padding:12px;background:var(--locacoes-orange-soft)}
+.resumo-financeiro-blocos dt{font-size:13px;line-height:1.35;font-weight:650;color:var(--locacoes-orange-dark)}
+.resumo-financeiro-blocos dd{margin:8px 0 0;font-size:clamp(18px,1.6vw,24px);line-height:1.2;font-weight:800;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.resumo-financeiro .resumo-periodo,.resumo-financeiro .resumo-explicacao,.resumo-canceladas{font-size:13px;line-height:1.4;margin:8px 0}
+.resumo-canceladas{padding:8px 10px;border-left:3px solid #94a3b8;background:#f1f5f9;color:#475569}
+@media(max-width:820px){.resumo-financeiro-blocos{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:359px){.resumo-financeiro-blocos{grid-template-columns:1fr}}
 .filtros-ativos{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;margin:12px 0;background:#eff6ff;border:1px solid #c7daf2;border-radius:8px;color:#214b80;font-size:14px}
 .filtros-ativos span{padding:2px 6px;background:#fff;border-radius:4px;overflow-wrap:anywhere}
 .paginacao-locacoes{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;padding:18px 0;font-size:14px;color:#475569}

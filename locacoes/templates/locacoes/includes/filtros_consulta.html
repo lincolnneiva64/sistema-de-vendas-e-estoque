@@ -2,11 +2,22 @@
   (function () {
     const formulario = document.getElementById("filtros-locacoes");
     const limpar = document.getElementById("limpar-filtros-locacoes");
+    const periodo = document.getElementById("periodo-locacoes");
+    const dadosPeriodos = document.getElementById("periodos-locacoes");
+    const periodos = dadosPeriodos ? JSON.parse(dadosPeriodos.textContent) : {};
     let temporizador;
     let enviando = false;
     function agendarFiltro(event) {
       if (!event.target.matches("input, select")) return;
       clearTimeout(temporizador);
+      if (event.target === periodo) {
+        const datas = periodos[periodo.value];
+        if (!datas) return; // Intervalo à escolha não altera nem envia datas.
+        formulario.elements.data_inicio.value = datas.inicio;
+        formulario.elements.data_fim.value = datas.fim;
+      } else if (periodo && ["data_inicio", "data_fim"].includes(event.target.name)) {
+        periodo.value = "escolha";
+      }
       temporizador = setTimeout(function () {
         if (!enviando && formulario.checkValidity()) {
           formulario.requestSubmit();
