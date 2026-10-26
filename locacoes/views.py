@@ -787,6 +787,7 @@ def lista(request):
     aba = "recolhimentos" if aba_original == "concluidas" else aba_original
     if aba not in dict(ABAS):
         aba = "entregas"
+    todas_entregas = aba == "entregas" and request.GET.get("situacao") not in {"pendentes", "realizadas"}
     cliente = request.GET.get("cliente", "").strip()
     status = request.GET.get("status", "").strip()
     financeiro = request.GET.get("financeiro", "").strip()
@@ -814,7 +815,7 @@ def lista(request):
         )
     )
     if not historico:
-        locacoes_qs = consulta_operacional(locacoes_qs, aba, realizadas)
+        locacoes_qs = consulta_operacional(locacoes_qs, aba, realizadas, todas=todas_entregas)
     else:
         locacoes_qs = locacoes_qs.order_by("-criado_em", "-id")
     if status in {Locacao.STATUS_RESERVADA, Locacao.STATUS_CANCELADA}:
@@ -858,15 +859,19 @@ def lista(request):
         locacao.indicador_operacional = indicador_operacional_locacao(locacao, hoje)
         if not historico:
             entrega = aba == "entregas"
-            atrasada = not realizadas and (
+            operacao_realizada = realizadas or (todas_entregas and locacao.status in {
+                Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO,
+                Locacao.STATUS_DEVOLVIDA, Locacao.STATUS_DEVOLVIDA_COM_AVARIA,
+            })
+            atrasada = not operacao_realizada and (
                 locacao._data_operacao < hoje or (
                     locacao._data_operacao == hoje and locacao._horario_operacao is not None
                     and locacao._horario_operacao < timezone.localtime().time()
                 )
             )
-            conclusao = timezone.localtime(locacao._conclusao_registrada) if realizadas and locacao._conclusao_registrada else None
+            conclusao = timezone.localtime(locacao._conclusao_registrada) if operacao_realizada and locacao._conclusao_registrada else None
             locacao.indicador_operacional = {
-                "texto": (("Entrega realizada" if entrega else "Recolhimento concluído") if realizadas
+                "texto": (("Entrega realizada" if entrega else "Recolhimento concluído") if operacao_realizada
                           else (("Entrega atrasada" if entrega else "Recolhimento atrasado")
                                 if atrasada else ("Entrega prevista" if entrega else "Aguardando recolhimento"))),
                 "data": conclusao.date() if conclusao else locacao._data_operacao,
@@ -879,6 +884,8 @@ def lista(request):
     contexto_consulta = {"aba": aba}
     if historico:
         contexto_consulta["visao"] = "historico"
+    elif not todas_entregas and request.GET.get("situacao") == "pendentes":
+        contexto_consulta["situacao"] = "pendentes"
     elif realizadas:
         contexto_consulta["situacao"] = "realizadas"
     parametros_pagina = {**parametros, **contexto_consulta}
@@ -892,6 +899,7 @@ def lista(request):
             "abas": abas,
             "historico": historico,
             "realizadas": realizadas,
+            "todas_entregas": todas_entregas,
             "pagina": pagina,
             "url_anterior": "?" + urlencode({**parametros_pagina, "pagina": pagina.previous_page_number()}) if pagina.has_previous() else "",
             "url_proxima": "?" + urlencode({**parametros_pagina, "pagina": pagina.next_page_number()}) if pagina.has_next() else "",

@@ -475,11 +475,6 @@
       {% endfor %}
     {% endif %}
 
-    <nav class="nav nav-tabs mb-3 consulta-operacional" aria-label="Consulta de locações">
-      {% for item in abas %}
-        <a class="nav-link {% if aba == item.valor and not historico %}active{% endif %}" href="{{ item.url }}" {% if aba == item.valor and not historico %}aria-current="page"{% endif %}>{{ item.rotulo }}</a>
-      {% endfor %}
-    </nav>
     <p><a class="btn btn-outline-secondary" href="{{ url_historico }}" {% if historico %}aria-current="page"{% endif %}>Histórico completo</a></p>
     <section class="cardx">
       <h2>Filtros da consulta</h2>
@@ -489,7 +484,7 @@
         <p class="muted">{{ aba|capfirst }}: {% if realizadas %}operações realizadas, com as mais recentes primeiro.{% else %}pendências operacionais; atrasadas e de hoje antes das próximas.{% endif %} Registros antigos sem atividade operacional atual continuam disponíveis no Histórico completo.</p>
       {% endif %}
       {% if realizadas and not historico %}<p class="muted">Sem confirmação datada no registro, a data prevista é usada como referência.</p>{% endif %}
-      <p class="muted">O período abaixo considera a data prevista de {{ periodo_rotulo }}{% if not historico %}, incluindo reagendamentos{% endif %}. Quitação financeira não encerra entrega ou recolhimento.</p>
+      <p class="muted">O período abaixo considera {% if todas_entregas %}a data efetiva ou prevista de entrega{% else %}a data prevista de {{ periodo_rotulo }}{% endif %}{% if not historico %}, incluindo reagendamentos{% endif %}. Quitação financeira não encerra entrega ou recolhimento.</p>
       {% if filtros_ativos %}<div class="filtros-ativos" role="status"><strong>Filtros ativos — resultados restritos:</strong> {% for filtro in filtros_ativos %}<span>{{ filtro.rotulo }}: {{ filtro.valor }}</span> {% endfor %}<a href="{{ url_limpar }}">Remover filtros</a></div>{% endif %}
       {% if datas_invalidas %}<p class="alert alert-warning">Revise as datas informadas: use um período válido, com a data inicial anterior ou igual à final.</p>{% endif %}
       <form method="get" class="filters" id="filtros-locacoes" data-enter-nav>
@@ -498,7 +493,8 @@
         <div>
           <label class="form-label" for="situacao-operacional">Mostrar</label>
           <select id="situacao-operacional" name="situacao" class="form-select">
-            <option value="pendentes" {% if not realizadas %}selected{% endif %}>Pendentes</option>
+            {% if aba == "entregas" %}<option value="todas" {% if todas_entregas %}selected{% endif %}>Todas</option>{% endif %}
+            <option value="pendentes" {% if not realizadas and not todas_entregas %}selected{% endif %}>Pendentes</option>
             <option value="realizadas" {% if realizadas %}selected{% endif %}>{% if aba == 'entregas' %}Entregas realizadas{% else %}Recolhimentos concluídos{% endif %}</option>
           </select>
         </div>{% endif %}
@@ -537,6 +533,12 @@
         </div>
       </form>
     </section>
+
+    <nav class="consulta-operacional" aria-label="Consulta de locações">
+      {% for item in abas %}
+        <a class="nav-link {% if aba == item.valor and not historico %}active{% endif %}" href="{{ item.url }}" {% if aba == item.valor and not historico %}aria-current="page"{% endif %}>{{ item.rotulo }}</a>
+      {% endfor %}
+    </nav>
 
     <section class="cardx">
       <h2>{% if historico %}Histórico completo{% else %}{{ aba|capfirst }}{% endif %} — {{ pagina.paginator.count }} registro{{ pagina.paginator.count|pluralize:"s" }}</h2>

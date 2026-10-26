@@ -40,14 +40,14 @@ class ConsultaOperacionalTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         return [l.pk for l in resposta.context["locacoes"]]
 
-    def test_entregas_padrao_ordena_atrasadas_hoje_futuras_e_desempata(self):
+    def test_entregas_padrao_inclui_realizadas_e_ordena_mais_recentes(self):
         futura = self.criar(2)
         hoje_tarde = self.criar(hora=time(16))
         atrasada = self.criar(-1)
         hoje_cedo = self.criar(hora=time(8))
         empate = self.criar(hora=time(8))
-        self.criar(status="entregue")
-        self.assertEqual(self.ids(), [atrasada.pk, hoje_cedo.pk, empate.pk, hoje_tarde.pk, futura.pk])
+        entregue = self.criar(status="entregue")
+        self.assertEqual(self.ids(), [futura.pk, hoje_tarde.pk, entregue.pk, empate.pk, hoje_cedo.pk, atrasada.pk])
         resposta = self.consultar()
         self.assertEqual(resposta.context["aba"], "entregas")
         self.assertContains(resposta, '>Entregas</a>')
@@ -70,7 +70,7 @@ class ConsultaOperacionalTests(TestCase):
         reagendada = self.criar(-2)
         outra = self.criar(1)
         TarefaOperacionalLocacao.objects.create(locacao=reagendada, tipo="entrega", data_agendada=self.hoje + timedelta(days=3), horario_agendado=time(7))
-        self.assertEqual(self.ids(), [outra.pk, reagendada.pk])
+        self.assertEqual(self.ids(), [reagendada.pk, outra.pk])
         self.assertEqual(self.ids(data_inicio="2026-10-28", data_fim="2026-10-28"), [reagendada.pk])
 
     def test_realizadas_usam_confirmacao_recente_sem_incluir_pendentes(self):
@@ -157,3 +157,24 @@ class ConsultaOperacionalTests(TestCase):
             resposta = self.consultar(visao="historico")
         self.assertEqual(len(resposta.context["locacoes"]), 25)
         self.assertTrue(any("LIMIT 25" in q["sql"].upper() for q in queries))
+
+    def test_cenarios_sinteticos_77_98_99_101_102_sem_trocar_filtros(self):
+        self.criar(pk=77, dias=-2, pessoa_avulsa_nome="Cliente fict?cio 77")
+        self.criar(pk=98, dias=2, pessoa_avulsa_nome="Cliente fict?cio 98")
+        self.criar(pk=99, dias=-4, status="devolvida", pessoa_avulsa_nome="Cliente fict?cio 99")
+        self.criar(pk=101, dias=-3, status="entregue", pessoa_avulsa_nome="Cliente fict?cio 101")
+        recente = self.criar(pk=102, dias=-10, status="entregue", pessoa_avulsa_nome="Cliente fict?cio 102")
+        evento = EventoLocacao.objects.create(locacao=recente, tipo="entregue", descricao="Entrega fict?cia")
+        EventoLocacao.objects.filter(pk=evento.pk).update(criado_em=timezone.make_aware(datetime.combine(self.hoje - timedelta(days=1), time(12))))
+        self.assertEqual(self.ids(), [98, 102, 77, 101, 99])
+        self.assertEqual(self.ids(situacao="pendentes"), [77, 98])
+        self.assertEqual(self.ids(aba="recolhimentos"), [102, 101])
+        self.assertEqual(self.ids(aba="recolhimentos", situacao="realizadas"), [99])
+        self.assertEqual(set(self.ids(visao="historico")), {77, 98, 99, 101, 102})
+        self.assertEqual(self.ids(data_inicio="2026-10-24", data_fim="2026-10-24"), [102])
+        resposta = self.consultar()
+        self.assertContains(resposta, 'value="todas" selected')
+        self.assertContains(resposta, "Cliente fict?cio 102")
+        item = next(l for l in resposta.context["locacoes"] if l.pk == 102)
+        self.assertEqual(item.indicador_operacional["texto"], "Entrega realizada")
+        self.assertFalse(item.indicador_operacional["atraso"])

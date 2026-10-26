@@ -94,7 +94,7 @@ class ConsultaAbasTests(TestCase):
         atrasada = self.criar(MARCO_OPERACIONAL, status="entregue")
         parcial = self.criar(status="pendente_devolucao")
         self.tarefa(parcial, status="parcial")
-        self.assertEqual(self.ids(), [futura.pk])
+        self.assertEqual(self.ids(), [futura.pk, parcial.pk, atrasada.pk])
         self.assertEqual(self.ids(aba="recolhimentos"), [atrasada.pk, parcial.pk])
 
     def test_entrega_parcial_e_tentativa_nao_realizada_continuam_abertas(self):
@@ -107,7 +107,7 @@ class ConsultaAbasTests(TestCase):
         for status in ["devolvida", "devolvida_com_avaria"]:
             locacao = self.criar(status=status, saldo_devedor=Decimal("50.00"))
             self.assertIn(locacao.pk, self.ids(aba="concluidas", financeiro="com_saldo"))
-            self.assertNotIn(locacao.pk, self.ids())
+            self.assertIn(locacao.pk, self.ids())
 
     def test_quitada_nao_equivale_a_devolvida(self):
         ativa = self.criar(status="entregue", saldo_devedor=0)
@@ -117,7 +117,7 @@ class ConsultaAbasTests(TestCase):
     def test_encerramento_administrativo_nao_afirma_devolucao_fisica(self):
         locacao = self.criar(status="entregue")
         tarefa = self.tarefa(locacao, status="resolvida_admin")
-        self.assertEqual(self.ids(), [])
+        self.assertEqual(self.ids(), [locacao.pk])
         self.assertEqual(self.ids(aba="concluidas"), [])
         response = self.consultar(aba="historico")
         self.assertContains(response, "Encerramento administrativo")
@@ -154,7 +154,7 @@ class ConsultaAbasTests(TestCase):
         locacao = self.criar(date(2026, 9, 28), status="entregue")
         self.conferencia(locacao, timezone.now())
         self.tarefa(locacao, status="resolvida_admin")
-        self.assertEqual(self.ids(), [])
+        self.assertEqual(self.ids(), [locacao.pk])
         self.assertEqual(self.ids(aba="historico"), [locacao.pk])
 
     def test_tentativa_documentada_atual_preserva_pendencia_antiga(self):

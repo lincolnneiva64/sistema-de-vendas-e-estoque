@@ -48,7 +48,7 @@ class ConsultaLocacoesUxTests(TestCase):
         return [locacao.pk for locacao in self.consultar(**filtros).context["locacoes"]]
 
     def test_abertura_mostra_pendentes_recentes_e_futuras(self):
-        self.assertEqual(self.ids(), [self.passada.pk, self.atual.pk, self.futura.pk, self.distante.pk])
+        self.assertEqual(self.ids(), [self.distante.pk, self.futura.pk, self.atual.pk, self.passada.pk])
 
     def test_visao_padrao_nao_mostra_canceladas(self):
         cancelada_hoje = self.criar(self.hoje, status=Locacao.STATUS_CANCELADA)
@@ -88,7 +88,7 @@ class ConsultaLocacoesUxTests(TestCase):
 
     def test_intervalo_inclusivo(self):
         self.assertEqual(self.ids(data_inicio="2026-10-03", data_fim="2026-10-05"),
-                         [self.passada.pk, self.atual.pk, self.futura.pk])
+                         [self.futura.pk, self.atual.pk, self.passada.pk])
 
     def test_historico_com_datas_no_passado(self):
         self.assertEqual(self.ids(data_inicio="2026-10-03", data_fim="2026-10-03"), [self.passada.pk])
@@ -97,7 +97,7 @@ class ConsultaLocacoesUxTests(TestCase):
         self.assertEqual(self.ids(data_fim="2026-10-03"), [self.passada.pk])
 
     def test_apenas_data_inicial_sem_limite_superior(self):
-        self.assertEqual(self.ids(data_inicio="2026-10-05"), [self.futura.pk, self.distante.pk])
+        self.assertEqual(self.ids(data_inicio="2026-10-05"), [self.distante.pk, self.futura.pk])
 
     def test_status_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, status=Locacao.STATUS_ENTREGUE)
@@ -107,7 +107,7 @@ class ConsultaLocacoesUxTests(TestCase):
     def test_financeiro_preserva_visao_padrao(self):
         alvo = self.criar(self.hoje, saldo_devedor=Decimal("10"))
         atrasada = self.criar(self.hoje - timedelta(days=2), saldo_devedor=Decimal("10"))
-        self.assertEqual(self.ids(financeiro="com_saldo"), [atrasada.pk, alvo.pk])
+        self.assertEqual(self.ids(financeiro="com_saldo"), [alvo.pk, atrasada.pk])
         self.assertNotIn(alvo.pk, self.ids(financeiro="quitadas"))
 
     def test_limpar_filtros_retorna_visao_padrao(self):
@@ -123,12 +123,12 @@ class ConsultaLocacoesUxTests(TestCase):
         self.assertEqual(self.ids(status="", financeiro="", data_inicio="", data_fim=""), self.ids())
 
     def test_ordem_cronologica(self):
-        self.assertEqual(self.ids(), [self.passada.pk, self.atual.pk, self.futura.pk, self.distante.pk])
+        self.assertEqual(self.ids(), [self.distante.pk, self.futura.pk, self.atual.pk, self.passada.pk])
 
     def test_mesmo_dia_ordena_por_horario(self):
         tarde = self.criar(self.hoje, time(16))
         cedo = self.criar(self.hoje, time(7))
-        self.assertEqual(self.ids()[1:4], [cedo.pk, self.atual.pk, tarde.pk])
+        self.assertEqual(self.ids()[2:5], [tarde.pk, self.atual.pk, cedo.pk])
 
 
 class FiltrosConsultaFrontendTests(SimpleTestCase):

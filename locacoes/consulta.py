@@ -10,13 +10,28 @@ MARCO_OPERACIONAL = date(2026, 10, 1)
 ABAS = (("entregas", "Entregas"), ("recolhimentos", "Recolhimentos"))
 
 
-def consulta_operacional(queryset, aba, realizadas=False):
+def consulta_operacional(queryset, aba, realizadas=False, todas=False):
     """Filtra e ordena no banco antes da paginação; não cria tarefas nem altera status."""
     from django.db.models import DateTimeField, Exists, F, OuterRef, Q, Subquery
-    from django.db.models.functions import Cast, Coalesce
+    from django.db.models.functions import Cast, Coalesce, TruncDate
     from .models import ConferenciaEntregaLocacao, ConferenciaRecolhimentoLocacao, EventoLocacao
 
     entrega = aba == "entregas"
+    if entrega and todas:
+        pendentes = consulta_operacional(queryset, aba)
+        concluidas = consulta_operacional(queryset, aba, realizadas=True).annotate(
+            _data_entrega_efetiva=Coalesce(TruncDate(F("_conclusao_registrada")), F("data_entrega")),
+        )
+        # Reutiliza a evidência física e a proteção do legado da consulta atual.
+        return queryset.filter(
+            Q(pk__in=pendentes.values("pk")) |
+            Q(pk__in=concluidas.filter(_data_entrega_efetiva__gte=MARCO_OPERACIONAL).values("pk"))
+        ).annotate(
+            _conclusao_registrada=Subquery(concluidas.filter(pk=OuterRef("pk")).values("_conclusao_registrada")[:1]),
+            _data_operacao=Coalesce(TruncDate(F("_conclusao_registrada")),
+                Subquery(pendentes.filter(pk=OuterRef("pk")).values("_data_operacao")[:1]), F("data_entrega")),
+            _horario_operacao=Coalesce(Subquery(pendentes.filter(pk=OuterRef("pk")).values("_horario_operacao")[:1]), F("horario_entrega")),
+        ).order_by("-_data_operacao", F("_horario_operacao").desc(nulls_last=True), "-id")
     tipo = "entrega" if entrega else "recolhimento"
     tarefas = TarefaOperacionalLocacao.objects.filter(locacao_id=OuterRef("pk"), tipo=tipo)
     abertas = tarefas.filter(status__in=["pendente", "parcial", "nao_possivel"])
