@@ -2,34 +2,64 @@
   (function () {
     const formulario = document.getElementById("filtros-locacoes");
     const limpar = document.getElementById("limpar-filtros-locacoes");
+    const resumo = document.getElementById("filtros-resumo");
     const periodo = document.getElementById("periodo-locacoes");
     const dadosPeriodos = document.getElementById("periodos-locacoes");
     const periodos = dadosPeriodos ? JSON.parse(dadosPeriodos.textContent) : {};
     let temporizador;
     let enviando = false;
+    function preservarOutroFormulario(form) {
+      // A tabela mantém o período financeiro aplicado no servidor, nunca
+      // incorpora datas personalizadas ainda em digitação no outro formulário.
+      if (form !== resumo) return;
+      const outro = form === resumo ? formulario : resumo;
+      if (!outro) return;
+      form.querySelectorAll("[data-preservar-consulta]").forEach(function (campo) {
+        const origem = outro.elements.namedItem(campo.name);
+        if (origem) campo.value = origem.value;
+      });
+      // Também preserva campos que estavam vazios quando a página abriu.
+      const nomes = form === resumo
+        ? ["cliente", "status", "financeiro", "data_inicio", "data_fim", "aba", "visao", "situacao"]
+        : ["resumo_periodo", "resumo_inicio", "resumo_fim"];
+      nomes.forEach(function (nome) {
+        const origem = outro.elements.namedItem(nome);
+        if (!origem || form.elements.namedItem(nome)) return;
+        const campo = document.createElement("input");
+        campo.type = "hidden"; campo.name = nome; campo.value = origem.value;
+        campo.dataset.preservarConsulta = ""; form.append(campo);
+      });
+    }
     function agendarFiltro(event) {
       if (!event.target.matches("input, select")) return;
       clearTimeout(temporizador);
-      if (event.target === periodo) {
+      const form = event.currentTarget;
+      if (form === resumo && event.target === periodo) {
         const datas = periodos[periodo.value];
+        document.getElementById("datas-resumo").hidden = Boolean(datas);
         if (!datas) return; // Intervalo à escolha não altera nem envia datas.
-        formulario.elements.data_inicio.value = datas.inicio;
-        formulario.elements.data_fim.value = datas.fim;
-      } else if (periodo && ["data_inicio", "data_fim"].includes(event.target.name)) {
+        resumo.elements.resumo_inicio.value = datas.inicio;
+        resumo.elements.resumo_fim.value = datas.fim;
+      } else if (form === resumo && ["resumo_inicio", "resumo_fim"].includes(event.target.name)) {
         periodo.value = "escolha";
+        return; // As duas datas são aplicadas juntas pelo botão/Enter.
       }
       temporizador = setTimeout(function () {
-        if (!enviando && formulario.checkValidity()) {
-          formulario.requestSubmit();
+        if (!enviando && form.checkValidity()) {
+          preservarOutroFormulario(form);
+          form.requestSubmit();
         }
       }, 350);
     }
-    formulario.addEventListener("input", agendarFiltro);
-    formulario.addEventListener("change", agendarFiltro);
-    formulario.addEventListener("submit", function (event) {
-      clearTimeout(temporizador);
-      if (enviando) event.preventDefault();
-      enviando = true;
+    [formulario, resumo].filter(Boolean).forEach(function (form) {
+      form.addEventListener("input", agendarFiltro);
+      form.addEventListener("change", agendarFiltro);
+      form.addEventListener("submit", function (event) {
+        clearTimeout(temporizador);
+        if (enviando) { event.preventDefault(); return; }
+        preservarOutroFormulario(form);
+        enviando = true;
+      });
     });
     limpar.addEventListener("click", function () {
       clearTimeout(temporizador);

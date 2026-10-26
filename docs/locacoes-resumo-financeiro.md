@@ -4,11 +4,15 @@ Resumo integrado à página existente, sem alterar rotinas de gravação finance
 
 ## Regras
 
-Posição: filtros → resumo financeiro → abas → tabela. Os blocos reaproveitam a
+Posição: cabeçalho → resumo financeiro → filtros operacionais → abas e Histórico
+completo → tabela. Os blocos reaproveitam a
 identidade visual da consulta: quatro colunas no desktop, duas no celular e uma
-em telas abaixo de 360 px. Não há novas ações, formulários ou botões.
+em telas abaixo de 360 px. Não há nova página. “Aplicar período” é a única ação
+adicionada, exclusiva do intervalo personalizado. Dois formulários
+GET na mesma página mantêm independentes os parâmetros financeiros e operacionais.
 
-O intervalo existente é reaproveitado com significados explícitos:
+O período financeiro tem campos próprios (`resumo_inicio`, `resumo_fim`), separados
+das datas de entrega/recolhimento da tabela (`data_inicio`, `data_fim`):
 
 - quantidade e contratado: cadastro (`Locacao.criado_em`) no intervalo;
 - recebido: `PagamentoLocacao.data_hora` no intervalo, inclusive de contratos anteriores;
@@ -18,15 +22,15 @@ Os limites incluem o dia inicial e o dia final completos no fuso ativo do Django
 Sem datas, não há limite temporal; uma data isolada limita somente sua extremidade.
 Datas inválidas deixam o resumo indisponível, sem valores que aparentem ser válidos.
 
-Cliente, Status e Financeiro restringem ambos os conjuntos. Status e financeiro
-são atuais; a restrição é identificada no resumo. Abas, Mostrar, marco operacional,
-situação de entrega/recolhimento e paginação não entram no cálculo financeiro.
+Cliente, Status, Financeiro, Mostrar, abas e datas operacionais afetam somente a
+tabela. O resumo depende somente do próprio período e considera todos os contratos
+e pagamentos elegíveis. Marco operacional e paginação não entram no resumo.
 A tabela mantém sua interpretação anterior das datas de entrega/recolhimento.
 
 Canceladas ficam fora dos indicadores principais e aparecem em linha separada,
 com quantidade e contratado por cadastro, e pagamentos por data do pagamento.
-Status Cancelada apresenta somente esse grupo, com saldo “Não se aplica” e aviso
-de que o saldo cadastral não é apresentado como dívida cobrável.
+Selecionar Status Cancelada na tabela não muda o resumo; o grupo cancelado continua
+separado, sem transformar seu saldo cadastral em dívida normalmente cobrável.
 
 ## Fonte e desempenho
 
@@ -43,9 +47,11 @@ Nenhuma rotina de pagamento, contrato, estoque ou movimentação foi modificada.
 
 ## Atalhos de período
 
-Um único seletor junto aos campos existentes oferece: Hoje, Ontem, Esta semana,
+Um único seletor na faixa do título do resumo oferece: Hoje, Ontem, Esta semana,
 Fim de semana, Este mês, Mês passado e Intervalo à escolha. Não existem atalhos
-de 7/30 dias nem de 3/6 meses, e nenhum campo de data foi duplicado.
+de 7/30 dias nem de 3/6 meses. As datas financeiras aparecem nessa faixa somente
+em Intervalo à escolha, claramente identificadas, sem compartilhar nomes ou valores
+com as datas operacionais.
 
 O calendário é calculado no servidor em `America/Belem`, independentemente do
 fuso do navegador ou de outro fuso ativo no processo. Hoje/ontem são dias civis;
@@ -55,11 +61,21 @@ Mês passado usa o mês anterior inteiro, incluindo fevereiro bissexto e virada 
 
 O atalho preenche as datas e reutiliza o envio automático com debounce existente.
 Intervalo à escolha não limpa nem envia as datas ao ser selecionado. A edição
-manual troca a indicação para Intervalo à escolha e mantém o envio automático
-existente, sem limite arbitrário de duração. Valores explícitos de datas sempre
+manual troca a indicação para Intervalo à escolha e aguarda “Aplicar período”,
+sem interromper a digitação das duas datas e sem limite arbitrário de duração.
+O botão fica junto aos campos, na faixa do resumo, somente na opção personalizada.
+Selecionar um período predefinido oculta os campos e aplica automaticamente.
+Valores explícitos de datas sempre
 prevalecem: o nome do atalho não pode sobrescrever um intervalo manual.
-Cliente, Status, Financeiro e aba são preservados. A identificação do período
-acompanha links de abas, paginação e Histórico. Limpar filtros mantém seu fluxo.
+Cada formulário preserva os parâmetros do outro em campos ocultos. A tabela mantém
+o período financeiro aplicado no servidor, sem incorporar rascunhos de datas ainda
+não aplicados. O formulário financeiro preserva os filtros operacionais ao enviar.
+Mudar o período preserva inclusive a página da tabela. Filtrar a tabela reinicia
+sua paginação como antes, mantendo o período financeiro. Abas, Histórico e links
+de paginação preservam o período; Limpar filtros limpa somente o operacional.
+URLs anteriores com `data_inicio`/`data_fim` continuam filtrando a tabela e não
+definem implicitamente o período financeiro. Sem parâmetros `resumo_*`, o resumo
+considera todo o histórico elegível.
 
 ## Limites históricos
 
@@ -72,21 +88,37 @@ Os indicadores não representam lucro nem faturamento fiscal.
 
 ## Validação executada
 
-**120 testes aprovados, sem skips:** os 109 anteriores, 10 de períodos e a regressão
-de frontend do debounce/limpeza.
+**128 testes aprovados, sem skips:** a regressão anterior adaptada à independência,
+cinco cenários em `locacoes.tests_consulta_independente` e três novos testes em
+`locacoes.tests_intervalo_personalizado`.
 
 Cobertos: cadastro/pagamento no mesmo mês; contrato antigo recebido no mês;
 parcelas múltiplas sem multiplicar contratado; canceladas com/sem pagamento;
 recebimento e desfazimento pelas funções reais do recebimento unificado; filtros
-combinados; dias inicial/final inclusivos e fronteira UTC/local; limites abertos;
+combinados na função de agregação; dias inicial/final inclusivos e fronteira UTC/local; limites abertos;
 datas inválidas; paginação; abas/Mostrar/Histórico sem afetar resumo; duas consultas
-de agregação; ausência de escrita durante consulta.
+de agregação; ausência de escrita durante consulta. Na página, filtros operacionais
+não alteram o resumo. Datas inválidas em um conjunto não invalidam o outro. Mudança
+do período financeiro preserva linhas, ordenação e página operacional; links e
+limpeza mantêm os parâmetros do conjunto independente.
 
 Atalhos: viradas de mês/ano, fevereiro comum e bissexto, segunda/domingo, fim de
 semana passado e em andamento, UTC em dia diferente de Belém, intervalo livre
 maior que um ano, campos manuais prevalecendo e preservação de filtros/links.
 No navegador, cada atalho preenche e aplica uma única consulta; a seleção manual
-não apaga datas e a edição dos dois campos usa um único envio com debounce.
+não apaga datas e a edição dos dois campos não envia até “Aplicar período”.
+Validados janeiro a junho, ano inteiro, intervalo entre anos e um único dia;
+preservação das datas no retorno, independência operacional e datas inválidas.
+Data inicial posterior à final mostra mensagem específica e nenhum indicador.
+Prévias específicas da opção aberta ficam em subpastas `personalizado-*`.
+
+Após o ajuste final de CSS, os três testes de intervalo personalizado foram
+reexecutados e aprovados. Em 1366 e 1051 px, seletor, datas e botão têm altura
+de 38 px, topos alinhados com tolerância de 1 px e espaços de 8 px. A regra é
+restrita ao desktop (acima de 820 px). As capturas mobile de 390 e 320 px foram
+comparadas por SHA-256 e permaneceram idênticas às aprovadas. A captura desktop
+manteve as mesmas dimensões, sem aumentar a faixa superior. São 128 testes na
+rodada funcional e a reexecução de três deles após o refinamento visual.
 
 Navegador: 1366, 1051, 390 e 320 px. Ordem dos painéis, número de colunas e ausência
 de rolagem horizontal verificados. Capturas com valores e clientes fictícios em

@@ -800,10 +800,6 @@ def lista(request):
     hoje = timezone.localdate()
     data_inicio_texto = request.GET.get("data_inicio", "").strip()
     data_fim_texto = request.GET.get("data_fim", "").strip()
-    periodos = periodos_consulta()
-    periodo = request.GET.get("periodo", "escolha")
-    if periodo not in periodos or (data_inicio_texto, data_fim_texto) != (periodos[periodo]["inicio"], periodos[periodo]["fim"]):
-        periodo = "escolha"
     def ler_data(texto):
         try:
             return parse_date(texto or "")
@@ -812,9 +808,21 @@ def lista(request):
     data_inicio = ler_data(data_inicio_texto)
     data_fim = ler_data(data_fim_texto)
     datas_invalidas = bool((data_inicio_texto and not data_inicio) or (data_fim_texto and not data_fim) or (data_inicio and data_fim and data_inicio > data_fim))
-    resumo_financeiro = None if datas_invalidas else resumo_financeiro_locacoes(
-        cliente, status, financeiro, data_inicio, data_fim,
+    resumo_inicio_texto = request.GET.get("resumo_inicio", "").strip()
+    resumo_fim_texto = request.GET.get("resumo_fim", "").strip()
+    resumo_inicio, resumo_fim = ler_data(resumo_inicio_texto), ler_data(resumo_fim_texto)
+    datas_financeiras_invalidas = bool(
+        (resumo_inicio_texto and not resumo_inicio) or (resumo_fim_texto and not resumo_fim)
+        or (resumo_inicio and resumo_fim and resumo_inicio > resumo_fim)
     )
+    periodos = periodos_consulta()
+    periodo = request.GET.get("resumo_periodo", "escolha")
+    if periodo not in periodos or (resumo_inicio_texto, resumo_fim_texto) != (periodos[periodo]["inicio"], periodos[periodo]["fim"]):
+        periodo = "escolha"
+    resumo_financeiro = None if datas_financeiras_invalidas else resumo_financeiro_locacoes(
+        inicio=resumo_inicio, fim=resumo_fim,
+    )
+    parametros_resumo = {chave: request.GET[chave] for chave in ("resumo_periodo", "resumo_inicio", "resumo_fim") if request.GET.get(chave)}
     locacoes_qs = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
@@ -902,11 +910,11 @@ def lista(request):
         contexto_consulta["situacao"] = "pendentes"
     elif realizadas:
         contexto_consulta["situacao"] = "realizadas"
-    parametros_pagina = {**parametros, **contexto_consulta}
-    parametros_navegacao = dict(parametros)
-    if request.GET.get("periodo"):
-        parametros_navegacao["periodo"] = periodo
-        parametros_pagina["periodo"] = periodo
+    parametros_pagina = {**parametros, **contexto_consulta, **parametros_resumo}
+    parametros_navegacao = {**parametros, **parametros_resumo}
+    preservar_operacional = {**parametros, **contexto_consulta}
+    if request.GET.get("pagina"):
+        preservar_operacional["pagina"] = request.GET["pagina"]
     abas = [{"valor": valor, "rotulo": rotulo, "url": "?" + urlencode({**parametros_navegacao, "aba": valor})} for valor, rotulo in ABAS]
     return render(
         request,
@@ -916,6 +924,16 @@ def lista(request):
             "resumo_financeiro": resumo_financeiro,
             "periodos_consulta": periodos,
             "periodo_selecionado": periodo,
+            "datas_financeiras_invalidas": datas_financeiras_invalidas,
+            "erro_periodo_financeiro": (
+                "A data inicial deve ser anterior ou igual à data final."
+                if resumo_inicio and resumo_fim and resumo_inicio > resumo_fim
+                else "Informe datas válidas para consultar os valores."
+            ),
+            "resumo_inicio": resumo_inicio_texto,
+            "resumo_fim": resumo_fim_texto,
+            "parametros_resumo": parametros_resumo,
+            "preservar_operacional": preservar_operacional,
             "aba": aba,
             "abas": abas,
             "historico": historico,
@@ -925,7 +943,7 @@ def lista(request):
             "url_anterior": "?" + urlencode({**parametros_pagina, "pagina": pagina.previous_page_number()}) if pagina.has_previous() else "",
             "url_proxima": "?" + urlencode({**parametros_pagina, "pagina": pagina.next_page_number()}) if pagina.has_next() else "",
             "url_historico": "?" + urlencode({**parametros_navegacao, "aba": aba, "visao": "historico"}),
-            "url_limpar": "?" + urlencode(contexto_consulta),
+            "url_limpar": "?" + urlencode({**contexto_consulta, **parametros_resumo}),
             "filtros_ativos": [
                 {"rotulo": {"cliente": "Cliente", "status": "Status", "financeiro": "Financeiro", "data_inicio": "Data inicial", "data_fim": "Data final"}[chave],
                  "valor": (dict(Locacao.STATUS_CHOICES).get(valor, valor) if chave == "status" else {"com_saldo": "Com saldo a receber", "quitadas": "Quitadas"}.get(valor, valor))}

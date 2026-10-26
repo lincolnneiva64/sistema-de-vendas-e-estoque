@@ -50,7 +50,7 @@ class DadosResumo:
         return locacao.registrar_pagamento(Decimal(str(valor)), "pix", data_hora=self.instante(quando), **campos)
 
     def consultar(self, **campos):
-        return self.client.get(reverse("locacoes:lista"), {"data_inicio": "2026-10-01", "data_fim": "2026-10-31", **campos})
+        return self.client.get(reverse("locacoes:lista"), {"resumo_inicio": "2026-10-01", "resumo_fim": "2026-10-31", **campos})
 
 
 class ResumoFinanceiroTests(DadosResumo, TestCase):
@@ -84,12 +84,11 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
         self.assertEqual((r["quantidade"], r["contratado"], r["recebido"], r["saldo"]), (1, 100, 20, 80))
         self.assertEqual((r["canceladas_quantidade"], r["canceladas_contratado"], r["canceladas_recebido"]), (2, 75, 25))
         resposta = self.consultar(status="cancelada")
-        self.assertContains(resposta, "Resumo financeiro — somente canceladas")
-        self.assertContains(resposta, "Não se aplica")
-        self.assertContains(resposta, "não é apresentado como dívida cobrável")
+        self.assertNotContains(resposta, "Resumo financeiro — somente canceladas")
+        self.assertContains(resposta, "Canceladas")
         r = resposta.context["resumo_financeiro"]
-        self.assertTrue(r["somente_canceladas"])
-        self.assertEqual(r["saldo"], 0)
+        self.assertFalse(r["somente_canceladas"])
+        self.assertEqual(r["saldo"], 80)
         self.assertEqual(r["canceladas_recebido"], 25)
 
     def test_recebimento_unificado_e_desfazimento_reais_sem_dupla_subtracao(self):
@@ -116,13 +115,12 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
         self.criar(pessoa_avulsa_nome="Outro", status="entregue")
         quitada = self.criar(cliente=cliente, status="entregue")
         self.pagar(quitada, 100)
-        r = self.resumo(cliente="Empresa", status="entregue", financeiro="com_saldo")
+        r = resumo_financeiro_locacoes(inicio=date(2026, 10, 1), fim=date(2026, 10, 31), cliente="Empresa", status="entregue", financeiro="com_saldo")
         self.assertEqual((r["quantidade"], r["contratado"], r["recebido"], r["saldo"]), (1, 100, 25, 75))
         self.assertEqual(len(r["restricoes"]), 3)
-        r = self.resumo(cliente="Empresa", status="entregue", financeiro="quitadas")
+        r = resumo_financeiro_locacoes(inicio=date(2026, 10, 1), fim=date(2026, 10, 31), cliente="Empresa", status="entregue", financeiro="quitadas")
         self.assertEqual((r["quantidade"], r["recebido"], r["saldo"]), (1, 100, 0))
-        self.assertEqual(self.resumo(cliente="Outro")["quantidade"], 1)
-        self.assertContains(self.consultar(financeiro="com_saldo"), "Financeiro atual: Com saldo a receber")
+        self.assertEqual(self.resumo(cliente="Outro")["quantidade"], 4)
 
     def test_datas_inclusivas_no_fuso_com_limites_fora_do_intervalo(self):
         for instante, incluido in (("2026-09-30T23:59:59.999999", False),
@@ -143,13 +141,13 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
         self.criar("2026-01-01")
         self.criar("2026-10-01")
         self.criar("2027-01-01")
-        self.assertEqual(self.resumo(data_inicio="", data_fim="")["quantidade"], 3)
-        self.assertEqual(self.resumo(data_inicio="", data_fim="2026-10-01")["quantidade"], 2)
-        self.assertEqual(self.resumo(data_inicio="2026-10-01", data_fim="")["quantidade"], 2)
+        self.assertEqual(self.resumo(resumo_inicio="", resumo_fim="")["quantidade"], 3)
+        self.assertEqual(self.resumo(resumo_inicio="", resumo_fim="2026-10-01")["quantidade"], 2)
+        self.assertEqual(self.resumo(resumo_inicio="2026-10-01", resumo_fim="")["quantidade"], 2)
 
     def test_datas_invalidas_nao_exibem_valores_nem_consultam_agregacoes(self):
         self.criar()
-        for filtros in ({"data_inicio": "2026-02-30"}, {"data_fim": "invalida"}, {"data_inicio": "2026-11-01", "data_fim": "2026-10-01"}):
+        for filtros in ({"resumo_inicio": "2026-02-30"}, {"resumo_fim": "invalida"}, {"resumo_inicio": "2026-11-01", "resumo_fim": "2026-10-01"}):
             with patch("locacoes.views.resumo_financeiro_locacoes") as calcular:
                 resposta = self.consultar(**filtros)
                 calcular.assert_not_called()
@@ -216,7 +214,7 @@ class ResumoFinanceiroBrowserTests(DadosResumo, TestCase):
                     tab.call("Emulation.setDeviceMetricsOverride", {"width": largura, "height": 1100, "deviceScaleFactor": 1, "mobile": largura < 600})
                     tab.call("Page.setDocumentContent", {"frameId": tab.call("Page.getFrameTree")["frameTree"]["frame"]["id"], "html": html})
                     tab.wait('!!document.querySelector(".resumo-financeiro-blocos")')
-                    medidas = tab.evaluate('''(()=>{const r=document.querySelector('.resumo-financeiro'),b=r.querySelector('dl'),f=document.querySelector('#filtros-locacoes').closest('section'),n=document.querySelector('.consulta-operacional');return {colunas:getComputedStyle(b).gridTemplateColumns.split(' ').length,ordem:f.getBoundingClientRect().bottom<=r.getBoundingClientRect().top&&r.getBoundingClientRect().bottom<=n.getBoundingClientRect().top,semOverflow:document.documentElement.scrollWidth<=innerWidth,texto:r.textContent}})()''')
+                    medidas = tab.evaluate('''(()=>{const r=document.querySelector('.resumo-financeiro'),b=r.querySelector('dl'),f=document.querySelector('#filtros-locacoes').closest('section'),n=document.querySelector('.consulta-operacional');return {colunas:getComputedStyle(b).gridTemplateColumns.split(' ').length,ordem:r.getBoundingClientRect().bottom<=f.getBoundingClientRect().top&&f.getBoundingClientRect().bottom<=n.getBoundingClientRect().top,semOverflow:document.documentElement.scrollWidth<=innerWidth,texto:r.textContent}})()''')
                     self.assertEqual(medidas["colunas"], colunas)
                     self.assertTrue(medidas["ordem"])
                     self.assertTrue(medidas["semOverflow"])

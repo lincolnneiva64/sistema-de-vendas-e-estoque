@@ -3,10 +3,25 @@
 .consulta-operacional .nav-link.active{background:#214b80;color:#fff;border-color:#214b80}
 .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;align-items:end}
 .filters>*{min-width:0}.filters input,.filters select{width:100%;max-width:100%;box-sizing:border-box}.filters label{display:block}
-.filters .periodo-datas{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:12px;grid-column:span 3;align-items:end}
-.periodo-datas>*{min-width:0}
 @media(min-width:1051px){#filtros-locacoes{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(max-width:1050px){.filters .periodo-datas{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}.periodo-atalho{grid-column:1/-1}}
+.resumo-cabecalho{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 -20px 12px;padding:12px 20px;background:linear-gradient(90deg,#ffedd5,#fff7ed 65%,#fff);border-bottom:2px solid #fed7aa;flex-wrap:wrap}
+.resumo-financeiro .resumo-cabecalho h2{margin:0;padding:0;border:0;background:none}
+.resumo-periodo-form{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0;font-size:13px}
+.resumo-periodo-form label{font-weight:650;color:var(--locacoes-orange-dark)}
+.resumo-periodo-form select{max-width:210px;min-height:38px;padding:6px 10px}
+.resumo-datas{display:flex;gap:8px;min-width:0;align-items:end}.resumo-datas[hidden]{display:none}
+.resumo-datas .btn{min-height:38px;padding:7px 12px;white-space:nowrap;font-size:13px}
+.resumo-datas>div{min-width:0}.resumo-datas label{display:block;font-size:12px}
+.resumo-datas input{box-sizing:border-box;width:155px;max-width:100%;min-height:38px;padding:6px}
+@media(min-width:821px){
+ .resumo-periodo-form{align-items:flex-end}
+ .resumo-periodo-form>label{margin-bottom:10px}
+ .resumo-periodo-form select,.resumo-datas input,.resumo-datas .btn{height:38px;min-height:38px;box-sizing:border-box}
+}
+.historico-consulta{margin-left:4px;display:inline-flex;align-items:center;min-height:40px;padding:0 8px;font-size:14px;color:#475569}
+.historico-consulta[aria-current=page]{font-weight:800;color:#214b80}
+@media(max-width:820px){.resumo-cabecalho{margin-right:-15px;margin-left:-15px;padding:12px 15px}.resumo-periodo-form{width:100%;justify-content:flex-start}.resumo-datas{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.resumo-datas input{width:100%}}
+@media(max-width:820px){.resumo-datas .btn{grid-column:1/-1;justify-self:start}}
 .data-locacao{white-space:nowrap;display:inline-block}
 .resumo-financeiro-blocos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
 .resumo-financeiro-blocos>div{min-width:0;border:1px solid var(--locacoes-border);border-radius:8px;padding:12px;background:var(--locacoes-orange-soft)}
