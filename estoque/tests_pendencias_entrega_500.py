@@ -135,7 +135,7 @@ class PendenciasEntrega500Tests(PendenciasEntregaFixtures, TestCase):
         with CaptureQueriesContext(connection) as muitas:
             views.listar_pendencias_entrega()
         self.assertEqual(len(poucas), len(muitas))
-        self.assertLessEqual(len(muitas), 5)
+        self.assertLessEqual(len(muitas), 6)  # Uma leitura em lote da auditoria administrativa.
 
     def test_botao_ver_todas_as_pendencias_aponta_para_rota(self):
         self.criar(status='cancelada')

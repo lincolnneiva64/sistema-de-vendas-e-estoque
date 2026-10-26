@@ -577,6 +577,9 @@ class EventoVenda(models.Model):
 
     @property
     def descricao_exibicao(self):
+        if self.tipo_evento in {"entrega_pendencia_regularizada", "entrega_pendencia_revertida"}:
+            from .services.regularizacao_pendencias_entrega import descricao_evento
+            return descricao_evento(self.descricao, self.tipo_evento)
         if self.tipo_evento == "separacao_quantidade_ajustada":
             from .services.pendencias_separacao import descricao_resolucao
             return descricao_resolucao(self.descricao)

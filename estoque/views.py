@@ -1084,7 +1084,8 @@ def localidade_principal_rota(vendas_ordenadas):
     return ""
 
 
-def listar_pendencias_entrega(limite=None):
+def listar_pendencias_entrega(limite=None, *, incluir_regularizadas=False):
+    from .services.regularizacao_pendencias_entrega import identificar_ocorrencia, filtrar_regularizadas
     pendencias = []
     pendencias_reprogramadas = set(
         EntregaChecklistItem.objects.filter(
@@ -1131,6 +1132,7 @@ def listar_pendencias_entrega(limite=None):
                 cliente = item_rota.venda.cliente
                 produto = item_venda.produto.nome if item_venda and item_venda.produto else "Produto nao identificado"
                 pendencias.append({
+                    "ocorrencia_administrativa": identificar_ocorrencia(item_rota, checklist),
                     "id": checklist.id,
                     "item_rota_id": item_rota.id,
                     "item_venda_id": item_venda.id if item_venda else "",
@@ -1152,6 +1154,7 @@ def listar_pendencias_entrega(limite=None):
         else:
             cliente = item_rota.venda.cliente
             pendencias.append({
+                "ocorrencia_administrativa": identificar_ocorrencia(item_rota),
                 "id": "",
                 "item_rota_id": item_rota.id,
                 "item_venda_id": "",
@@ -1171,10 +1174,9 @@ def listar_pendencias_entrega(limite=None):
                 "status": item_rota.get_status_display(),
             })
 
-        if limite and len(pendencias) >= limite:
-            return pendencias[:limite]
-
-    return pendencias
+    if not incluir_regularizadas:
+        pendencias = filtrar_regularizadas(pendencias)
+    return pendencias[:limite] if limite else pendencias
 
 
 def pendencias_sugeriveis_entrega():
@@ -1253,7 +1255,10 @@ def listar_pendencias_resolvidas_entrega(limite=None, filtros=None):
             "resumo_resolucao": resumo_resolucao,
         })
 
-    return pendencias
+    from .services.regularizacao_pendencias_entrega import listar_regularizadas
+    pendencias.extend(listar_regularizadas(filtros))
+    pendencias.sort(key=lambda p: (p["data"], p["id"]), reverse=True)
+    return pendencias[:limite] if limite else pendencias
 
 
 def contexto_pendencia_resolvida_nota(request, venda):
@@ -21277,6 +21282,10 @@ def entregas_dia(request):
                     sequencia_rota.append(("pendencia", checklists_pendencia[0].rota_item.venda, checklists_pendencia))
 
             with transaction.atomic():
+                from .services.regularizacao_pendencias_entrega import validar_reprogramacao
+                if not validar_reprogramacao(pendencia_ids_selecionados):
+                    messages.warning(request, "As pendências selecionadas mudaram ou foram regularizadas. Atualize a lista antes de criar a rota.", extra_tags="rota-entrega")
+                    return redirect(f"{reverse('estoque:entregas_dia')}?data={data_entrega.isoformat()}")
                 rota = EntregaRota.objects.create(
                     data=data_entrega,
                     tipo=EntregaRota.TIPO_ROTA,
