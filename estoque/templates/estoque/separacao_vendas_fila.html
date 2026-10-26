@@ -252,18 +252,13 @@
 
                 {% if separacao.checklist_nao_iniciado_fila and not separacao.tem_alteracao_fisica_fila and not separacao.tem_divergencia_fila and not separacao.nota_pronta_fila %}
                   <div class="sep-alert neutral">
-                    <strong>AGUARDANDO SEPARACAO</strong>
-                    <div>Checklist ainda nao iniciado.</div>
+                    <strong>Aguardando separação — {{ separacao.total_itens }} produto{{ separacao.total_itens|pluralize:"s" }}</strong>
                   </div>
                 {% endif %}
 
                 {% if separacao.mostrar_checklist_incompleto_fila %}
                   <div class="sep-alert">
-                    <strong>CHECKLIST INCOMPLETO</strong>
-                    <div>Falta conferir:</div>
-                    {% for item in separacao.itens_pendentes %}
-                      <div>{{ item.produto }} - {{ item.quantidade }} {{ item.unidade }}</div>
-                    {% endfor %}
+                    <strong>Em separação — faltam conferir {{ separacao.total_pendentes }} produto{{ separacao.total_pendentes|pluralize:"s" }}</strong>
                   </div>
                 {% endif %}
 
@@ -273,10 +268,12 @@
                       <div class="pend-item">
                         <div class="pend-name">{{ item.produto }}</div>
                         <div class="pend-grid">
-                          <span{% if item.motivo %} title="{{ item.motivo }}"{% endif %}>{{ item.status_texto }}</span>
+                          <span{% if item.motivo %} title="{{ item.motivo }}"{% endif %}>{% if item.aguardando_conferencia %}Ainda não conferido{% elif item.status == "nao_encontrado" %}Não encontrado{% else %}{{ item.status_texto }}{% endif %}</span>
                           <span>Solicitado: {{ item.quantidade_solicitada }} {{ item.unidade }}</span>
+                          {% if not item.aguardando_conferencia %}
                           <span>Separado: {{ item.quantidade_separada }} {{ item.unidade }}</span>
                           <span>Nota atual: {{ item.quantidade_atual_nota }} {{ item.unidade_atual }}</span>
+                          {% endif %}
                         </div>
                         {% if item.observacao %}
                           <div class="pend-obs">{{ item.observacao }}</div>

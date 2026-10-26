@@ -25186,25 +25186,32 @@ def _montar_grupos_rota_separacao(separacoes):
             if item.status == SeparacaoVendaItem.STATUS_PENDENTE
         ]
         separacao.checklist_nao_iniciado_fila = (
-            separacao.status == SeparacaoVenda.STATUS_ENVIADA
+            bool(itens_checklist_fila)
             and not separacao.iniciado_em
+            and not _checklist_separacao_em_consulta(separacao)
             and all(item.status == SeparacaoVendaItem.STATUS_PENDENTE for item in itens_checklist_fila)
         )
         separacao.mostrar_checklist_incompleto_fila = (
             bool(separacao.itens_pendentes)
             and not separacao.checklist_nao_iniciado_fila
-            and separacao.status in {
-                SeparacaoVenda.STATUS_EM_SEPARACAO,
-                SeparacaoVenda.STATUS_COM_PENDENCIA,
-            }
+            and not _checklist_separacao_em_consulta(separacao)
         )
         separacao.total_itens = operacional["produtos"]
         separacao.total_pendencias = operacional["pendencias"]
         separacao.total_resolvidos = operacional["resolvidos"]
         separacao.itens_resolvidos = [_resumo_item_pendencia_separacao(item) for item in itens
                                     if item.falta_resolvida and not item.pendencia_operacional]
-        separacao.itens_com_pendencia = [_resumo_item_pendencia_separacao(item) for item in itens
-                                        if item.pendencia_operacional]
+        separacao.itens_com_pendencia = []
+        for item in itens:
+            if not item.pendencia_operacional:
+                continue
+            aguardando = (item.status == SeparacaoVendaItem.STATUS_PENDENTE
+                          and item.situacao_operacional == "pendente")
+            if aguardando and separacao.checklist_nao_iniciado_fila:
+                continue
+            resumo_item = _resumo_item_pendencia_separacao(item)
+            resumo_item["aguardando_conferencia"] = aguardando
+            separacao.itens_com_pendencia.append(resumo_item)
         separacao.tem_ajuste_nota = _separacao_tem_ajuste_nota(separacao)
         separacao.tem_divergencia_fila = (
             bool(separacao.divergencias_fila)
