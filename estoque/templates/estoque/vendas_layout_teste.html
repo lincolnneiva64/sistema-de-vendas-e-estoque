@@ -18,7 +18,6 @@
     body[data-sales-offline="true"] #vendaGravadaBloco,
     body[data-sales-offline="true"] #atalho-despesa-global,
     body[data-sales-offline="true"] #revisaoPrecosPosterior,
-    body[data-sales-offline="true"] #conferenciaEstoqueContador,
     body[data-sales-offline="true"] #btnVisualizarVenda,
     body[data-sales-offline="true"] .cancelamento-nota-grupo { display:none !important; }
     body {
@@ -290,13 +289,43 @@ select {
         width: 100%;
     }
 
-    .conferencia-estoque-contador {
-        margin-top: 4px;
+    #contadorItens {
+        position: fixed;
+        left: 158px;
+        bottom: calc(39px + env(safe-area-inset-bottom));
+        z-index: 1000;
+        font-size: 12px;
+        font-weight: 700;
         color: #475569;
-        font-size: 11.5px;
-        font-weight: 800;
+        white-space: nowrap;
+    }
+    .produto-pendente-compacto {
+        gap: 3px 6px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 3px 6px;
+        margin-top: 3px;
+        border: 1px solid #f0c36d;
+        border-radius: 6px;
+        background: #fff8e6;
+        font-size: 11px;
         line-height: 1.2;
     }
+    .produto-pendente-compacto > span { flex: 1 1 150px; overflow-wrap: anywhere; }
+    .produto-pendente-compacto > button {
+        flex: 0 0 auto;
+        padding: 2px 5px;
+        min-height: 24px;
+        font: inherit;
+        cursor: pointer;
+    }
+    @media (max-width: 980px) {
+        .produto-pendente-compacto > button { min-height: 36px; }
+    }
+    @media (max-width: 575.98px) {
+        #contadorItens { left: 145px; bottom: calc(36px + env(safe-area-inset-bottom)); }
+    }
+
 #clienteBusca {
     width: 100%;
 }
@@ -3031,15 +3060,7 @@ td:first-child {
     <input type="text" id="produtoBusca" placeholder="Selecione um produto" autocomplete="off">
     <div id="produtoSugestoes" class="produto-sugestoes"></div>
 <div id="estoquePreview" class="estoque-preview"></div>
-<div
-    id="conferenciaEstoqueContador"
-    class="conferencia-estoque-contador"
-    data-total-produtos="{{ conferencia_estoque_contador.total_produtos }}"
-    data-total-conferidos="{{ conferencia_estoque_contador.total_conferidos }}"
-    data-total-faltantes="{{ conferencia_estoque_contador.total_faltantes }}"
->
-    Conferidos: {{ conferencia_estoque_contador.total_conferidos }} / {{ conferencia_estoque_contador.total_produtos }} · Faltam: {{ conferencia_estoque_contador.total_faltantes }}
-</div>
+
 
     <select id="produto" hidden>
         <option value="">Selecione um produto</option>
@@ -3317,7 +3338,7 @@ td:first-child {
 <div id="resumoVenda" style="
     margin-top: 10px;
     display: grid;
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: 1fr auto auto;
     align-items: center;
     gap: 14px;
     padding: 12px 14px;
@@ -3325,11 +3346,7 @@ td:first-child {
     border: 1px solid #bfdbfe;
     border-radius: 14px;
 ">
-    <div id="contadorItens" style="
-        font-size: 16px;
-        font-weight: 800;
-        color: #1e3a8a;
-    ">Itens: 0</div>
+    <span id="contadorItens" role="status" aria-live="polite">Produtos: 0</span>
 
     <div class="resumo-vendas-hoje-compacto resumo-vendas-hoje-na-barra" aria-label="Resumo das vendas de hoje">
         <span class="titulo">Hoje:</span>
@@ -3555,14 +3572,14 @@ const estoquePreview = document.getElementById("estoquePreview");
 const pendingProductLine = document.createElement("div");
 pendingProductLine.id = "venda-linha-produto-pendente";
 pendingProductLine.setAttribute("role", "status");
-pendingProductLine.style.cssText = "gap:8px;align-items:center;flex-wrap:wrap;padding:6px 8px;margin-top:4px;border:1px solid #f0c36d;border-radius:8px;background:#fff8e6;font-size:12px";
+pendingProductLine.className = "produto-pendente-compacto";
 const pendingProductMessage = document.createElement("span");
 const restorePendingProduct = document.createElement("button");
-restorePendingProduct.type = "button"; restorePendingProduct.textContent = "Restaurar produto";
+restorePendingProduct.type = "button"; restorePendingProduct.textContent = "Restaurar"; restorePendingProduct.setAttribute("aria-label", "Restaurar produto selecionado");
 const commitPendingProduct = document.createElement("button");
 commitPendingProduct.type = "button";
 const cancelPendingProduct = document.createElement("button");
-cancelPendingProduct.type = "button"; cancelPendingProduct.textContent = "Cancelar linha";
+cancelPendingProduct.type = "button"; cancelPendingProduct.textContent = "Cancelar"; cancelPendingProduct.setAttribute("aria-label", "Cancelar linha em montagem");
 pendingProductLine.append(pendingProductMessage, restorePendingProduct, commitPendingProduct, cancelPendingProduct);
 pendingProductLine.hidden = true;
 produtoBusca.parentElement.append(pendingProductLine);
@@ -3692,7 +3709,6 @@ const btnConfirmarConferenciaEstoque = document.getElementById("btnConfirmarConf
 const btnCorrigirConferenciaEstoque = document.getElementById("btnCorrigirConferenciaEstoque");
 const btnCancelarConferenciaEstoque = document.getElementById("btnCancelarConferenciaEstoque");
 const btnFecharConferenciaEstoque = document.getElementById("modalConferenciaEstoqueFechar");
-const conferenciaEstoqueContador = document.getElementById("conferenciaEstoqueContador");
 let conferenciaEstoqueProdutoAtualId = "";
 let conferenciaEstoqueOptionAtual = null;
 let conferenciaEstoqueRequisicaoEmAndamento = false;
@@ -5636,7 +5652,8 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 
     const contadorItens = document.getElementById("contadorItens");
     if (contadorItens) {
-        contadorItens.textContent = "Itens: " + linhas.length;
+        const produtos = new Set(Array.from(linhas, linha => linha.dataset.produtoId).filter(Boolean));
+        contadorItens.textContent = "Produtos: " + produtos.size;
     }
 }
 
@@ -6058,14 +6075,6 @@ function aplicarEstadoConferenciaEstoquePreview(opt) {
     estoquePreview.classList.add(classeBadgeConferenciaEstoque(opt));
 }
 
-function atualizarContadorConferenciaEstoque(conferencia) {
-    if (!conferenciaEstoqueContador || !conferencia) return;
-    conferenciaEstoqueContador.dataset.totalProdutos = String(conferencia.total_produtos ?? "");
-    conferenciaEstoqueContador.dataset.totalConferidos = String(conferencia.total_conferidos ?? "");
-    conferenciaEstoqueContador.dataset.totalFaltantes = String(conferencia.total_faltantes ?? "");
-    conferenciaEstoqueContador.textContent = `Conferidos: ${conferencia.total_conferidos} / ${conferencia.total_produtos} · Faltam: ${conferencia.total_faltantes}`;
-}
-
 function atualizarOptionConferenciaEstoque(produtoDados) {
     if (!produtoDados) return null;
     const opt = Array.from(produto.options).find((option) => option.dataset.produtoId === String(produtoDados.id));
@@ -6085,7 +6094,7 @@ function atualizarBadgesConferenciaEstoque(produtoDados) {
         badge.classList.toggle("estoque-conferido", !!produtoDados.estoque_conferido);
         badge.classList.toggle("estoque-nao-conferido", !produtoDados.estoque_conferido);
     });
-    if (opt && produto.value === opt.value) {
+    if (opt && produto.value === opt.value && produtoBusca.value.trim() === opt.value.trim()) {
         const estoqueBase = parseFloat(opt.dataset.estoque || "0");
         estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(
             estoqueBase,
@@ -6234,7 +6243,6 @@ function renderizarModalConferenciaEstoque(dados) {
     }
     renderizarHistoricoConferenciaEstoque(produtoDados.ultima_movimentacao);
     atualizarBadgesConferenciaEstoque(produtoDados);
-    atualizarContadorConferenciaEstoque(dados.conferencia);
 }
 
 function abrirModalConferenciaEstoque(opt) {
@@ -8217,7 +8225,6 @@ function filtrarProdutos(texto) {
     return;
   }
   const termo = texto.toLowerCase().trim();
-  const primeiraLetra = termo.charAt(0);
 
   const opcoes = Array.from(produto.querySelectorAll("option")).filter((opt) => {
     const nome = (opt.value || "").toLowerCase().trim();
@@ -8229,11 +8236,6 @@ function filtrarProdutos(texto) {
     return nome.startsWith(termo);
   });
 
-  const segueOrdemAlfabetica = opcoes.filter((opt) => {
-    const nome = opt.value.toLowerCase().trim();
-    const inicial = nome.charAt(0);
-    return inicial >= primeiraLetra && !nome.startsWith(termo);
-  });
 const contemEmOutraPalavra = opcoes.filter((opt) => {
     const nome = opt.value.toLowerCase().trim();
 
@@ -8242,7 +8244,7 @@ const contemEmOutraPalavra = opcoes.filter((opt) => {
     const palavras = nome.split(/\s+/);
     return palavras.some((palavra, index) => index > 0 && palavra.includes(termo));
 });
-  sugestoes = [...comecaComTermo, ...contemEmOutraPalavra, ...segueOrdemAlfabetica];
+  sugestoes = [...comecaComTermo, ...contemEmOutraPalavra];
   indexAtivo = sugestoes.length ? 0 : -1;
 }
 function renderSugestoes() {
@@ -8308,22 +8310,6 @@ function renderSugestoes() {
             }, 500);
         }, { passive: false });
     }
-
-    div.addEventListener("mouseenter", () => {
-        const unidadeBaseSug = opt.dataset.unidade1 || "";
-const unidadeFracSug = opt.dataset.unidade2 || "";
-const fracionadoSug = opt.dataset.fracionado === "true";
-const fatorSug = parseFloat(opt.dataset.fator || "0");
-const estoqueBaseSug = parseFloat(opt.dataset.estoque || "0");
-
-if (fracionadoSug && unidadeFracSug) {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSug, unidadeBaseSug, fatorSug, unidadeFracSug, fracionadoSug)}`;
-} else {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSug, unidadeBaseSug, fatorSug, unidadeFracSug, fracionadoSug)}`;
-}
-        aplicarEstadoConferenciaEstoquePreview(opt);
-        estoquePreview.style.display = "inline-block";
-    });
 
     let produtoToqueX = 0;
     let produtoToqueY = 0;
@@ -8408,6 +8394,23 @@ function aplicarEstadoConferenciaPreco(opt) {
     }
 }
 
+function atualizarEstoqueProdutoSelecionado() {
+    const opt = produto.options[produto.selectedIndex];
+    if (!opt?.dataset.produtoId || produtoBusca.value.trim() !== opt.value.trim()) {
+        estoquePreview.textContent = "";
+        estoquePreview.style.display = "none";
+        return;
+    }
+    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(
+        Number(String(opt.dataset.estoque || "0").replace(",", ".")),
+        opt.dataset.unidade1 || opt.dataset.unidade || "",
+        parseFloat(String(opt.dataset.fator || "0").replace(",", ".")), opt.dataset.unidade2 || "",
+        opt.dataset.fracionado === "true"
+    )}`;
+    aplicarEstadoConferenciaEstoquePreview(opt);
+    estoquePreview.style.display = "inline-block";
+}
+
 function existeLinhaProdutoPendenteVenda() {
     const selected = produto.options[produto.selectedIndex];
     return Boolean(selected?.dataset.produtoId
@@ -8415,6 +8418,7 @@ function existeLinhaProdutoPendenteVenda() {
 }
 
 function refreshPendingProductLine() {
+    atualizarEstoqueProdutoSelecionado();
     const selected = produto.options[produto.selectedIndex];
     if (!existeLinhaProdutoPendenteVenda()) {
         setPendingProductLineVisible(false);
@@ -8425,8 +8429,8 @@ function refreshPendingProductLine() {
     const quantityText = quantidade.value.trim() || "não informada";
     pendingProductMessage.textContent = mismatch
         ? `Linha pendente: ${selected.value} — quantidade ${quantityText}. O texto da busca não corresponde ao produto selecionado.`
-        : `Produto em montagem: ${selected.value} — quantidade ${quantityText}${linhaSelecionada ? ' — edição de item existente' : ''}.`;
-    commitPendingProduct.textContent = linhaSelecionada ? "Atualizar item pendente" : "Adicionar item pendente";
+        : `${linhaSelecionada ? "Editando" : "Em montagem"}: ${selected.value} · Qtd ${quantityText}.`;
+    commitPendingProduct.textContent = linhaSelecionada ? "Atualizar" : "Adicionar";
     restorePendingProduct.hidden = !mismatch;
     setPendingProductLineVisible(true);
 }
@@ -8440,6 +8444,7 @@ function selecionarProduto(opt) {
 if (bloquearProdutoDuplicadoNoCampoProdutoVenda(opt)) {
     return;
 }
+if (produto.value !== opt.value) quantidade.value = "";
 produtoAutoPreenchidoVenda = false;
 
 produto.value = opt.value;
@@ -8596,27 +8601,29 @@ function rolarParaUltimoProdutoLancado() {
 /* ===== FIM ROLAR PARA ULTIMO PRODUTO LANCADO - CHATGPT 2026-06-10 ===== */
 produtoBusca.addEventListener("input", () => {
     autocompleteAberto = true;
-
     const texto = produtoBusca.value.trim();
-    let selected = produto.options[produto.selectedIndex];
-    if (selected?.dataset.produtoId && produtoAutoPreenchidoVenda && !quantidade.value.trim() && !linhaSelecionada
-        && texto !== selected.value.trim()) {
-        produto.value = ""; unidade.value = ""; preco.value = "";
-        produtoAutoPreenchidoVenda = false;
-        selected = produto.options[produto.selectedIndex];
-    }
+    const selected = produto.options[produto.selectedIndex];
     if (selected?.dataset.produtoId && texto !== selected.value.trim()) {
+        // Preserve a pending editor for explicit restore/cancel, but keep searching.
+        if (!existeLinhaProdutoPendenteVenda()) {
+            produto.value = "";
+            unidade.value = "";
+            preco.value = "";
+            atualizarCustoMargemVenda();
+            aplicarEstadoConferenciaPreco(null);
+        }
+        produtoAutoPreenchidoVenda = false;
+        ocultarHistoricoProdutoCliente();
+    }
+    refreshPendingProductLine();
+    if (!texto) {
+        sugestoes = [];
+        indexAtivo = -1;
+        autocompleteAberto = false;
+        sugestoesBox.replaceChildren();
         sugestoesBox.style.display = "none";
-        refreshPendingProductLine();
         return;
     }
-
-    if (!texto) {
-    sugestoesBox.style.display = "none";
-    estoquePreview.textContent = "";
-    refreshPendingProductLine();
-    return;
-}
     filtrarProdutos(texto);
     renderSugestoes();
 });
@@ -8628,6 +8635,7 @@ produtoBusca.addEventListener("input", () => {
     refreshPendingProductLine();
 }));
 produto.addEventListener("change", refreshPendingProductLine);
+unidade.addEventListener("change", atualizarEstoqueProdutoSelecionado);
 produtoBusca.addEventListener("click", () => {
     autocompleteAberto = true;
 
@@ -8636,9 +8644,6 @@ produtoBusca.addEventListener("click", () => {
     filtrarProdutos(texto);
     renderSugestoes();
 
-    if (!texto && ultimoProdutoLancadoVenda) {
-        setTimeout(rolarParaUltimoProdutoLancado, 80);
-    }
 });
 //produtoBusca.addEventListener("focus", () => {
 //    autocompleteAberto = true;
@@ -8649,6 +8654,7 @@ produtoBusca.addEventListener("click", () => {
 //});
 produtoBusca.addEventListener("blur", () => {
     setTimeout(() => {
+        if (document.activeElement === produtoBusca) return;
         autocompleteAberto = false;
         sugestoesBox.style.display = "none";
 
@@ -8719,8 +8725,11 @@ produtoBusca.addEventListener("keydown", (e) => {
 
 
     else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        autocompleteAberto = false;
         sugestoesBox.style.display = "none";
-        estoquePreview.textContent = "";
+        atualizarEstoqueProdutoSelecionado();
     }
 });
 

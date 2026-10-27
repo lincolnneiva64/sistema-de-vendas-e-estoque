@@ -144,14 +144,13 @@ class EstoqueManualVendasFrontendTests(TestCase):
         self.assertIn(reverse("estoque:conferencia_estoque_corrigir", args=[0]), html)
         self.assertIn("function urlConferenciaEstoque(base, produtoId)", html)
 
-    def test_contador_existe_com_contexto_inicial(self):
+    def test_contador_geral_nao_aparece_em_vendas(self):
         html = self._html()
-
-        self.assertIn('id="conferenciaEstoqueContador"', html)
-        self.assertIn('data-total-produtos="2"', html)
-        self.assertIn('data-total-conferidos="1"', html)
-        self.assertIn('data-total-faltantes="1"', html)
-        self.assertIn("Conferidos: 1 / 2", html)
+        self.assertNotIn('id="conferenciaEstoqueContador"', html)
+        self.assertNotIn("Conferidos: 1 / 2", html)
+        self.assertIn('id="estoquePreview"', html)
+        self.assertEqual(html.count('id="contadorItens"'), 1)
+        self.assertIn("Produtos: 0", html)
 
     def test_estrutura_impede_propagacao_do_clique_da_badge(self):
         html = self._html()
@@ -178,7 +177,7 @@ class EstoqueManualVendasFrontendTests(TestCase):
         self.assertIn("async function enviarConferenciaEstoque(url, payload, mensagemSucesso)", html)
         self.assertIn("renderizarModalConferenciaEstoque(dados);", html)
         self.assertIn("atualizarBadgesConferenciaEstoque(produtoDados);", html)
-        self.assertIn("atualizarContadorConferenciaEstoque(dados.conferencia);", html)
+        self.assertNotIn("Conferidos:", html)
         # Rental regularization has its own refresh flow. Restrict this
         # invariant to the stock conference and both of its click handlers.
         inicio = html.index("async function enviarConferenciaEstoque(")

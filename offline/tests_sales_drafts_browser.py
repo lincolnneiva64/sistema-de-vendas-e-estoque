@@ -84,6 +84,149 @@ class SalesDraftBrowserTests(StaticLiveServerTestCase):
         tab.evaluate('document.getElementById("sales-draft-recovery-button").click();true')
         tab.wait(f'document.querySelectorAll("#tabelaProdutos tr").length==={item_count}')
 
+    def test_pesquisas_sucessivas_sem_estoque_antigo(self):
+        from django.utils import timezone
+        from decimal import Decimal
+        import base64
+        self.second_product.nome = 'Skol'
+        self.second_product.quantidade = Decimal('4.5')
+        self.second_product.unidade_compra = 'DZ'
+        self.second_product.unidade_venda_1 = 'DZ'
+        self.second_product.unidade_venda_2 = 'UN'
+        self.second_product.vende_fracionado = True
+        self.second_product.fator_conversao = 12
+        self.second_product.save()
+        self.third_product.nome = 'Amstel'
+        self.third_product.save()
+        self.fourth_product.nome = 'Glacial'
+        self.fourth_product.save()
+        venda = Venda.objects.create(cliente=self.customer, data_venda=timezone.localdate(), operador=self.operator.nome, tipo_pagamento='A prazo', total=15)
+        ItemVenda.objects.create(venda=venda, produto=self.second_product, quantidade=1, unidade='DZ', preco_unitario=15, valor_total=15)
+        artifacts = Path(__file__).resolve().parent.parent / 'artifacts' / 'vendas-autocomplete'
+        artifacts.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix='vendas-busca-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = self.open_sales(chrome)
+                for width in (1366, 390):
+                    tab.call('Emulation.setDeviceMetricsOverride', dict(width=width, height=900, deviceScaleFactor=1, mobile=width < 981))
+                    tab.evaluate('salesDraftBridge.clear();true')
+                    self.select_customer(tab, 'Cliente Comercial')
+                    tab.evaluate('operadorVenda.value="Operador Comercial";operadorVenda.dispatchEvent(new Event("change",{bubbles:true}));true')
+                    def search(text):
+                        tab.evaluate('produtoBusca.focus();produtoBusca.value=' + json.dumps(text) + ';produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+                        self.assertEqual(tab.evaluate('estoquePreview.textContent'), '')
+                        self.assertEqual(tab.evaluate('getComputedStyle(estoquePreview).display'), 'none')
+                        self.assertNotIn('Conferidos:', tab.evaluate('document.body.innerText'))
+                    def key(value):
+                        tab.evaluate('produtoBusca.dispatchEvent(new KeyboardEvent("keydown",{key:' + json.dumps(value) + ',bubbles:true,cancelable:true}));true')
+                    search('gl')
+                    self.assertTrue(tab.evaluate('document.querySelector(".produto-sugestao-item").textContent.includes("Glacial")'))
+                    for term, name in [('sko', 'Skol'), ('amst', 'Amstel'), ('gl', 'Glacial')]:
+                        search('')
+                        search(term)
+                        self.assertEqual(tab.evaluate('getComputedStyle(produtoSugestoes).display'), 'block')
+                        tab.evaluate('document.querySelector(".produto-sugestao-item").dispatchEvent(new MouseEvent("mouseenter"));true')
+                        self.assertEqual(tab.evaluate('estoquePreview.textContent'), '')
+                        key('ArrowDown'); key('ArrowUp'); key('Escape')
+                        self.assertEqual(tab.evaluate('getComputedStyle(produtoSugestoes).display'), 'none')
+                        key('ArrowDown')
+                        # Wait for the existing smooth scroll before tapping screen coordinates.
+                        tab.evaluate('await new Promise(resolve=>setTimeout(resolve,350));true')
+                        if width == 390:
+                            point = tab.evaluate('(()=>{const r=document.querySelector(".produto-sugestao-item").getBoundingClientRect();return {x:r.x+15,y:r.y+r.height/2}})()')
+                            tab.call('Input.dispatchTouchEvent', {'type':'touchStart','touchPoints':[point]})
+                            tab.call('Input.dispatchTouchEvent', {'type':'touchEnd','touchPoints':[]})
+                        elif name == 'Amstel':
+                            point = tab.evaluate('(()=>{const r=document.querySelector(".produto-sugestao-item").getBoundingClientRect();return {x:r.x+15,y:r.y+r.height/2}})()')
+                            tab.call('Input.dispatchMouseEvent', dict(type='mousePressed', button='left', clickCount=1, **point))
+                            tab.call('Input.dispatchMouseEvent', dict(type='mouseReleased', button='left', clickCount=1, **point))
+                        else:
+                            key('Enter')
+                        try:
+                            tab.wait('produto.value === ' + json.dumps(name))
+                        except AssertionError:
+                            artifacts.joinpath(f'falha-{width}-{name}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'format':'png'})['data']))
+                            raise
+                        self.assertEqual(tab.evaluate('produto.value'), name)
+                        self.assertEqual(tab.evaluate('produtoBusca.value'), name)
+                        self.assertTrue(tab.evaluate('getComputedStyle(estoquePreview).display !== "none"'))
+                        if name == 'Skol':
+                            self.assertEqual(tab.evaluate('estoquePreview.textContent'), 'Estoque: 4 DZ | 6 UN')
+                    search('zzzzzz-inexistente')
+                    self.assertEqual(tab.evaluate('document.querySelectorAll(".produto-sugestao-item").length'), 0)
+                    key('Enter'); key('Enter')
+                    self.assertEqual(tab.evaluate('produto.value'), '')
+                    search('')
+                    search('sko')
+                    artifacts.joinpath(f'pesquisa-{width}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'format':'png'})['data']))
+                    key('Enter')
+                    tab.evaluate('quantidade.value="1";document.getElementById("btnAdicionarItemVenda").click();document.querySelector("#tabelaProdutos tr").click();true')
+                    search('amst')
+                    self.assertIn('n\u00e3o corresponde', tab.evaluate('document.getElementById("venda-linha-produto-pendente").textContent'))
+                    tab.evaluate('document.getElementById("btnAdicionarItemVenda").click();true')
+                    self.assertEqual(tab.evaluate('document.querySelector("#tabelaProdutos tr").dataset.produtoId'), str(self.second_product.pk))
+                    tab.evaluate('document.getElementById("venda-linha-produto-pendente").querySelector("button").click();true')
+                    self.assertEqual(tab.evaluate('estoquePreview.textContent'), 'Estoque: 4 DZ | 6 UN')
+                    artifacts.joinpath(f'edicao-{width}.png').write_bytes(base64.b64decode(tab.call('Page.captureScreenshot', {'format':'png'})['data']))
+                for width in (1366, 390):
+                    tab.call('Emulation.setDeviceMetricsOverride', dict(width=width, height=900, deviceScaleFactor=1, mobile=width < 981))
+                    tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/?editar=' + str(venda.pk)})
+                    tab.wait('document.querySelector("#contadorItens")?.textContent === "Produtos: 1"')
+                    tab.evaluate('document.querySelector("#tabelaProdutos tr").click();true')
+                    search('amst')
+                    self.assertEqual(tab.evaluate('getComputedStyle(produtoSugestoes).display'), 'block')
+            finally:
+                chrome.stop()
+
+    def test_contador_produtos_e_montagem_compacta(self):
+        with TemporaryDirectory(prefix='vendas-resumo-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                from django.utils import timezone
+                venda = Venda.objects.create(cliente=self.customer, data_venda=timezone.localdate(), tipo_pagamento='A prazo', operador=self.operator.nome, total=15)
+                ItemVenda.objects.create(venda=venda, produto=self.second_product, quantidade=3, unidade='UN', preco_unitario=5, valor_total=15)
+                tab = self.open_sales(chrome)
+                self.select_customer(tab, 'Cliente Comercial')
+                for width in (1366, 390):
+                    tab.call('Emulation.setDeviceMetricsOverride', dict(width=width, height=900, deviceScaleFactor=1, mobile=width < 981))
+                    tab.evaluate('salesDraftBridge.clear();true')
+                    self.assertEqual(tab.evaluate('document.getElementById("contadorItens").textContent'), 'Produtos: 0')
+                    self.assertEqual(tab.evaluate('document.querySelectorAll("#contadorItens").length'), 1)
+                    self.assertIsNone(tab.evaluate('document.getElementById("conferenciaEstoqueContador")'))
+                    self.select_customer(tab, 'Cliente Comercial')
+                    tab.evaluate('operadorVenda.value="Operador Comercial";operadorVenda.dispatchEvent(new Event("change",{bubbles:true}));produtoBusca.value="Segundo Produto";produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+                    tab.wait('!!document.querySelector(".produto-sugestao-item")')
+                    tab.evaluate('document.querySelector(".produto-sugestao-item").click();quantidade.value="3";document.getElementById("btnAdicionarItemVenda").click();true')
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 1')
+                    tab.evaluate('produtoBusca.value="Terceiro Produto";produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+                    tab.wait('!!document.querySelector(".produto-sugestao-item")')
+                    tab.evaluate('document.querySelector(".produto-sugestao-item").click();quantidade.value="7";document.getElementById("btnAdicionarItemVenda").click();true')
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 2')
+                    tab.evaluate('document.querySelector("#tabelaProdutos tr").click();quantidade.value="4";quantidade.dispatchEvent(new Event("input",{bubbles:true}));true')
+                    self.assertTrue(tab.evaluate('!document.getElementById("venda-linha-produto-pendente").hidden'))
+                    tab.evaluate('produtoBusca.value="Texto diferente";produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+                    self.assertIn('n\u00e3o corresponde', tab.evaluate('document.getElementById("venda-linha-produto-pendente").textContent'))
+                    tab.evaluate('document.getElementById("venda-linha-produto-pendente").querySelector("button").click();true')
+                    self.assertEqual(tab.evaluate('produtoBusca.value'), 'Segundo Produto')
+                    tab.evaluate('document.getElementById("venda-linha-produto-pendente").querySelectorAll("button")[1].click();true')
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 2')
+                    # Restore duplicate IDs to verify distinct products rather than rows.
+                    tab.evaluate('window.resumoDraft=salesDraftBridge.capture();resumoDraft.itens.push({...resumoDraft.itens[0]});salesDraftBridge.restore(resumoDraft);true')
+                    self.assertEqual(tab.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'), 3)
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 2')
+                    tab.evaluate('resumoDraft.itens=resumoDraft.itens.slice(0,1);salesDraftBridge.restore(resumoDraft);true')
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 1')
+                    self.assertTrue(tab.evaluate('(()=>{const bar=document.getElementById("resumoVenda"), height=bar.offsetHeight;contadorItens.style.display="none";const same=bar.offsetHeight===height;contadorItens.style.display="";return same})()'))
+                    self.assertTrue(tab.evaluate('contadorItens.getBoundingClientRect().left >= document.getElementById("atalho-despesa-global").getBoundingClientRect().right'))
+                    tab.evaluate('salesDraftBridge.clear();true')
+                    self.assertEqual(tab.evaluate('contadorItens.textContent'), 'Produtos: 0')
+                tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/?editar=' + str(venda.pk)})
+                tab.wait('document.querySelector("#contadorItens")?.textContent === "Produtos: 1" && document.querySelectorAll("#tabelaProdutos tr").length === 1')
+                self.assertEqual(tab.evaluate('document.querySelector("#tabelaProdutos tr").dataset.produtoId'), str(self.second_product.pk))
+            finally:
+                chrome.stop()
+
     def test_reload_reopen_restart_offline_edit_discard_and_no_official_changes(self):
         models = [Produto, Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, OperacaoSincronizacao]
         before = {m.__name__:list(m.objects.order_by('pk').values()) for m in models}
