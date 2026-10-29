@@ -51,9 +51,13 @@ def modal(request, inventario_id):
             # This explicit, CSRF-protected click replaces the historical access page.
             historica = acesso_ajustes.iniciar(request.user, inventario) if inventario.finalizada_em else ''
             resultado, resumo = estado(inventario)
+            precisao = [l for l in resultado['linhas'] if l.get('bloqueio_codigo') == 'precisao']
+            outros_bloqueados = [l for l in resultado['linhas']
+                                if l['estado'] == 'Bloqueado' and l.get('bloqueio_codigo') != 'precisao']
             token = ajustes.previa_atualizacao(inventario.pk, resultado['aptas']) if resultado['aptas'] else ''
             html = render_to_string('inventario/previa_ajustes_modal.html', dict(
                 inventario=inventario, atualizacao=resultado, previa_lote=token,
+                pendentes_precisao=precisao, outros_bloqueados=outros_bloqueados,
                 revisao_historica=historica, ajustes_habilitados=getattr(settings,'INVENTARIO_AJUSTES_HABILITADOS',False)), request=request)
             return JsonResponse(dict(ok=True, html=html, resumo=resumo))
         if acao != 'atualizar':

@@ -14,7 +14,7 @@ from django.contrib.auth.models import Permission
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.exceptions import PermissionDenied
 from django.db import connection, close_old_connections, transaction, DatabaseError
-from django.test import TestCase, TransactionTestCase, override_settings, Client
+from django.test import TestCase, TransactionTestCase, SimpleTestCase, override_settings, Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -28,6 +28,43 @@ from .models import (Inventario, RodadaContagem, PropostaAjuste, AplicacaoAjuste
                      EventoAjuste, DecisaoAjuste, MovimentoObservado, ConfirmacaoContagem)
 from .tests import produto
 from .tests_browser import CHROME
+
+
+class PrecisaoFisicaTests(SimpleTestCase):
+    def rodada(self, fator, principal, avulsos, contado, unidade='UN', fracionado=True):
+        from decimal import Decimal
+        from types import SimpleNamespace
+        cadastro = dict(base='PCT', secundaria=unidade, fator=str(fator),
+                        fracionado=fracionado, avulsos_fisicos=not fracionado)
+        return SimpleNamespace(item=SimpleNamespace(cadastro=cadastro),
+            embalagens=Decimal(principal), avulsos=Decimal(avulsos), contado_base=Decimal(contado))
+
+    def test_bloqueia_os_tres_arredondamentos_sem_mudar_contagem(self):
+        from .conversao_fisica import exigir_precisao_ajuste, PrecisaoInsuficiente
+        for fator, principal, avulsos, contado, unidade, total in [
+                (28, '1', '2', '1.071', 'UN', '30 UN'),
+                (12, '1', '5', '1.417', 'UN', '17 UN'),
+                (30, '4', '28', '4.933', 'KG', '148 KG')]:
+            with self.subTest(fator=fator):
+                rodada = self.rodada(fator, principal, avulsos, contado, unidade)
+                antes = vars(rodada).copy()
+                with self.assertRaises(PrecisaoInsuficiente) as erro:
+                    exigir_precisao_ajuste(rodada)
+                self.assertEqual(erro.exception.contagem_fisica, total)
+                self.assertEqual(vars(rodada), antes)
+
+    def test_aceita_fracoes_exatas_un_kg_e_avulsos_nao_fracionados(self):
+        from .conversao_fisica import exigir_precisao_ajuste
+        for rodada in [self.rodada(20, '1', '4', '1.200'),
+                       self.rodada(30, '4', '15', '4.500', 'KG'),
+                       self.rodada(10, '1', '2', '1.200', fracionado=False)]:
+            exigir_precisao_ajuste(rodada)
+
+    def test_fator_congelado_invalido_nao_libera_ajuste(self):
+        from .conversao_fisica import exigir_precisao_ajuste
+        for fator in ['0', 'NaN', 'Infinity', 'invalido']:
+            with self.subTest(fator=fator), self.assertRaises(ValueError):
+                exigir_precisao_ajuste(self.rodada(fator, '1', '2', '1.200'))
 
 
 class AjustesFixture:

@@ -1,5 +1,5 @@
 """Conference-only physical relation. No commercial product writes."""
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -46,6 +46,37 @@ def exigir_representavel(rodada):
     if fisico and rodada.contado_base is not None:
         if rodada.contado_base * Decimal(fisico['unidades_por_embalagem']) != Decimal(fisico['total_unidades']):
             raise ValueError('Contagem física exata preservada em UN. Ajuste automático indisponível: o saldo em embalagens não representa essas unidades sem arredondamento.')
+
+
+class PrecisaoInsuficiente(ValueError):
+    def __init__(self, contagem_fisica):
+        self.contagem_fisica = contagem_fisica
+        super().__init__(
+            f'Contagem preservada: {contagem_fisica}. O saldo com três casas decimais '
+            'não representa essa quantidade física exatamente. Nenhum ajuste será aplicado.')
+
+
+def exigir_precisao_ajuste(rodada):
+    """Compare by multiplication: never round a physical count to authorize a write."""
+    cadastro = rodada.item.cadastro
+    if not cadastro['fracionado'] and not avulsos_fisicos(cadastro):
+        if rodada.avulsos in (None, Decimal(0)):
+            return
+        cadastro = cadastro_contagem(rodada.item)
+    if not cadastro['fracionado'] and not avulsos_fisicos(cadastro):
+        raise ValueError('Contagem com avulsos sem relação física confirmada.')
+    try:
+        fator = Decimal(str(cadastro.get('fator', '0')))
+    except InvalidOperation:
+        raise ValueError('Conversão congelada inválida. Revise a conferência.') from None
+    if not fator.is_finite() or fator <= 0 or not cadastro.get('secundaria'):
+        raise ValueError('Conversão congelada inválida. Revise a conferência.')
+    if rodada.embalagens is None or rodada.avulsos is None or rodada.contado_base is None:
+        raise ValueError('Contagem física incompleta. Revise a conferência.')
+    fisico = rodada.embalagens * fator + rodada.avulsos
+    if rodada.contado_base * fator != fisico:
+        quantidade = format(fisico.normalize(), 'f').replace('.', ',')
+        raise PrecisaoInsuficiente(f"{quantidade} {cadastro['secundaria']}")
 
 
 @transaction.atomic

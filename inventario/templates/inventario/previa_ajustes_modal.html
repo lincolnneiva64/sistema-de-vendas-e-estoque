@@ -1,8 +1,10 @@
 {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% endif %}
 <p>Somente os produtos aptos com diferenças abaixo terão seus saldos alterados. Produtos já ajustados ficam fora desta operação.</p>
+<h3>{{ atualizacao.aptas|length }} produto{{ atualizacao.aptas|length|pluralize:"s" }} que serão atualizados</h3>
 {% include 'inventario/previa_produtos_ajuste.html' %}
 {% if not atualizacao.aptas %}<p>Nenhum produto apto com diferença para atualizar.</p>{% endif %}
-{% if atualizacao.resumo.bloqueados %}<section class="aviso" data-bloqueados-modal><strong>{{ atualizacao.resumo.bloqueados }} produto(s) bloqueado(s), sem atualização:</strong><ul>{% for linha in atualizacao.linhas %}{% if linha.estado == 'Bloqueado' %}<li>{{ linha.rodada.item.cadastro.nome }}: {{ linha.bloqueio }}</li>{% endif %}{% endfor %}</ul></section>{% endif %}
+{% if pendentes_precisao %}<section class="aviso" data-pendentes-precisao><h3>{{ pendentes_precisao|length }} produto{{ pendentes_precisao|length|pluralize:"s" }} pendente{{ pendentes_precisao|length|pluralize:"s" }} por precisão</h3><ul>{% for linha in pendentes_precisao %}<li><strong>{{ linha.rodada.item.cadastro.nome }}</strong>: {{ linha.bloqueio }}</li>{% endfor %}</ul><p>As contagens e os OKs permanecem preservados. Os saldos desses produtos não serão alterados.</p></section>{% endif %}
+{% if outros_bloqueados %}<section class="aviso" data-bloqueados-modal><strong>{{ outros_bloqueados|length }} produto(s) com outros bloqueios, sem atualização:</strong><ul>{% for linha in outros_bloqueados %}<li>{{ linha.rodada.item.cadastro.nome }}: {{ linha.bloqueio }}</li>{% endfor %}</ul></section>{% endif %}
 <p>Os movimentos posteriores ao OK serão preservados. Se os dados mudarem, a confirmação será recusada e será necessária nova revisão.</p>
 {% if not ajustes_habilitados %}<p class="aviso">Aplicação de ajustes desabilitada no servidor.</p>{% endif %}
 {% if previa_lote %}<form id="confirmar-atualizacao-modal" method="post" data-confirmar-ajustes-modal action="{% url 'inventario:ajustes_modal' inventario.pk %}">

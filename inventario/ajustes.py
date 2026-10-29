@@ -12,6 +12,7 @@ from django.db.models import OuterRef, Subquery
 from estoque.models import Produto, MovimentacaoEstoqueManual
 from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
 from . import services
+from .conversao_fisica import exigir_precisao_ajuste, PrecisaoInsuficiente
 from .selecao import itens_incluidos, rodadas_incluidas
 from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
                      PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado,
@@ -69,6 +70,8 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
         if not confirmacao or any(getattr(confirmacao, campo) != getattr(rodada, campo)
                 for campo in ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')):
             raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
+        if resultado['diferenca'] != 0:
+            exigir_precisao_ajuste(rodada)
         from .conciliacao_documental import conciliar
         documentos = conciliar(rodada, movimentos, travar=travar_documentos, _lote=_lote)
         resultado['documentos'] = documentos
@@ -96,6 +99,9 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
         resultado['proposta'] = proposta
         if proposta:
             resultado['estado'] = proposta.get_estado_display()
+    except PrecisaoInsuficiente as exc:
+        resultado.update(estado='Bloqueado', bloqueio=str(exc), bloqueio_codigo='precisao',
+                         contagem_fisica=exc.contagem_fisica)
     except ValueError as exc:
         resultado.update(estado='Bloqueado', bloqueio=str(exc))
     return resultado
@@ -402,6 +408,14 @@ def projetar_resultado(linhas_revisao):
             linha.update(estado='Bloqueado', bloqueio='OK sem confirmação original compatível; solicite recontagem.')
         elif rodada.contado_base == rodada.esperado:
             linha.update(estado='Sem diferença', bloqueio='Sem diferença registrada para atualizar.')
+        else:
+            try:
+                exigir_precisao_ajuste(rodada)
+            except PrecisaoInsuficiente as exc:
+                linha.update(estado='Bloqueado', bloqueio=str(exc), bloqueio_codigo='precisao',
+                             contagem_fisica=exc.contagem_fisica)
+            except ValueError as exc:
+                linha.update(estado='Bloqueado', bloqueio=str(exc))
         linhas.append(linha)
     resumo = dict(aptos=0, candidatos=sum(l['estado'] == 'Requer prévia' for l in linhas),
         bloqueados=sum(l['estado'] == 'Bloqueado' for l in linhas),

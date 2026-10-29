@@ -50,6 +50,100 @@ class Fixture(AjustesFixture):
 
 
 @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
+class PrecisaoModalTests(Fixture, TestCase):
+    def preparar_oito(self, saldo_probak='1.072'):
+        from decimal import Decimal
+        from .conversao import snapshot
+        from .models import ItemInventario
+        from .tests import produto
+        self.precisao = []
+        casos = [(f'Apto de teste {i}', 'CX', 12, '10', '8', '0', 'UN') for i in range(4)]
+        casos += [('Probak de teste', 'PCT', 28, saldo_probak, '1', '2', 'UN'),
+                  ('Bic de teste', 'PCT', 12, '1.333', '1', '5', 'UN'),
+                  ('Sal de teste', 'FD', 30, '4.967', '4', '28', 'KG')]
+        for nome, base, fator, saldo, principal, avulsos, secundaria in casos:
+            p = produto(nome=nome, unidade_compra=base, unidade_venda_1=base,
+                unidade_venda_2=secundaria, fator_conversao=fator, quantidade=Decimal(saldo))
+            p.refresh_from_db()
+            item = ItemInventario.objects.create(inventario=self.inv, produto=p,
+                cadastro=snapshot(p), custo_base=p.preco_compra)
+            r = RodadaContagem.objects.create(item=item, numero=1)
+            acesso, _ = services.gerar_acesso(self.usuario, self.inv.pk, self.funcionario.pk, [r.pk])
+            services.salvar_contagem(acesso.pk, r.pk, 0, principal, avulsos, True)
+            if nome in ['Probak de teste', 'Bic de teste', 'Sal de teste']:
+                self.precisao.append((p.pk, r.pk))
+        self.finalizar()
+
+    def test_cinco_aptos_tres_pendentes_confirmacao_e_reenvio_sem_perdas(self):
+        self.preparar_oito()
+        contagens = list(RodadaContagem.objects.order_by('pk').values())
+        oks = list(ConfirmacaoContagem.objects.order_by('pk').values())
+        saldos = dict(Produto.objects.values_list('pk', 'quantidade'))
+        payload, dados = self.prever()
+        self.assertEqual(payload['resumo']['aptos'], 5)
+        self.assertEqual(len(payload['resumo']['bloqueados']), 3)
+        self.assertIn('5 produtos que serão atualizados', payload['html'])
+        self.assertIn('3 produtos pendentes por precisão', payload['html'])
+        for total in ['30 UN', '17 UN', '148 KG']:
+            self.assertIn(total, payload['html'])
+        entradas = ajustes.ler_token(dados['previa'])['rodadas']
+        self.assertEqual(len(entradas), 5)
+        self.assertTrue({r for _, r in self.precisao}.isdisjoint(e['rodada'] for e in entradas))
+        self.assertEqual(saldos, dict(Produto.objects.values_list('pk', 'quantidade')))
+        self.assertFalse(AplicacaoAjuste.objects.exists())
+        self.assertNotContains(self.client.post(self.modal, {**dados, 'confirmacao': ''}), '"ok": true', status_code=400)
+        resposta = self.client.post(self.modal, dados)
+        self.assertEqual(resposta.status_code, 200, resposta.content)
+        self.assertEqual(resposta.json()['quantidade'], 5)
+        self.assertEqual(resposta.json()['resumo']['pendentes'], 3)
+        self.assertEqual(AplicacaoAjuste.objects.count(), 5)
+        repetida = self.client.post(self.modal, dados)
+        self.assertEqual(repetida.status_code, 200, repetida.content)
+        self.assertEqual(repetida.json()['aplicacoes'], resposta.json()['aplicacoes'])
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 5)
+        for produto_id, _ in self.precisao:
+            self.assertEqual(Produto.objects.get(pk=produto_id).quantidade, saldos[produto_id])
+        self.assertEqual(list(RodadaContagem.objects.order_by('pk').values()), contagens)
+        self.assertEqual(list(ConfirmacaoContagem.objects.order_by('pk').values()), oks)
+        self.inv.refresh_from_db()
+        self.assertIsNotNone(self.inv.finalizada_em)
+
+    def test_previa_antiga_com_oito_recusada_integralmente_no_servidor(self):
+        self.preparar_oito()
+        with patch('inventario.ajustes.exigir_precisao_ajuste'):
+            _, dados = self.prever()
+        self.assertEqual(len(ajustes.ler_token(dados['previa'])['rodadas']), 8)
+        saldos = list(Produto.objects.order_by('pk').values_list('quantidade', flat=True))
+        resposta = self.client.post(self.modal, dados)
+        self.assertEqual(resposta.status_code, 400, resposta.content)
+        self.assertFalse(AplicacaoAjuste.objects.exists())
+        self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
+        self.assertEqual(saldos, list(Produto.objects.order_by('pk').values_list('quantidade', flat=True)))
+
+    def test_mudanca_apos_previa_recusa_todo_lote_dos_cinco(self):
+        self.preparar_oito()
+        _, dados = self.prever()
+        Produto.objects.filter(pk=self.produto.pk).update(quantidade=11)
+        saldos = list(Produto.objects.order_by('pk').values_list('quantidade', flat=True))
+        resposta = self.client.post(self.modal, dados)
+        self.assertEqual(resposta.status_code, 400, resposta.content)
+        self.assertFalse(AplicacaoAjuste.objects.exists())
+        self.assertFalse(MovimentacaoEstoqueManual.objects.exists())
+        self.assertEqual(saldos, list(Produto.objects.order_by('pk').values_list('quantidade', flat=True)))
+
+    def test_projecao_preliminar_tambem_separa_precisao_sem_bloquear_igualdade(self):
+        from inventario.views import linhas_revisao
+        self.preparar_oito(saldo_probak='1.071')
+        resultado = ajustes.projetar_resultado(linhas_revisao(self.inv))
+        self.assertEqual(sum(l.get('bloqueio_codigo') == 'precisao' for l in resultado['linhas']), 2)
+        sem_diferenca = next(l for l in resultado['linhas'] if l['rodada'].pk == self.precisao[0][1])
+        self.assertEqual(sem_diferenca['estado'], 'Sem diferença')
+        payload, _ = self.prever()
+        self.assertEqual(payload['resumo']['aptos'], 5)
+        self.assertEqual(len(payload['resumo']['bloqueados']), 2)
+
+
+@override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
 class AjustesModalHTTPTests(Fixture,TestCase):
     def test_previa_apenas_aptos_contado_saldos_e_bloqueados_separados(self):
         bloqueada=self.bloqueada()
