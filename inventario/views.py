@@ -22,7 +22,8 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
-from .conversao import converter
+from .conversao import avulsos_fisicos, converter
+from .conversao_fisica import cadastro_contagem, carregar as carregar_relacoes, BASES
 from . import services, sessoes, ajustes
 from . import acesso_ajustes
 from . import confirmacao_ajustes
@@ -104,6 +105,7 @@ def linhas_revisao(inventario):
             to_attr="rodadas_revisao"),
         "decisao",
     ).order_by("pk"))
+    carregar_relacoes(itens)
     sinais_por_item, eventos_por_item = defaultdict(list), defaultdict(list)
     for sinal in SinalizacaoFisica.objects.filter(rodada__item__in=itens).select_related(
             "rodada", "acesso", "usuario", "resolvida_por").order_by("criado_em"):
@@ -158,6 +160,17 @@ def linhas_revisao(inventario):
                     "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
                     "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
                 "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
+    from .conversao_fisica import auditoria as auditoria_fisica
+    for linha in linhas:
+        r = linha['rodada']
+        fisico = auditoria_fisica(linha['item'], r.embalagens, r.avulsos) if r.ok_em else {}
+        if fisico:
+            linha['contado_texto'] = format(Decimal(fisico['embalagens']).normalize(), 'f') + ' ' + fisico['base'] + ' + ' + format(Decimal(fisico['avulsos']).normalize(), 'f') + ' UN (' + fisico['total_unidades'] + ' UN)'
+            linha['contado_principal'] = linha['contado_texto'].rsplit(' (', 1)[0]
+            linha['contado_total_fisico'] = fisico['total_unidades'] + ' UN'
+            if r.esperado is not None:
+                diferenca_un = Decimal(fisico['total_unidades']) - r.esperado * Decimal(fisico['unidades_por_embalagem'])
+                linha['diferenca_texto'] = format(diferenca_un.normalize(), 'f').replace('.', ',') + ' UN'
     return sorted(linhas, key=lambda linha: chave_produto(linha["item"]))
 
 
@@ -287,11 +300,15 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         registro_admin = next((e for e in reversed(linha['eventos'])
             if e.acao == contagem_admin.ACAO and rodada.ok_em and e.dados.get('versao_saida') == rodada.versao), None)
         linha['ok_admin_nome'] = registro_admin.dados.get('usuario_nome') if registro_admin else ''
+        linha['cadastro_contagem'] = cadastro_contagem(linha['item'])
+        linha['solicitar_relacao'] = not linha['item'].cadastro['fracionado'] and linha['item'].cadastro['base'] in BASES and not avulsos_fisicos(linha['cadastro_contagem'])
         linha['edicao_admin'] = pode_editar_contagem and not linha['decisao'] and not rodada.encerrada_em
         if linha['edicao_admin']:
             linha['autorizacao_admin'] = contagem_admin.autorizacao(request.user, inventario, rodada)
             linha['embalagens_admin'] = entrada(rodada.embalagens, linha['item'].cadastro['continua'])
             linha['avulsos_admin'] = entrada(rodada.avulsos, linha['item'].cadastro['secundaria_continua'])
+            if avulsos_fisicos(linha['cadastro_contagem']) and rodada.avulsos is None:
+                linha['avulsos_admin'] = '0'
         linha["participante_protegido"] = bool(getattr(rodada, "atribuicao", None)
             or rodada.numero != 1 or rodada.versao or rodada.ok_em or rodada.encerrada_em
             or rodada.revisada_em or linha["decisao"] or linha["sinalizacoes"]
@@ -408,7 +425,7 @@ def acesso_sessao(request):
 
 
 def payload_cego(rodada):
-    cadastro = rodada.item.cadastro
+    cadastro = cadastro_contagem(rodada.item)
     # A concurrent OK may commit after this round was read. Keep the history
     # consistent with the version being returned; a stale write still gets 409.
     if hasattr(rodada, "confirmacoes_mobile"):
@@ -425,9 +442,11 @@ def payload_cego(rodada):
     return {"total_convertido": total, "exibir_total": exibir_total,
         "id": rodada.pk, "nome": cadastro["nome"], "codigo": cadastro["codigo"], "base": cadastro["base"],
         "secundaria": cadastro["secundaria"], "fracionado": cadastro["fracionado"],
+        "avulsos_fisicos": avulsos_fisicos(cadastro), "fator": cadastro["fator"],
+        "solicitar_relacao": not cadastro["fracionado"] and cadastro["base"] in BASES and not avulsos_fisicos(cadastro),
         "passo": "0.001" if cadastro["continua"] else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
         "embalagens": entrada(rodada.embalagens, cadastro["continua"]),
-        "avulsos": entrada(rodada.avulsos, cadastro["secundaria_continua"]), "versao": rodada.versao,
+        "avulsos": ("0" if avulsos_fisicos(cadastro) and rodada.avulsos is None else entrada(rodada.avulsos, cadastro["secundaria_continua"])), "versao": rodada.versao,
         "guardado": rodada.versao > 0,
         "ultimo_ok": {"embalagens": entrada(ultimo.embalagens, cadastro["continua"]),
                       "avulsos": entrada(ultimo.avulsos, cadastro["secundaria_continua"]),
@@ -603,3 +622,19 @@ def finalizar_administrativamente(request, inventario_id):
             f"{dados['sem_ajuste']} permanecem sem ajuste aplicado, sendo {dados['diferencas_pendentes']} com diferenca registrada. "
             "Nenhum saldo foi alterado pelo encerramento. Bloqueios e historico preservados.")
     return redirect("inventario:lista")
+
+
+@privado
+@csrf_protect
+@require_POST
+def confirmar_conversao_fisica(request, inventario_id, rodada_id):
+    from . import conversao_fisica
+    services.permitir(request.user, 'revisar_inventario')
+    try:
+        if request.POST.get('confirmacao_relacao') != 'sim':
+            raise ValueError('Confirme expressamente a relação física para esta conferência.')
+        conversao_fisica.confirmar(request.user,inventario_id,rodada_id,
+            request.POST.get('autorizacao'),request.POST.get('fator_fisico'))
+    except (ValueError, PermissionDenied) as exc:
+        return JsonResponse({'erro':str(exc)},status=403 if isinstance(exc,PermissionDenied) else 409)
+    return JsonResponse({'destino':reverse('inventario:detalhe',args=[inventario_id])+'#titulo-resumo'})

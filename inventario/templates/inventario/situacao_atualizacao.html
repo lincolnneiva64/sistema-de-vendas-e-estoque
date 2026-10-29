@@ -2,7 +2,8 @@
 {% if a.estado == 'Aplicado' %}<strong class="estado-atualizacao estado-aplicado">Aplicado</strong>{% if a.saldo_aplicado is not None %}<span class="saldo-aplicado">Saldo registrado: {{ a.saldo_aplicado|floatformat:'-3' }} {{ a.unidade_aplicada }}</span>{% else %}<span>Saldo histórico indisponível; consulte a auditoria.</span>{% endif %}
 {% elif modo_historico %}{% if linha.diferenca is not None and linha.diferenca != 0 %}<span class="aplicacao-nao-comprovada">Diferença registrada — aplicação não comprovada nesta conferência</span>{% else %}<span>Sem ajuste registrado nesta conferência.</span>{% endif %}{% if a.estado == 'Bloqueado' %}<strong class="estado-atualizacao estado-bloqueado">Bloqueado</strong><span>{{ a.bloqueio }}</span>{% endif %}
 {% elif a.bloqueio %}<strong class="estado-atualizacao estado-bloqueado">{{ a.estado }}</strong><span>{{ a.bloqueio }}</span>
-{% elif a.preliminar %}<strong class="estado-atualizacao">Requer prévia</strong><span>A validação documental será feita ao revisar a atualização.</span>
+{% elif a.preliminar and linha.diferenca is not None and linha.diferenca != 0 %}<strong class="estado-atualizacao">Revisão recomendada</strong><span>Confira a diferença encontrada antes de atualizar o estoque.</span>
+{% elif a.preliminar %}<strong class="estado-atualizacao">Confira antes de atualizar</strong><span>A conferência dos documentos e saldos será feita ao revisar a atualização.</span>
 {% elif a.estado == 'Pendente de revisão' or a.estado == 'Aprovado' %}<strong class="estado-atualizacao estado-apto">Apto para atualizar</strong><span>Prévia: {{ a.atual|floatformat:'-3' }} → {{ a.resultante|floatformat:'-3' }} {{ a.unidade }}</span>
 {% elif a.estado == 'Rejeitado' %}<strong>Rejeitado</strong><span>Uma nova proposta exige nova confirmação física.</span>
 {% else %}<strong>{{ a.estado|default:'Indisponível' }}</strong>{% endif %}{% endwith %}</td>

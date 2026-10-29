@@ -10,7 +10,8 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from estoque.models import Fornecedor, Funcionario, Produto, ProdutoFornecedor
-from .conversao import converter, decimal_entrada, snapshot
+from .conversao import cadastro_compativel, converter, decimal_entrada, snapshot
+from .conversao_fisica import cadastro_contagem, auditoria as auditoria_fisica, exigir_representavel
 from .erros import ErroAcesso
 from .selecao import itens_incluidos, rodadas_incluidas
 from .rastreabilidade import ORIGENS
@@ -295,7 +296,7 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
         raise ValueError("Versão da contagem inválida. Atualize a página.")
     anterior = rodada.confirmacoes.filter(versao_entrada=versao).first() if confirmar else None
     if anterior:
-        valores = converter(rodada.item.cadastro, embalagens, avulsos)
+        valores = converter(cadastro_contagem(rodada.item), embalagens, avulsos)
         if valores[:2] == (anterior.embalagens, anterior.avulsos):
             # Retry of an old accepted request returns current state, never
             # overwrites a newer correction or advances its temporal reference.
@@ -304,10 +305,10 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
     if versao != rodada.versao:
         raise ValueError("Esta contagem foi atualizada em outra aba. Atualize a página.")
     if confirmar:
-        valores = converter(rodada.item.cadastro, embalagens, avulsos)
+        valores = converter(cadastro_contagem(rodada.item), embalagens, avulsos)
     else:
         principal, avulso = decimal_entrada(embalagens), decimal_entrada(avulsos)
-        valores = converter(rodada.item.cadastro, principal if principal is not None else 0,
+        valores = converter(cadastro_contagem(rodada.item), principal if principal is not None else 0,
                            avulso if avulso is not None else 0)
         incompleta = principal is None or (rodada.item.cadastro["fracionado"] and avulso is None)
         valores = (principal, avulso, None if incompleta else valores[2], None if incompleta else valores[3])
@@ -318,7 +319,7 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
         validar_escrita(inventario, acesso, token_hash)  # May have waited for a sale past token expiry.
         if not produto.ativo or produto.excluido or produto.quantidade is None:
             raise ValueError("Produto indisponível ou saldo sem referência. Solicite revisão.")
-        if snapshot(produto) != rodada.item.cadastro:
+        if not cadastro_compativel(produto, rodada.item.cadastro):
             raise ValueError("Cadastro alterado desde a seleção. Solicite nova conferência.")
         rodada.esperado = produto.quantidade
         rodada.sequencia_ok = sequencia(produto.pk)
@@ -336,7 +337,7 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
     rodada.versao += 1
     rodada.save()
     atualizar_versao(inventario)
-    evento(acesso.inventario, "produto_ok" if confirmar else "progresso_salvo", rodada=rodada, acesso=acesso, versao=rodada.versao)
+    evento(acesso.inventario, "produto_ok" if confirmar else "progresso_salvo", rodada=rodada, acesso=acesso, versao=rodada.versao, contagem_fisica=auditoria_fisica(rodada.item, valores[0], valores[1]))
     return rodada
 
 
@@ -426,7 +427,7 @@ def finalizar_conferencia(acesso_id, versao, *, token_hash=None):
     pendentes = []
     for rodada in proprias:
         try:
-            converter(rodada.item.cadastro, rodada.embalagens, rodada.avulsos)
+            converter(cadastro_contagem(rodada.item), rodada.embalagens, rodada.avulsos)
             completa = rodada.ok_em is not None
         except ValueError:
             completa = False
@@ -555,8 +556,9 @@ def validar_cadeia(rodada, produto, documentos=(), *, _lote=None):
         raise ValueError("Confirme uma rodada ativa antes da revisão.")
     if (rodada.item_id in _lote.pendentes if _lote is not None else SinalizacaoFisica.objects.filter(rodada__item_id=rodada.item_id, resolvida_em__isnull=True).exists()):
         raise ValueError("Movimentação física sinalizada sem resolução. Revisão ou recontagem necessária.")
-    if not produto.ativo or produto.excluido or produto.quantidade is None or snapshot(produto) != rodada.item.cadastro:
+    if not produto.ativo or produto.excluido or produto.quantidade is None or not cadastro_compativel(produto, rodada.item.cadastro):
         raise ValueError("Produto ou conversão alterado. Solicite nova conferência.")
+    exigir_representavel(rodada)
     confirmacoes = _lote.confirmacoes[rodada.pk] if _lote is not None else list(rodada.confirmacoes.order_by("versao_entrada"))
     primeira = confirmacoes[0] if confirmacoes else rodada
     movimentos = _lote.movimentos[rodada.item.produto_id] if _lote is not None else list(movimentos_relevantes(rodada))

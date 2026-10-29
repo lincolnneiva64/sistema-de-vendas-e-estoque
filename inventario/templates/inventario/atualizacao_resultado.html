@@ -6,7 +6,7 @@
   <p class="muted">A finalização das contagens e a revisão não comprovam aplicação de ajustes. Consulte os saldos registrados e a evolução de cada produto.</p>
   {% else %}
   {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% else %}
-  {% if atualizacao.preliminar %}<p>{{ atualizacao.resumo.candidatos }} requerem prévia · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p><p>A situação inicial é preliminar. Revise a prévia para validar os documentos, os bloqueios e os saldos antes de confirmar.</p>
+  {% if atualizacao.preliminar %}<p>{{ atualizacao.resumo.candidatos }} aguardam revisão · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p><p>Confira as informações de cada produto. A revisão verifica os documentos, os bloqueios e os saldos antes da confirmação.</p>
   {% else %}<p>{{ atualizacao.resumo.aptos }} aptos para atualizar · {{ atualizacao.resumo.bloqueados }} bloqueados · {{ atualizacao.resumo.aplicados }} já aplicados.</p>{% endif %}
   {% if not ajustes_habilitados %}<p class="aviso">Aplicação real desabilitada no servidor. A prévia não altera o estoque.</p>{% endif %}
   {% if previa_lote %}
@@ -20,7 +20,7 @@
       <div class="acoes"><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Cancelar</a><button name="confirmacao" value="sim" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar atualização</button></div>
     </form>
 
-  {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige prévia validada e autorização.</p>{% endif %}
+  {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige revisão validada e autorização.</p>{% endif %}
   {% endif %}
   {% endif %}
 </div>

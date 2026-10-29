@@ -84,3 +84,6 @@
  .movimentos-periodo tr>td.fluxo{grid-column:1;grid-row:3;text-align:left}
  .movimentos-periodo tr>td.saldo{grid-column:2;grid-row:3}
 }
+
+/* Nome completo no título, preservando o contador. */
+.extrato-titulo h2{min-width:0;overflow-wrap:anywhere}.extrato-titulo>span{flex-shrink:0}

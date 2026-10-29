@@ -1,5 +1,6 @@
 'use strict';
 document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
+    form.noValidate = true;
     const modal = form.closest('dialog');
     const abrir = document.querySelector('[data-abrir-edicao-admin="' + modal.id + '"]');
     abrir.addEventListener('click', () => {
@@ -32,13 +33,29 @@ document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
             ? total.toLocaleString('pt-BR', {maximumFractionDigits: 3}) + ' ' + form.dataset.base : '—';
     };
     form.addEventListener('input', atualizarTotal);
+    principal.addEventListener('input', () => {
+        principal.removeAttribute('aria-invalid');
+        if (mensagem.dataset.erroPrincipal) { mensagem.textContent=''; delete mensagem.dataset.erroPrincipal; }
+        atualizarTotal();
+    });
     atualizarTotal();
     form.querySelector('[data-fechar-edicao-admin]').addEventListener('click', () => {
         if (!enviando) modal.close();
     });
     form.addEventListener('submit', async event => {
         event.preventDefault();
-        if (enviando || !form.reportValidity()) return;
+        if (enviando) return;
+        if (principal.value.trim() === '' || !principal.validity.valid) {
+            principal.setAttribute('aria-invalid','true');
+            mensagem.dataset.erroPrincipal='true';
+            mensagem.textContent=principal.value.trim()==='' ? 'Informe a quantidade em '+form.dataset.base+'. Use 0 quando não houver pacotes completos.' : 'Confira a quantidade em '+form.dataset.base+'.';
+            principal.focus();return;
+        }
+        if (form.hasAttribute('data-relacao-pendente') && avulsos && avulsos.value !== '' && Number(avulsos.value)>0) {
+            mensagem.textContent='Confirme primeiro a relação física da embalagem em Unidades avulsas.';
+            modal.querySelector('.unidades-avulsas').open=true;return;
+        }
+        if (!form.reportValidity()) return;
         enviando = true;
         botao.disabled = true;
         form.setAttribute('aria-busy', 'true');

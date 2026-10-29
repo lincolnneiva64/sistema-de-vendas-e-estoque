@@ -16,3 +16,5 @@ form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344
 #aviso-pendencias button { display: block; width: 100%; min-height: 44px; margin-top: 12px; white-space: normal; }
 #proxima-pendencia { min-height: 44px; max-width: 100%; white-space: normal; }
 #proxima-pendencia[hidden] { display: none; }
+
+.unidades-avulsas{min-width:0;max-width:100%}.unidades-avulsas summary{font-size:14px;color:#244b5a;cursor:pointer;overflow-wrap:anywhere}.unidades-avulsas input{max-width:100%;box-sizing:border-box}

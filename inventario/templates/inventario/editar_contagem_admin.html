@@ -1,14 +1,17 @@
 {% load l10n %}
 {% if linha.edicao_admin %}<div class="edicao-contagem-admin"><button type="button" class="secondary" data-abrir-edicao-admin="edicao-admin-{{ linha.rodada.pk }}" aria-haspopup="dialog">Editar contagem</button>
 <dialog id="edicao-admin-{{ linha.rodada.pk }}" class="modal-contagem-admin" aria-labelledby="titulo-admin-{{ linha.rodada.pk }}">
-<h2 id="titulo-admin-{{ linha.rodada.pk }}">{{ linha.item.cadastro.nome }}</h2>
-<p class="muted">Rodada {{ linha.rodada.numero }}</p>
-<form method="post" action="{% url 'inventario:editar_contagem_admin' inventario.pk linha.rodada.pk %}" data-edicao-admin data-fator="{{ linha.item.cadastro.fator }}" data-base="{{ linha.item.cadastro.base }}">
-{% csrf_token %}<input type="hidden" name="autorizacao" value="{{ linha.autorizacao_admin }}"><input type="hidden" name="confirmacao" value="sim">
+<h2 id="titulo-admin-{{ linha.rodada.pk }}">{{ linha.item.cadastro.nome }}</h2><p class="muted">Rodada {{ linha.rodada.numero }}</p>
 <p class="muted">O OK anterior será preservado. Esta confirmação não altera o estoque.</p>
-<label>Quantidade em {{ linha.item.cadastro.base }}<input type="number" name="embalagens" min="0" max="999999999.999" step="{% if linha.item.cadastro.continua %}0.001{% else %}1{% endif %}" inputmode="decimal" value="{{ linha.embalagens_admin }}" required></label>
+<label>Quantidade em {{ linha.item.cadastro.base }}<input type="number" name="embalagens" form="contagem-admin-{{ linha.rodada.pk }}" min="0" max="999999999.999" step="{% if linha.item.cadastro.continua %}0.001{% else %}1{% endif %}" inputmode="decimal" value="{{ linha.embalagens_admin }}" required aria-describedby="mensagem-admin-{{ linha.rodada.pk }}"></label>
+{% if linha.solicitar_relacao %}<details class="unidades-avulsas"><summary>Unidades avulsas</summary>
+<form method="post" data-relacao-fisica action="{% url 'inventario:confirmar_conversao_fisica' inventario.pk linha.rodada.pk %}">{% csrf_token %}<input type="hidden" name="autorizacao" value="{{ linha.autorizacao_admin }}"><input type="hidden" name="confirmacao_relacao" value="sim"><label>Quantas UN há em 1 {{ linha.item.cadastro.base }}?<input name="fator_fisico" type="number" min="2" max="999999999" step="1" inputmode="numeric" required></label><small>Relação física da embalagem — confirme pela embalagem, não pela quantidade encontrada. Vale somente nesta conferência.</small><button type="submit">Confirmar relação física</button><p role="status" data-mensagem-relacao></p></form>
+<label>Quantas unidades soltas foram encontradas?<input type="number" name="avulsos" form="contagem-admin-{{ linha.rodada.pk }}" min="0" max="999999999" step="1" inputmode="numeric" value="{{ linha.avulsos_admin|default:'0' }}" required></label><small>A contagem avulsa só pode ser confirmada depois da relação física.</small>
+</details>{% endif %}
+<form id="contagem-admin-{{ linha.rodada.pk }}" method="post" action="{% url 'inventario:editar_contagem_admin' inventario.pk linha.rodada.pk %}" data-edicao-admin {% if linha.solicitar_relacao %}data-relacao-pendente{% endif %} {% if linha.cadastro_contagem.avulsos_fisicos %}data-avulsos-fisicos{% endif %} data-fator="{{ linha.cadastro_contagem.fator }}" data-base="{{ linha.item.cadastro.base }}">
+{% csrf_token %}<input type="hidden" name="autorizacao" value="{{ linha.autorizacao_admin }}"><input type="hidden" name="confirmacao" value="sim">
 {% if linha.item.cadastro.fracionado %}<label>Avulsos em {{ linha.item.cadastro.secundaria }}<input type="number" name="avulsos" min="0" max="999999999.999" step="{% if linha.item.cadastro.secundaria_continua %}0.001{% else %}1{% endif %}" inputmode="decimal" value="{{ linha.avulsos_admin }}" required></label>{% endif %}
-<p>Total em {{ linha.item.cadastro.base }}: <output data-total-admin aria-live="polite">—</output></p>
-<button type="submit">Confirmar contagem</button><button type="button" class="secondary" data-fechar-edicao-admin>Cancelar</button>
-<p data-mensagem-admin role="status" aria-live="polite"></p>
+{% if linha.cadastro_contagem.avulsos_fisicos %}<details class="unidades-avulsas"><summary>Unidades avulsas</summary><p>Relação física confirmada: <strong>1 {{ linha.item.cadastro.base }} = {{ linha.cadastro_contagem.fator }} UN</strong></p><label>Quantas unidades soltas foram encontradas?<input type="number" name="avulsos" min="0" max="999999999" step="1" inputmode="numeric" value="{{ linha.avulsos_admin }}" required></label></details><p data-total-fisico aria-live="polite"></p>{% endif %}
+<p>{% if linha.cadastro_contagem.avulsos_fisicos %}Equivalência em {{ linha.item.cadastro.base }} (3 casas){% else %}Total em {{ linha.item.cadastro.base }}{% endif %}: <output data-total-admin aria-live="polite">—</output></p>
+<button type="submit">Confirmar contagem</button><button type="button" class="secondary" data-fechar-edicao-admin>Cancelar</button><p id="mensagem-admin-{{ linha.rodada.pk }}" data-mensagem-admin role="status" aria-live="polite"></p>
 </form></dialog></div>{% elif linha.decisao %}<small>Contagem bloqueada: ajuste aplicado.</small>{% endif %}

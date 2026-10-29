@@ -6,9 +6,10 @@ from django.utils import timezone
 
 from estoque.models import Produto
 from . import services
-from .conversao import converter, snapshot
+from .conversao import converter, snapshot, cadastro_compativel
 from .models import (Inventario, ItemInventario, RodadaContagem, ConfirmacaoContagem,
                      EventoInventario, DecisaoAjuste, AplicacaoAjuste, PropostaAjuste)
+from .conversao_fisica import cadastro_contagem, auditoria as auditoria_fisica
 from .selecao import itens_incluidos
 
 SALT = 'inventario-contagem-administrativa-v1'
@@ -55,7 +56,7 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
             or AplicacaoAjuste.objects.filter(proposta__rodada__item=item).exists()
             or PropostaAjuste.objects.filter(rodada__item=item, estado='aplicado').exists()):
         raise ValueError('Produto com ajuste de estoque aplicado. A correção exige um processo separado.')
-    valores = converter(item.cadastro, embalagens, avulsos)
+    valores = converter(cadastro_contagem(item), embalagens, avulsos)
     anterior = rodada.confirmacoes.filter(versao_entrada=dados['versao']).first()
     if anterior:
         # Retry only this administrator's accepted request, never somebody else's OK.
@@ -68,7 +69,7 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
         raise ValueError('A contagem mudou em outra aba ou acesso. Atualize a página.')
     services.verificar_observador()
     produto = Produto.objects.select_for_update().get(pk=item.produto_id)
-    if not produto.ativo or produto.excluido or produto.quantidade is None or snapshot(produto) != item.cadastro:
+    if not produto.ativo or produto.excluido or produto.quantidade is None or not cadastro_compativel(produto, item.cadastro):
         raise ValueError('Produto ou cadastro alterado. Revise antes de confirmar a contagem.')
     antes = valores_auditoria(rodada)
     ultimo = rodada.confirmacoes.order_by('-versao_entrada').first()
@@ -90,5 +91,6 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
         versao_saida=rodada.versao, produto_id=produto.pk, produto_nome=item.cadastro['nome'],
         unidade=item.cadastro['base'], secundaria=item.cadastro['secundaria'],
         fator=item.cadastro['fator'], conferencia_id=inventario.pk, rodada_numero=rodada.numero,
-        ciclo=inventario.ciclo, usuario_nome=usuario.get_username(), estoque_alterado=False)
+        ciclo=inventario.ciclo, usuario_nome=usuario.get_username(), estoque_alterado=False,
+        contagem_fisica=auditoria_fisica(item, valores[0], valores[1]))
     return rodada

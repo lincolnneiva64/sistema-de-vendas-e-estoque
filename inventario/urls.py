@@ -5,6 +5,7 @@ from . import ajustes_views, ajustes_modal
 
 app_name = "inventario"
 urlpatterns = [
+    path("sessao/<int:inventario_id>/conversao-fisica/<int:rodada_id>/", views.confirmar_conversao_fisica, name="confirmar_conversao_fisica"),
     path("sessao/<int:inventario_id>/atualizacao-modal/", ajustes_modal.modal, name="ajustes_modal"),
     path("sessao/<int:inventario_id>/finalizar-administrativamente/", views.finalizar_administrativamente, name="finalizar_administrativamente"),
     path("sessao/<int:inventario_id>/contagem-admin/<int:rodada_id>/", views.editar_contagem_admin, name="editar_contagem_admin"),
