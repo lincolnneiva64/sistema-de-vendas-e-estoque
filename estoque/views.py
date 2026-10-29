@@ -66,6 +66,7 @@ from .documentos_horarios import acrescentar_rodape_imagem, desenhar_horarios, l
 from .horarios_recebimentos import (horario_legivel, campos_comprovante, campos_fechamento,
     metadados_recebimento, texto_horarios, imagem_com_horarios)
 from inventario.rastreabilidade import identificar, referenciar_venda
+from .services import decisoes_precos_compra as decisoes_compra
 from .services.diagnostico_finalizacao_compra import diagnosticar_finalizacao_http, etapa_finalizacao_compra
 from .services.separacao_vendas import (
     consolidar_alteracoes_fisicas_apos_separacao,
@@ -11877,8 +11878,10 @@ def _salvar_compra_e_itens(compra, dados, status):
     bloquear_produtos_precos([pk for pk in ids if pk])
     if compra.pk:
         compra.alteracoes_precos_vinculados=Compra.objects.values_list('alteracoes_precos_vinculados',flat=True).get(pk=compra.pk)
-    snapshots = {item.produto_id: item.alteracoes_precos for item in compra.itens.all()}
-    snapshots_vinculados = {item.produto_id:item.alteracoes_precos_vinculados for item in compra.itens.all()}
+    itens_anteriores = list(compra.itens.all())
+    revisoes_anteriores = {i.produto_id: (i.preco_compra_anterior, i.revisao_preco_concluida) for i in itens_anteriores}
+    snapshots = {item.produto_id: item.alteracoes_precos for item in itens_anteriores}
+    snapshots_vinculados = {item.produto_id:item.alteracoes_precos_vinculados for item in itens_anteriores}
     compra.fornecedor = dados["fornecedor"]
     compra.data_compra = dados["data_compra"]
     compra.data_vencimento = dados["data_vencimento"]
@@ -11903,6 +11906,8 @@ def _salvar_compra_e_itens(compra, dados, status):
             valor_total=item["valor_total"],
             observacao=item["observacao"] or None,
             alteracoes_precos=snapshots.get(item["produto"].pk, {}),
+            preco_compra_anterior=revisoes_anteriores.get(item["produto"].pk, (None, False))[0],
+            revisao_preco_concluida=revisoes_anteriores.get(item["produto"].pk, (None, False))[1],
         )
         for item in dados["itens"]
     ]
@@ -12177,7 +12182,7 @@ def _criar_contas_pagar_compra_bloqueada(compra):
 
 
 @serializar_grupos
-def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None, revisao_precos_pendente=False):
+def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_custo_produto_ids=None, atualizar_preco_venda_produtos=None, revisao_precos_pendente=False, decisao_request=None):
     atualizar_custo_produto_ids = set(atualizar_custo_produto_ids or [])
     atualizar_preco_venda_produtos = atualizar_preco_venda_produtos or {}
     with transaction.atomic():
@@ -12199,6 +12204,9 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                     f"Unidade {item.unidade} de {produto.nome} diverge do estoque em {unidade_base}. "
                     "Confira a quantidade e o preco por embalagem antes de finalizar. Nenhuma conversao automatica foi aplicada."
                 )
+        revisao_precos_pendente, custos_anteriores = decisoes_compra.validar_finalizacao(
+            compra, getattr(decisao_request, 'user', None), getattr(decisao_request, 'POST', {}),
+            atualizar_preco_venda_produtos, atualizar_custo_produto_ids, produtos_bloqueados=produtos)
         fornecedores = []
         custos = []
         etapa_finalizacao_compra('estoque')
@@ -12213,11 +12221,10 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                 revisao_precos_pendente
                 and item.produto_id in atualizar_custo_produto_ids
                 and item.preco_compra_anterior is None
-                and Decimal(str(produto.preco_compra or "0")).quantize(Decimal("0.01"))
-                != item.preco_unitario
+                and item.produto_id in custos_anteriores
             ):
                 item.preco_compra_anterior = Decimal(
-                    produto.preco_compra or Decimal("0.00")
+                    custos_anteriores[item.produto_id]
                 ).quantize(Decimal("0.01"))
                 item.save(update_fields=["preco_compra_anterior"])
 
@@ -12268,6 +12275,40 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             _registrar_movimentos_compra_a_vista(compra, valores_origem)
 
 
+
+def _retorno_compra(request, nome, **kwargs):
+    if request.headers.get('X-Compra-Decisao') == '1':
+        return JsonResponse(dict(ok=True, redirect=reverse(nome, kwargs=kwargs)))
+    return redirect(nome, **kwargs)
+
+
+def _compra_decisao_rejeitada(request, compra, dados, erro, finalizando=False):
+    if request.headers.get('X-Compra-Decisao') == '1':
+        return JsonResponse(dict(ok=False, erro=str(erro), revisar_precos=True), status=409)
+    from types import SimpleNamespace
+    class NovaCompraTela(SimpleNamespace):
+        def __bool__(self):
+            return False
+    persistida = Compra.objects.filter(pk=compra.pk).first() if compra.pk else None
+    contexto = _contexto_form_compra(persistida, finalizando=finalizando,
+                                    fechamento_token=request.POST.get('fechamento_token'))
+    tela = persistida or NovaCompraTela()
+    for campo in ('fornecedor', 'data_compra', 'data_vencimento', 'tipo_pagamento', 'cartao',
+                  'total', 'total_produtos', 'ajuste_total', 'observacao'):
+        setattr(tela, campo, dados[campo])
+    tela.fornecedor_id = dados['fornecedor'].pk
+    contexto.update(compra=tela, tipo_pagamento_form=dados['tipo_pagamento'],
+                    erro_decisao_precos=str(erro), total_itens_compra=dados['total_produtos'])
+    contexto['item_linhas'] = [dict(produto_id=i['produto'].pk, produto_nome=i['produto'].nome,
+        quantidade=str(i['quantidade']).replace('.', ','), unidade=i['unidade'],
+        unidade_estoque=i['produto'].unidade_venda_1 or i['produto'].unidade_compra or '',
+        preco_unitario=str(i['preco_unitario']).replace('.', ','), estoque=_estoque_produto_texto(i['produto']),
+        observacao=i['observacao']) for i in dados['itens']]
+    contexto['form_compra_preservado'] = {k: request.POST.getlist(k) for k in request.POST
+        if k not in ('csrfmiddlewaretoken', 'previa_decisao_precos', 'decisoes_precos_itens',
+                     'decisao_precos_compra', 'revisao_precos_pendente') and not k.endswith('[]')}
+    return render(request, 'estoque/compras_nova.html', contexto, status=409)
+
 @proteger_precos_http()
 def compras_nova(request):
     if request.method == "POST":
@@ -12295,17 +12336,17 @@ def compras_nova(request):
                 )
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                    return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
                 status = Compra.STATUS_RASCUNHO
                 _salvar_compra_e_itens(compra, dados, status)
                 _salvar_pagamento_nota_compra(request, compra, dados)
                 if acao == "finalizar":
-                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
-                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
                     if dados["compra_conta_futura"]:
-                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request), decisao_request=request)
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request), decisao_request=request)
+        except decisoes_compra.DecisaoPrecosInvalida as exc:
+            return _compra_decisao_rejeitada(request, compra, dados, exc, finalizando=False)
         except (ValueError, ValidationError) as exc:
             messages.error(request, ' '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc))
             return redirect("estoque:compras_nova")
@@ -12323,13 +12364,13 @@ def compras_nova(request):
                 messages.success(request, "Compra finalizada no cartao de credito, sem movimentar Caixa/Banco.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
-            return redirect("estoque:compras_lista")
+            return _retorno_compra(request, "estoque:compras_lista")
         if acao == "finalizar" and dados["compra_conta_futura"]:
             if dados["compra_a_prazo"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada no cartao de credito, sem movimentar Caixa/Banco.")
-            return redirect("estoque:compras_lista")
+            return _retorno_compra(request, "estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
     return render(
@@ -12360,8 +12401,9 @@ def compra_salvar_pre_revisao(request, pk=None):
                 return JsonResponse({"ok": False, "erro": "Compra ja finalizada. Recarregue a pagina para consultar o resultado."}, status=409)
             _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
             _salvar_pagamento_nota_compra(request, compra, dados)
+            revisao_precos = decisoes_compra.preparar(compra, request.user)
         return JsonResponse({
-            "ok": True,
+            "ok": True, "revisao_precos": revisao_precos,
             "editar_url": reverse("estoque:compra_editar", kwargs={"pk": compra.pk}),
             "finalizar_url": reverse("estoque:compra_finalizar", kwargs={"pk": compra.pk}),
             "salvar_url": reverse("estoque:compra_salvar_pre_revisao", kwargs={"pk": compra.pk}),
@@ -12432,7 +12474,7 @@ def compra_editar(request, pk):
         return render(request, "estoque/compras_nova.html", contexto)
     if not _compra_editavel_ou_redireciona(compra):
         messages.warning(request, "Compra finalizada deve ser editada pela correcao de itens.")
-        return redirect("estoque:compras_detalhe", pk=compra.pk)
+        return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
 
     if request.method == "POST":
         acao = request.POST.get("acao_compra") or "salvar_rascunho"
@@ -12446,7 +12488,7 @@ def compra_editar(request, pk):
             with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                    return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
                 compra.status = Compra.STATUS_RASCUNHO
                 compra.save(update_fields=["status", "atualizado_em"])
             messages.success(request, "Compra voltou para a edicao dos itens.")
@@ -12463,16 +12505,16 @@ def compra_editar(request, pk):
             with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                    return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
                 _salvar_compra_e_itens(compra, dados, status)
                 _salvar_pagamento_nota_compra(request, compra, dados)
                 if acao == "finalizar":
-                    _atualizar_custos_produtos_compra(dados["itens"], atualizar_custo_produto_ids, compra=compra)
-                    _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
                     if dados["compra_conta_futura"]:
-                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                        _finalizar_compra_com_financeiro(compra, None, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request), decisao_request=request)
                 if acao == "confirmar_financeiro":
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request), decisao_request=request)
+        except decisoes_compra.DecisaoPrecosInvalida as exc:
+            return _compra_decisao_rejeitada(request, compra, dados, exc, finalizando=False)
         except (ValueError, IndexError) as exc:
             if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
                 return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
@@ -12492,13 +12534,13 @@ def compra_editar(request, pk):
                 messages.success(request, "Compra finalizada no cartao de credito, sem movimentar Caixa/Banco.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
-            return redirect("estoque:compras_lista")
+            return _retorno_compra(request, "estoque:compras_lista")
         if acao == "finalizar" and dados["compra_conta_futura"]:
             if dados["compra_a_prazo"]:
                 messages.success(request, "Compra finalizada e conta a pagar criada com sucesso.")
             else:
                 messages.success(request, "Compra finalizada no cartao de credito, sem movimentar Caixa/Banco.")
-            return redirect("estoque:compras_lista")
+            return _retorno_compra(request, "estoque:compras_lista")
         return redirect("estoque:compra_finalizar", pk=compra.pk)
 
     return render(
@@ -12517,7 +12559,7 @@ def compra_editar(request, pk):
 def compra_finalizar(request, pk):
     compra = get_object_or_404(Compra.objects.prefetch_related("itens__produto"), pk=pk)
     if not _compra_editavel_ou_redireciona(compra):
-        return redirect("estoque:compras_detalhe", pk=compra.pk)
+        return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
 
     if request.method == "POST":
         acao = request.POST.get("acao_compra")
@@ -12525,7 +12567,7 @@ def compra_finalizar(request, pk):
             with transaction.atomic(), bloquear_catalogo():
                 compra = Compra.objects.select_for_update().get(pk=compra.pk)
                 if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                    return redirect("estoque:compras_detalhe", pk=compra.pk)
+                    return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
                 compra.status = Compra.STATUS_RASCUNHO
                 compra.save(update_fields=["status", "atualizado_em"])
             messages.success(request, "Compra voltou para a edicao dos itens.")
@@ -12558,11 +12600,13 @@ def compra_finalizar(request, pk):
                 with transaction.atomic(), bloquear_catalogo():
                     compra = Compra.objects.select_for_update().get(pk=compra.pk)
                     if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                        return redirect("estoque:compras_detalhe", pk=compra.pk)
+                        return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
                     etapa_finalizacao_compra('salvar_itens_plano')
                     _salvar_compra_e_itens(compra, dados, Compra.STATUS_RASCUNHO)
                     _salvar_pagamento_nota_compra(request, compra, dados)
-                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request))
+                    _finalizar_compra_com_financeiro(compra, valores_origem, atualizar_custo_produto_ids, atualizar_preco_venda_produtos, _compra_revisao_precos_pendente_post(request), decisao_request=request)
+            except decisoes_compra.DecisaoPrecosInvalida as exc:
+                return _compra_decisao_rejeitada(request, compra, dados, exc, finalizando=True)
             except ValueError as exc:
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
@@ -12576,13 +12620,13 @@ def compra_finalizar(request, pk):
                 messages.success(request, "Compra finalizada no cartao de credito, sem movimentar Caixa/Banco.")
             else:
                 messages.success(request, "Compra finalizada e valores lancados no financeiro com sucesso.")
-            return redirect("estoque:compras_lista")
+            return _retorno_compra(request, "estoque:compras_lista")
 
     if compra.status == Compra.STATUS_FINALIZACAO_INICIADA:
         with transaction.atomic(), bloquear_catalogo():
             compra = Compra.objects.select_for_update().get(pk=compra.pk)
             if not _compra_editavel_ou_redireciona(compra) or compra.estoque_entrada_realizada:
-                return redirect("estoque:compras_detalhe", pk=compra.pk)
+                return _retorno_compra(request, "estoque:compras_detalhe", pk=compra.pk)
             compra.status = Compra.STATUS_RASCUNHO
             compra.save(update_fields=["status", "atualizado_em"])
     return render(
@@ -16271,7 +16315,8 @@ def revisao_precos_posterior_pendentes(request):
         "fator_conversao",
     )
     grupos_vistos=set()
-    for item in _itens_revisao_precos_posterior().select_related("produto", "produto__vinculo_grupo__grupo").order_by("compra_id", "id"):
+    previas_decisao = {}
+    for item in _itens_revisao_precos_posterior().select_related("compra", "produto", "produto__vinculo_grupo__grupo").order_by("compra_id", "id"):
         produto = item.produto
         dados = {campo: str(getattr(produto, campo) or 0) for campo in campos} if produto else {}
         vinculo = getattr(produto, 'vinculo_grupo', None) if produto else None
@@ -16284,7 +16329,11 @@ def revisao_precos_posterior_pendentes(request):
             dados["preco_compra_fracionado"] = str(
                 (item.preco_compra_anterior / produto.fator_conversao).quantize(Decimal("0.01"))
             )
+        if item.compra_id not in previas_decisao:
+            previas_decisao[item.compra_id] = decisoes_compra.preparar_posterior(item.compra, request.user)
+        chave_decisao = f"g:{vinculo.grupo_id}" if vinculo else f"p:{item.produto_id}"
         itens.append({
+            "previa_decisao_precos": previas_decisao[item.compra_id].get(chave_decisao, ""),
             "item_id": item.pk,
             "compra_id": item.compra_id,
             "produto_id": item.produto_id,
@@ -16368,6 +16417,7 @@ def revisao_precos_posterior_salvar(request):
             precos = _produtos_preco_venda_atualizar_post(request)
             if set(precos) != {(produto_id, campo) for _, campo, _ in enviados}:
                 raise ValueError("Preco invalido.")
+            decisoes_compra.validar_posterior(compra, item, request.user, request.POST, precos)
             _atualizar_precos_venda_produtos_compra(precos, compra=compra)
             vinculo=getattr(produto,'vinculo_grupo',None)
             if vinculo:

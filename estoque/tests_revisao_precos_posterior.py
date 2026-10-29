@@ -40,6 +40,9 @@ class RevisaoPrecosPosteriorTests(TestCase):
     def payload(self, **extra):
         dados = dict(compra_id=self.compra.pk, item_id=self.item.pk, produto_id=self.produto.pk)
         dados.update(extra)
+        from .services.decisoes_precos_compra import preparar_posterior
+        dados['previa_decisao_precos'] = preparar_posterior(self.compra, self.operador).get(f'p:{self.produto.pk}', '')
+        dados['decisao_precos'] = 'alterar' if any(k.startswith(('novo_preco_venda_produto_', 'atualizar_preco_venda_')) for k in extra) else 'manter'
         return dados
 
     def precos(self, campos, valores, ids=None):

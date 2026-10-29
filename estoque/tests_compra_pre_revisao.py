@@ -1,6 +1,7 @@
 """Regressao do rascunho financeiro e dos envios de finalizacao atrasados."""
 from datetime import date
 import os
+import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from decimal import Decimal
@@ -25,7 +26,7 @@ from .models import (
 
 class CompraPreRevisaoFixture:
     def setUp(self):
-        self.user = autorizar_operador(get_user_model().objects.create_user(username="teste-pre-revisao"))
+        self.user = autorizar_operador(get_user_model().objects.create_superuser(username="teste-pre-revisao", password="teste"))
         self.client.force_login(self.user)
         self.fornecedor = Fornecedor.objects.create(nome="Fornecedor teste")
         self.produto = Produto.objects.create(
@@ -61,6 +62,10 @@ class CompraPreRevisaoFixture:
             dados[f"compra_parcela_vencimento_{n}"] = f"2026-11-{8 + (n-1)*10:02d}"
             dados[f"compra_parcela_observacao_{n}"] = f"Documento {n}"
         dados.update(extra)
+        from .services.decisoes_precos_compra import preparar
+        dados['previa_decisao_precos'] = preparar(self.compra, self.user)['previa']
+        dados['decisao_precos_compra'] = 'adiar' if dados.get('revisao_precos_pendente') == '1' else 'revisado'
+        dados['decisoes_precos_itens'] = json.dumps({f'p:{self.produto.pk}':'manter'})
         return dados
 
     def assert_sem_efeitos(self):

@@ -9361,6 +9361,7 @@ const operador = buscarCampoOperadorVenda();
 
     function ehCampoDepoisDoOperador(el) {
         if (!el) return false;
+        if (el.closest('#revisaoPrecosPosterior')) return false;
 
         const texto = (
             (el.placeholder || "") + " " +

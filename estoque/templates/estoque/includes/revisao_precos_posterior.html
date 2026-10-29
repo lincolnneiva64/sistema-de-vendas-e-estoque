@@ -284,6 +284,7 @@
       <button type="button" id="rpDepois">Fazer depois</button>
       <button type="button" id="rpAgora" class="rp-principal">Revisar agora</button>
       <button type="button" id="rpSalvar" class="rp-principal" hidden>Salvar e próximo</button>
+      <button type="button" id="rpManter" hidden>Manter preços atuais</button>
     </footer>
     <div hidden>{% csrf_token %}</div>
   </div>
@@ -299,6 +300,7 @@
   const erro = document.getElementById("rpErro");
   const agora = document.getElementById("rpAgora");
   const salvar = document.getElementById("rpSalvar");
+  const manter = document.getElementById("rpManter");
   const voltar = document.getElementById("rpVoltar");
   const depois = document.getElementById("rpDepois");
   let revisaoPrecosItens = [], revisaoPrecosIndice = 0, revisaoPrecosDecisoes = {};
@@ -343,7 +345,7 @@
     if (!pendentes || modal.classList.contains("visivel")) return;
     modoRevisao = false; mostrarErro(""); focoAnterior = document.activeElement;
     card.classList.add("rp-alerta"); mensagem.hidden = false; listaConferenciaPrecosCompra.hidden = true;
-    agora.hidden = false; salvar.hidden = true; voltar.hidden = true;
+    agora.hidden = false; salvar.hidden = true; manter.hidden = true; voltar.hidden = true;
     document.getElementById("rpAjuda").hidden = true;
     document.getElementById("rpTitulo").textContent = "Há preços de venda para revisar";
     exibir(); agora.focus();
@@ -401,23 +403,29 @@
       if (!pendentes) { fechar(); return; }
       revisaoPrecosIndice = 0; revisaoPrecosDecisoes = {}; concluidos.clear(); modoRevisao = true;
       clearTimeout(timer); card.classList.remove("rp-alerta"); mensagem.hidden = true;
-      listaConferenciaPrecosCompra.hidden = false; agora.hidden = true; salvar.hidden = false; voltar.hidden = false;
+      listaConferenciaPrecosCompra.hidden = false; agora.hidden = true; salvar.hidden = false; manter.hidden = false; voltar.hidden = false;
       document.getElementById("rpAjuda").hidden = false;
       document.getElementById("rpTitulo").textContent = "Revisar preços de venda";
       exibir(); renderizar();
     } catch(e) { mostrarErro(e.message); }
     finally { ocupado = false; agora.disabled = false; }
   }
-  async function salvarAtual() {
+  async function salvarAtual(preservar = false) {
     if (ocupado) return;
     const item = revisaoPrecosItens[revisaoPrecosIndice];
-    ocupado = true; salvar.disabled = true; depois.disabled = true; voltar.disabled = true;
+    ocupado = true; salvar.disabled = true; manter.disabled = true; depois.disabled = true; voltar.disabled = true;
     listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.readOnly = true; });
     mostrarErro("");
     try {
       if (!concluidos.has(item.item_id)) {
         salvarDecisaoProdutoAtual();
-        const dados = new URLSearchParams({compra_id:item.compra_id, item_id:item.item_id, produto_id:item.produtoId});
+        const decisao=decisaoProduto(item);
+        if(preservar)Object.values(decisao.precos).forEach(p=>{p.atualizar=false;});
+        const alterou=Object.entries(decisao.precos).some(([campo,p])=>
+          p.atualizar && numero(p.novoPreco)!==numero(item.produto[campo]));
+        if(!alterou && !preservar)throw new Error('Para concluir sem reajuste, escolha Manter preços atuais.');
+        const dados = new URLSearchParams({compra_id:item.compra_id, item_id:item.item_id, produto_id:item.produtoId,
+          decisao_precos:preservar?'manter':'alterar',previa_decisao_precos:item.previa_decisao_precos});
         if(item.grupo_precos)dados.set('versao_grupo_produto_'+item.produtoId,item.grupo_precos.versao);
         Object.entries(decisaoProduto(item).precos).forEach(([campo, preco]) => {
           if (!preco.atualizar) return;
@@ -454,14 +462,15 @@
       } else { fechar(); agendar(); }
     } catch(e) { mostrarErro(e.message); }
     finally {
-      ocupado = false; depois.disabled = false;
+      ocupado = false; manter.disabled = false; depois.disabled = false;
       salvar.disabled = !revisaoPrecosItens[revisaoPrecosIndice].disponivel;
       voltar.disabled = revisaoPrecosIndice === 0;
       listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.readOnly = false; });
     }
   }
   agora.addEventListener("click", iniciar);
-  salvar.addEventListener("click", salvarAtual);
+  salvar.addEventListener("click", () => salvarAtual(false));
+  manter.addEventListener('click',()=>salvarAtual(true));
   depois.addEventListener("click", function() { if (!ocupado) { fechar(); agendar(); } });
   voltar.addEventListener("click", function() {
     if (ocupado || revisaoPrecosIndice === 0) return;

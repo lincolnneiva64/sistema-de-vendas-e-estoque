@@ -2630,7 +2630,6 @@
       text-align:right;
     }
     .compras-precos-rodape { display:grid; grid-template-columns:1fr; padding:9px; }
-    #btnContinuarSemAtualizarPrecosCompra { display:none; }
     .pagamento-select-real { display:none !important; }
     .pagamento-opcoes-mobile { display:grid; }
     .campo-observacao-compra { display:none !important; }
@@ -2839,7 +2838,7 @@
 </select></template>
 <form method="post" id="formCompra" data-edicao-finalizada="{% if edicao_finalizada %}1{% else %}0{% endif %}" data-salvar-pre-revisao-url="{% if compra %}{% url 'estoque:compra_salvar_pre_revisao' compra.id %}{% else %}{% url 'estoque:compra_nova_salvar_pre_revisao' %}{% endif %}"{% if compra and not edicao_finalizada %} data-confirmar-financeiro-url="{% url 'estoque:compra_finalizar' compra.id %}"{% endif %}>
     {% csrf_token %}
-    <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" hidden></p>
+    <p id="erroSalvarPreRevisaoCompra" role="alert" class="compras-field-error" {% if not erro_decisao_precos %}hidden{% endif %}>{{ erro_decisao_precos }}</p>
     <input type="hidden" name="fechamento_token" value="{{ fechamento_token }}">
     <input type="hidden" name="acao_compra" id="acaoCompra" value="{% if edicao_finalizada %}salvar_correcao_simples{% elif finalizando %}confirmar_financeiro{% else %}salvar_rascunho{% endif %}">
     {% if edicao_finalizada %}
@@ -2852,6 +2851,9 @@
     {% endif %}
     <input type="hidden" name="fluxo_mobile_compra" id="fluxoMobileCompra" value="0">
     <input type="hidden" name="revisao_precos_pendente" id="revisaoPrecosPendenteCompra" value="0">
+    <input type="hidden" name="previa_decisao_precos" id="previaDecisaoPrecosCompra" value="">
+    <input type="hidden" name="decisao_precos_compra" id="decisaoPrecosCompra" value="">
+    <input type="hidden" name="decisoes_precos_itens" id="decisoesPrecosItensCompra" value="{}">
     <div id="camposAtualizarCustoCompra"></div>
 
     <section class="compras-precos-modal" id="modalConferenciaPrecosCompra" aria-hidden="true">
@@ -2864,7 +2866,7 @@
         <div class="compras-precos-escolha" id="escolhaRevisaoPrecosCompra" hidden>
           <strong>Financeiro conferido.</strong>
           <p>Voc&ecirc; pode finalizar a compra agora e revisar os pre&ccedil;os de venda depois, ou fazer a revis&atilde;o antes de finalizar.</p>
-          <button type="button" class="compras-btn compras-btn-primary" id="btnFinalizarRevisarDepoisCompra">Finalizar agora</button>
+          <button type="button" class="compras-btn compras-btn-primary" id="btnFinalizarRevisarDepoisCompra">Finalizar e revisar depois</button>
           <button type="button" class="compras-btn compras-btn-secondary" id="btnRevisarPrecosAgoraCompra">Revisar pre&ccedil;os agora</button>
           <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarFinanceiroCompra">Voltar</button>
         </div>
@@ -2872,7 +2874,7 @@
         <div class="compras-precos-rodape">
           <button type="button" class="compras-btn compras-btn-secondary" id="btnVoltarProdutoPrecoCompra">Voltar</button>
           <button type="button" class="compras-btn compras-btn-primary" id="btnAtualizarPrecosContinuarCompra">Salvar e proximo</button>
-          <button type="button" class="compras-btn compras-btn-secondary" id="btnContinuarSemAtualizarPrecosCompra">Continuar sem atualizar</button>
+          <button type="button" class="compras-btn compras-btn-secondary" id="btnContinuarSemAtualizarPrecosCompra">Manter preços atuais</button>
           <button type="button" class="compras-btn compras-btn-secondary" id="btnCancelarConferenciaPrecosCompra">Cancelar</button>
         </div>
       </div>
@@ -5804,6 +5806,7 @@
 
   function abrirEscolhaRevisaoPrecosMobile(itens) {
     if (!compraMobile() || !modalConferenciaPrecosCompra || !escolhaRevisaoPrecosCompra) return false;
+    escolhaRevisaoPrecosCompra.insertBefore(btnFinalizarRevisarDepoisCompra, btnRevisarPrecosAgoraCompra);
 
     revisaoPrecosItens = itens || [];
     revisaoPrecosIndice = 0;
@@ -5831,6 +5834,7 @@
 
   function abrirConferenciaPrecosCompra(itens) {
     if (!modalConferenciaPrecosCompra) return false;
+    if (!compraMobile()) modalConferenciaPrecosCompra.querySelector('.compras-precos-rodape').append(btnFinalizarRevisarDepoisCompra);
 
     if (escolhaRevisaoPrecosCompra) escolhaRevisaoPrecosCompra.hidden = true;
     if (listaConferenciaPrecosCompra) listaConferenciaPrecosCompra.hidden = false;
@@ -5969,7 +5973,6 @@
     if(formCompra.dataset.confirmandoGrupo==='1')return;
     formCompra.dataset.confirmandoGrupo='1';
     sincronizarTodosPrecosUnitarios();
-    salvarDecisaoProdutoAtual();
     try {
       const gruposConfirmados=[];
       if(atualizarSelecionados){
@@ -6019,8 +6022,33 @@
     formCompra.requestSubmit ? formCompra.requestSubmit() : formCompra.submit();
   }
 
-  function salvarProdutoAtualEAvancarConferenciaPrecos() {
+  function registrarDecisaoPrecoAtual(manter) {
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    if (!item) return;
+    const decisao = decisaoProduto(item);
+    if (manter) Object.values(decisao.precos).forEach(p => { p.atualizar = false; });
+    const opt = Array.from(tabela.querySelectorAll('select[name="produto_id[]"]'))
+      .find(s => s.value === item.produtoId)?.selectedOptions[0];
+    const mapa = {preco_vista:'precoVista',preco_prazo:'precoPrazo',
+      preco_vista_fracionado:'precoVistaFracionado',preco_prazo_fracionado:'precoPrazoFracionado'};
+    const mudou = Object.entries(decisao.precos).some(([c,p]) =>
+      p.atualizar && numero(p.novoPreco) !== numero(opt?.dataset[mapa[c]]));
+    if (!mudou && !manter) {
+      const erro=document.getElementById('erroSalvarPreRevisaoCompra');
+      erro.textContent='Para continuar sem reajuste, escolha Manter preços atuais.';erro.hidden=false;
+      erro.scrollIntoView({block:'center'});return false;
+    }
+    const escolhas = JSON.parse(document.getElementById('decisoesPrecosItensCompra').value || '{}');
+    escolhas[item.grupoId ? 'g:'+item.grupoId : 'p:'+item.produtoId] = mudou ? 'alterar' : 'manter';
+    if (!mudou) Object.values(decisao.precos).forEach(p => { p.atualizar = false; });
+    document.getElementById('decisoesPrecosItensCompra').value = JSON.stringify(escolhas);
+    document.getElementById('decisaoPrecosCompra').value = 'revisado';
+    return true;
+  }
+
+  function salvarProdutoAtualEAvancarConferenciaPrecos(manter = false) {
     salvarDecisaoProdutoAtual();
+    if (!registrarDecisaoPrecoAtual(manter)) return;
     if (revisaoPrecosIndice < revisaoPrecosItens.length - 1) {
       revisaoPrecosIndice += 1;
       renderizarConferenciaPrecos();
@@ -6143,8 +6171,42 @@
       formCompra.dataset.confirmarFinanceiroUrl = dados.finalizar_url;
       formCompra.action = dados.editar_url;
       window.history.replaceState(null, "", dados.editar_url);
-      if (compraMobile()) abrirEscolhaRevisaoPrecosMobile(itens);
-      else abrirConferenciaPrecosCompra(itens);
+      document.getElementById('previaDecisaoPrecosCompra').value = dados.revisao_precos.previa;
+      document.getElementById('decisoesPrecosItensCompra').value = '{}';
+      document.getElementById('decisaoPrecosCompra').value = '';
+      const projecao = new Map(dados.revisao_precos.itens.map(i => [String(i.produto_id), i]));
+      const mapa = {preco_compra:'precoCompra',preco_compra_fracionado:'precoCompraFracionado',
+        preco_vista:'precoVista',preco_prazo:'precoPrazo',preco_venda:'precoVenda',
+        preco_vista_fracionado:'precoVistaFracionado',preco_prazo_fracionado:'precoPrazoFracionado',
+        fator_conversao:'fatorConversao'};
+      tabela.querySelectorAll('select[name="produto_id[]"]').forEach(select => {
+        const linha = projecao.get(select.value), opt = select.selectedOptions[0];
+        if (!linha || !opt) return;
+        Object.entries(mapa).forEach(([campo, atributo]) => {
+          opt.dataset[atributo] = linha.dados[campo] === 'None' ? '0' : linha.dados[campo];
+        });
+        opt.dataset.precoCompra = linha.custo_anterior;
+        opt.dataset.vendeFracionado = linha.dados.vende_fracionado === 'True' ? '1' : '0';
+        opt.dataset.grupoId = linha.grupo ? String(linha.grupo.id) : '';
+        opt.dataset.versaoGrupo = linha.grupo ? String(linha.grupo.versao) : '';
+        opt.dataset.grupoPrecos = linha.grupo ? linha.grupo.nome : '';
+        opt.dataset.grupoUrl = linha.grupo ? linha.grupo.url : '';
+        opt.dataset.grupoRegularizado = linha.grupo?.regularizado ? '1' : '0';
+      });
+      const atuais = divergenciasPrecoCompra();
+      const edicoesAnteriores = revisaoPrecosDecisoes;
+      if (!atuais.length) {
+        definirCustosSelecionadosParaEnvio(false);
+        document.getElementById('decisaoPrecosCompra').value = 'revisado';
+        conferenciaPrecosConfirmada = true;
+        envioAcionadoPeloBotao = true;
+        queueMicrotask(() => formCompra.requestSubmit());
+      } else if (compraMobile()) abrirEscolhaRevisaoPrecosMobile(atuais);
+      else abrirConferenciaPrecosCompra(atuais);
+      atuais.forEach(item => {
+        const chave = item.chave || item.produtoId;
+        if (edicoesAnteriores[chave]) revisaoPrecosDecisoes[chave] = edicoesAnteriores[chave];
+      });
     } catch (falha) {
       const mensagem = falha.name === "AbortError" ? "O servidor demorou para responder." : (falha.message || "Falha de conexao.");
       erro.textContent = "A revisao nao foi aberta. " + mensagem + " Seus dados continuam nesta tela; tente novamente.";
@@ -6209,6 +6271,38 @@
       delete formCompra.dataset.etapaCorrecao;
       controles.forEach(({campo, disabled}) => { campo.disabled = disabled; });
       if (btnSalvarCompra) { btnSalvarCompra.disabled = false; btnSalvarCompra.textContent = "Salvar alterações"; }
+    }
+  }
+
+  async function enviarFinalizacaoValidada() {
+    const erro = document.getElementById('erroSalvarPreRevisaoCompra');
+    const botao = botaoEnvioAtual || btnSalvarCompra;
+    const texto = botao?.textContent;
+    acaoCompra.value = 'confirmar_financeiro';
+    if (formCompra.dataset.confirmarFinanceiroUrl) formCompra.action = formCompra.dataset.confirmarFinanceiroUrl;
+    const payload = new FormData(formCompra);
+    formCompra.dataset.enviando = '1';
+    if (botao) { botao.disabled = true; botao.textContent = 'Finalizando a compra...'; }
+    try {
+      const resposta = await fetch(formCompra.action || location.href, {method:'POST',body:payload,
+        credentials:'same-origin',headers:{Accept:'application/json','X-Compra-Decisao':'1'}});
+      const dados = resposta.headers.get('content-type')?.includes('application/json') ? await resposta.json() : null;
+      if (resposta.ok && dados?.ok && dados.redirect) { location.assign(dados.redirect); return; }
+      const erroPagina = !dados ? new DOMParser().parseFromString(await resposta.text(), 'text/html').querySelector('.compras-alert.error')?.textContent : '';
+      throw new Error(dados?.erro || erroPagina || 'Não foi possível confirmar a finalização. Confira o estado da compra antes de tentar novamente.');
+    } catch (falha) {
+      conferenciaPrecosConfirmada = false;
+      document.getElementById('previaDecisaoPrecosCompra').value = '';
+      document.getElementById('decisaoPrecosCompra').value = '';
+      document.getElementById('decisoesPrecosItensCompra').value = '{}';
+      erro.textContent = falha instanceof TypeError
+        ? 'Sem confirmação do servidor. Confira o estado da compra antes de reenviar. Seus dados continuam nesta tela.'
+        : falha.message;
+      erro.hidden = false;
+      erro.scrollIntoView({block:'center'});
+    } finally {
+      delete formCompra.dataset.enviando;
+      if (botao) { botao.disabled = false; botao.textContent = texto; }
     }
   }
 
@@ -6378,6 +6472,11 @@
       }
 
       desabilitarItensProvisoriosParaEnvio();
+      if (finalizandoCompra) {
+        event.preventDefault();
+        enviarFinalizacaoValidada();
+        return;
+      }
       formCompra.dataset.enviando = "1";
 
       if (compraMobile()) {
@@ -6510,10 +6609,11 @@
   if (btnFinalizarRevisarDepoisCompra) {
     btnFinalizarRevisarDepoisCompra.addEventListener("click", function() {
       if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "1";
+      document.getElementById('decisaoPrecosCompra').value = 'adiar';
+      document.getElementById('decisoesPrecosItensCompra').value = '{}';
 
       definirTodosCustosParaEnvioSemPrecos();
       conferenciaPrecosConfirmada = true;
-      fechamentoOrigemConfirmado = true;
 
       if (acaoCompra) acaoCompra.value = "confirmar_financeiro";
       atualizarFluxoMobileCompra();
@@ -6552,7 +6652,6 @@
       if (revisaoPrecosPendenteCompra) revisaoPrecosPendenteCompra.value = "0";
 
       revisaoPrecosIndice = 0;
-      revisaoPrecosDecisoes = {};
       revisaoPrecosItens.forEach(function(item) {
         decisaoProduto(item);
       });
@@ -6573,7 +6672,7 @@
 
   if (btnContinuarSemAtualizarPrecosCompra) {
     btnContinuarSemAtualizarPrecosCompra.addEventListener("click", function() {
-      continuarAposConferenciaPrecos(false);
+      salvarProdutoAtualEAvancarConferenciaPrecos(true);
     });
   }
 
@@ -10055,6 +10154,25 @@
 })();
 </script>
 
+
+
+{% if form_compra_preservado %}
+{{ form_compra_preservado|json_script:"compra-form-preservado" }}
+<script>
+addEventListener('DOMContentLoaded', () => {
+  const valores=JSON.parse(document.getElementById('compra-form-preservado').textContent);
+  const restaurar=() => Object.entries(valores).forEach(([nome,lista]) => {
+    document.querySelectorAll('#formCompra [name]').forEach(campo => {
+      if(campo.name===nome && campo.type!=='checkbox')campo.value=lista[0];
+    });
+  });
+  restaurar();
+  ['compraFormaCobrancaNota','compraQuantidadeBoletos'].forEach(id=>
+    document.getElementById(id)?.dispatchEvent(new Event('change',{bubbles:true})));
+  restaurar();
+});
+</script>
+{% endif %}
 
 {% endblock %}
 
