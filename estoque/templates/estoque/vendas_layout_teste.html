@@ -67,25 +67,49 @@
     border: 1px solid rgba(255, 193, 7, 0.48);
     min-height: auto;
 }
-    .historico-produto-cliente {
-    margin-top: 6px;
-    font-size: 11.5px;
+    #estoquePreview {
+        position: absolute;
+        bottom: calc(100% + 1px);
+        left: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0 3px;
+        border: 0;
+        border-radius: 2px;
+        font-size: 11px;
+        line-height: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        pointer-events: none;
+    }
+    @media (max-width: 980px) {
+        .estoque-zerado-prefixo { display: none; }
+        #estoquePreview {
+            bottom: 100%;
+            font-size: 10px;
+            line-height: 11px;
+        }
+    }
+    .preco-informacoes .historico-produto-cliente {
+    margin: 0;
+    font: inherit;
     font-weight: 700;
-    line-height: 1.25;
     color: #475569;
     display: none;
-    width: fit-content;
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 100%;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    overflow-wrap: anywhere;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .historico-produto-cliente.sem-historico {
     color: #64748b;
-    background: #f8fafc;
-    border-color: #e2e8f0;
 }
 
 .pedido-importado-aviso {
@@ -1585,15 +1609,34 @@ select:focus {
     border-color: #64748b;
 }
 
-.preco-margem-custo {
+.preco-informacoes {
     position: absolute;
     left: 2px;
+    right: 0;
     bottom: calc(100% + 2px);
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     color: #64748b;
-    font-size: 11px;
+    font-size: 10px;
+    line-height: 12px;
+}
+
+.preco-margem-custo {
+    flex: 0 0 auto;
     font-weight: 800;
-    line-height: 1;
     white-space: nowrap;
+}
+
+.preco-margem-custo:not(:empty) + .historico-produto-cliente:not(:empty)::before {
+    content: "| ";
+}
+
+@media (max-width: 980px) {
+    .preco-informacoes {
+        right: auto;
+        width: calc(300% + 14px);
+    }
 }
 
 #preco.preco-conferido-campo,
@@ -3009,7 +3052,7 @@ td:first-child {
 
 @media (max-width: 980px) {
     .bloco-lancamento .linha-cabecalho-venda ~ .linha:not(.linha-cabecalho-venda) {
-        margin-top: -4px !important;
+        margin-top: 12px !important;
         margin-bottom: 6px !important;
     }
 }
@@ -3095,9 +3138,11 @@ td:first-child {
     <input type="text" id="custoVenda" placeholder="Custo" readonly aria-label="Custo do produto">
 </div>
 <div class="preco-venda-wrap">
-    <span id="precoMargemCusto" class="preco-margem-custo" aria-live="polite"></span>
+    <div class="preco-informacoes">
+        <span id="precoMargemCusto" class="preco-margem-custo" aria-live="polite"></span>
+        <span id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></span>
+    </div>
     <input type="text" id="preco" placeholder="Preço">
-    <div id="historicoProdutoCliente" class="historico-produto-cliente" aria-live="polite"></div>
 </div>
         </div>
 
@@ -3603,7 +3648,7 @@ const btnAdicionarItemVenda = document.getElementById("btnAdicionarItemVenda");
 commitPendingProduct.addEventListener("click", () => {
     const selected = produto.options[produto.selectedIndex];
     if (!selected?.dataset.produtoId) return;
-    produtoBusca.value = selected.value;
+    // Usa a mesma conferência de busca e seleção do botão principal.
     refreshPendingProductLine();
     btnAdicionarItemVenda.click();
 });
@@ -3757,12 +3802,25 @@ function produtoVendaNormalEstoqueZerado() {
     return numeroEstoqueVendaNormal(opcao) <= 0;
 }
 
+function limparAvisoEstoqueZeradoVenda() {
+    if (!estoquePreview?.classList.contains("estoque-zerado")) return;
+    estoquePreview.textContent = "";
+    estoquePreview.style.display = "none";
+    aplicarEstadoConferenciaEstoquePreview(null);
+}
+
 function mostrarBloqueioEstoqueZeradoVendaNormal() {
     const opcao = vendaProdutoSelecionadoOption();
     const nome = opcao && opcao.value ? opcao.value : "Produto";
     if (estoquePreview) {
         estoquePreview.textContent = "Produto com estoque zerado: " + nome;
-        estoquePreview.style.display = "inline-flex";
+        estoquePreview.title = estoquePreview.textContent;
+        const prefixo = document.createElement("span");
+        prefixo.className = "estoque-zerado-prefixo";
+        prefixo.textContent = "Produto com ";
+        estoquePreview.replaceChildren(prefixo, document.createTextNode("estoque zerado: " + nome));
+        estoquePreview.classList.add("estoque-zerado");
+        estoquePreview.style.display = "block";
         estoquePreview.style.background = "#fee2e2";
         estoquePreview.style.borderColor = "#ef4444";
         estoquePreview.style.color = "#991b1b";
@@ -3813,9 +3871,17 @@ function bloquearProdutoEstoqueZeradoVendaNormal(event) {
     return true;
 }
 
+let revisaoSelecaoProdutoVenda = 0;
 if (produtoBusca) {
     produtoBusca.addEventListener("blur", function(event) {
+        const revisao = revisaoSelecaoProdutoVenda;
+        const texto = produtoBusca.value;
+        const opcao = vendaProdutoSelecionadoOption();
+        if (!opcao || normalizarTextoVendaEstoque(texto) !== normalizarTextoVendaEstoque(opcao.value)) return;
         setTimeout(function() {
+            // A delayed validation belongs only to the search/selection that scheduled it.
+            if (revisao !== revisaoSelecaoProdutoVenda || produtoBusca.value !== texto
+                || vendaProdutoSelecionadoOption() !== opcao) return;
             bloquearProdutoEstoqueZeradoVendaNormal(event);
         }, 80);
     });
@@ -3823,6 +3889,7 @@ if (produtoBusca) {
 
 if (produto) {
     produto.addEventListener("change", function(event) {
+        revisaoSelecaoProdutoVenda++;
         bloquearProdutoEstoqueZeradoVendaNormal(event);
     });
 }
@@ -4044,6 +4111,7 @@ function ocultarHistoricoProdutoCliente() {
     }
     if (!historicoProdutoCliente) return;
     historicoProdutoCliente.textContent = "";
+    historicoProdutoCliente.removeAttribute("title");
     historicoProdutoCliente.classList.remove("sem-historico");
     historicoProdutoCliente.style.display = "none";
 }
@@ -4054,13 +4122,15 @@ function renderizarHistoricoProdutoCliente(historico) {
     historicoProdutoCliente.classList.remove("sem-historico");
     historicoProdutoCliente.style.display = "inline-block";
     if (!historico) {
-        historicoProdutoCliente.textContent = "Sem compra anterior deste produto para este cliente.";
+        historicoProdutoCliente.textContent = "Sem compra anterior";
+        historicoProdutoCliente.title = historicoProdutoCliente.textContent;
         historicoProdutoCliente.classList.add("sem-historico");
         return;
     }
     const precoHistorico = formatarMoedaCliente(historico.preco_unitario);
     historicoProdutoCliente.textContent =
-        `Último preço do cliente: ${precoHistorico} em ${formatarDataHistoricoProduto(historico.data_venda)}`;
+        `Última: ${precoHistorico} · ${formatarDataHistoricoProduto(historico.data_venda)}`;
+    historicoProdutoCliente.title = historicoProdutoCliente.textContent;
 }
 
 function atualizarHistoricoProdutoCliente(optionProduto = null) {
@@ -5254,6 +5324,7 @@ let linhaSelecionada = null;
 let ultimoItemRemovido = null;
 let produtoAutoPreenchidoVenda = false;
 let linhaProdutoIniciadaVenda = false;
+let preenchendoEdicaoProdutoVenda = false;
 
 function atualizarBotaoEdicaoItemVenda() {
     if (!btnAdicionarItemVenda) return;
@@ -5431,16 +5502,17 @@ function bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaIgnorada = n
         return false;
     }
 
-    mostrarAviso("Esse produto já foi lançado.", produtoBusca, true);
+    mostrarAviso("Esse produto já foi lançado: " + produtoNome + ".", produtoBusca, true);
     return true;
 }
 
 function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null) {
-    const produtoNome = (produtoOption?.value || produtoBusca.value || produto.value || "").trim();
+    const produtoNome = (produtoOption?.value || produtoBusca.value || "").trim();
     if (!produtoNome) return false;
 
     const optionEncontrada = produtoOption || obterProdutoOptionVenda(produtoNome);
     const produtoId = optionEncontrada?.dataset?.produtoId || "";
+    if (!produtoId) return false;
 
     if (!bloquearProdutoDuplicadoVenda(produtoId, produtoNome, linhaSelecionada)) {
         return false;
@@ -5451,6 +5523,7 @@ function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null) {
     indexAtivo = -1;
 
     produtoBusca.value = produtoNome;
+    refreshPendingProductLine();
     setTimeout(() => {
         produtoBusca.focus();
         produtoBusca.select();
@@ -5487,59 +5560,35 @@ const qtd = (linha.dataset.quantidade || linha.children[1].textContent).trim();
 const un = (linha.dataset.unidade || linha.children[2].textContent).trim();
 const valor = (linha.dataset.precoUnitario || linha.children[3].textContent).trim();
 
-// joga nos inputs
-const optionDaLinha = Array.from(produto.options).find(opt => opt.dataset.produtoId === linha.dataset.produtoId)
-    || Array.from(produto.options).find(opt => opt.text.trim() === nome);
-produto.value = optionDaLinha?.value || nome;
-produto.dispatchEvent(new Event("change"));
-produtoBusca.value = optionDaLinha?.value || nome;
-const optionEdicao = optionDaLinha;
-
-if (optionEdicao) {
-    const unidade1Edicao = optionEdicao.dataset.unidade1 || "";
-const unidade2Edicao = optionEdicao.dataset.unidade2 || "";
-const fracionadoEdicao = optionEdicao.dataset.fracionado === "true";
-const fatorEdicao = parseFloat(optionEdicao.dataset.fator || "0");
-const estoqueBaseEdicao = parseFloat(optionEdicao.dataset.estoque || "0");
-
-if (fracionadoEdicao && unidade2Edicao) {
-    estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseEdicao, unidade1Edicao, fatorEdicao, unidade2Edicao, fracionadoEdicao)}`;
-} else {
-    estoquePreview.innerText = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseEdicao, unidade1Edicao, fatorEdicao, unidade2Edicao, fracionadoEdicao)}`;
-}
-    aplicarEstadoConferenciaEstoquePreview(optionEdicao);
-    estoquePreview.style.display = "inline-block";
-} else {
-    estoquePreview.innerText = "";
-    estoquePreview.style.display = "none";
-}
-quantidade.value = qtd;
-
-unidade.innerHTML = "";
-
-if (optionEdicao) {
-    const unidade1Edicao = optionEdicao.dataset.unidade1 || optionEdicao.dataset.unidade || "";
-    const unidade2Edicao = optionEdicao.dataset.unidade2 || "";
-    const fracionadoEdicao = optionEdicao.dataset.fracionado === "true";
-
-    if (unidade1Edicao) {
-        const op1 = document.createElement("option");
-        op1.value = unidade1Edicao;
-        op1.textContent = unidade1Edicao;
-        unidade.appendChild(op1);
+// Preenche a linha inteira antes de publicar o estado visual da edição.
+preenchendoEdicaoProdutoVenda = true;
+try {
+    const optionDaLinha = Array.from(produto.options).find(opt => opt.dataset.produtoId === linha.dataset.produtoId)
+        || Array.from(produto.options).find(opt => opt.text.trim() === nome);
+    produto.value = optionDaLinha?.value || nome;
+    produtoBusca.value = optionDaLinha?.value || nome;
+    quantidade.value = qtd;
+    unidade.innerHTML = "";
+    if (optionDaLinha) {
+        const principal = optionDaLinha.dataset.unidade1 || optionDaLinha.dataset.unidade || "";
+        const secundaria = optionDaLinha.dataset.unidade2 || "";
+        if (principal) unidade.add(new Option(principal, principal));
+        if (optionDaLinha.dataset.fracionado === "true" && secundaria) unidade.add(new Option(secundaria, secundaria));
     }
-
-    if (fracionadoEdicao && unidade2Edicao) {
-        const op2 = document.createElement("option");
-        op2.value = unidade2Edicao;
-        op2.textContent = unidade2Edicao;
-        unidade.appendChild(op2);
-    }
+    if (un && !Array.from(unidade.options).some(option => option.value === un)) unidade.add(new Option(un + ' (referência local)', un));
+    unidade.value = un;
+    // Mantém os efeitos existentes do select, sem renderizar a linha incompleta.
+    produto.dispatchEvent(new Event("change"));
+    // Preserva a unidade e o preço negociados, em vez dos valores do catálogo.
+    unidade.value = un;
+    preco.value = valor;
+    atualizarCustoMargemVenda();
+} finally {
+    preenchendoEdicaoProdutoVenda = false;
+    window.atualizarSelectsBonitosVenda?.();
+    refreshPendingProductLine();
 }
-
-if (un && !Array.from(unidade.options).some(option => option.value === un)) unidade.add(new Option(un + ' (referência local)', un));
-unidade.value = un;
-preco.value = valor;setTimeout(() => {
+setTimeout(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }, 50);
 produtoBusca.focus();
@@ -6068,6 +6117,8 @@ function classeBadgeConferenciaEstoque(opt) {
 
 function aplicarEstadoConferenciaEstoquePreview(opt) {
     if (!estoquePreview) return;
+    estoquePreview.classList.remove("estoque-zerado");
+    estoquePreview.removeAttribute("title");
     if (window.salesOffline.active) estoquePreview.textContent = estoquePreview.textContent.replace(/^Estoque:/, 'Estoque de referência:');
     estoquePreview.classList.remove("estoque-conferido", "estoque-nao-conferido");
     estoquePreview.style.background = "";
@@ -6439,7 +6490,7 @@ function atualizarCustoMargemVenda() {
     }
 
     const sinal = percentual > 0 ? "+" : "";
-    precoMargemCusto.textContent = `${sinal}${percentual.toFixed(0)}% sobre custo`;
+    precoMargemCusto.textContent = `Margem: ${sinal}${percentual.toFixed(0)}%`;
 }
 
 function validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto) {
@@ -8256,6 +8307,43 @@ const contemEmOutraPalavra = opcoes.filter((opt) => {
   sugestoes = [...comecaComTermo, ...contemEmOutraPalavra];
   indexAtivo = sugestoes.length ? 0 : -1;
 }
+// Mantém a lista fora da barra de ações, com rolagem própria.
+function posicionarSugestoesProdutoVenda() {
+    if (sugestoesBox.style.display !== "block") return;
+    const campo = produtoBusca.getBoundingClientRect();
+    const pendencia = pendingProductLine.hidden ? campo : pendingProductLine.getBoundingClientRect();
+    const estoque = estoquePreview.getBoundingClientRect();
+    const acoes = btnAdicionarItemVenda.closest(".barra-acoes-venda").getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const inicio = (viewport?.offsetTop || 0) + 8;
+    const fim = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight) - 8;
+    const abaixo = Math.max(campo.bottom, pendencia.bottom) + 4;
+    const despesa = document.getElementById("atalho-despesa-global")?.getBoundingClientRect();
+    const limiteDespesa = despesa?.height && despesa.left < campo.right && despesa.right > campo.left
+        ? despesa.top - 8 : fim;
+    const limiteAbaixo = Math.min(fim, acoes.top - 8, limiteDespesa);
+    const acima = Math.min(campo.top - 16, estoque.height ? estoque.top - 4 : campo.top - 16);
+    const espacoAbaixo = Math.max(0, limiteAbaixo - abaixo);
+    const espacoAcima = Math.max(0, acima - inicio);
+    const subir = espacoAbaixo < Math.min(124, sugestoesBox.scrollHeight + 2) && espacoAcima > espacoAbaixo;
+    const altura = Math.min(window.innerWidth <= 980 ? 280 : 435, subir ? espacoAcima : espacoAbaixo);
+    sugestoesBox.style.position = "fixed";
+    sugestoesBox.style.zIndex = "9991";
+    sugestoesBox.style.boxSizing = "border-box";
+    sugestoesBox.style.left = campo.left + "px";
+    sugestoesBox.style.right = "auto";
+    sugestoesBox.style.width = campo.width + "px";
+    sugestoesBox.style.maxHeight = altura + "px";
+    sugestoesBox.style.top = subir ? "auto" : abaixo + "px";
+    sugestoesBox.style.bottom = subir ? (window.innerHeight - acima) + "px" : "auto";
+}
+window.addEventListener("resize", posicionarSugestoesProdutoVenda);
+window.addEventListener("scroll", (event) => {
+    if (event.target !== sugestoesBox) posicionarSugestoesProdutoVenda();
+}, {capture: true, passive: true});
+window.visualViewport?.addEventListener("resize", posicionarSugestoesProdutoVenda);
+window.visualViewport?.addEventListener("scroll", posicionarSugestoesProdutoVenda);
+
 function renderSugestoes() {
     sugestoesBox.innerHTML = "";
 
@@ -8324,6 +8412,7 @@ function renderSugestoes() {
     let produtoToqueY = 0;
     let produtoToqueMoveu = false;
     let produtoToqueSelecionou = false;
+    let produtoMouseSelecionou = false;
 
     div.addEventListener("touchstart", (evento) => {
         const toque = evento.touches && evento.touches[0];
@@ -8364,12 +8453,14 @@ function renderSugestoes() {
         if (evento.target.closest(".estoque-item-sugestao")) return;
         evento.preventDefault();
         evento.stopPropagation();
+        produtoMouseSelecionou = true;
         selecionarProduto(opt);
+        setTimeout(() => { produtoMouseSelecionou = false; }, 400);
     });
 
     div.addEventListener("click", (evento) => {
         if (evento.target.closest(".estoque-item-sugestao")) return;
-        if (produtoToqueSelecionou) return;
+        if (produtoToqueSelecionou || produtoMouseSelecionou) return;
 
         evento.preventDefault();
         evento.stopPropagation();
@@ -8380,6 +8471,7 @@ function renderSugestoes() {
 });
 
     sugestoesBox.style.display = "block";
+    posicionarSugestoesProdutoVenda();
 
     const produtoAtivo = sugestoes[indexAtivo];
     if (produtoAtivo) {
@@ -8388,10 +8480,12 @@ function renderSugestoes() {
 
     const itemAtivo = sugestoesBox.querySelector(".produto-sugestao-item.ativo");
 if (itemAtivo) {
-    itemAtivo.scrollIntoView({
-        block: "nearest",
-        behavior: "smooth"
-    });
+    const topo = itemAtivo.offsetTop;
+    const base = topo + itemAtivo.offsetHeight;
+    if (topo < sugestoesBox.scrollTop) sugestoesBox.scrollTop = topo;
+    else if (base > sugestoesBox.scrollTop + sugestoesBox.clientHeight) {
+        sugestoesBox.scrollTop = base - sugestoesBox.clientHeight;
+    }
 }
 }
 function aplicarEstadoConferenciaPreco(opt) {
@@ -8404,10 +8498,12 @@ function aplicarEstadoConferenciaPreco(opt) {
 }
 
 function atualizarEstoqueProdutoSelecionado() {
+    if (preenchendoEdicaoProdutoVenda) return;
     const opt = produto.options[produto.selectedIndex];
     if (!opt?.dataset.produtoId || produtoBusca.value.trim() !== opt.value.trim()) {
         estoquePreview.textContent = "";
         estoquePreview.style.display = "none";
+        aplicarEstadoConferenciaEstoquePreview(null);
         return;
     }
     estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(
@@ -8417,6 +8513,12 @@ function atualizarEstoqueProdutoSelecionado() {
         opt.dataset.fracionado === "true"
     )}`;
     aplicarEstadoConferenciaEstoquePreview(opt);
+    if (Number(String(opt.dataset.estoque || "0").replace(",", ".")) <= 0) {
+        estoquePreview.textContent = estoquePreview.textContent.replace(/^Estoque:/, "Estoque zerado:");
+        estoquePreview.classList.add("estoque-zerado");
+        estoquePreview.style.background = "#fee2e2";
+        estoquePreview.style.color = "#991b1b";
+    }
     estoquePreview.style.display = "inline-block";
 }
 
@@ -8427,6 +8529,7 @@ function existeLinhaProdutoPendenteVenda() {
 }
 
 function refreshPendingProductLine() {
+    if (preenchendoEdicaoProdutoVenda) return;
     atualizarEstoqueProdutoSelecionado();
     const selected = produto.options[produto.selectedIndex];
     if (!existeLinhaProdutoPendenteVenda()) {
@@ -8435,9 +8538,15 @@ function refreshPendingProductLine() {
     }
     const searchText = produtoBusca.value.trim();
     const mismatch = searchText !== selected.value.trim();
+    // Pesquisar outro produto não é editar uma linha já lançada. A seleção anterior
+    // continua preservada, mas a busca normal não precisa da faixa de pendência.
+    if (!linhaSelecionada && (mismatch || quantidadeInformadaValida())) {
+        setPendingProductLineVisible(false);
+        return;
+    }
     const quantityText = quantidade.value.trim() || "não informada";
     pendingProductMessage.textContent = mismatch
-        ? `Linha pendente: ${selected.value} — quantidade ${quantityText}. O texto da busca não corresponde ao produto selecionado.`
+        ? `Linha pendente: ${selected.value} · Qtd ${quantityText}. Busca: "${searchText || "(vazia)"}".`
         : `${linhaSelecionada ? "Editando" : "Em montagem"}: ${selected.value} · Qtd ${quantityText}.`;
     commitPendingProduct.textContent = linhaSelecionada ? "Atualizar" : "Adicionar";
     restorePendingProduct.hidden = !mismatch;
@@ -8450,10 +8559,15 @@ function setPendingProductLineVisible(visible) {
 }
 
 function selecionarProduto(opt) {
+    revisaoSelecaoProdutoVenda++;
+    limparAvisoEstoqueZeradoVenda();
 if (bloquearProdutoDuplicadoNoCampoProdutoVenda(opt)) {
     return;
 }
-if (produto.value !== opt.value) quantidade.value = "";
+if (produto.value !== opt.value) {
+    quantidade.value = "";
+    linhaProdutoIniciadaVenda = false;
+}
 produtoAutoPreenchidoVenda = false;
 
 produto.value = opt.value;
@@ -8503,19 +8617,7 @@ unidade.value = unidade1;
 if (unidade1) {
     unidade.dispatchEvent(new Event("change"));
 }
-const estoqueBaseSelecionado = parseFloat(opt.dataset.estoque || "0");
-const fatorSelecionado = parseFloat(opt.dataset.fator || "0");
-const unidadeBaseSelecionada = opt.dataset.unidade1 || "";
-const unidadeFracSelecionada = opt.dataset.unidade2 || "";
-const fracionadoSelecionado = opt.dataset.fracionado === "true";
-
-if (fracionadoSelecionado && unidadeFracSelecionada) {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSelecionado, unidadeBaseSelecionada, fatorSelecionado, unidadeFracSelecionada, fracionadoSelecionado)}`;
-} else {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBaseSelecionado, unidadeBaseSelecionada, fatorSelecionado, unidadeFracSelecionada, fracionadoSelecionado)}`;
-}
-aplicarEstadoConferenciaEstoquePreview(opt);
-estoquePreview.style.display = "inline-block";
+atualizarEstoqueProdutoSelecionado();
 
 preco.value = opt.dataset.preco || "";
 atualizarCustoMargemVenda();
@@ -8537,6 +8639,7 @@ unidade.addEventListener("change", () => {
 
     if (!opt) {
         aplicarEstadoConferenciaPreco(null);
+        atualizarEstoqueProdutoSelecionado();
         return;
     }
 
@@ -8550,21 +8653,14 @@ const estoqueBase = parseFloat(opt.dataset.estoque || "0");
 let precoBase = opt.dataset.preco || "";
 let precoFracionado = opt.dataset.preco2 || "";
 
+    atualizarEstoqueProdutoSelecionado();
     if (unidade.value === unidade1) {
-        if (fracionado && unidade2) {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
-} else {
-    estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
-}
-        aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoBase;
         atualizarCustoMargemVenda();
         return;
     }
 
     if (fracionado && unidade.value === unidade2) {
-        estoquePreview.textContent = `Estoque: ${formatarEstoqueProdutoVenda(estoqueBase, unidade1, fator, unidade2, fracionado)}`;
-        aplicarEstadoConferenciaEstoquePreview(opt);
         preco.value = precoFracionado;
         atualizarCustoMargemVenda();
     }
@@ -8609,6 +8705,8 @@ function rolarParaUltimoProdutoLancado() {
 }
 /* ===== FIM ROLAR PARA ULTIMO PRODUTO LANCADO - CHATGPT 2026-06-10 ===== */
 produtoBusca.addEventListener("input", () => {
+    revisaoSelecaoProdutoVenda++;
+    limparAvisoEstoqueZeradoVenda();
     autocompleteAberto = true;
     const texto = produtoBusca.value.trim();
     const selected = produto.options[produto.selectedIndex];
@@ -8704,11 +8802,8 @@ produtoBusca.addEventListener("keydown", (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) {
-        return;
-    }
-
     if (sugestoesBox.style.display !== "block") {
+        if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) return;
         autocompleteAberto = true;
         const textoProduto = produtoBusca.value.trim();
         if (textoProduto || !sugestoes.length) {
