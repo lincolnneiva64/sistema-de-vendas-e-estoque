@@ -45,13 +45,26 @@ const produtosPendentes = () => [...document.querySelectorAll('form.contagem')].
     || form.dataset.valoresSalvos !== JSON.stringify([form.elements.embalagens.value, form.elements.avulsos?.value || '']));
 let navegandoPendencias = false;
 const proximaPendencia = document.querySelector('#proxima-pendencia');
+const listaPendentes = document.querySelector('#produtos-pendentes');
+const listaConferidos = document.querySelector('#lista-produtos-conferidos');
+document.querySelectorAll('form.contagem').forEach(form => {
+    form.dataset.conferidoServidor = form.querySelector('.mensagem').dataset.confirmado;
+});
+function organizarProduto(form) {
+    const destino = form.dataset.conferidoServidor === 'true' ? listaConferidos : listaPendentes;
+    const cartao = form.closest('article');
+    if (!destino || cartao.parentElement === destino) return;
+    const seguinte = [...destino.querySelectorAll(':scope > article')].find(outro =>
+        Number(outro.dataset.ordem) > Number(cartao.dataset.ordem));
+    destino.insertBefore(cartao, seguinte || destino.querySelector('#nenhum-produto-pendente'));
+}
 function atualizarPendencias() {
     const formularios = [...document.querySelectorAll('form.contagem')];
-    const conferidos = formularios.filter(form => form.dataset.confirmado === 'true'
-        && camposContagem(form).every(campo => campo.value.trim() && campo.validity.valid)).length;
-    const progresso = document.querySelector('#progresso-contagem');
-    if (progresso) progresso.textContent = conferidos + ' de ' + formularios.length
-        + ' conferidos — faltam ' + (formularios.length - conferidos);
+    const conferidos = formularios.filter(form => form.dataset.conferidoServidor === 'true').length;
+    document.querySelectorAll('[data-total-conferidos]').forEach(total => { total.textContent = conferidos; });
+    document.querySelectorAll('[data-total-pendentes]').forEach(total => { total.textContent = formularios.length - conferidos; });
+    const vazio = document.querySelector('#nenhum-produto-pendente');
+    if (vazio) vazio.hidden = !formularios.length || conferidos !== formularios.length;
     if (!proximaPendencia) return;
     const pendentes = produtosPendentes();
     proximaPendencia.hidden = !navegandoPendencias || !pendentes.length || conferenciaBloqueada;
@@ -66,6 +79,8 @@ function irParaPendente() {
     document.querySelectorAll('.pendencia-destacada').forEach(cartao => cartao.classList.remove('pendencia-destacada'));
     const cartao = form.closest('article');
     cartao.classList.add('pendencia-destacada');
+    const grupo = cartao.closest('#produtos-conferidos');
+    if (grupo) grupo.open = true;
     const campo = camposFaltantes(form)[0] || camposContagem(form).find(campo => !campo.validity.valid);
     if (campo?.readOnly && !conferenciaBloqueada) form.querySelector('[data-editar-contagem]').click();
     const alvo = campo && !campo.readOnly ? campo : form.querySelector('[value=ok]:not(:disabled)') || form.querySelector('[data-editar-contagem]');
@@ -183,6 +198,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
                 + quantidade(ultimoOK.embalagens, ultimoOK.avulsos)
             : precisaVerificar ? 'Último OK ainda não verificado no servidor.' : 'Nenhum OK salvo.';
         if (!confirmado) cartao.querySelector('.estado-produto').textContent = pendencia();
+        organizarProduto(form);
         atualizarPendencias();
     };
     atualizarVisual(form.dataset.confirmado === 'true');
@@ -215,6 +231,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
         ultimoOK = produto.ultimo_ok;
         jaConfirmado = !!ultimoOK;
         form.dataset.valoresSalvos = JSON.stringify([produto.embalagens, produto.avulsos || '']);
+        form.dataset.conferidoServidor = String(produto.conferido);
         form.dataset.confirmado = String(iguais && produto.conferido);
         protegido = iguais && produto.guardado;
         atualizarVisual(iguais && produto.conferido);
@@ -253,6 +270,7 @@ document.querySelectorAll('form.contagem').forEach(form => {
         requisicoesPendentes++;
         atualizarEdicao();
         mensagem.textContent = pendencia() + ' Enviando…';
+        let proximoFoco = null;
         try {
             const response = await fetch(form.action, {method: 'POST', body: dados, headers: {Accept: 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
             const resultado = await lerResposta(response);
@@ -264,11 +282,18 @@ document.querySelectorAll('form.contagem').forEach(form => {
             jaConfirmado = jaConfirmado || resultado.produto.conferido;
             protegido = true;
             ultimoOK = resultado.produto.ultimo_ok;
+            if (resultado.produto.conferido && cartao.parentElement === listaPendentes
+                    && (cartao.contains(document.activeElement) || document.activeElement === document.body)) {
+                const seguinte = cartao.nextElementSibling?.querySelector('form.contagem')
+                    || [...listaPendentes.querySelectorAll('form.contagem')].find(outro => outro !== form);
+                proximoFoco = {form: seguinte, topo: Math.max(16,
+                    Math.min(form.elements.embalagens.getBoundingClientRect().top, innerHeight / 3))};
+            }
+            form.dataset.conferidoServidor = String(resultado.produto.conferido);
             atualizarVisual(resultado.produto.conferido);
             form.dataset.valoresSalvos = valores();
             aplicarEstadoConferencia(resultado.conferencia);
             mensagem.textContent = resultado.mensagem;
-            if (navegandoPendencias && proximaPendencia) cartao.append(proximaPendencia);
         } catch (erro) {
             precisaVerificar = true;
             form.dataset.confirmado = 'false';
@@ -281,6 +306,16 @@ document.querySelectorAll('form.contagem').forEach(form => {
             restaurar();
             atualizarVisual(form.dataset.confirmado === 'true');
             atualizarEdicao();
+            if (proximoFoco && (cartao.contains(document.activeElement) || document.activeElement === document.body)) {
+                const proximo = proximoFoco.form;
+                const alvo = proximo && (camposContagem(proximo).find(campo => !campo.readOnly && !campo.matches(':disabled'))
+                    || proximo.querySelector('[value=ok]:not(:disabled), [data-editar-contagem]:not(:disabled)'))
+                    || document.querySelector('#nenhum-produto-pendente');
+                if (alvo) {
+                    alvo.focus({preventScroll: true});
+                    window.scrollBy(0, alvo.getBoundingClientRect().top - proximoFoco.topo);
+                }
+            }
         }
     });
 });

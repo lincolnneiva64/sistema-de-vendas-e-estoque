@@ -18,3 +18,8 @@ form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344
 #proxima-pendencia[hidden] { display: none; }
 
 .unidades-avulsas{min-width:0;max-width:100%}.unidades-avulsas summary{font-size:14px;color:#244b5a;cursor:pointer;overflow-wrap:anywhere}.unidades-avulsas input{max-width:100%;box-sizing:border-box}
+
+.resumo-contagem{display:flex;flex-wrap:wrap;gap:8px 24px;margin:16px 0;font-weight:600}
+.grupo-conferidos{border:1px solid #8bb99a;border-radius:12px;background:#f1faf4;padding:8px 12px;min-width:0}
+.grupo-conferidos>summary{min-height:44px;box-sizing:border-box;overflow-wrap:anywhere}
+.grupo-conferidos .card{margin:12px 0}
