@@ -23,3 +23,6 @@ form.contagem input[readonly]{background:#edf2f1;border-color:#b9c8c4;color:#344
 .grupo-conferidos{border:1px solid #8bb99a;border-radius:12px;background:#f1faf4;padding:8px 12px;min-width:0}
 .grupo-conferidos>summary{min-height:44px;box-sizing:border-box;overflow-wrap:anywhere}
 .grupo-conferidos .card{margin:12px 0}
+.grupo-conferidos.revisao-disponivel{border:2px solid #17633b;background:#e5f5eb}
+.grupo-conferidos.revisao-disponivel>summary{color:#124f32;font-size:1.1rem}
+.mobile #finalizar-conferencia{border-top:1px solid #a2b5ba;margin-top:24px;padding-top:16px}

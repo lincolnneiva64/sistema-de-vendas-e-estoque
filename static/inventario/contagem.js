@@ -65,6 +65,8 @@ function atualizarPendencias() {
     document.querySelectorAll('[data-total-pendentes]').forEach(total => { total.textContent = formularios.length - conferidos; });
     const vazio = document.querySelector('#nenhum-produto-pendente');
     if (vazio) vazio.hidden = !formularios.length || conferidos !== formularios.length;
+    document.querySelector('#produtos-conferidos')?.classList.toggle('revisao-disponivel',
+        formularios.length > 0 && conferidos === formularios.length);
     if (!proximaPendencia) return;
     const pendentes = produtosPendentes();
     proximaPendencia.hidden = !navegandoPendencias || !pendentes.length || conferenciaBloqueada;

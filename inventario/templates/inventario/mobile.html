@@ -3,9 +3,9 @@
 <div class="aviso"><button type="button" id="verificar-acesso" data-url="{% url 'inventario:mobile' %}">Verificar acesso e último OK</button><p id="mensagem-acesso" role="status">Se o acesso falhar, mantenha esta tela aberta. Abra o link vigente em outra aba deste mesmo navegador, confirme a entrada e volte para verificar. Nenhuma alteração será reenviada automaticamente.</p></div>
 <button type="button" id="proxima-pendencia" class="secondary" hidden></button><div id="produtos-contagem"></div><section id="produtos-pendentes" aria-label="Produtos pendentes">
 {% for produto in produtos %}{% if not produto.conferido %}{% include 'inventario/produto_contagem.html' %}{% endif %}{% endfor %}
-<p id="nenhum-produto-pendente" class="status" tabindex="-1" {% if progresso.faltam or not produtos %}hidden{% endif %}>Todos os produtos deste acesso receberam OK.</p>
+<p id="nenhum-produto-pendente" class="status" tabindex="-1" {% if progresso.faltam or not produtos %}hidden{% endif %}>Todos os produtos conferidos. Revise os itens abaixo antes de finalizar.</p>
 </section>
-<details id="produtos-conferidos" class="grupo-conferidos"><summary>Produtos já conferidos (<span data-total-conferidos>{{ progresso.conferidos }}</span>)</summary><div id="lista-produtos-conferidos">
+<details id="produtos-conferidos" class="grupo-conferidos{% if produtos and not progresso.faltam %} revisao-disponivel{% endif %}"><summary>Produtos já conferidos (<span data-total-conferidos>{{ progresso.conferidos }}</span>)</summary><div id="lista-produtos-conferidos">
 {% for produto in produtos %}{% if produto.conferido %}{% include 'inventario/produto_contagem.html' %}{% endif %}{% endfor %}
 </div></details>
 {% if not produtos %}<p>Nenhum produto disponível neste acesso. Solicite orientação ao responsável.</p>{% endif %}

@@ -108,3 +108,82 @@ class OrganizacaoBrowserTests(OrganizacaoFixture, StaticLiveServerTestCase):
         for p in self.produtos:
             p.refresh_from_db()
             self.assertEqual(p.quantidade, 10)
+
+
+@skipUnless(Path(CHROME).is_file(), 'Chrome indisponível')
+class ConclusaoVisualMobileTests(StaticLiveServerTestCase):
+    def test_dois_oks_destacam_revisao_sem_enviar_e_preservam_recontagem(self):
+        usuario = get_user_model().objects.create_superuser('revisao-visual', '', 'teste')
+        produtos = [produto(nome=nome, unidade_compra='UN', vende_fracionado=False)
+                    for nome in ['Primeiro teste', 'Segundo teste']]
+        inventario = services.criar_inventario(usuario, 'Revisão visual', 'manual',
+                                               [p.pk for p in produtos])
+        rodadas = list(inventario.itens.order_by('produto__nome').values_list('rodadas__pk', flat=True))
+        funcionario = Funcionario.objects.create(nome='Revisor de teste')
+        acesso, token = services.gerar_acesso(usuario, inventario.pk, funcionario.pk, rodadas)
+        with TemporaryDirectory(prefix='revisao-visual-contagem-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                t = chrome.tab()
+                t.call('Emulation.setDeviceMetricsOverride', dict(width=390, height=844, deviceScaleFactor=1, mobile=True))
+                t.call('Emulation.setTouchEmulationEnabled', dict(enabled=True, maxTouchPoints=1))
+
+                def tocar(seletor):
+                    import json
+                    ponto = t.evaluate("(()=>{const e=document.querySelector(" + json.dumps(seletor)
+                        + ");e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();"
+                        + "return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
+                    t.call('Input.dispatchTouchEvent', dict(type='touchStart', touchPoints=[ponto]))
+                    t.call('Input.dispatchTouchEvent', dict(type='touchEnd', touchPoints=[]))
+
+                t.call('Page.navigate', dict(url=self.live_server_url + reverse('inventario:convite', args=[token])))
+                t.wait("!!document.querySelector('form button')")
+                tocar('form button')
+                t.wait('window.inventarioContagemPronta===true')
+                self.assertFalse(t.evaluate("document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel')"))
+                for indice, rodada in enumerate(rodadas):
+                    seletor = f'[data-produto-id="{rodada}"]'
+                    t.evaluate(f"window.atual=document.querySelector('{seletor}');atual.elements.embalagens.value='2';atual.elements.embalagens.dispatchEvent(new Event('input',{{bubbles:true}}));true")
+                    # O destaque só pode surgir depois da confirmação do último OK.
+                    if indice == 1:
+                        t.evaluate("window.fetchReal=fetch;window.fetch=async(...args)=>{if(String(args[0])===atual.action)await new Promise(resolve=>window.liberarOK=resolve);return fetchReal(...args)};true")
+                    tocar(seletor + ' [value=ok]')
+                    if indice == 1:
+                        t.wait('!!window.liberarOK')
+                        self.assertFalse(t.evaluate("document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel')"))
+                        t.evaluate('window.liberarOK();true')
+                    t.wait(f"document.querySelectorAll('#lista-produtos-conferidos form.contagem').length==={indice + 1} && !atual.querySelector('[data-editar-contagem]').disabled")
+                t.evaluate('window.fetch=fetchReal;true')
+                self.assertTrue(t.evaluate("document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel') && !document.querySelector('#produtos-conferidos').open && !document.querySelector('#nenhum-produto-pendente').hidden && document.querySelector('#nenhum-produto-pendente').textContent==='Todos os produtos conferidos. Revise os itens abaixo antes de finalizar.'"))
+                self.assertTrue(t.evaluate("['#produtos-conferidos>summary','#finalizar-conferencia button'].every(s=>{const r=document.querySelector(s).getBoundingClientRect();return r.height>0&&r.top>=0&&r.bottom<=innerHeight})"))
+                inventario.refresh_from_db()
+                acesso.refresh_from_db()
+                self.assertIsNone(inventario.finalizada_em)
+                self.assertIsNone(acesso.enviada_em)
+                tocar('#produtos-conferidos>summary')
+                self.assertTrue(t.evaluate("document.querySelector('#produtos-conferidos').open && document.querySelectorAll('#lista-produtos-conferidos article').length===2 && !document.querySelector('#produtos-conferidos').contains(document.querySelector('#finalizar-conferencia'))"))
+                tocar(f'[data-produto-id="{rodadas[0]}"] [data-editar-contagem]')
+                tocar(f'[data-produto-id="{rodadas[0]}"] [value=salvar]')
+                t.wait("document.querySelectorAll('#produtos-pendentes form.contagem').length===1")
+                self.assertTrue(t.evaluate("!document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel') && document.querySelector('#nenhum-produto-pendente').hidden"))
+                tocar(f'[data-produto-id="{rodadas[0]}"] [value=ok]')
+                t.wait("document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel')")
+                t.call('Page.reload')
+                t.wait('window.inventarioContagemPronta===true')
+                self.assertTrue(t.evaluate("document.querySelector('#produtos-conferidos').classList.contains('revisao-disponivel') && !document.querySelector('#produtos-conferidos').open && document.querySelector('[data-total-pendentes]').textContent==='0' && document.querySelector('[data-total-conferidos]').textContent==='2'"))
+                for largura in [320, 390]:
+                    t.call('Emulation.setDeviceMetricsOverride', dict(width=largura, height=844, deviceScaleFactor=1, mobile=True))
+                    self.assertTrue(t.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+                tocar('#finalizar-conferencia button')
+                t.wait("document.querySelector('#estado-conferencia').textContent.includes('finalizada')")
+                self.assertTrue(t.evaluate("document.querySelector('#finalizar-conferencia button').disabled && [...document.querySelectorAll('[data-editar-contagem]')].every(e=>e.hidden)"))
+                t.call('Page.reload')
+                t.wait('window.inventarioContagemPronta===true')
+                self.assertTrue(t.evaluate("!!document.querySelector('#produtos-conferidos>summary') && !document.querySelector('#finalizar-conferencia')"))
+                tocar('#produtos-conferidos>summary')
+                self.assertTrue(t.evaluate("document.querySelectorAll('#lista-produtos-conferidos article').length===2 && [...document.querySelectorAll('form.contagem fieldset')].every(e=>e.disabled)"))
+            finally:
+                chrome.stop()
+        for p in produtos:
+            p.refresh_from_db()
+            self.assertEqual(p.quantidade, 10)
