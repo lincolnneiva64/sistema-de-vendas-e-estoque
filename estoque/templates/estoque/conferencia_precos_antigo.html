@@ -1,4 +1,5 @@
 {% extends "estoque/base.html" %}
+{% load horarios_documentos %}
 
 {% block title %}Conferir precos com sistema antigo | {{ block.super }}{% endblock %}
 
@@ -244,7 +245,7 @@
                                 {% if linha.produto.preco_conferido %}
                                     <span class="badge-leitura badge-conferido">conferido</span>
                                     <span class="text-muted">
-                                        {{ linha.produto.preco_conferido_em|date:"d/m/Y H:i" }}
+                                        <span style="color:#334155">Conferência registrada: {% instante_registro linha.produto.preco_conferido_em %}</span>
                                         {% if linha.produto.preco_conferido_por %}
                                             | {{ linha.produto.preco_conferido_por.get_username }}
                                         {% endif %}
@@ -526,7 +527,17 @@
         if (!target) return;
         if (data.preco_conferido) {
             const operador = data.preco_conferido_por ? ` | ${data.preco_conferido_por}` : "";
-            target.innerHTML = `<span class="badge-leitura badge-conferido">conferido</span> <span class="text-muted">${data.preco_conferido_em || ""}${operador}</span>`;
+            target.innerHTML = '<span class="badge-leitura badge-conferido">conferido</span> ';
+            const registro = document.createElement("span");
+            registro.style.color = "#334155";
+            registro.append("Conferência registrada: ");
+            const horario = document.createElement("strong");
+            horario.className = "horario-registro";
+            horario.style.cssText = "color:#1e293b;font-size:12px;font-weight:700;overflow-wrap:anywhere;white-space:normal";
+            horario.title = "Horário de Belém (PA) · America/Belem";
+            horario.textContent = data.preco_conferido_em || "Horário não registrado";
+            registro.append(horario, operador);
+            target.append(registro);
             row.classList.add("linha-conferida");
             row.classList.remove("linha-nao-encontrado", "linha-duvidosa", "linha-provavel");
         } else {

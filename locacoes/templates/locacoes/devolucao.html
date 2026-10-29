@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -92,7 +93,9 @@
         </div>
       </section>
     </form>
-  </main>
+  <section class="cardx"><h2>Registros de devolução</h2>{% for evento in locacao.eventos.all %}{% if evento.tipo == "devolucao" %}<p>Registro do evento no servidor: {% instante_registro evento.criado_em %}<br>{{ evento.descricao }}</p>{% endif %}{% endfor %}</section>
+<p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
   {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

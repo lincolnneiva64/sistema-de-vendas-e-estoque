@@ -1,4 +1,4 @@
-{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}{% load horarios_documentos %}
 {% block title %}Separacao venda #{{ venda.id }}{% endblock %}
 {% block content %}
 <style>
@@ -67,12 +67,16 @@
   <div class="sep-shell">
     <header class="sep-head">
       <h1 class="sep-title">Separacao da venda #{{ venda.id }}</h1>
-      <p class="sep-sub">{{ venda.cliente.nome|default:"Consumidor" }} - enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</p>
+      <p class="sep-sub">{{ venda.cliente.nome|default:"Consumidor" }} - enviada em {% instante_registro separacao.enviado_em %}</p>
       <p class="sep-sub">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</p>
+{% if separacao.iniciado_em %}<p class="sep-sub">Início registrado: {% instante_registro separacao.iniciado_em %}</p>{% endif %}
+{% if separacao.revisao_solicitada_em %}<p class="sep-sub">Revisão solicitada: {% instante_registro separacao.revisao_solicitada_em %}</p>{% endif %}
+{% if separacao.revisao_concluida_em %}<p class="sep-sub">Revisão concluída: {% instante_registro separacao.revisao_concluida_em %}</p>{% endif %}
+{% rodape_horarios separacao %}{% include "estoque/includes/aviso_horarios_registro.html" %}
       <span class="sep-status {{ operacional.status|default:separacao.status }}">{{ operacional.mensagem|default:separacao.get_status_display }}</span>
       {% if modo_consulta %}
         <p class="sep-sub"><strong>Consulta do checklist concluído</strong></p>
-        <p class="sep-sub">Conclusão: {{ separacao.finalizado_em|date:"d/m/Y H:i"|default:"Data não registrada" }} · Conferido por: {{ separacao.separado_por|default:"Não registrado" }}</p>
+        <p class="sep-sub">Conclusão registrada: {% instante_registro separacao.finalizado_em %} · Conferido por: {{ separacao.separado_por|default:"Não registrado" }}</p>
         <p class="sep-sub">Quantidades e resultados preservados da conferência original.</p>
       {% endif %}
     </header>

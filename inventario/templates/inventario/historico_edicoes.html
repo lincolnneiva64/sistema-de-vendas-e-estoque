@@ -1,0 +1,3 @@
+{% load horarios_documentos %}
+{% for edicao in registro.edicoes_documentais %}<p>Nota alterada em {% instante_registro edicao.instante %}: {{ edicao.antes|floatformat:'-3' }} {{ edicao.unidade_antes }} → {{ edicao.depois|floatformat:'-3' }} {{ edicao.unidade_depois }}. Informação documental; não representa outra movimentação de estoque.</p>{% endfor %}
+{% if registro.edicoes_truncadas %}<p>Evidência limitada; sequência não certificada.</p>{% endif %}

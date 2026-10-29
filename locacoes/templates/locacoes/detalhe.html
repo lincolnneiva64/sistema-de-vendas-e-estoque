@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+﻿{% load horarios_documentos horarios_locacoes %}
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
@@ -73,9 +74,9 @@
       <div class="grid">
         <div><strong>Status</strong><br><span class="pill {% if locacao.status == 'cancelada' %}cancelada{% endif %}">{{ locacao.get_status_display }}</span></div>
         <div><strong>Contratante</strong><br>{{ locacao.nome_contratante }}</div>
-        <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} às {{ locacao.horario_entrega|time:"H:i" }}</div>
-        <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} às {{ locacao.horario_evento|time:"H:i" }}</div>
-        <div><strong>Devolução prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}{% if locacao.horario_previsto_devolucao %} às {{ locacao.horario_previsto_devolucao|time:"H:i" }}{% else %} (sem horario: fim do dia){% endif %}</div>
+        <div><strong>Entrega agendada</strong><br>{% agenda_locacao locacao.data_entrega locacao.horario_entrega %}</div>
+        <div><strong>Evento agendado</strong><br>{% agenda_locacao locacao.data_evento locacao.horario_evento %}</div>
+        <div><strong>Devolução prevista</strong><br>{% agenda_locacao locacao.data_prevista_devolucao locacao.horario_previsto_devolucao %}</div>
         <div><strong>Localidade/preço</strong><br>{{ locacao.faixa_preco_nome_snapshot }}</div>
         <div><strong>Endereço da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
         <div><strong>Total</strong><br>R$ {{ locacao.total|floatformat:2 }}</div>
@@ -107,7 +108,7 @@
           <tbody>
             {% for pagamento in locacao.pagamentos.all %}
               <tr>
-                <td>{{ pagamento.data_hora|date:"d/m/Y H:i" }}</td>
+                <td>{% include "locacoes/includes/horarios_pagamento.html" %}</td>
                 <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
                 <td>{{ pagamento.get_forma_pagamento_display }}</td>
                 <td>{{ pagamento.get_recibo_status_display }}</td>
@@ -150,7 +151,8 @@
           {% for tarefa in tarefas_operacionais %}
             <div class="operacional-item">
               <strong>{{ tarefa.get_tipo_display }}</strong><br>
-              {{ tarefa.data_agendada|date:"d/m/Y" }}{% if tarefa.horario_agendado %} às {{ tarefa.horario_agendado|time:"H:i" }}{% else %} sem horário marcado{% endif %}
+              Agendado: {% agenda_locacao tarefa.data_agendada tarefa.horario_agendado %}
+{% include "locacoes/includes/horarios_tarefa.html" %}
               <div class="mt-2">
                 <a class="btn btn-locacoes btn-sm" href="{% url 'locacoes:abrir_tarefa_operacional' locacao.id tarefa.tipo %}">
                   {% if tarefa.tipo == "entrega" %}Preparar entrega{% else %}Preparar recolhimento{% endif %}
@@ -428,7 +430,7 @@
             </strong>
 
             <span class="muted">
-              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
+              <span>Registro da conferência no servidor:</span> {% instante_registro conferencia.criado_em %}
             </span>
           </div>
 
@@ -480,7 +482,7 @@
           {% if conferencia.previsao_conclusao %}
             <div>
               <strong>Previsão para completar:</strong>
-              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
+              {% instante_registro conferencia.previsao_conclusao %}
             </div>
           {% endif %}
 
@@ -520,7 +522,7 @@
             </strong>
 
             <span class="muted">
-              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
+              <span>Registro da conferência no servidor:</span> {% instante_registro conferencia.criado_em %}
             </span>
           </div>
 
@@ -570,7 +572,7 @@
           {% if conferencia.previsao_conclusao %}
             <div>
               <strong>Nova previsão:</strong>
-              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
+              {% instante_registro conferencia.previsao_conclusao %}
             </div>
           {% endif %}
 
@@ -607,13 +609,23 @@
 
     <section class="cardx">
       <h2>Histórico</h2>
+      {% for tarefa in locacao.tarefas_operacionais.all %}
+        {% if tarefa.confirmado_em or tarefa.tentativa_em or tarefa.resolvida_em %}
+          <div class="mb-2"><strong>{{ tarefa.get_tipo_display }}</strong>
+            {% include "locacoes/includes/horarios_tarefa.html" %}
+          </div>
+        {% endif %}
+      {% endfor %}
       {% for evento in locacao.eventos.all %}
-        <p class="mb-2"><strong>{{ evento.criado_em|date:"d/m/Y H:i" }}</strong> - {{ evento.tipo }}{% if evento.responsavel %} - {{ evento.responsavel }}{% endif %}<br>{{ evento.descricao }}</p>
+        <p class="mb-2"><strong>Registro do evento no servidor: {% instante_registro evento.criado_em %}</strong> - {{ evento.tipo }}{% if evento.responsavel %} - {{ evento.responsavel }}{% endif %}<br>{{ evento.descricao }}</p>
       {% empty %}
         <p class="muted mb-0">Nenhum evento registrado.</p>
       {% endfor %}
     </section>
-  </main>
+  {% rodape_horarios locacao %}
+{% if locacao.cancelada_em %}<p>Cancelamento registrado: {% instante_registro locacao.cancelada_em %}</p>{% endif %}
+<p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
   {% include "locacoes/includes/enter_nav.html" %}
 <script>
 (function () {

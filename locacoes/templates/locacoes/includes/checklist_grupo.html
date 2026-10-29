@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <section class="grupo">
   <h2>{{ titulo }}</h2>
 
@@ -25,17 +26,17 @@
 
           <div class="hora">
             {% if item.horario %}
-              {{ item.horario|time:"H:i" }}
+              Agendado: {% agenda_locacao item.tarefa.data_agendada item.horario %}
             {% else %}
               Sem horário
             {% endif %}
           </div>
         </div>
 
-        <div class="dados">
+        <div class="dados">{% include "locacoes/includes/horarios_tarefa.html" with tarefa=item.tarefa %}
           <div>
-            <strong>Solicitada em:</strong>
-            {{ item.locacao.criado_em|date:"d/m/Y H:i" }}
+            <strong>Locação registrada no servidor:</strong>
+            {% instante_registro item.locacao.criado_em %}
           </div>
 
           <div>

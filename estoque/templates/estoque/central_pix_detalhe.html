@@ -1,4 +1,5 @@
 {% extends "estoque/base.html" %}
+{% load horarios_documentos %}
 {% block title %}{{ pix_titulo_detalhe }}{% endblock %}
 {% block content %}
 <style>
@@ -200,7 +201,7 @@
           <div class="pix-compare-grid">
             <div class="pix-compare-card">
               <h3>Pix atual #{{ pix.id }}</h3>
-              <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Cadastro do comprovante</span><span>{% instante_registro pix.criado_em %}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
               <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.nome_pagador|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.valor|floatformat:2 }}</span></div>
@@ -218,7 +219,7 @@
             </div>
             <div class="pix-compare-card">
               <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
-              <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Cadastro do comprovante</span><span>{% instante_registro pix.pix_original.criado_em %}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
               <div class="pix-compare-row"><span>Pagador</span><span>{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row"><span>Valor</span><span>R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>
@@ -249,7 +250,7 @@
         <div>
           <div class="pix-detail-list">
             <div class="pix-detail-row"><span>ID do Pix</span><span>#{{ pix.id }}</span></div>
-            <div class="pix-detail-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+            <div class="pix-detail-row"><span>Cadastro do comprovante</span><span>{% instante_registro pix.criado_em %}</span></div>
             <div class="pix-detail-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome|default:"-" }}</span></div>
             <form method="post" class="pix-correction-inline" autocomplete="off" id="pixCorrectionForm">
               {% csrf_token %}
@@ -390,7 +391,7 @@
           <div class="pix-compare pix-compare-side">
             <div class="pix-compare-card">
               <h3>Pix parecido #{{ pix.pix_original.id }}</h3>
-              <div class="pix-compare-row"><span>Cadastro</span><span>{{ pix.pix_original.criado_em|date:"d/m/Y H:i" }}</span></div>
+              <div class="pix-compare-row"><span>Cadastro do comprovante</span><span>{% instante_registro pix.pix_original.criado_em %}</span></div>
               <div class="pix-compare-row"><span>Enviado por</span><span>{{ pix.pix_original.enviado_por_nome|default:"-" }}</span></div>
               <div class="pix-compare-row pix-compare-row-highlight"><span>Pagador</span><span class="pix-compare-primary-value">{{ pix.pix_original.nome_pagador|default:"Nao identificado" }}</span></div>
               <div class="pix-compare-row pix-compare-row-highlight"><span>Valor</span><span class="pix-compare-primary-value">R$ {{ pix.pix_original.valor|floatformat:2 }}</span></div>

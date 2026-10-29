@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Detalhes do Credito{% endblock %}
 {% block content %}
 <style>
@@ -161,7 +162,7 @@
               <span>Credito: R$ {{ ultimo_movimento.valor_credito|floatformat:2 }}</span>
             </div>
           {% endif %}
-          <div class="credito-ultimo-ref">Conta #{{ ultimo_movimento.conta_id|default:"-" }} / Venda #{{ ultimo_movimento.venda_id|default:"-" }} - {{ ultimo_movimento.criado_em|date:"d/m/Y H:i" }}</div>
+          <div class="credito-ultimo-ref" style="color:#334155">Conta #{{ ultimo_movimento.conta_id|default:"-" }} / Venda #{{ ultimo_movimento.venda_id|default:"-" }} - Crédito registrado: {% instante_registro ultimo_movimento.criado_em %}</div>
         </div>
       {% endif %}
     </section>
@@ -172,7 +173,7 @@
           <article class="credito-card {% if credito.utilizado %}utilizado{% endif %}">
             <div class="credito-card-head">
               <h2 class="credito-card-title">{% if credito.utilizado %}Credito utilizado{% else %}Credito gerado{% endif %}</h2>
-              <span class="credito-card-data">{{ credito.criado_em|date:"d/m/Y H:i" }}</span>
+              <span class="credito-card-data" style="color:#334155">Crédito registrado: {% instante_registro credito.criado_em %}</span>
             </div>
             <div class="credito-grid">
               <div class="credito-dado">

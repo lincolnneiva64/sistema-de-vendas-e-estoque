@@ -1,6 +1,7 @@
+{% load horarios_documentos %}
 {% if eventos_selecao %}
 <details class="card" id="historico-selecao"><summary>Histórico de retiradas e reinclusões</summary>
   <p class="muted">Este registro não faz parte dos resultados da contagem.</p>
-  {% for evento in eventos_selecao %}<p>{{ evento.criado_em|date:'d/m/Y H:i:s' }} · {{ evento.usuario }} · {{ evento.dados.nome }} · {% if evento.acao == 'produto_retirado' %}Retirado{% else %}Reincluído{% endif %} · {{ evento.dados.motivo }}</p>{% endfor %}
+  {% for evento in eventos_selecao %}<p>{% instante_registro evento.criado_em %} · {{ evento.usuario }} · {{ evento.dados.nome }} · {% if evento.acao == 'produto_retirado' %}Retirado{% else %}Reincluído{% endif %} · {{ evento.dados.motivo }}</p>{% endfor %}
 </details>
 {% endif %}

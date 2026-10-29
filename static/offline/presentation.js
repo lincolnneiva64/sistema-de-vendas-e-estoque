@@ -1,4 +1,59 @@
 // Presentation only: state selection and synchronization remain in core/app.
+const belemClock = new Intl.DateTimeFormat('pt-BR', {timeZone:'America/Belem',
+    day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'});
+
+export function formatOfflineTime(value) {
+    // Never interpret a date-only or a timezone-free legacy string as an instant.
+    if (!(typeof value === 'number' && Number.isFinite(value))
+        && !(typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value))) return 'Horário não registrado';
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return 'Horário não registrado';
+    if (typeof value === 'string') {
+        const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+        if (month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(year, month, 0)).getUTCDate()) return 'Horário não registrado';
+    }
+    const parts = Object.fromEntries(belemClock.formatToParts(date).map(part => [part.type, part.value]));
+    return `${parts.day}/${parts.month}/${parts.year} às ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+export function timeText(target, text) {
+    // Only for presentation nodes containing text; never rewrite a command/receipt.
+    const parts = String(text).split(/(\d{2}\/\d{2}\/\d{4} às \d{2}:\d{2}:\d{2})/g);
+    target.replaceChildren(...parts.map((part, index) => {
+        if (index % 2 === 0) return document.createTextNode(part);
+        const strong = document.createElement('strong');
+        strong.className = 'offline-timestamp'; strong.textContent = part;
+        strong.style.cssText = 'color:#1e293b;font-weight:700;overflow-wrap:anywhere;white-space:normal';
+        strong.title = 'Horário de Belém (PA) · America/Belem';
+        return strong;
+    }));
+}
+
+export function catalogTimes(snapshot) {
+    return `Preparação informada pelo dispositivo: ${formatOfflineTime(snapshot?.prepared_at)} · `
+        + `Geração do catálogo no servidor: ${formatOfflineTime(snapshot?.gerado_em)} · Horário de Belém (PA)`;
+}
+
+export function operationTimes(operation) {
+    const box = document.createElement('div');
+    box.className = 'offline-operation-times';
+    box.style.cssText = 'color:#334155;font-size:12px;line-height:1.6;overflow-wrap:anywhere;white-space:normal';
+    for (const [label, value] of [
+        ['Criação informada pelo dispositivo', operation.created_at],
+        ['Conclusão do processamento no servidor (resultado recebido)', operation.server_result?.completed_at],
+        ...(operation.synchronized_at ? [['Confirmação salva neste dispositivo', operation.synchronized_at]] : []),
+    ]) {
+        const row = document.createElement('div');
+        const text = value == null && label.includes('servidor')
+            ? 'Horário não disponível nesta consulta' : formatOfflineTime(value);
+        timeText(row, `${label}: ${text}`); box.append(row);
+    }
+    const legend = document.createElement('div');
+    legend.textContent = 'Horário de Belém (PA) · America/Belem. Os registros não comprovam o horário de execução física.';
+    box.append(legend);
+    return box;
+}
+
 export function renderIndicator(target, state, elapsedMinutes) {
     if (!target) return;
     const global = target.closest('.offline-global');

@@ -1,4 +1,6 @@
-{% if registro.fonte == 'regularizacao' %}<strong>Regularização aplicada</strong><small>Correção registrada: {% if registro.diferenca_aplicada > 0 %}+{% endif %}{{ registro.diferenca_aplicada|floatformat:'-3' }} {{ registro.unidade }}</small>
+{% if registro.documento_atual %}<strong>Quantidade atual da nota: {{ registro.quantidade|floatformat:'-3' }} {{ registro.unidade }}</strong><small>Informação documental; não é outra baixa.</small>{% if registro.conversao_aviso %}<small class="indisponivel">{{ registro.conversao_aviso }}</small>{% endif %}
+{% elif registro.unidades_evidencia %}{% include 'inventario/historico_unidades_evidencia.html' with evidencia=registro.unidades_evidencia %}
+{% elif registro.fonte == 'regularizacao' %}<strong>Regularização aplicada</strong><small>Correção registrada: {% if registro.diferenca_aplicada > 0 %}+{% endif %}{{ registro.diferenca_aplicada|floatformat:'-3' }} {{ registro.unidade }}</small>
 {% else %}{% if registro.entrada is not None %}<span class="entrada">Entrada +{{ registro.entrada|floatformat:'-3' }} <span>{{ registro.unidade|default:'Unidade não disponível' }}</span></span>
 {% elif registro.saida is not None %}<span class="saida">Saída −{{ registro.saida|floatformat:'-3' }} <span>{{ registro.unidade|default:'Unidade não disponível' }}</span></span>{% include 'inventario/historico_unidades.html' with equivalencia=registro.saida_equivalencia %}
 {% elif registro.antes is not None and registro.depois is not None %}

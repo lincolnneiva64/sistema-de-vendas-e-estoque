@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_recebimentos %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -474,6 +475,7 @@
 </head>
 <body>
   <main class="conf-page">
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
     <div class="conf-shell">
       <header class="conf-top">
         <div>
@@ -563,8 +565,8 @@
             <strong class="conf-readonly-value">{{ fechamento_resumo.usuario_nome }}</strong>
           </div>
           <div class="conf-readonly-item">
-            <span class="conf-label">Finalizada em</span>
-            <strong class="conf-readonly-value">{{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</strong>
+            <span class="conf-label">Registro do fechamento no sistema</span>
+            <strong class="conf-readonly-value">{% instante_registro fechamento_resumo.obj.created_at %}</strong>
           </div>
           <div class="conf-readonly-item">
             <span class="conf-label">Observação inicial / informação para apuração</span>
@@ -759,7 +761,8 @@
       </section>
       {% endif %}
     </div>
-  </main>
+  {% if fechamento_resumo %}{% horarios_fechamento fechamento_resumo.obj %}{% endif %}
+</main>
   <div id="modalCalculadoraConferencia" class="conf-calc-modal" hidden>
     <div id="dialogCalculadoraConferencia" class="conf-calc-dialog" role="dialog" aria-modal="true" aria-labelledby="tituloCalculadoraConferencia" tabindex="-1">
       <div class="conf-calc-header">

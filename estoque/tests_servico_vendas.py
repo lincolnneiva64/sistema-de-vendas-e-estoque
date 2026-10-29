@@ -4,6 +4,8 @@ import json
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 
 from .models import (
@@ -14,6 +16,12 @@ from .models import (
 
 class ContratoGravarVendaTests(TestCase):
     def setUp(self):
+        self.usuario = get_user_model().objects.create_user("operador-contrato", password="teste")
+        self.usuario.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="estoque",
+            codename__in=("add_venda", "change_venda", "view_cliente", "view_produto"),
+        ))
+        self.client.force_login(self.usuario)
         self.cliente = Cliente.objects.create(nome="Cliente contrato")
         self.produto = Produto.objects.create(
             nome="Produto contrato", quantidade=Decimal("10.000"),
@@ -61,6 +69,43 @@ class ContratoGravarVendaTests(TestCase):
         self.assertEqual(EventoVenda.objects.filter(venda=venda).count(), 1)
         self.assertIsNone(retorno["separacao"])
         self.assertTrue(retorno["produtos_estoque_atualizados"])
+
+    def test_anonimo_recebe_401_sem_chamar_servico_ou_gravar(self):
+        self.client.logout()
+        with patch("estoque.views.criar_ou_atualizar_venda") as servico:
+            self.assertEqual(self.postar().status_code, 401)
+        servico.assert_not_called()
+        self.assert_sem_efeitos()
+
+    def test_autenticado_sem_permissao_recebe_403_sem_efeitos(self):
+        usuario = get_user_model().objects.create_user("contrato-sem-permissao")
+        self.client.force_login(usuario)
+        with patch("estoque.views.criar_ou_atualizar_venda") as servico:
+            self.assertEqual(self.postar().status_code, 403)
+        servico.assert_not_called()
+        self.assert_sem_efeitos()
+
+    def test_permissao_de_criacao_nao_autoriza_editar(self):
+        venda_id = self.postar().json()["venda_id"]
+        self.usuario.user_permissions.remove(Permission.objects.get(
+            content_type__app_label="estoque", codename="change_venda"))
+        dados = copy.deepcopy(self.dados)
+        dados["venda_id"] = venda_id
+        dados["itens"][0].update(item_id=ItemVenda.objects.get().pk, quantidade="3")
+        modelos = (Produto, Venda, ItemVenda, EventoVenda, ContaReceber, MovimentoFinanceiro)
+        antes = [list(modelo.objects.order_by("pk").values()) for modelo in modelos]
+        with patch("estoque.views.criar_ou_atualizar_venda") as servico:
+            self.assertEqual(self.postar(dados).status_code, 403)
+        servico.assert_not_called()
+        self.assertEqual(antes, [list(modelo.objects.order_by("pk").values()) for modelo in modelos])
+
+    def test_leituras_sem_permissao_de_criacao_nao_autorizam_gravar(self):
+        self.usuario.user_permissions.remove(Permission.objects.get(
+            content_type__app_label="estoque", codename="add_venda"))
+        with patch("estoque.views.criar_ou_atualizar_venda") as servico:
+            self.assertEqual(self.postar().status_code, 403)
+        servico.assert_not_called()
+        self.assert_sem_efeitos()
 
     def test_validacoes_sem_efeitos(self):
         casos = [
@@ -120,8 +165,11 @@ class ContratoGravarVendaTests(TestCase):
         self.dados["tipo_pagamento"] = "A vista"
         with patch("estoque.views.MovimentoFinanceiro.objects.create",
                    side_effect=RuntimeError("Falha financeira")):
-            with self.assertRaises(RuntimeError):
-                self.postar()
+            resposta = self.postar()
+        self.assertEqual(resposta.status_code, 500)
+        self.assertFalse(resposta.json()["sucesso"])
+        self.assertIn("Consulte a nota antes de tentar novamente", resposta.json()["mensagem"])
+        self.assertNotIn("Falha financeira", resposta.json()["mensagem"])
         self.assert_sem_efeitos()
 
     def test_json_ilegivel_e_metodo_http(self):
@@ -130,6 +178,10 @@ class ContratoGravarVendaTests(TestCase):
         self.assertEqual(resposta.json(), {
             "sucesso": False, "mensagem": "Nao foi possivel ler os dados da venda.",
         })
+        # The commercial gate rejects an unlisted read for a regular operator.
+        self.assertEqual(self.client.get("/vendas/gravar/", secure=True).status_code, 403)
+        administrador = get_user_model().objects.create_superuser("contrato-metodo-http", "", "teste")
+        self.client.force_login(administrador)
         self.assertEqual(self.client.get("/vendas/gravar/", secure=True).status_code, 405)
         self.assert_sem_efeitos()
 

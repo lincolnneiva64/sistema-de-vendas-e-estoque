@@ -1,3 +1,4 @@
+{% load horarios_documentos tz %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -861,7 +862,7 @@
 
         .comunicacao-linha {
             display: grid;
-            grid-template-columns: 102px minmax(0, 1fr);
+            grid-template-columns: minmax(120px, 175px) minmax(0, 1fr);
             gap: 5px;
             padding: 4px 7px;
             border-top: 1px solid #e2e8f0;
@@ -1067,7 +1068,7 @@
 
         .historico-linha {
             display: grid;
-            grid-template-columns: 40px minmax(0, 1fr);
+            grid-template-columns: minmax(120px, 175px) minmax(0, 1fr);
             gap: 5px;
             align-items: baseline;
             padding: 2px 0;
@@ -1894,7 +1895,7 @@
                     {% if venda.cancelada and not modo_pendencia_resolvida %}
                         <div class="venda-cancelada-banner">
                             CANCELADA / VENDA NAO REALIZADA.
-                            {% if venda.cancelada_em %} Cancelada em {{ venda.cancelada_em|date:"d/m/Y H:i" }}.{% endif %}
+                            {% if venda.cancelada_em %} Cancelada em {% instante_registro venda.cancelada_em %}.{% endif %}
                             {% if venda.motivo_cancelamento %} Motivo: {{ venda.motivo_cancelamento }}{% endif %}
                             Itens preservados somente para historico.
                         </div>
@@ -2346,21 +2347,23 @@
                         <span>R$ {{ total_ajustado_entregue|floatformat:2 }}</span>
                     </div>
                     {% endif %}
+                    {% rodape_horarios venda %}
                     </div>
 
                     {% if request.GET.nota_atualizada != "1" and not modo_pendencia_resolvida %}
+                    {% timezone "America/Belem" %}
                     <div class="historico">
                         <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico da nota</h2>
                         <div class="historico-lista">
                             {% if eventos %}
-                                {% regroup eventos by criado_em.date as eventos_por_data %}
+                                {% regroup eventos by criado_em|date:"d/m/Y" as eventos_por_data %}
                                 {% for grupo in eventos_por_data %}
-                                    <div class="historico-grupo" data-historico-data="{{ grupo.grouper|date:'d/m/Y' }}">
-                                        <div class="historico-grupo-data">{{ grupo.grouper|date:"d/m/Y" }}</div>
+                                    <div class="historico-grupo" data-historico-data="{{ grupo.grouper }}">
+                                        <div class="historico-grupo-data">{{ grupo.grouper }}</div>
                                         <div class="historico-eventos">
                                             {% for evento in grupo.list %}
                                                 <div class="historico-linha">
-                                                    <span class="historico-hora">{{ evento.criado_em|date:"H:i" }}</span>
+                                                    <span class="historico-hora">{% instante_registro evento.criado_em %}</span>
                                                     <span class="historico-descricao">&mdash; {{ evento.descricao_exibicao }}</span>
                                                 </div>
                                             {% endfor %}
@@ -2373,12 +2376,13 @@
                         </div>
                     </div>
 
+                    {% endtimezone %}
                     <div class="comunicacao">
                         <h2 style="margin: 0 0 5px; font-size: 13px; color: #1e3a8a;">Historico de comunicacao</h2>
                         <div id="comunicacaoWhatsappLista" class="comunicacao-lista">
                             {% for evento in comunicacoes_whatsapp %}
                                 <div class="comunicacao-linha">
-                                    <span class="comunicacao-data">{{ evento.criado_em|date:"d/m/Y H:i" }}</span>
+                                    <span class="comunicacao-data">{% instante_registro evento.criado_em %}</span>
                                     <span class="comunicacao-descricao">
                                         {{ evento.descricao_exibicao }}
                                         {% if evento.numero_whatsapp %}
@@ -2503,6 +2507,7 @@
                         <span>R$ {{ total_ajustado_entregue|floatformat:2 }}</span>
                     </div>
                     {% endif %}
+                    {% rodape_horarios venda %}
                 </section>
             </article>
         </div>
@@ -2566,14 +2571,23 @@
             }, 5000);
         }
 
+        function formatarInstanteVenda(valor) {
+            if (!valor || !/(Z|[+-]\d{2}:\d{2})$/.test(valor)) return "Horário não registrado";
+            const data = new Date(valor);
+            if (Number.isNaN(data.getTime())) return "Horário não registrado";
+            return new Intl.DateTimeFormat("pt-BR", {
+                timeZone: "America/Belem", day: "2-digit", month: "2-digit", year: "numeric",
+                hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+            }).format(data).replace(",", " às");
+        }
+
         function adicionarHistorico(descricao, criadoEm) {
             const lista = document.querySelector(".historico-lista");
             if (!lista) {
                 return;
             }
-            const partes = String(criadoEm || "").replace(",", "").split(/\s+/);
-            const data = partes[0] || "";
-            const hora = partes[1] || "";
+            const instante = formatarInstanteVenda(criadoEm);
+            const data = instante.split(" às ")[0];
             let grupo = lista.querySelector(`[data-historico-data="${data}"]`);
 
             const vazio = lista.querySelector(".historico-vazio");
@@ -2596,7 +2610,15 @@
 
             const item = document.createElement("div");
             item.className = "historico-linha";
-            item.innerHTML = `<span class="historico-hora">${hora}</span><span class="historico-descricao">&mdash; ${descricao}</span>`;
+            const horario = document.createElement("strong");
+            horario.className = "historico-hora horario-registro";
+            horario.style.color = "#1e293b";
+            horario.style.fontSize = "12px";
+            horario.textContent = instante;
+            const texto = document.createElement("span");
+            texto.className = "historico-descricao";
+            texto.textContent = "— " + descricao;
+            item.append(horario, texto);
             eventos.prepend(item);
         }
 
@@ -2613,9 +2635,11 @@
             const linha = document.createElement("div");
             linha.className = "comunicacao-linha";
 
-            const data = document.createElement("span");
+            const data = document.createElement("strong");
             data.className = "comunicacao-data";
-            data.textContent = String(criadoEm || "").replace(",", "");
+            data.style.color = "#1e293b";
+            data.style.fontSize = "12px";
+            data.textContent = formatarInstanteVenda(criadoEm);
 
             const texto = document.createElement("span");
             texto.className = "comunicacao-descricao";
@@ -2656,15 +2680,7 @@
                     return null;
                 }
                 mostrarMensagem(data.mensagem || descricao);
-                const agora = new Date();
-                const criadoEm = agora.toLocaleString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                });
-                adicionarHistorico(data.mensagem || descricao, criadoEm);
+                adicionarHistorico(data.mensagem || descricao, data.evento_criado_em);
                 return data;
             } catch (erro) {
                 mostrarMensagem("Nao foi possivel registrar o evento.");
@@ -2862,13 +2878,7 @@
                     atualizarStatusWhatsapp(resultado.whatsapp_status, resultado.whatsapp_status_texto);
                     adicionarComunicacaoWhatsapp(
                         resultado.comunicacao_descricao,
-                        new Date().toLocaleString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                        }),
+                        resultado.evento_criado_em,
                         resultado.comunicacao_numero,
                         resultado.comunicacao_origem
                     );

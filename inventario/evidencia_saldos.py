@@ -29,7 +29,7 @@ BENIGNOS = frozenset(('venda_gravada', 'nota_visualizada', 'whatsapp_aberto',
     'pedido_parcial'))
 
 
-def conflito_eventos(eventos, outros_nomes):
+def conflito_eventos(eventos, outros_nomes, *, aceitar_nota_impressa=False):
     """Ignore a stock edit only if its exact named item is independently another SKU.
 
     Unknown events, target edits and ambiguous names invalidate the candidate.
@@ -50,6 +50,10 @@ def conflito_eventos(eventos, outros_nomes):
     genericos = []
     for evento in eventos:
         if evento['tipo_evento'] in BENIGNOS:
+            continue
+        # Only the read-only extract opts in; adjustment reconciliation keeps
+        # its existing conservative policy and material-event evidence.
+        if aceitar_nota_impressa and evento['tipo_evento'] == 'nota_impressa':
             continue
         if evento['tipo_evento'] == 'alteracao_separacao_atendida':
             if evento.get('descricao', '').strip() not in resumos or not evento.get('criado_em'):

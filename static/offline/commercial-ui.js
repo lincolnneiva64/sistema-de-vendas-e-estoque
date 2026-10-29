@@ -1,4 +1,5 @@
 import {openDB, Repository} from '/offline/assets/2-8f/core.js';
+import {catalogTimes, timeText} from '/offline/assets/2-8f/presentation.js';
 import {carregarSnapshotComercial, atualizarSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
 
 const panel = document.querySelector('#offline-global .offline-panel');
@@ -12,9 +13,9 @@ if (panel && indicator.dataset.actor) {
     const button = box.querySelector('button'), status = box.querySelector('[role="status"]');
     let repo, busy = false;
     function describe(snapshot) {
-        status.textContent = snapshot
-            ? `Catálogo salvo: ${snapshot.contagens.clientes} clientes e ${snapshot.contagens.produtos} produtos. Atualizado em ${new Date(snapshot.prepared_at).toLocaleString('pt-BR')}.`
-            : 'Nenhum catálogo comercial salvo para este usuário.';
+        timeText(status, snapshot
+            ? `Catálogo salvo: ${snapshot.contagens.clientes} clientes e ${snapshot.contagens.produtos} produtos. ${catalogTimes(snapshot)}.`
+            : 'Nenhum catálogo comercial salvo para este usuário.');
     }
     async function initialize() {
         repo = new Repository(await openDB());

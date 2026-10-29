@@ -5,6 +5,7 @@ from django.db.models import Min
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
+from estoque.documentos_horarios import FUSO_DOCUMENTOS
 from estoque.models import ItemVenda, ItemVendaRemovido, MovimentacaoEstoqueManual
 from .models import MovimentoObservado
 
@@ -32,12 +33,12 @@ def selecionar(params, referencia, selecionada, documentos, produto_id, limite=N
             primeiro, ultimo = (parse_date(params.get(c, '')) for c in ('data_inicial', 'data_final'))
             if not primeiro or not ultimo or primeiro > ultimo:
                 raise ValueError
-            inicio = timezone.make_aware(datetime.combine(primeiro, time.min))
-            fim = min(timezone.make_aware(datetime.combine(ultimo+timedelta(days=1), time.min)), limite)
+            inicio = timezone.make_aware(datetime.combine(primeiro, time.min), FUSO_DOCUMENTOS)
+            fim = min(timezone.make_aware(datetime.combine(ultimo+timedelta(days=1), time.min), FUSO_DOCUMENTOS), limite)
             if inicio >= fim:
                 raise ValueError
-            aviso = ('Datas inclusivas no fuso local; o fim é limitado ao momento da consulta.'
-                     if limite != referencia else 'Datas inclusivas no fuso local; o fim é limitado à referência da conferência.')
+            aviso = ('Datas inclusivas no horário de Belém (PA); o fim é limitado ao momento da consulta.'
+                     if limite != referencia else 'Datas inclusivas no horário de Belém (PA); o fim é limitado à referência da conferência.')
         except (ValueError, OverflowError, TypeError):
             inicio = fim = referencia
             erro = ('Informe um período válido, com início anterior ao momento da consulta e fim igual ou posterior ao início.'
@@ -55,10 +56,10 @@ def selecionar(params, referencia, selecionada, documentos, produto_id, limite=N
             if valor:
                 candidatos.append(valor)
         dia = ItemVenda.objects.filter(produto_id=produto_id,
-            venda__data_venda__lte=timezone.localtime(limite).date()).aggregate(
+            venda__data_venda__lte=timezone.localtime(limite, FUSO_DOCUMENTOS).date()).aggregate(
                 inicio=Min('venda__data_venda'))['inicio']
         if dia:
-            candidatos.append(timezone.make_aware(datetime.combine(dia, time.min)))
+            candidatos.append(timezone.make_aware(datetime.combine(dia, time.min), FUSO_DOCUMENTOS))
         if candidatos:
             inicio = min(candidatos)
         aviso = 'Desde o primeiro registro datado disponível; não comprova cobertura integral nem saldo inicial.'

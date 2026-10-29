@@ -1,0 +1,40 @@
+{% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
+{% block title %}Histórico de estoque — {{ produto.nome }}{% endblock %}
+{% block content %}
+<style>
+  .ajustes-historico {max-width:1100px;margin:20px auto;padding:0 12px;overflow-wrap:anywhere}
+  .ajustes-registro {border:1px solid #d1d5db;border-radius:10px;padding:12px;margin:12px 0;break-inside:avoid}
+  .ajustes-saldos {display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}
+  .ajustes-historico nav {display:flex;flex-wrap:wrap;gap:16px;margin:16px 0}
+  @media print {.ajustes-historico nav {display:none}}
+</style>
+<main class="ajustes-historico">
+  <h1>Histórico de conferências e ajustes</h1>
+  <p><strong>{{ produto.nome }}</strong> · Produto #{{ produto.id }}</p>
+  <p>Unidade atual do cadastro: <strong>{{ produto.unidade_venda_1|default:"Não informada" }}</strong>.
+    Os registros abaixo não possuem unidade histórica congelada.</p>
+  <p>Horários de registro no sistema em America/Belem; não comprovam o momento físico da operação.</p>
+  {% for registro in pagina %}
+  <article class="ajustes-registro">
+    <strong>#{{ registro.id }} · {{ registro.get_tipo_display }}</strong>
+    <div>{% instante_registro registro.criado_em %}</div>
+    <div>Usuário responsável: {% if registro.usuario %}{{ registro.usuario.get_username }}{% else %}Não identificado{% endif %}</div>
+    {% if registro.operador_nome %}<div>Nome registrado na operação: {{ registro.operador_nome }}</div>{% endif %}
+    <div class="ajustes-saldos">
+      <span>Estoque anterior: <strong>{{ registro.estoque_antes|quantidade_historico }}</strong></span>
+      <span>Estoque posterior: <strong>{{ registro.estoque_depois|quantidade_historico }}</strong></span>
+      <span>Diferença: <strong>{% if registro.diferenca > 0 %}+{% endif %}{{ registro.diferenca|quantidade_historico }}</strong></span>
+    </div>
+    <div>{{ registro.motivo|default:"Motivo não informado"|linebreaksbr }}</div>
+    {% if registro.observacao %}<div>Observação: {{ registro.observacao|linebreaksbr }}</div>{% endif %}
+  </article>
+  {% empty %}<p>Nenhuma conferência ou ajuste manual registrado para este produto.</p>{% endfor %}
+  <nav aria-label="Páginas do histórico">
+    {% if pagina.has_previous %}<a href="?pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+    <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a href="?pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+  </nav>
+  <a href="{% url 'estoque:produto_detalhe' produto.id %}">Ver produto</a>
+</main>
+{% endblock %}

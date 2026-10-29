@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -252,7 +253,7 @@
 
         <div class="campo">
           <span class="rotulo">Data/Hora</span>
-          <div class="valor">{{ conferencia.criado_em|date:"d/m/Y H:i" }}</div>
+          <div class="valor"><span>Registro da conferência no servidor:</span> {% instante_registro conferencia.criado_em %}</div>
         </div>
 
         <div class="resumo">
@@ -323,7 +324,7 @@
           </div>
           <div>
             <span class="envio-label">Data:</span>
-            <span class="envio-valor">{{ envio_checklist.criado_em|date:"d/m/Y H:i" }}</span>
+            <span class="envio-valor">{% instante_registro envio_checklist.criado_em %}</span>
           </div>
           {% if envio_checklist.whatsapp_url %}
             <a class="btn-discreto" href="{{ envio_checklist.whatsapp_url }}" target="_blank" rel="noopener">Abrir WhatsApp novamente</a>
@@ -407,7 +408,8 @@
     {% endif %}
 
     {{ texto_checklist|json_script:"texto-checklist-recolhimento" }}
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 
   <script>
     (function () {

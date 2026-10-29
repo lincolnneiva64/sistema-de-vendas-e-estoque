@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_recebimentos %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -136,7 +137,7 @@
     .rcd-list { display: grid; gap: 10px; }
     .rcd-row {
       display: grid;
-      grid-template-columns: 74px minmax(0, 1fr) 142px;
+      grid-template-columns: minmax(120px, 175px) minmax(0, 1fr) 142px;
       gap: 12px;
       align-items: center;
       padding: 12px;
@@ -244,6 +245,7 @@
 </head>
 <body>
   <main class="rcd-page">
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
     <div class="rcd-shell">
       <header class="rcd-top">
         <div>
@@ -301,7 +303,7 @@
       <section class="rcd-list" aria-label="Lista de recebimentos">
         {% for item in historico_recebimentos_dia %}
           <article class="rcd-row">
-            <div class="rcd-time">{{ item.hora|default:"--:--" }}</div>
+            <div class="rcd-time">{% instante_registro item.criado_em %}{% if item.recibo_confirmado_em %}<div>Envio do recibo confirmado: {% instante_registro item.recibo_confirmado_em %}</div>{% endif %}{% if item.recibo_dispensado_em %}<div>Recibo dispensado: {% instante_registro item.recibo_dispensado_em %}</div>{% endif %}</div>
             <div>
               <span class="rcd-client">{{ item.cliente_nome }}</span>
               <div class="rcd-meta">

@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_recebimentos %}
 ﻿<!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -490,6 +491,7 @@
     </style>
 </head>
 <body>
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
     <div class="container">
         <div class="header">
             <h1>Pedido #{{ pedido.id }}</h1>
@@ -554,7 +556,7 @@
             <div class="aviso">
                 <strong>Pedido salvo com sucesso.</strong>
                 Pedido #{{ pedido.id }} de {{ pedido.cliente.nome|default:"Cliente nao informado" }},
-                criado em {{ pedido.criado_em|date:"d/m/Y H:i" }},
+                criado em {% instante_registro pedido.criado_em %},
                 com {{ itens_exibidos|length }} item{{ itens_exibidos|length|pluralize }},
                 total de R$ {{ total_exibido|floatformat:"2" }} e status {{ pedido.get_status_display }}.
             </div>
@@ -704,12 +706,12 @@
             <div class="info-grid">
                 <div class="info-item">
                     <span class="info-label">Criado em</span>
-                    <span class="info-valor">{{ pedido.criado_em|date:"d/m/Y H:i" }}</span>
+                    <span class="info-valor">{% instante_registro pedido.criado_em %}</span>
                 </div>
                 
                 <div class="info-item">
                     <span class="info-label">Última Atualização</span>
-                    <span class="info-valor">{{ pedido.atualizado_em|date:"d/m/Y H:i" }}</span>
+                    <span class="info-valor">{% instante_registro pedido.atualizado_em %}</span>
                 </div>
             </div>
         </div>
@@ -734,7 +736,7 @@
                                 <td data-label="Quantidade">{{ pendencia.quantidade_formatada }}</td>
                                 <td data-label="Unidade">{{ pendencia.unidade|default:"-" }}</td>
                                 <td data-label="Total">R$ {{ pendencia.valor_total|floatformat:"2" }}</td>
-                                <td data-label="Data">{{ pendencia.criado_em|date:"d/m/Y H:i" }}</td>
+                                <td data-label="Data">{% instante_registro pendencia.criado_em %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>

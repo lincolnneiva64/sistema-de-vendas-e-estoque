@@ -62,6 +62,9 @@ from .services.sincronizacao_firebird import (
 )
 from .services.vendas import ErroGravarVenda, criar_ou_atualizar_venda
 from .services.estoque_manual import conferir_ou_ajustar_estoque
+from .documentos_horarios import acrescentar_rodape_imagem, desenhar_horarios, linhas_horarios
+from .horarios_recebimentos import (horario_legivel, campos_comprovante, campos_fechamento,
+    metadados_recebimento, texto_horarios, imagem_com_horarios)
 from inventario.rastreabilidade import identificar, referenciar_venda
 from .services.diagnostico_finalizacao_compra import diagnosticar_finalizacao_http, etapa_finalizacao_compra
 from .services.separacao_vendas import (
@@ -7528,6 +7531,20 @@ def conferencia_estoque_produto(request, produto_id):
 
 
 @never_cache
+@require_GET
+def historico_estoque_manual(request, produto_id):
+    from django.core.paginator import Paginator
+
+    _usuario, _operador, resposta = _operador_conferencia_estoque(request)
+    if resposta:
+        return resposta
+    produto = get_object_or_404(Produto, pk=produto_id)
+    registros = MovimentacaoEstoqueManual.objects.filter(produto=produto).select_related("usuario").order_by("-criado_em", "-id")
+    pagina = Paginator(registros, 25).get_page(request.GET.get("pagina"))
+    return render(request, "estoque/historico_estoque_manual.html", {"produto": produto, "pagina": pagina})
+
+
+@never_cache
 @require_POST
 def conferencia_estoque_confirmar(request, produto_id):
     usuario, operador_nome, resposta_operador = _operador_conferencia_estoque(request, acao="confirmar")
@@ -9132,7 +9149,7 @@ def _payload_envio_lista_fornecedor(envio):
         "telefoneDestinatario": envio.telefone_destinatario,
         "telefoneFormatado": _formatar_whatsapp_recente_fornecedor(envio.telefone_destinatario),
         "confirmadoEm": envio.confirmado_em.isoformat(),
-        "confirmadoEmTexto": timezone.localtime(envio.confirmado_em).strftime("%d/%m/%Y %H:%M"),
+        "confirmadoEmTexto": horario_legivel(envio.confirmado_em),
         "origemDestinatario": envio.origem_destinatario,
         "origemDestinatarioTexto": envio.get_origem_destinatario_display(),
         "confirmadoPor": envio.confirmado_por.get_username() if envio.confirmado_por else "",
@@ -9536,6 +9553,8 @@ def _gerar_lista_fornecedor_whatsapp_imagem(lista):
     largura_total = _texto_largura(draw, total_texto, fonte_total)
     draw.text((largura - margem - 20 - largura_total, y + 28), total_texto, fill=verde, font=fonte_total)
     draw.text((margem, y + 116), "Fim da lista", fill=suave, font=fonte_fim)
+
+    imagem = acrescentar_rodape_imagem(imagem, lista, _fonte_nota_whatsapp(24), _fonte_nota_whatsapp(24, True))
 
     png = BytesIO()
     imagem.save(png, format="PNG")
@@ -10571,6 +10590,8 @@ def _gerar_lista_fornecedor_interno_imagem(lista, tipo="analitica"):
             y += altura_card
 
     draw.text((margem, altura - 70), "Uso interno - nao confirma envio ao vendedor.", fill=suave, font=fonte_rodape)
+
+    imagem = acrescentar_rodape_imagem(imagem, lista, _fonte_nota_whatsapp(24), _fonte_nota_whatsapp(24, True))
 
     png = BytesIO()
     imagem.save(png, format="PNG")
@@ -15396,9 +15417,10 @@ def _montar_mensagem_curta_confirmacao_recebimento(dados):
         "",
         "Segue seu comprovante de pagamento.",
         "",
+        f"Data informada: {dados.get('data_recebimento') or 'Não informada'}",
         f"Total pago: {valor_pago}",
         f"Saldo atual: {saldo_atual}",
-    ])
+    ] + [""] + texto_horarios(campos_comprovante(dados)))
 
 
 def _serializar_dados_comprovante_recebimento(cliente, dados):
@@ -15564,7 +15586,7 @@ def conferencia_precos_antigo_salvar(request):
             },
             "preco_conferido": produto.preco_conferido,
             "preco_conferido_em": (
-                timezone.localtime(produto.preco_conferido_em).strftime("%d/%m/%Y %H:%M")
+                horario_legivel(produto.preco_conferido_em)
                 if produto.preco_conferido_em
                 else ""
             ),
@@ -15614,7 +15636,7 @@ def conferencia_precos_antigo_marcar_conferido(request):
             "ok": True,
             "produto_id": produto.pk,
             "preco_conferido": True,
-            "preco_conferido_em": timezone.localtime(produto.preco_conferido_em).strftime("%d/%m/%Y %H:%M"),
+            "preco_conferido_em": horario_legivel(produto.preco_conferido_em),
             "preco_conferido_por": operador,
         }
     )
@@ -18648,6 +18670,9 @@ def receber_cliente(request, cliente_id):
                                     f"Pix #{pix_baixado.id} marcado como baixado. Duplicados/inativos marcados: {duplicados_marcados}.",
                                 )
                             saldo_atual_confirmacao = resultado_operacao["saldo_atual"]
+                            horarios_exibicao = metadados_recebimento(operacao_recebimento)
+                            comprovante_dados = {**comprovante_dados, "_horarios_registro": horarios_exibicao}
+                            dados_confirmacao_whatsapp = {**dados_confirmacao_whatsapp, "_horarios_registro": horarios_exibicao}
                             comprovante_token = uuid4().hex
                             comprovantes_sessao = request.session.get("receber_cliente_comprovantes", {})
                             comprovantes_sessao[comprovante_token] = comprovante_dados
@@ -18819,6 +18844,7 @@ def _dados_comprovante_operacao_recebimento(operacao):
     dados.setdefault("contas_abertas", [])
     dados.setdefault("locacoes", [])
     dados.setdefault("locacoes_abertas", [])
+    dados["_horarios_registro"] = metadados_recebimento(operacao)
     return dados
 
 
@@ -19578,7 +19604,7 @@ def _mensagem_conferencia_recebimentos_rota(
     return "\n".join([
         "Confira os recebimentos desta rota:",
         detalhes_rota_url,
-    ])
+    ] + texto_horarios(campos_fechamento(fechamento_resumo.get("obj"))))
 
 
 def _funcionarios_whatsapp_conferencia_rota():
@@ -19613,8 +19639,10 @@ def _item_historico_recebimento_operacao(item, operacao_atual_id=None):
     usuario_nome = _nome_usuario_recebimento(item.criado_por)
     return {
         "operacao_id": item.id,
-        "hora": timezone.localtime(item.criado_em).strftime("%H:%M") if item.criado_em else "",
+        "hora": horario_legivel(item.criado_em),
         "criado_em": item.criado_em,
+        "recibo_confirmado_em": item.recibo_confirmado_em,
+        "recibo_dispensado_em": item.recibo_dispensado_em,
         "cliente_nome": item.cliente_nome_snapshot or (item.cliente.nome if item.cliente else "Cliente nao informado"),
         "valor_recebido": item.valor_recebido or Decimal("0.00"),
         "valor_recebido_formatado": _formatar_moeda(item.valor_recebido),
@@ -20694,6 +20722,7 @@ def receber_cliente_confirmar_recibo(request, cliente_id, operacao_id):
             "ok": True,
             "status_recibo": operacao.status_recibo,
             "ja_confirmado": True,
+            "confirmado_em": operacao.recibo_confirmado_em.isoformat() if operacao.recibo_confirmado_em else None,
             "mensagem": "Este recibo ja estava confirmado como enviado.",
             "confirmado_em": operacao.recibo_confirmado_em.isoformat() if operacao.recibo_confirmado_em else "",
             "confirmado_por": confirmado_por_nome,
@@ -21900,6 +21929,8 @@ def entrega_rota_checklist_cliente(request, rota_id, venda_id=None, rota_item_id
             "carregado": checklist.carregado,
             "entregue": checklist.entregue,
             "status": status,
+            "registro_criado_em": checklist.criado_em,
+            "registro_atualizado_em": checklist.atualizado_em,
         })
 
     final_statuses = []
@@ -25937,13 +25968,13 @@ def preparar_whatsapp_venda(request, pk):
 @require_POST
 def registrar_impressao(request, pk):
     venda = get_object_or_404(Venda, pk=pk)
-    _registrar_evento_venda(
+    evento = _registrar_evento_venda(
         venda,
         "nota_impressa",
         "Nota impressa.",
         canal="impressao",
     )
-    return JsonResponse({"sucesso": True, "mensagem": "Registro de impressão salvo."})
+    return JsonResponse({"sucesso": True, "mensagem": "Registro de impressão salvo.", "evento_criado_em": evento.criado_em.isoformat()})
 
 
 @require_POST
@@ -25972,7 +26003,7 @@ def registrar_whatsapp_aberto(request, pk):
             "atualizado_em",
         ])
 
-    _registrar_evento_venda(
+    evento = _registrar_evento_venda(
         venda,
         "whatsapp_aberto",
         "WhatsApp aberto para envio.",
@@ -25981,6 +26012,7 @@ def registrar_whatsapp_aberto(request, pk):
         origem_numero=origem_numero,
     )
     return JsonResponse({
+        "evento_criado_em": evento.criado_em.isoformat(),
         "sucesso": True,
         "mensagem": "Registro de abertura no WhatsApp salvo.",
         "whatsapp_status": venda.whatsapp_status,
@@ -26111,7 +26143,7 @@ def confirmar_whatsapp(request, pk):
         "whatsapp_confirmado_em",
         "atualizado_em",
     ])
-    _registrar_evento_venda(
+    evento = _registrar_evento_venda(
         venda,
         "whatsapp_confirmado",
         "Envio confirmado manualmente.",
@@ -26120,6 +26152,7 @@ def confirmar_whatsapp(request, pk):
         origem_numero=origem_numero,
     )
     return JsonResponse({
+        "evento_criado_em": evento.criado_em.isoformat(),
         "sucesso": True,
         "mensagem": "Confirmacao de envio via WhatsApp salva.",
         "whatsapp_status": venda.whatsapp_status,
@@ -26504,6 +26537,13 @@ def _gerar_paginas_nota_whatsapp(venda):
         y += 134
     draw.text((x1, y), "LA Neiva", fill=verde, font=fonte_label)
 
+    fonte_horarios = _fonte_nota_whatsapp(24)
+    fonte_horarios_negrito = _fonte_nota_whatsapp(24, True)
+    rodape = linhas_horarios(venda)
+    altura_linha_horarios = max(fonte_horarios.getbbox("Ag")[3], fonte_horarios_negrito.getbbox("Ag")[3]) + 12
+    adicionar_pagina_se_precisar(30 + len(rodape) * altura_linha_horarios)
+    y += 24
+    y = desenhar_horarios(draw, venda, x1, y, fonte_horarios, fonte_horarios_negrito)
     imagem.info["conteudo_altura"] = min(altura, y + 68)
     paginas.append(imagem)
     return paginas
@@ -26742,7 +26782,7 @@ def _gerar_conferencia_recebimentos_rota_imagem(
 
     draw.rounded_rectangle((x, y, direita, y + 122), radius=18, fill="#eff6ff", outline="#60a5fa", width=3)
     draw.text((x + 22, y + 18), f"Rota: {rota}", fill=texto, font=fonte_texto_negrito)
-    draw.text((x + 22, y + 66), f"Data: {data_referencia.strftime('%d/%m/%Y')}", fill=texto, font=fonte_texto)
+    draw.text((x + 22, y + 66), f"Data de referência: {data_referencia.strftime('%d/%m/%Y')}", fill=texto, font=fonte_texto)
     y += 146
 
     def desenhar_resumo(x_campo, y_campo, largura_campo, label, valor, destaque=False):
@@ -26812,6 +26852,9 @@ def _gerar_conferencia_recebimentos_rota_imagem(
         font=fonte_rodape,
     )
 
+    imagem = imagem_com_horarios(imagem, campos_fechamento(fechamento_resumo.get("obj")),
+        _fonte_nota_whatsapp(24), _fonte_nota_whatsapp(24, True))
+
     png = BytesIO()
     imagem.save(png, format="PNG")
     png.seek(0)
@@ -26872,7 +26915,7 @@ def _gerar_comprovante_recebimento_imagem(dados):
     cliente = dados.get("cliente_nome") or "Cliente"
     draw.rounded_rectangle((x, y, direita, y + 94), radius=14, fill="#fff8e8", outline="#ead19a", width=2)
     draw.text((x + 18, y + 12), f"Cliente: {cliente}", fill=texto, font=fonte_texto_negrito)
-    draw.text((x + 18, y + 44), f"Data: {dados.get('data_recebimento') or '-'}", fill=texto, font=fonte_texto)
+    draw.text((x + 18, y + 44), f"Data informada: {dados.get('data_recebimento') or '-'}", fill=texto, font=fonte_texto)
     draw.text((x + 18, y + 68), f"Forma: {dados.get('forma_pagamento') or '-'}", fill=suave, font=fonte_label)
     y += 108
 
@@ -26988,6 +27031,9 @@ def _gerar_comprovante_recebimento_imagem(dados):
     if altura_final < altura:
         imagem = imagem.crop((0, 0, largura, altura_final))
 
+    imagem = imagem_com_horarios(imagem, campos_comprovante(dados),
+        _fonte_nota_whatsapp(22), _fonte_nota_whatsapp(22, True))
+
     png = BytesIO()
     imagem.save(png, format="PNG")
     png.seek(0)
@@ -26997,6 +27043,21 @@ def _gerar_comprovante_recebimento_imagem(dados):
 def _gerar_recibo_recebimento_whatsapp_card(dados):
     largura = 480
     margem = 6
+    # Preserve readable minimum sizes even for amounts wider than the usual card.
+    medidor = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    for campo, tamanho, espaco in (
+        ("valor_pago", 40, 16), ("saldo_atual", 40, 16),
+        ("saldo_anterior", 20, 206), ("credito_gerado", 20, 206),
+    ):
+        texto = _formatar_moeda(_decimal_comprovante(dados.get(campo)))
+        caixa = medidor.textbbox((0, 0), texto, font=_fonte_recibo_card_bold(tamanho))
+        largura = max(largura, caixa[2] - caixa[0] + espaco + margem * 2)
+    saldo_aberto_card = sum(
+        (_decimal_comprovante(conta.get("saldo_atual")) for conta in dados.get("contas_abertas", [])),
+        Decimal("0.00"),
+    )
+    caixa = medidor.textbbox((0, 0), _formatar_moeda(saldo_aberto_card), font=_fonte_recibo_card_bold(20))
+    largura = max(largura, caixa[2] - caixa[0] + 218)
     conteudo_largura = largura - (margem * 2)
     fundo = "#f8fafc"
     papel = "#fffefc"
@@ -27057,7 +27118,8 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
         tamanho = getattr(fonte_base, "size", 64)
         while tamanho > tamanho_minimo:
             fonte = _fonte_recibo_card_bold(tamanho)
-            if _texto_largura(draw, texto, fonte) <= largura_maxima:
+            caixa = draw.textbbox((0, 0), texto, font=fonte)
+            if caixa[2] - caixa[0] <= largura_maxima:
                 return fonte
             tamanho -= 4
         return _fonte_recibo_card_bold(tamanho_minimo)
@@ -27066,10 +27128,20 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
         caixa = draw.textbbox((0, 0), "Ag", font=fonte)
         return caixa[3] - caixa[1]
 
+    def garantir_altura(necessaria):
+        nonlocal imagem, draw, altura
+        if necessaria > altura:
+            altura = int(necessaria) + 32
+            ampliada = Image.new("RGB", (largura, altura), fundo)
+            ampliada.paste(imagem, (0, 0))
+            imagem = ampliada
+            draw = ImageDraw.Draw(imagem)
+
     def desenhar_linhas_texto(x, y1, linhas, fonte, cor, entrelinhas=2):
         for linha in linhas:
-            draw.text((x, y1), linha, fill=cor, font=fonte)
-            y1 += altura_texto(fonte) + entrelinhas
+            caixa = draw.textbbox((0, 0), linha, font=fonte)
+            draw.text((x - caixa[0], y1 - caixa[1]), linha, fill=cor, font=fonte)
+            y1 += max(altura_texto(fonte), caixa[3] - caixa[1]) + entrelinhas
 
     def desenhar_linha(y1, label, valor, destaque=False, fundo_linha=None, fonte_valor_base=None, fonte_valor_regular=None):
         padding_y = 4 if not destaque else 3
@@ -27085,12 +27157,17 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             fonte_valor_linha = fonte_valor_regular
         linhas_valor = _quebrar_texto(draw, valor, fonte_valor_linha, valor_largura - 8)
         linhas_label = _quebrar_texto(draw, label, fonte_label_linha, label_largura - 6)
-        altura_label = len(linhas_label) * altura_texto(fonte_label_linha) + max(len(linhas_label) - 1, 0) * 2
-        altura_valor = len(linhas_valor) * altura_texto(fonte_valor_linha) + max(len(linhas_valor) - 1, 0) * 2
+        def altura_linhas(linhas, fonte):
+            caixas = [draw.textbbox((0, 0), linha, font=fonte) for linha in linhas]
+            return sum(max(altura_texto(fonte), c[3] - c[1]) for c in caixas) + max(len(linhas) - 1, 0) * 2
+
+        altura_label = altura_linhas(linhas_label, fonte_label_linha)
+        altura_valor = altura_linhas(linhas_valor, fonte_valor_linha)
         altura_linha = max(30 if not destaque else 50, altura_label, altura_valor) + (padding_y * 2)
         fundo_usado = fundo_linha or (verde_fundo if destaque else papel)
         borda_usada = verde_borda if destaque else borda_suave
 
+        garantir_altura(y1 + altura_linha)
         draw.rectangle((tabela_x, y1, tabela_direita, y1 + altura_linha), fill=fundo_usado, outline=borda_usada, width=2 if destaque else 1)
         draw.line((valor_x, y1, valor_x, y1 + altura_linha), fill=borda_usada, width=1)
         label_y = y1 + ((altura_linha - altura_label) / 2)
@@ -27106,22 +27183,25 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
             valor,
             fonte_valor_base,
             conteudo_largura - (padding_x * 2),
-            62,
+            40,
         )
-        altura_label = altura_texto(fonte_label_destaque)
-        altura_valor = altura_texto(fonte_valor_linha)
+        caixa_label = draw.textbbox((0, 0), label, font=fonte_label_destaque)
+        caixa_valor = draw.textbbox((0, 0), valor, font=fonte_valor_linha)
+        altura_label = caixa_label[3] - caixa_label[1]
+        altura_valor = caixa_valor[3] - caixa_valor[1]
         altura_linha = altura_label + altura_valor + (padding_y * 2) + 1
 
+        garantir_altura(y1 + altura_linha)
         draw.rectangle(
             (tabela_x, y1, tabela_direita, y1 + altura_linha),
             fill=fundo_linha,
             outline=borda_linha,
             width=2,
         )
-        draw.text((tabela_x + padding_x, y1 + padding_y), label, fill=cor_texto, font=fonte_label_destaque)
-        valor_largura_texto = _texto_largura(draw, valor, fonte_valor_linha)
+        draw.text((tabela_x + padding_x - caixa_label[0], y1 + padding_y - caixa_label[1]), label, fill=cor_texto, font=fonte_label_destaque)
+        valor_largura_texto = caixa_valor[2] - caixa_valor[0]
         valor_x_centralizado = tabela_x + ((tabela_direita - tabela_x - valor_largura_texto) / 2)
-        draw.text((valor_x_centralizado, y1 + padding_y + altura_label + 1), valor, fill=cor_texto, font=fonte_valor_linha)
+        draw.text((valor_x_centralizado - caixa_valor[0], y1 + padding_y + altura_label + 1 - caixa_valor[1]), valor, fill=cor_texto, font=fonte_valor_linha)
         return y1 + altura_linha
 
     cliente = dados.get("cliente_nome") or "Cliente"
@@ -27131,7 +27211,7 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     saldo_aberto = sum((_decimal_comprovante(conta.get("saldo_atual")) for conta in contas_abertas), Decimal("0.00"))
 
     y = desenhar_linha(y, "Cliente", cliente, fonte_valor_base=fonte_cliente)
-    y = desenhar_linha(y, "Data", data_recebimento)
+    y = desenhar_linha(y, "Data informada", data_recebimento)
     y = desenhar_linha(y, "Forma", forma_pagamento)
     y = desenhar_linha(y, "Saldo anterior", _formatar_moeda(saldo_anterior))
     y = desenhar_linha_destaque(
@@ -27178,10 +27258,14 @@ def _gerar_recibo_recebimento_whatsapp_card(dados):
     y = desenhar_linha(y, "Saldo restante", _formatar_moeda(saldo_aberto), fundo_linha="#f8fafc")
 
     y += 6
+    garantir_altura(y + 48)
     draw.text((margem + 6, y), "Obrigado. L A Neiva", fill=vinho_escuro, font=fonte_fim)
     altura_final = min(altura, max(y + 32, 440))
     if altura_final < altura:
         imagem = imagem.crop((0, 0, largura, altura_final))
+
+    imagem = imagem_com_horarios(imagem, campos_comprovante(dados),
+        _fonte_nota_whatsapp(18), _fonte_nota_whatsapp(18, True))
 
     png = BytesIO()
     imagem.save(png, format="PNG")

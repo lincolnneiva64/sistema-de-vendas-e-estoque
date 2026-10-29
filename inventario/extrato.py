@@ -10,6 +10,7 @@ from django.db.models import (BooleanField, CharField,
                               DecimalField, Exists, F, IntegerField, OuterRef, Subquery, Value)
 from django.db.models.functions import Cast, Concat, TruncDate
 from django.urls import reverse
+from estoque.documentos_horarios import FUSO_DOCUMENTOS
 from estoque.models import ItemVenda, MovimentacaoEstoqueManual
 
 from .rastreabilidade import ORIGENS
@@ -19,7 +20,7 @@ from .extrato_apresentacao import identificar_vendas, tecnicos_das_vendas
 
 
 COLUNAS = ('pk', 'dia', 'instante', 'fonte', 'documento', 'quantidade', 'unidade',
-           'pessoa', 'cancelada', 'origem', 'antes', 'depois', 'referencia', 'devolvido')
+           'pessoa', 'cancelada', 'origem', 'antes', 'depois', 'referencia', 'devolvido', 'ordem')
 
 
 def evidencia_inicial(pagina, inicio):
@@ -55,7 +56,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
             unidade=Value('', CharField()), pessoa=Value('', CharField()),
             cancelada=Value(False, BooleanField()), origem=Value('', CharField()),
             antes=Cast(Value(None), decimal), depois=Cast(Value(None), decimal),
-            referencia=Value('', CharField()), devolvido=Value(False, BooleanField()))
+            referencia=Value('', CharField()), devolvido=Value(False, BooleanField()), ordem=F('pk'))
         defaults.update(campos)
         return qs.order_by().annotate(dia=dia, instante=instante,
             fonte=Value(fonte, CharField()), **defaults).values(*COLUNAS)
@@ -65,15 +66,15 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     # Alias names must not conflict with concrete model fields (unidade etc.).
     # Project all sources through values() first, so annotate can reuse these names.
     compras_q = normalizar(recebidas.values('pk'), 'compra',
-        TruncDate('compra__estoque_entrada_realizada_em'), F('compra__estoque_entrada_realizada_em'),
+        TruncDate('compra__estoque_entrada_realizada_em', tzinfo=FUSO_DOCUMENTOS), F('compra__estoque_entrada_realizada_em'),
         documento=F('compra_id'), quantidade=F('quantidade'), unidade=F('unidade'),
         pessoa=F('compra__fornecedor__nome'), cancelada=F('compra__cancelada'))
-    vendas_q = normalizar(vendas.values('pk'), 'venda', TruncDate('venda__criado_em'),
+    vendas_q = normalizar(vendas.values('pk'), 'venda', TruncDate('venda__criado_em', tzinfo=FUSO_DOCUMENTOS),
         F('venda__criado_em'), documento=F('venda_id'),
         quantidade=F('quantidade'), unidade=F('unidade'), pessoa=F('venda__operador'),
         cancelada=F('venda__cancelada'), origem=F('venda__tipo_pagamento'),
         devolvido=F('venda__estoque_devolvido_cancelamento'))
-    removidos_q = normalizar(removidos.values('pk'), 'remocao', TruncDate('criado_em'), F('criado_em'),
+    removidos_q = normalizar(removidos.values('pk'), 'remocao', TruncDate('criado_em', tzinfo=FUSO_DOCUMENTOS), F('criado_em'),
         documento=F('venda_id'), quantidade=F('quantidade_snapshot'), unidade=F('unidade_snapshot'),
         pessoa=F('operador'), origem=F('status'), devolvido=F('estoque_devolvido'))
     manuais = MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id,
@@ -90,7 +91,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     if timeline:
         tecnicos = identificar_vendas(movimentos, vendas)
         movimentos = tecnicos.exclude(origem='venda', outro_movimento=False,
-            item_venda_documentado__isnull=False)
+            venda_com_edicao=False, item_venda_documentado__isnull=False)
         # Only a persisted application with the actual manual-movement FK proves
         # an applied regularization. Neither a title nor an observation is proof.
         aplicacao = AplicacaoAjuste.objects.filter(
@@ -102,7 +103,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
             aplicado_em=Subquery(aplicacao.values('aplicado_em')[:1]))
         regulares = todos_manuais.filter(aplicado_em__gte=inicio, aplicado_em__lt=fim) if inicio else todos_manuais.none()
         regularizacoes_q = normalizar(regulares.values('pk'), 'regularizacao',
-            TruncDate('aplicado_em'), F('aplicado_em'), documento=F('pk'),
+            TruncDate('aplicado_em', tzinfo=FUSO_DOCUMENTOS), F('aplicado_em'), documento=F('pk'),
             antes=F('estoque_antes'), depois=F('estoque_depois'))
         referencia_regular = regulares.filter(estoque_antes=OuterRef('antes'),
             estoque_depois=OuterRef('depois')).annotate(
@@ -111,9 +112,9 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         movimentos = movimentos.annotate(regular_documentado=Exists(referencia_regular)).exclude(
             origem='ajuste_manual', regular_documentado=True)
         manuais = manuais.annotate(aplicado_em=Subquery(aplicacao.values('aplicado_em')[:1])).filter(aplicado_em__isnull=True)
-    movimentos_q = normalizar(movimentos.values('pk'), 'digital', TruncDate('registrado_em'), F('registrado_em'),
-        origem=F('origem'), antes=F('antes'), depois=F('depois'), referencia=F('referencia'))
-    manuais_q = normalizar(manuais.values('pk'), 'manual', TruncDate('criado_em'), F('criado_em'),
+    movimentos_q = normalizar(movimentos.values('pk'), 'digital', TruncDate('registrado_em', tzinfo=FUSO_DOCUMENTOS), F('registrado_em'),
+        origem=F('origem'), antes=F('antes'), depois=F('depois'), referencia=F('referencia'), ordem=F('sequencia'))
+    manuais_q = normalizar(manuais.values('pk'), 'manual', TruncDate('criado_em', tzinfo=FUSO_DOCUMENTOS), F('criado_em'),
         documento=F('pk'), antes=F('estoque_antes'), depois=F('estoque_depois'),
         origem=F('tipo'), pessoa=F('operador_nome'),
         referencia=Concat('motivo', Value(' · '), 'observacao', output_field=CharField()))
@@ -130,7 +131,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         sem_data = todos.filter(venda__estoque_devolvido_cancelamento=True,
             venda__estoque_devolvido_cancelamento_em__isnull=True).exists()
     devolucoes_q = normalizar(devolucoes.values('pk'), 'cancelamento',
-        TruncDate('venda__estoque_devolvido_cancelamento_em'), F('venda__estoque_devolvido_cancelamento_em'),
+        TruncDate('venda__estoque_devolvido_cancelamento_em', tzinfo=FUSO_DOCUMENTOS), F('venda__estoque_devolvido_cancelamento_em'),
         documento=F('venda_id'), devolvido=F('venda__estoque_devolvido_cancelamento'))
     fontes = [vendas_q, removidos_q, movimentos_q, devolucoes_q, manuais_q]
     if regularizacoes_q is not None:
@@ -139,10 +140,10 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         # Include exactly this historical OK, even outside the selected interval.
         # UNION keeps chronological pagination in SQL, without loading all events.
         conferencia_q = normalizar(type(rodada).objects.filter(pk=rodada.pk).values('pk'),
-            'conferencia', TruncDate('ok_em'), F('ok_em'))
+            'conferencia', TruncDate('ok_em', tzinfo=FUSO_DOCUMENTOS), F('ok_em'))
         fontes.append(conferencia_q)
     unificada = compras_q.union(*fontes, all=True).order_by(
-        'dia', 'instante', 'fonte', 'pk')
+        'dia', 'instante', 'fonte', 'ordem', 'pk')
     pagina = Paginator(unificada, 50).get_page(params.get('extrato_pagina'))
     pagina.devolucao_sem_data = sem_data
     tecnicos_por_item = tecnicos_das_vendas(tecnicos, pagina) if timeline else {}
@@ -215,6 +216,11 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     if timeline and rodada:
         from .saldos_apresentacao import apresentar
         apresentar(pagina, rodada)
+    if produto_id:
+        from .extrato_edicoes import apresentar_edicoes
+        apresentar_edicoes(pagina, produto_id)
+        from .extrato_unidades import apresentar_unidades
+        apresentar_unidades(pagina, produto_id)
     pagina.saldo_inicial = evidencia_inicial(pagina, inicio)
     for sentido, numero in (('anterior', pagina.number - 1), ('proxima', pagina.number + 1)):
         consulta = params.copy()

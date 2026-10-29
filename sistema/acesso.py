@@ -13,7 +13,8 @@ PROTECAO_PROPRIA = {
     'locacoes.pickup_links': {'individual', 'send', 'manage'},
     'estoque.autorizacao_estoque': {'autorizar', 'autorizada'},
     'estoque.views': {'compras_lista_fornecedor_conferencia_externa',
-        'conferencia_estoque_confirmar', 'conferencia_estoque_corrigir', 'conferencia_estoque_produto'},
+        'conferencia_estoque_confirmar', 'conferencia_estoque_corrigir', 'conferencia_estoque_produto',
+        'historico_estoque_manual'},  # Same explicit stock actor/permission gate as the modal.
     'offline.views': {'snapshot', 'commercial_snapshot', 'synchronize', 'operation_result',
         'close_sale_conflict', 'sale_closure_result'},
 }

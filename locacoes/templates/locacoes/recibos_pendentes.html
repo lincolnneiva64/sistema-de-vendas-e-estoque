@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -36,7 +37,7 @@
             <tr>
               <td>#{{ pagamento.locacao_id }}</td>
               <td>{{ pagamento.locacao.nome_contratante }}</td>
-              <td>R$ {{ pagamento.valor|floatformat:2 }}</td>
+              <td>R$ {{ pagamento.valor|floatformat:2 }}{% include "locacoes/includes/horarios_pagamento.html" %}</td>
               <td>R$ {{ pagamento.locacao.saldo_devedor|floatformat:2 }}</td>
               <td><a class="btn btn-locacoes btn-sm" href="{% url 'locacoes:recibo_pagamento' pagamento.id %}">Abrir / reenviar</a></td>
             </tr>
@@ -46,6 +47,7 @@
         </tbody>
       </table>
     </section>
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 </body>
 </html>

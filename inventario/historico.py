@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.core.paginator import Paginator
 from django.db.models import Sum, OuterRef, Subquery
 from django.utils import timezone
+from estoque.documentos_horarios import FUSO_DOCUMENTOS
 from estoque.models import ItemCompra, ItemVenda, ItemVendaRemovido
 from .models import MovimentoObservado
 from .rastreabilidade import ORIGENS
@@ -44,7 +45,7 @@ def investigar(rodada, params):
         movimentos = movimentos.filter(registrado_em__gte=inicio, registrado_em__lt=fim)
         # Sales have a business date only: boundary-day documents are candidates,
         # not proof they happened after a purchase or before a physical count.
-        datas = (timezone.localtime(inicio).date(), timezone.localtime(fim-timedelta(microseconds=1)).date())
+        datas = (timezone.localtime(inicio, FUSO_DOCUMENTOS).date(), timezone.localtime(fim-timedelta(microseconds=1), FUSO_DOCUMENTOS).date())
         vendas = (vendas.filter(venda__criado_em__gte=inicio, venda__criado_em__lt=fim)
                   if timeline else vendas.filter(venda__data_venda__range=datas))
         removidos = removidos.filter(criado_em__gte=inicio, criado_em__lt=fim)

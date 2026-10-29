@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 {% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -445,7 +446,7 @@
           <tbody>
             {% for movimento in historico_movimentacoes %}
               <tr>
-                <td>{{ movimento.data_hora|date:"d/m/Y H:i" }}</td>
+                <td>Horário informado da movimentação: {% instante_registro movimento.data_hora %}<br>Registro no servidor: {% instante_registro movimento.criado_em %}</td>
                 <td>{{ movimento.get_item_display }}</td>
                 <td>{{ movimento.get_tipo_display }}</td>
                 <td>{{ movimento.quantidade }}</td>
@@ -460,7 +461,8 @@
         <p class="locacoes-muted mb-0">Nenhuma movimentacao registrada ainda.</p>
       {% endif %}
     </section>
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
       const botoes = document.querySelectorAll(

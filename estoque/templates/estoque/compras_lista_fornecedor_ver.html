@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Lista por Fornecedor #{{ lista.id }}
 <style>
   /* Ajuste compacto da tela Ver Lista */
@@ -383,8 +384,8 @@
     {% if ultimo_envio_interno %}
       <div class="lista-ver-envio-interno-grid">
         <div class="lista-ver-info">
-          <small>Ultimo envio</small>
-          <strong>{{ ultimo_envio_interno.registrado_em|date:"d/m/Y H:i" }}</strong>
+          <small style="color:#334155">Último envio interno registrado</small>
+          {% instante_registro ultimo_envio_interno.registrado_em %}
         </div>
         <div class="lista-ver-info">
           <small>Destino</small>
@@ -594,6 +595,7 @@
       Total da lista: R$ {{ lista.total_lista|floatformat:2 }}
     </div>
   </section>
+{% rodape_horarios lista %}
 </main>
 
 

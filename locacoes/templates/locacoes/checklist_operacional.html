@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 {% load static %}
 <html lang="pt-br">
@@ -25,7 +26,9 @@
     .tarefa-ordem { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; padding: 4px 8px; margin-bottom: 8px; background: #e0f2fe; color: #075985; font-size: 0.78rem; font-weight: 900; }
     .linha-topo { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
     .cliente { font-size: 1.05rem; font-weight: 900; }
-    .hora { white-space: nowrap; border-radius: 999px; padding: 5px 9px; background: #fff7ed; color: var(--orange-dark); font-weight: 900; border: 1px solid #fdba74; }
+    .hora { white-space: normal; overflow-wrap: anywhere; border-radius: 8px; padding: 5px 9px; background: #fff7ed; color: #334155; font-weight: 900; border: 1px solid #fdba74; }
+    .linha-topo > * { min-width: 0; }
+    @media (max-width: 560px) { .linha-topo { flex-wrap: wrap; } }
     .item.atrasada .hora { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
     .dados { display: grid; gap: 5px; margin-top: 8px; font-size: 0.94rem; }
     .materiais { margin: 8px 0 0; padding-left: 18px; }
@@ -94,7 +97,7 @@
         <article class="item historico-item">
           <div class="linha-topo">
             <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
-            {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+            {% if operacao.instante %}<span class="hora">Registro no servidor: {% instante_registro operacao.instante %}</span>{% endif %}
           </div>
           <div class="dados">
             <strong>{{ operacao.status }}</strong>
@@ -114,7 +117,7 @@
           <article class="item historico-admin">
             <div class="linha-topo">
               <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
-              {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+              {% if operacao.instante %}<span class="hora">Registro no servidor: {% instante_registro operacao.instante %}</span>{% endif %}
             </div>
             <div class="dados">
               <strong>Resolvida administrativamente — {{ operacao.tipo|capfirst }}</strong>
@@ -134,7 +137,7 @@
           <article class="item historico-admin">
             <div class="linha-topo">
               <a class="cliente tarefa-link" href="{% url 'locacoes:detalhe' operacao.locacao.pk %}">{{ operacao.cliente }}</a>
-              {% if operacao.instante %}<span class="hora">{{ operacao.instante|date:"H:i" }}</span>{% endif %}
+              {% if operacao.instante %}<span class="hora">Registro no servidor: {% instante_registro operacao.instante %}</span>{% endif %}
             </div>
             <div class="dados">
               <strong>{{ operacao.status }}</strong>
@@ -145,7 +148,8 @@
         {% endfor %}
       </section>
     {% endif %}
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
   {% include "locacoes/includes/enter_nav.html" %}
   <script>
     (function () {

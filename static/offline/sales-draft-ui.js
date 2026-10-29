@@ -1,4 +1,5 @@
 import '/offline/assets/connection-recovery-v1/sales.js';
+import {formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
@@ -143,9 +144,11 @@ function renderDeviceSales(operations) {
             sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
         const customer = operation.original_labels?.cliente?.nome || payload.cliente_id || 'Cliente não informado';
         const summary = document.createElement('span');
-        summary.textContent = `${state.label} ${customer} — ${payload.data_venda || operation.created_at} — `
+        summary.textContent = `${state.label} ${customer} — ${payload.data_venda || ('Criação informada pelo dispositivo: ' + formatOfflineTime(operation.created_at))} — `
             + `${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} — Ref. ${operation.operation_id}`;
+        timeText(summary, summary.textContent);
         row.append(summary);
+        row.append(operationTimes(operation));
         if (state.recordId) {
             const link = document.createElement('a');
             link.href = state.url; link.textContent = ` Abrir venda #${state.recordId}`;
@@ -179,10 +182,11 @@ async function refreshRecoveryList() {
         const option = document.createElement('option');
         option.value = item.key;
         const total = Number(item.total || 0).toLocaleString('pt-BR', {style:'currency',currency:'BRL'});
-        option.textContent = `${item.customer || 'Cliente não informado'} — ${item.item_count} item(ns) — ${total} — ${new Date(item.updated_at).toLocaleString('pt-BR')}`
+        option.textContent = `${item.customer || 'Cliente não informado'} — ${item.item_count} item(ns) — ${total} — Atualização no dispositivo: ${formatOfflineTime(item.updated_at)} (Belém)`
             + (item.legacy ? ' — rascunho legado' : ' — transferir de outra aba')
             + (item.blocked ? ` — bloqueado: ${item.reason}` : '');
         option.disabled = item.blocked;
+        option.style.color = '#1e293b'; option.style.fontWeight = '700';
         recoverySelect.append(option);
     }
     const singleCandidate = recoveryCandidates.length === 1 ? recoveryCandidates[0] : null;
@@ -312,11 +316,12 @@ async function refreshCompletion() {
         const payload = operation?.payload || {};
         const total = (payload.itens || []).reduce((sum, item) => sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
         const transport = operation?.transport === 'online' ? 'online' : 'offline';
-        message.textContent += ` Existe uma venda de origem ${transport} pendente de resolução. A conexão atual é indicada em Status. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. Data: ${payload.data_venda || marker.finalized_at}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. `
+        message.textContent += ` Existe uma venda de origem ${transport} pendente de resolução. A conexão atual é indicada em Status. Cliente: ${operation?.original_labels?.cliente?.nome || payload.cliente_id || 'Não informado'}. ${payload.data_venda ? 'Data da venda: ' + payload.data_venda : 'Conclusão informada pelo dispositivo: ' + formatOfflineTime(marker.finalized_at)}. Total: ${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})}. Status: ${completionView.status}. `
             + (completionView.status === 'conflito' ? 'Use Revisar venda no diagnóstico abaixo. Consultar Vendas e navegação continuam disponíveis; a montagem permanece protegida até a resolução.'
                 : 'Consulte o resultado pelo botão abaixo. Para reenviar manualmente quando permitido, abra Status → Sincronizar agora.');
         message.setAttribute('role', 'alert');
     } else message.setAttribute('role', 'status');
+    timeText(message, message.textContent);
     const canStartNext = localCompletion?.conclusion_mode === 'offline' && operation?.transport === 'offline'
         && operation.status === 'pendente' && operation.attempts === 0 && !operation.server_result && !queueBlocked;
     if (canStartNext) {

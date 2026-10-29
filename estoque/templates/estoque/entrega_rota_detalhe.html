@@ -1,4 +1,4 @@
-{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}{% load horarios_documentos %}
 {% block title %}Entrega #{{ rota.id }}{% endblock %}
 {% block content %}
 <style>
@@ -296,6 +296,7 @@
             <div class="venda-detalhe-head">
               <div>
                 <h3 class="venda-detalhe-title">{% if item_rota.is_pendencia %}Pendência - {% endif %}{{ item_rota.venda.cliente.nome|default:"Consumidor" }} - Venda #{{ item_rota.venda.id }}</h3>
+                <div class="venda-detalhe-meta">Registro do bloco: {% instante_registro item_rota.criado_em %}</div>
                 <div class="venda-detalhe-meta">Ordem {{ item_rota.ordem_entrega }}{% if item_rota.is_pendencia and item_rota.resumo_pendencia %} - {{ item_rota.resumo_pendencia }}{% else %} - Total R$ {{ item_rota.venda.total|floatformat:2 }}{% endif %}</div>
               </div>
               <a class="rota-btn primary" href="{% url 'estoque:venda_detalhe' item_rota.venda.id %}?entrega={{ rota.id }}">Abrir nota</a>
@@ -354,6 +355,7 @@
   </div>
 </div>
 {{ checklist_url|json_script:"checklist-url-data" }}
+<div style="max-width:1100px;margin:12px auto;padding:0 12px">{% rodape_horarios rota %}{% include "estoque/includes/aviso_horarios_registro.html" %}</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {

@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Lista de Compras #{{ lista.id }}
 
 
@@ -2734,6 +2735,7 @@
       </div>
     </div>
   </section>
+{% rodape_horarios lista %}
 </main>
 
 <script>

@@ -1,4 +1,5 @@
 {% extends "estoque/base.html" %}
+{% load horarios_documentos %}
 {% block title %}Comprovante enviado{% endblock %}
 {% block content %}
 <style>
@@ -33,7 +34,7 @@
         {% if pix.enviado_por_nome %}
           <div class="pix-success-row"><span>Enviado por</span><span>{{ pix.enviado_por_nome }}</span></div>
         {% endif %}
-        <div class="pix-success-row"><span>Cadastro</span><span>{{ pix.criado_em|date:"d/m/Y H:i" }}</span></div>
+        <div class="pix-success-row"><span>Cadastro do comprovante</span><span>{% instante_registro pix.criado_em %}</span></div>
         <div class="pix-success-row"><span>Status</span><span class="pix-success-status">OCR pendente / Conferencia pendente</span></div>
       </div>
 

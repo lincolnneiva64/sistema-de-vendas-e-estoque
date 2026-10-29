@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -30,16 +31,16 @@
     <section class="box">
       <div class="grid">
         <div>
-          <strong>Data da solicitação</strong><br>
-          {{ locacao.criado_em|date:"d/m/Y H:i" }}
+          <strong>Registro da locação no servidor</strong><br>
+          {% instante_registro locacao.criado_em %}
         </div>
         <div><strong>Pessoa/cliente</strong><br>{{ locacao.nome_contratante }}</div>
         <div><strong>Telefone</strong><br>{{ locacao.telefone_contratante|default:"-" }}</div>
         <div><strong>Endereco do contratante</strong><br>{{ locacao.endereco_contratante|default:"-"|linebreaksbr }}</div>
         <div><strong>Endereco da entrega</strong><br>{{ locacao.endereco_entrega|linebreaksbr }}</div>
-        <div><strong>Entrega</strong><br>{{ locacao.data_entrega|date:"d/m/Y" }} as {{ locacao.horario_entrega|time:"H:i" }}</div>
-        <div><strong>Evento</strong><br>{{ locacao.data_evento|date:"d/m/Y" }} as {{ locacao.horario_evento|time:"H:i" }}</div>
-        <div><strong>Devolucao prevista</strong><br>{{ locacao.data_prevista_devolucao|date:"d/m/Y" }}</div>
+        <div><strong>Entrega agendada</strong><br>{% agenda_locacao locacao.data_entrega locacao.horario_entrega %}</div>
+        <div><strong>Evento agendado</strong><br>{% agenda_locacao locacao.data_evento locacao.horario_evento %}</div>
+        <div><strong>Devolucao prevista</strong><br>{% agenda_locacao locacao.data_prevista_devolucao locacao.horario_previsto_devolucao %}</div>
         <div><strong>Status financeiro</strong><br>{{ locacao.get_status_financeiro_display }}</div>
       </div>
     </section>
@@ -67,10 +68,12 @@
       {{ form.responsavel }}
       <button class="btn btn-success mt-2" type="submit">Registrar termo gerado/impresso</button>
       {% if locacao.termo_gerado_em %}
-        <p class="mt-2 mb-0">Termo registrado em {{ locacao.termo_gerado_em|date:"d/m/Y H:i" }}{% if locacao.termo_gerado_por %} por {{ locacao.termo_gerado_por }}{% endif %}.</p>
+        <p class="mt-2 mb-0">Termo registrado em {% instante_registro locacao.termo_gerado_em %}{% if locacao.termo_gerado_por %} por {{ locacao.termo_gerado_por }}{% endif %}.</p>
       {% endif %}
     </form>
-  </main>
+  <p style="color:#334155;font-size:12px">Geração do termo registrada: {% instante_registro locacao.termo_gerado_em %}</p>
+<p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
   {% include "locacoes/includes/enter_nav.html" %}
 </body>
 </html>

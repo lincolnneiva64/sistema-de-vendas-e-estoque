@@ -1,4 +1,5 @@
 {% extends "estoque/base.html" %}
+{% load horarios_documentos %}
 
 {% block title %}Revisao de Produtos | {{ block.super }}{% endblock %}
 
@@ -107,7 +108,7 @@
                                         Gerenciar
                                     </button>
                                 </td>
-                                <td class="text-muted">{{ produto.criado_em|date:"d/m/Y" }}</td>
+                                <td class="text-muted"><span style="color:#334155">Cadastro registrado: {% instante_registro produto.criado_em %}</span></td>
                                 <td>
                                     <button type="submit" name="acao" value="excluir:{{ produto.id }}"
                                             class="btn btn-outline-danger btn-sm"

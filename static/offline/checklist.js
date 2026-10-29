@@ -1,4 +1,5 @@
 import {Repository, openDB} from '/offline/assets/2-8f/core.js';
+import {operationTimes} from '/offline/assets/2-8f/presentation.js';
 const indicator = document.getElementById('offline-global');
 const scope = {actor: indicator.dataset.actor, environment: indicator.dataset.environment};
 const local = document.body.dataset.localChecklist === 'true';
@@ -92,6 +93,7 @@ async function render() {
         for (const op of pending) {
             const li = document.createElement('li');
             li.textContent = `${op.status}: ${op.payload.observacao} · ${op.operation_id} ${op.last_error || ''}`;
+            li.append(operationTimes(op));
             list.append(li);
         }
     }

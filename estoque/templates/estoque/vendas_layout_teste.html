@@ -3030,6 +3030,7 @@ td:first-child {
             <div id="modalConferenciaEstoqueStatus" class="modal-conferencia-estoque-status pendente">Ainda não conferido</div>
         </div>
         <div id="modalConferenciaEstoqueHistorico" class="modal-conferencia-estoque-historico">Sem histórico de conferência.</div>
+        <a id="modalConferenciaEstoqueHistoricoLink" href="#" target="_blank" rel="noopener" hidden>Consultar histórico completo de conferências e ajustes</a>
         <div class="modal-conferencia-estoque-form">
             <button type="button" id="btnConfirmarConferenciaEstoque" class="modal-conferencia-estoque-btn secundario">Confirmar estoque atual</button>
             <label>
@@ -6052,11 +6053,13 @@ function formatarEstoqueConferencia(valor) {
 }
 
 function formatarDataConferenciaEstoque(valor) {
-    if (!valor) return "";
+    if (!valor) return "Horário não registrado";
     const data = new Date(valor);
-    if (Number.isNaN(data.getTime())) return "";
-    const dois = (numero) => String(numero).padStart(2, "0");
-    return `${dois(data.getDate())}/${dois(data.getMonth() + 1)}/${data.getFullYear()} ${dois(data.getHours())}:${dois(data.getMinutes())}`;
+    if (Number.isNaN(data.getTime())) return "Horário não registrado";
+    return new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Belem", day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+    }).format(data).replace(",", " às");
 }
 
 function classeBadgeConferenciaEstoque(opt) {
@@ -6214,15 +6217,15 @@ function renderizarHistoricoConferenciaEstoque(movimentacao) {
         return;
     }
     const data = formatarDataConferenciaEstoque(movimentacao.criado_em);
-    if (movimentacao.tipo === "conferencia") {
-        modalConferenciaEstoqueHistorico.textContent = `Conferido em ${data}. Estoque ${formatarEstoqueConferencia(movimentacao.estoque_depois)} estava correto.`;
-        return;
-    }
+    const diferenca = Number(movimentacao.diferenca);
     const linhas = [
-        `Corrigido em ${data}.`,
-        `${formatarEstoqueConferencia(movimentacao.estoque_antes)} -> ${formatarEstoqueConferencia(movimentacao.estoque_depois)}`,
+        `Registro no sistema: ${data} (America/Belem).`,
+        `Responsável registrado: ${movimentacao.operador || "Não identificado"}.`,
+        `Estoque anterior: ${formatarEstoqueConferencia(movimentacao.estoque_antes)}; posterior: ${formatarEstoqueConferencia(movimentacao.estoque_depois)}.`,
+        `Diferença: ${diferenca > 0 ? "+" : ""}${formatarEstoqueConferencia(movimentacao.diferenca)}.`,
+        movimentacao.motivo ? `Motivo: ${movimentacao.motivo}` : "Motivo não informado",
+        "Unidade histórica não registrada."
     ];
-    if (movimentacao.motivo) linhas.push(`Motivo: ${movimentacao.motivo}`);
     modalConferenciaEstoqueHistorico.textContent = linhas.join("\n");
 }
 
@@ -6232,6 +6235,11 @@ function renderizarModalConferenciaEstoque(dados) {
     conferenciaEstoquePermissoes = dados.permissoes || {confirmar: false, corrigir: false};
     if (autorizacaoConferenciaEstoque) autorizacaoConferenciaEstoque.hidden = !!(conferenciaEstoquePermissoes.confirmar && conferenciaEstoquePermissoes.corrigir);
     conferenciaEstoqueProdutoAtualId = String(produtoDados.id);
+    const linkHistorico = document.getElementById("modalConferenciaEstoqueHistoricoLink");
+    if (linkHistorico) {
+        linkHistorico.href = "{% url 'estoque:historico_estoque_manual' 0 %}".replace("/0/", `/${produtoDados.id}/`);
+        linkHistorico.hidden = false;
+    }
     conferenciaEstoqueOptionAtual = atualizarOptionConferenciaEstoque(produtoDados) || conferenciaEstoqueOptionAtual;
     if (modalConferenciaEstoqueProduto) modalConferenciaEstoqueProduto.textContent = produtoDados.nome || "Produto";
     if (modalConferenciaEstoqueAtual) modalConferenciaEstoqueAtual.textContent = formatarEstoqueConferencia(produtoDados.estoque_atual);
@@ -6262,6 +6270,7 @@ function abrirModalConferenciaEstoque(opt) {
         modalConferenciaEstoqueStatus.classList.remove("conferido", "pendente");
     }
     if (modalConferenciaEstoqueHistorico) modalConferenciaEstoqueHistorico.textContent = "";
+    document.getElementById("modalConferenciaEstoqueHistoricoLink").hidden = true;
     mostrarFeedbackConferenciaEstoque("Carregando estoque...");
     bloquearAcoesConferenciaEstoque(true);
 

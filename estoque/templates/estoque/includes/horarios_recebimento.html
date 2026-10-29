@@ -1,0 +1,7 @@
+{% load horarios_documentos %}
+<aside class="horarios-recebimento" style="margin:10px 0;padding:8px 0;border-top:1px solid #cbd5e1;color:#334155;font-size:12px;line-height:1.5;overflow-wrap:anywhere;break-inside:avoid" aria-label="Horários do registro">
+  {% for rotulo, valor in campos %}<div>{{ rotulo }}: {% instante_registro valor %}</div>{% endfor %}
+  {% if dinamico %}<div>Confirmação de envio do recibo: <span id="horarioConfirmacaoRecibo">{% instante_registro confirmacao_em %}</span></div>{% endif %}
+  <div>Horário de Belém (PA)</div>
+  {% if fechamento %}<div>Registro do fechamento no sistema; não representa um horário físico independente de finalização.</div>{% endif %}
+</aside>

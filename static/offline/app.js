@@ -1,5 +1,5 @@
 import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8f/core.js';
-import {renderIndicator} from '/offline/assets/2-8f/presentation.js';
+import {renderIndicator, formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {closedLocally,closureKey,installClosureUI,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
@@ -102,7 +102,8 @@ async function refreshCommunication(event = null) {
 async function render() {
     if (!repo) return;
     await refreshCommunication();
-    const operations = await repo.all('operations');
+    const [operations, history] = await Promise.all([repo.all('operations'), pilot ? repo.all('history') : []]);
+    const historyTimes = new Map(history.map(row => [row.operation_id, row.synchronized_at]));
     const scope = communicationScope();
     const scoped = operations.filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
     const closureMetadata=await repo.all('metadata');
@@ -118,8 +119,8 @@ async function render() {
         resetLog = document.createElement('span'); resetLog.id = 'offline-reset-log';
         resetLog.setAttribute('role', 'status'); badge.after(resetLog);
     }
-    if (resetLog) resetLog.textContent = stability.failedAt && !stability.ready(performance.now(), Date.now())
-        ? 'Estabilidade reiniciada \u00e0s ' + new Date(stability.failedAt).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}) + ' \u2014 motivo: falha de comunica\u00e7\u00e3o' : '';
+    if (resetLog) timeText(resetLog, stability.failedAt && !stability.ready(performance.now(), Date.now())
+        ? 'Estabilidade reiniciada — horário do dispositivo: ' + formatOfflineTime(stability.failedAt) + ' — motivo: falha de comunicação · Horário de Belém (PA)' : '');
     renderIndicator(badge, state, Math.floor(stability.elapsed(performance.now(), Date.now()) / 60000));
     if (syncing && modal.open) modalText.textContent = 'Sincronizando ' + progress.replace('/', ' de ') + '...';
     const observedConnection = connectionStatus(stability.connection, Date.now());
@@ -158,11 +159,13 @@ async function render() {
         if (revisionView?.recordId) row.textContent = `Conflito resolvido pela venda nº ${revisionView.recordId} · original ${op.operation_id}`;
         const closure=closureMetadata.find(row=>row.key===closureKey(op))?.receipt;
         if(closedLocally(closureMetadata,op))row.textContent=`Encerrada administrativamente — nenhuma venda gerada · original ${op.operation_id}`;
-        const diagnostic = operationDetails(op, scope, revisionView,closure);
+        const shownOperation = {...op, synchronized_at: historyTimes.get(op.operation_id)};
+        row.append(operationTimes(shownOperation));
+        const diagnostic = operationDetails(shownOperation, scope, revisionView,closure);
         if (diagnostic) { diagnostic.open = expanded.has(op.operation_id); row.append(diagnostic); }
         list.append(row);
     }
-    document.getElementById('offline-diagnostic').textContent = snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · snapshot: ${snapshot.prepared_at} · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.';
+    timeText(document.getElementById('offline-diagnostic'), snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · preparação informada pelo dispositivo: ${formatOfflineTime(snapshot.prepared_at)} · Horário de Belém (PA) · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.');
 }
 async function failConnection(event) {
     stopped = true;

@@ -191,6 +191,10 @@ class EstoqueManualServiceTests(TestCase):
         self.assertFalse(self.produto.estoque_conferido)
 
     def test_venda_normal_baixa_estoque_sem_historico_manual(self):
+        from django.contrib.auth.models import Permission
+        self.usuario.user_permissions.add(*Permission.objects.filter(content_type__app_label="estoque",
+            codename__in=("add_venda", "change_venda", "view_cliente", "view_produto")))
+        self.client.force_login(self.usuario)
         produto = Produto.objects.create(
             nome="Produto Venda Normal",
             unidade_compra="UN",

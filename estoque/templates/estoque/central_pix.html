@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Central de Pix{% endblock %}
 {% block content %}
 <style>
@@ -413,6 +414,13 @@
   .pix-pagador { font-weight: 750; color: #334155; }
   .pix-cell-muted, .pix-meta { color: #40576e; font-weight: 800; }
   .pix-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pix-table .pix-col-cadastro,
+  .pix-col-cadastro .pix-meta {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+  }
   .pix-sem-cliente {
     display: inline-flex; align-items: center; max-width: 100%;
     border: 1px solid #7dd3fc; border-radius: 999px; background: #e0f2fe;
@@ -626,7 +634,7 @@
               <tr>
                 <th class="pix-col-id">Nº Pix</th>
                 <th class="pix-col-data">Data do Pix</th>
-                <th class="pix-col-cadastro">Registrado em</th>
+                <th class="pix-col-cadastro" title="Cadastro do comprovante">Cadastro</th>
                 <th class="pix-col-cliente">Cliente</th>
                 <th class="pix-col-pagador">Pagador</th>
                 <th class="pix-col-enviado">Enviado por</th>
@@ -641,7 +649,7 @@
                 <tr class="pix-row {% if not pix.visualizado_em %}pix-row-novo{% endif %}">
                   <td class="pix-col-id"><span class="pix-id">#{{ pix.id }}</span></td>
                   <td class="pix-col-data"><span class="pix-meta">{{ pix.data_pagamento|date:"d/m/Y H:i"|default:"-" }}</span></td>
-                  <td class="pix-col-cadastro"><span class="pix-meta">{{ pix.criado_em|date:"d/m/Y H:i" }}</span></td>
+                  <td class="pix-col-cadastro"><span class="pix-meta">{% instante_registro pix.criado_em %}</span></td>
                   <td>
                     {% if pix.cliente %}
                       <span class="pix-cliente" title="{{ pix.cliente.nome }}">{{ pix.cliente.nome }}</span>

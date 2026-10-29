@@ -1,8 +1,16 @@
 ﻿{% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Compra #{{ compra.id }}{% endblock %}
 
 {% block content %}
 <style>
+  @media (max-width: 575.98px) {
+    #atalho-despesa-global {
+      position: static !important;
+      margin: 0 8px 12px;
+    }
+  }
+
   .nota-compra-wrap {
     max-width: 820px;
     margin: 6px auto 70px;
@@ -912,7 +920,7 @@
     <p>Os valores acima refletem a conciliação registrada; pagamentos posteriores permanecem no histórico financeiro.</p>
     <details><summary>Antes/depois e ajustes auditados</summary>
     {% for edicao in compra.edicoes.all %}{% if edicao.depois.ajustes %}
-      <p><strong>{{ edicao.criado_em|date:"d/m/Y H:i" }} — {{ edicao.usuario }}</strong>: {{ edicao.motivo }}</p>
+      <p style="color:#334155"><strong>Correção registrada: {% instante_registro edicao.criado_em %} — {{ edicao.usuario }}</strong>: {{ edicao.motivo }}</p>
       <p>Total anterior R$ {{ edicao.depois.ajustes.total_anterior }} → corrigido R$ {{ edicao.depois.ajustes.total_corrigido }}.</p>
       {% for item in edicao.depois.ajustes.itens %}<p>{{ item.nome_anterior|default:"Novo item" }} → {{ item.nome_corrigido }} — {{ item.quantidade }} {{ item.unidade }}; R$ {{ item.preco }}. Item original #{{ item.item_id|default:"novo" }} → item corrigido #{{ item.item_corrigido_id }}.</p>{% endfor %}
       {% for item in edicao.depois.ajustes.removidos %}<p>Removido: {{ item.nome }} (item #{{ item.item_id }}).</p>{% endfor %}
@@ -933,6 +941,7 @@
       </details>
     </section>
   {% endif %}
+  {% rodape_horarios compra %}
 </div>
 
 <div id="modalExcluirCompraDetalhe" class="nota-compra-modal">

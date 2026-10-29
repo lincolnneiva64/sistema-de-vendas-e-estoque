@@ -1,0 +1,6 @@
+{% load horarios_documentos %}
+<div style="color:#334155;font-size:12px;line-height:1.6;overflow-wrap:anywhere">
+  {% if tarefa.confirmado_em %}<div>Confirmação registrada no servidor: {% instante_registro tarefa.confirmado_em %}</div>{% endif %}
+  {% if tarefa.tentativa_em %}<div>Tentativa registrada no servidor: {% instante_registro tarefa.tentativa_em %}</div>{% endif %}
+  {% if tarefa.resolvida_em %}<div>Resolução administrativa: {% instante_registro tarefa.resolvida_em %} · Não comprova execução física.</div>{% endif %}
+</div>

@@ -547,10 +547,11 @@
     .confirmacao-envio-meta {
       display: none;
       margin-top: 8px;
-      color: #285f3b;
+      color: #334155;
       font-size: .74rem;
       font-weight: 850;
-      line-height: 1.35;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
     }
 
     .confirmacao-envio-meta.visivel {
@@ -1126,8 +1127,8 @@
       if (!envio) return "";
       const nome = texto(envio.nomeDestinatario, "Sem nome");
       const telefone = texto(envio.telefoneFormatado || envio.telefoneDestinatario, "");
-      const data = texto(envio.confirmadoEmTexto, "");
-      return `Envio ao vendedor confirmado em ${html(data)} para ${html(nome)} - ${html(telefone)}.`;
+      const data = texto(envio.confirmadoEmTexto, "Horário não registrado");
+      return `Confirmação de envio ao vendedor registrada no sistema: <strong class="horario-registro" style="color:#1e293b;font-size:12px;font-weight:700;overflow-wrap:anywhere;white-space:normal" title="Horário de Belém (PA) · America/Belem">${html(data)}</strong> para ${html(nome)} - ${html(telefone)}. <span style="color:#334155">Horário de Belém (PA). Não comprova entrega ou leitura no WhatsApp.</span>`;
     }
 
     function aplicarEnvioConfirmado(envio) {

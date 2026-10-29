@@ -1,8 +1,9 @@
+{% load horarios_documentos horarios_locacoes %}
       <div class="mini-dados">
         <div><strong>Cliente:</strong> {{ cliente_nome_checklist }}</div>
         {% if cliente_endereco_checklist %}<div><strong>Endereço cadastrado:</strong> {{ cliente_endereco_checklist|linebreaksbr }}{% if cliente_endereco_mapa_url %} · <a href="{{ cliente_endereco_mapa_url }}" target="_blank" rel="noopener">Abrir endereço cadastral no mapa</a>{% endif %}</div>{% endif %}
         {% if local_operacao_checklist %}<div><strong>Local da operação:</strong> {{ local_operacao_checklist|linebreaksbr }}{% if local_operacao_mapa_url %} · <a href="{{ local_operacao_mapa_url }}" target="_blank" rel="noopener">Abrir no mapa</a>{% endif %}</div>{% endif %}
         <div><strong>Telefone:</strong> {% if cliente_tel_url %}<a href="{{ cliente_tel_url }}">{{ cliente_telefone_checklist }}</a>{% else %}Não informado{% endif %}</div>
         {% if cliente_whatsapp_contato_url %}<div><a href="{{ cliente_whatsapp_contato_url }}" target="_blank" rel="noopener">Contatar pelo WhatsApp</a></div>{% endif %}
-        {% if data_operacao_checklist %}<div><strong>Recolhimento previsto:</strong> {{ data_operacao_checklist|date:"d/m/Y" }}{% if horario_operacao_checklist %} às {{ horario_operacao_checklist|time:"H:i" }}{% else %} · horário não informado{% endif %}</div>{% endif %}
+        {% if data_operacao_checklist %}<div><strong>Recolhimento previsto:</strong> {% agenda_locacao data_operacao_checklist horario_operacao_checklist %}</div>{% endif %}
       </div>

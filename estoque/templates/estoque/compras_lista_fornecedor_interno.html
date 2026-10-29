@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Lista Interna #{{ lista.id }}{% endblock %}
 
 {% block content %}
@@ -483,7 +484,7 @@
         {% for envio in envios_internos %}
           <div class="lista-interna-historico-item">
             <strong>
-              {{ envio.registrado_em|date:"d/m/Y H:i" }}
+              <span style="color:#334155">Envio interno registrado: {% instante_registro envio.registrado_em %}</span>
               -
               {{ envio.get_versao_display }}
             </strong>
@@ -530,6 +531,7 @@ Total: R$ {{ lista.total_lista|floatformat:2 }}
 {{ forloop.counter }}. {{ item.produto.nome|default:"Produto nao identificado" }} - {{ item.quantidade_final|floatformat:3 }} {{ item.unidade }} - R$ {{ item.total|floatformat:2 }}
 {% endfor %}
   </textarea>
+{% rodape_horarios lista %}
 </main>
 
 <script>

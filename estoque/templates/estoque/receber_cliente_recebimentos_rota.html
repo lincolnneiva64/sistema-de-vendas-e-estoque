@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_recebimentos %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -309,7 +310,7 @@
 
     .rcr-row-main {
       display: grid;
-      grid-template-columns: 72px minmax(0, 1fr) 140px;
+      grid-template-columns: minmax(120px, 175px) minmax(0, 1fr) 140px;
       gap: 12px;
       align-items: start;
     }
@@ -520,6 +521,7 @@
 </head>
 <body>
   <main class="rcr-page">
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
     <div class="rcr-shell">
       <header class="rcr-top">
         <div>
@@ -618,7 +620,7 @@
         {% if conferencia_concluida %}
           <div class="rcr-conference-grid">
             <span>Conferido por: {{ fechamento_resumo.usuario_nome }}</span>
-            <span>Finalizado em: {{ fechamento_resumo.finalizado_em|date:"d/m/Y H:i" }}</span>
+            <span>Registro do fechamento: {% instante_registro fechamento_resumo.obj.created_at %}</span>
             <span>Esperado: {{ fechamento_resumo.valor_esperado_formatado }}</span>
             <span>Contado: {{ fechamento_resumo.valor_contado_formatado }}</span>
             <span>{{ fechamento_resumo.diferenca_tipo }}: {{ fechamento_resumo.diferenca_formatada }}</span>
@@ -661,7 +663,7 @@
           {% for item in historico_recebimentos_rota_dia %}
             <article class="rcr-row">
               <div class="rcr-row-main">
-                <div class="rcr-time">{{ item.hora|default:"--:--" }}</div>
+                <div class="rcr-time">{% instante_registro item.criado_em %}{% if item.recibo_confirmado_em %}<div>Envio do recibo confirmado: {% instante_registro item.recibo_confirmado_em %}</div>{% endif %}{% if item.recibo_dispensado_em %}<div>Recibo dispensado: {% instante_registro item.recibo_dispensado_em %}</div>{% endif %}</div>
                 <strong class="rcr-client">{{ item.cliente_nome }}</strong>
                 <div class="rcr-money">
                   {{ item.valor_recebido_formatado }}
@@ -741,7 +743,8 @@
       </div>
 
     </div>
-  </main>
+  {% if fechamento_resumo %}{% horarios_fechamento fechamento_resumo.obj %}{% endif %}
+</main>
 
   {{ mensagem_conferencia|json_script:"mensagemConferenciaTexto" }}
 

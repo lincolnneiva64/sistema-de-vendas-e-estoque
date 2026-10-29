@@ -6,6 +6,7 @@ from . import views_grupos_produtos
 app_name = "estoque"
 
 urlpatterns = [
+    path("produtos/<int:produto_id>/historico-estoque-manual/", views.historico_estoque_manual, name="historico_estoque_manual"),
     path("conferencia-estoque/autorizar/", autorizacao_estoque.autorizar, name="conferencia_estoque_autorizar"),
     path("conferencia-estoque/autorizada/", autorizacao_estoque.autorizada, name="conferencia_estoque_autorizada"),
     path("produtos/grupos/", views_grupos_produtos.grupos_lista, name="grupos_produtos_lista"),

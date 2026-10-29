@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 
@@ -8,6 +10,10 @@ from .models import Produto
 
 class EstoqueManualVendasFrontendTests(TestCase):
     def setUp(self):
+        usuario = get_user_model().objects.create_user("leitor-estoque", password="teste")
+        usuario.user_permissions.add(*Permission.objects.filter(content_type__app_label="estoque",
+            codename__in=("view_venda", "view_cliente", "view_produto")))
+        self.client.force_login(usuario)
         self.produto_pendente = Produto.objects.create(
             nome="Produto Pendente Frontend",
             preco_compra=Decimal("10.00"),
@@ -237,11 +243,11 @@ class EstoqueManualVendasFrontendTests(TestCase):
         self.assertIn('motivo: modalConferenciaMotivo ? modalConferenciaMotivo.value : ""', html)
         self.assertNotIn("Informe o motivo", html)
 
-    def test_historico_de_correcao_omite_linha_de_motivo_quando_vazio(self):
+    def test_historico_de_correcao_identifica_motivo_ausente(self):
         html = self._html()
 
         self.assertIn("const linhas = [", html)
-        self.assertIn('if (movimentacao.motivo) linhas.push(`Motivo: ${movimentacao.motivo}`);', html)
+        self.assertIn('movimentacao.motivo ? `Motivo: ${movimentacao.motivo}` : "Motivo não informado"', html)
         self.assertIn('modalConferenciaEstoqueHistorico.textContent = linhas.join("\\n");', html)
         self.assertIn("white-space: pre-line;", html)
 

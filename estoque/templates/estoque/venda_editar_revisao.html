@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Editar nota - revisao{% endblock %}
 {% block content %}
 <style>
@@ -349,7 +350,7 @@
             <div class="edit-review-list">
               {% for evento in eventos %}
                 <div class="edit-review-list-item">
-                  <span class="edit-review-list-title">{{ evento.criado_em|date:"d/m/Y H:i" }} - {{ evento.tipo_evento }}</span>
+                  <span class="edit-review-list-title" style="color:#334155">Evento registrado: {% instante_registro evento.criado_em %} - {{ evento.tipo_evento }}</span>
                   <span class="edit-review-list-meta">{{ evento.descricao_exibicao|default:"Sem descricao." }}</span>
                 </div>
               {% endfor %}

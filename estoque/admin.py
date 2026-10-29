@@ -1,4 +1,5 @@
 from django.contrib import admin
+from .admin_horarios import HorariosAdminMixin, coluna_horario
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import Categoria, EnvioListaCompraFornecedor, Fornecedor, FornecedorContato, Funcionario, ItemVenda, OperacaoRecebimentoCliente, PixRecebido, Produto, ProdutoFornecedor, ResolucaoVisitaFornecedor, Unidade, Venda
@@ -39,19 +40,10 @@ admin.site.register(PixRecebido)
 
 
 @admin.register(OperacaoRecebimentoCliente)
-class OperacaoRecebimentoClienteAdmin(admin.ModelAdmin):
-    list_display = (
-        "id",
-        "cliente",
-        "cliente_nome_snapshot",
-        "valor_recebido",
-        "data_recebimento",
-        "forma_pagamento",
-        "rota_snapshot",
-        "status_recibo",
-        "criado_por",
-        "criado_em",
-    )
+class OperacaoRecebimentoClienteAdmin(HorariosAdminMixin, admin.ModelAdmin):
+    horarios_admin = {'criado_em': 'Recebimento registrado no servidor', 'recibo_confirmado_em': 'Confirmação de envio do recibo registrada', 'atualizado_em': 'Última atualização no servidor', 'recibo_dispensado_em': 'Dispensa do recibo registrada'}
+    horario_criado_em = coluna_horario('criado_em', 'Recebimento registrado no servidor')
+    list_display = ('id', 'cliente', 'cliente_nome_snapshot', 'valor_recebido', 'data_recebimento', 'forma_pagamento', 'rota_snapshot', 'status_recibo', 'criado_por', 'horario_criado_em')
     list_filter = (
         "status_recibo",
         "data_recebimento",
@@ -78,8 +70,10 @@ class FornecedorAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProdutoFornecedor)
-class ProdutoFornecedorAdmin(admin.ModelAdmin):
-    list_display = ("produto", "fornecedor", "ativo", "criado_em")
+class ProdutoFornecedorAdmin(HorariosAdminMixin, admin.ModelAdmin):
+    horarios_admin = {'criado_em': 'Vínculo criado no servidor'}
+    horario_criado_em = coluna_horario('criado_em', 'Vínculo criado no servidor')
+    list_display = ('produto', 'fornecedor', 'ativo', 'horario_criado_em')
     search_fields = ("produto__nome", "fornecedor__nome", "fornecedor__nome_fantasia")
     list_filter = ("ativo",)
 
@@ -87,15 +81,10 @@ class ProdutoFornecedorAdmin(admin.ModelAdmin):
 
 
 @admin.register(ResolucaoVisitaFornecedor)
-class ResolucaoVisitaFornecedorAdmin(admin.ModelAdmin):
-    list_display = (
-        "fornecedor",
-        "data_visita_original",
-        "tipo_resolucao",
-        "nova_data_visita",
-        "responsavel",
-        "resolvido_em",
-    )
+class ResolucaoVisitaFornecedorAdmin(HorariosAdminMixin, admin.ModelAdmin):
+    horarios_admin = {'resolvido_em': 'Resolução administrativa registrada', 'atualizado_em': 'Última atualização no servidor'}
+    horario_resolvido_em = coluna_horario('resolvido_em', 'Resolução administrativa registrada')
+    list_display = ('fornecedor', 'data_visita_original', 'tipo_resolucao', 'nova_data_visita', 'responsavel', 'horario_resolvido_em')
     search_fields = (
         "fornecedor__nome",
         "observacao",
@@ -113,8 +102,10 @@ class ResolucaoVisitaFornecedorAdmin(admin.ModelAdmin):
 
 
 @admin.register(EnvioListaCompraFornecedor)
-class EnvioListaCompraFornecedorAdmin(admin.ModelAdmin):
-    list_display = ("lista", "fornecedor", "nome_destinatario", "telefone_destinatario", "origem_destinatario", "confirmado_em", "confirmado_por")
+class EnvioListaCompraFornecedorAdmin(HorariosAdminMixin, admin.ModelAdmin):
+    horarios_admin = {'confirmado_em': 'Confirmação de envio ao fornecedor registrada', 'criado_em': 'Registro criado no servidor', 'atualizado_em': 'Última atualização no servidor'}
+    horario_confirmado_em = coluna_horario('confirmado_em', 'Confirmação de envio ao fornecedor registrada')
+    list_display = ('lista', 'fornecedor', 'nome_destinatario', 'telefone_destinatario', 'origem_destinatario', 'horario_confirmado_em', 'confirmado_por')
     search_fields = ("lista__id", "fornecedor__nome", "nome_destinatario", "telefone_destinatario")
     list_filter = ("origem_destinatario", "confirmado_em")
     readonly_fields = ("criado_em", "atualizado_em")

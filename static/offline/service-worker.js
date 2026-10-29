@@ -1,5 +1,5 @@
 // Refresh modules inherited from upstream, including independent sales drafts.
-const CACHE = 'offline-pilot-shell-v41-indicador-conexao';
+const CACHE = 'offline-pilot-shell-v43-horarios-belem';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/assets/2-8h-pickup/checklist.js');
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');

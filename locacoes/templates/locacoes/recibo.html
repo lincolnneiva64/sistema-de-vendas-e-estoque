@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -143,6 +144,12 @@
       .grid, .acoes-doc { grid-template-columns: 1fr; }
       h1 { font-size: 1.18rem; }
     }
+    @media print {
+      .mensagem-card, .painel, .topo > a, .acoes-doc { display: none; }
+      body { background: #fff; }
+      .page { max-width: none; padding: 0; }
+      .doc-card { box-shadow: none; break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -195,16 +202,16 @@
 
         <div class="grid">
           <div class="dado">
-            <span class="rotulo">Entrega</span>
-            {{ locacao.data_entrega|date:"d/m/Y" }} as {{ locacao.horario_entrega|time:"H:i" }}
+            <span class="rotulo">Entrega agendada</span>
+            {% agenda_locacao locacao.data_entrega locacao.horario_entrega %}
           </div>
           <div class="dado">
-            <span class="rotulo">Evento</span>
-            {{ locacao.data_evento|date:"d/m/Y" }} as {{ locacao.horario_evento|time:"H:i" }}
+            <span class="rotulo">Evento agendado</span>
+            {% agenda_locacao locacao.data_evento locacao.horario_evento %}
           </div>
           <div class="dado">
             <span class="rotulo">Devolucao prevista</span>
-            {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}
+            {% agenda_locacao locacao.data_prevista_devolucao locacao.horario_previsto_devolucao %}
           </div>
           <div class="dado">
             <span class="rotulo">Pagamento</span>
@@ -212,7 +219,8 @@
           </div>
         </div>
 
-        <span class="rotulo mt-3">Materiais contratados</span>
+        {% include "locacoes/includes/horarios_pagamento.html" %}
+<span class="rotulo mt-3">Materiais contratados</span>
         <ul class="materiais">
           {% for item in locacao.itens.all %}
             <li>{{ item.quantidade }} {{ item.get_tipo_display }}</li>
@@ -284,13 +292,13 @@
           <div class="estado-final">
             <strong>Recibo enviado.</strong>
             {% if pagamento.recibo_enviado_por %}Enviado por {{ pagamento.recibo_enviado_por }}.{% endif %}
-            {% if pagamento.recibo_enviado_em %} Registrado em {{ pagamento.recibo_enviado_em|date:"d/m/Y H:i" }}.{% endif %}
+            {% if pagamento.recibo_enviado_em %} Registrado em {% instante_registro pagamento.recibo_enviado_em %}.{% endif %}
           </div>
         {% else %}
           <div class="estado-final dispensado">
             <strong>Envio dispensado.</strong>
             {% if pagamento.recibo_dispensado_por %}Dispensado por {{ pagamento.recibo_dispensado_por }}.{% endif %}
-            {% if pagamento.recibo_dispensado_em %} Registrado em {{ pagamento.recibo_dispensado_em|date:"d/m/Y H:i" }}.{% endif %}
+            {% if pagamento.recibo_dispensado_em %} Registrado em {% instante_registro pagamento.recibo_dispensado_em %}.{% endif %}
             {% if pagamento.recibo_dispensa_observacao %}<div class="mt-2">Motivo: {{ pagamento.recibo_dispensa_observacao }}</div>{% endif %}
           </div>
         {% endif %}
@@ -304,7 +312,8 @@
         <a class="btn btn-success w-100 btn-doc" href="{{ tarefa_entrega_url }}">Preparar entrega</a>
       </section>
     {% endif %}
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 
   {% include "locacoes/includes/enter_nav.html" %}
   <script>

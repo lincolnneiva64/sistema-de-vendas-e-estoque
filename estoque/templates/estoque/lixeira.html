@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load horarios_documentos %}
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
@@ -236,7 +237,7 @@ to{
                 <td>{{ produto.quantidade }}</td>
                 <td>{{ produto.estoque_minimo }}</td>
                 <td class="data-exclusao">
-    {{ produto.excluido_em|date:"d/m/Y H:i" }}
+    <span style="color:#334155">Exclusão registrada: {% instante_registro produto.excluido_em %}</span>
 </td>
                 <td>
     <div class="acoes-lixeira">

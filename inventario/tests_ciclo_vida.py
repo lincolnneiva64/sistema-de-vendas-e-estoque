@@ -228,7 +228,10 @@ class CicloVidaTests(CicloFixture, TestCase):
         for versao, numero in [(0, "6"), (1, "8")]:
             resposta = client.post(contar, {"acao": "ok", "versao": versao, "embalagens": numero, "avulsos": "", "csrfmiddlewaretoken": csrf})
             self.assertEqual(resposta.status_code, 200)
-            self.assertEqual(set(resposta.json()["produto"]), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo", "passo_avulsos", "embalagens", "avulsos", "versao", "guardado", "conferido", "ok_em", "ultimo_ok"})
+            produto_resposta = resposta.json()["produto"]
+            self.assertEqual(set(produto_resposta), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo", "passo_avulsos", "embalagens", "avulsos", "versao", "guardado", "conferido", "ok_em", "ultimo_ok", "exibir_total", "total_convertido"})
+            self.assertIs(produto_resposta["exibir_total"], False)
+            self.assertEqual(produto_resposta["total_convertido"], "")
         finalizar = reverse("inventario:finalizar")
         self.assertEqual(client.post(finalizar, {"versao": self.versao()}).status_code, 403)
         self.assertEqual(client.post(finalizar, {"versao": self.versao(), "csrfmiddlewaretoken": csrf}).status_code, 200)
@@ -237,6 +240,33 @@ class CicloVidaTests(CicloFixture, TestCase):
         resposta = client.get(reverse("inventario:mobile"))
         self.assertContains(resposta, "Conferência finalizada e enviada")
         self.assertNotContains(resposta, "Referência")
+
+    def test_total_convertido_usa_contagem_e_cadastro_congelado_sem_revelar_estoque(self):
+        item = self.rodada.item
+        item.cadastro = dict(item.cadastro, base="PCT", secundaria="KG", fator="10",
+            fracionado=True, continua=False, secundaria_continua=True)
+        item.save(update_fields=["cadastro"])
+        # Current product data must not replace the rule frozen for this count.
+        Produto.objects.filter(pk=self.produto.pk).update(fator_conversao=99)
+        self.client.post(reverse("inventario:convite", args=[self.token]))
+        resposta = self.client.post(reverse("inventario:contar", args=[self.rodada.pk]),
+            {"acao": "salvar", "versao": 0, "embalagens": "2", "avulsos": "5.5"})
+        self.assertEqual(resposta.status_code, 200)
+        payload = resposta.json()["produto"]
+        self.assertIs(payload["exibir_total"], True)
+        self.assertEqual(payload["total_convertido"], "2,550")
+        self.assertEqual(set(payload), {"id", "nome", "codigo", "base", "secundaria",
+            "fracionado", "passo", "passo_avulsos", "embalagens", "avulsos", "versao",
+            "guardado", "conferido", "ok_em", "ultimo_ok", "exibir_total", "total_convertido"})
+        self.produto.refresh_from_db()
+        self.assertEqual(self.produto.quantidade, 10)
+        self.assertNotEqual(payload["total_convertido"], "10,000")
+        # A draft may use the frozen rule; confirming changed product data stays blocked.
+        recusada = self.client.post(reverse("inventario:contar", args=[self.rodada.pk]),
+            {"acao": "ok", "versao": 1, "embalagens": "2", "avulsos": "5.5"})
+        self.assertEqual(recusada.status_code, 409)
+        self.assertIn("Cadastro alterado", recusada.json()["erro"])
+        self.assertFalse(ConfirmacaoContagem.objects.exists())
 
 
 @skipUnless(connection.vendor == "postgresql", "Exige PostgreSQL descartável")

@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_recebimentos %}
 
 <style>
 /* Ajuste seguro do topo da tela Pedidos */
@@ -1035,6 +1036,7 @@
 </style>
 </head>
 <body>
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
 
 <aside class="pedidos-atalhos-lateral" id="atalhosPedidos" aria-label="Atalhos de pedidos">
   <button type="button" class="pedidos-atalhos-toggle" id="btnatalhosPedidos" aria-expanded="false" aria-controls="atalhosPedidosPainel">Atalhos</button>
@@ -1182,7 +1184,7 @@
                         {% for pedido in pedidos %}
                             <tr>
                                 <td class="col-id" data-label="Pedido"><span class="pedido-id">#{{ pedido.id }}</span></td>
-                                <td class="pedido-data" data-label="Criado em">{{ pedido.criado_em|date:"d/m/Y H:i" }}</td>
+                                <td class="pedido-data" data-label="Registro e atualização" style="white-space:normal">Registro: {% instante_registro pedido.criado_em %}<div>Atualização: {% instante_registro pedido.atualizado_em %}</div></td>
                                 <td class="pedido-cliente col-cliente" data-label="Cliente">
                                     {% if pedido.cliente %}
                                         {{ pedido.cliente.nome }}

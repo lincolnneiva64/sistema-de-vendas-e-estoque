@@ -1,3 +1,4 @@
+{% load horarios_documentos %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -441,7 +442,8 @@
         </div>
       {% endif %}
     </section>
-  </main>
+  {% rodape_horarios lista %}
+</main>
 
   {% if checklist_externa_editavel %}
   <script>

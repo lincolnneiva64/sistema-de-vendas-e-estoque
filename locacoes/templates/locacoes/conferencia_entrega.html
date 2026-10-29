@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -199,7 +200,8 @@
       <section class="box sucesso">
         <h2>Entrega registrada com sucesso.</h2>
         <div class="mini-dados">
-          <div><strong>Situação:</strong> {{ conferencia_salva.get_situacao_display }}</div>
+          <div>Conferência registrada no servidor: {% instante_registro conferencia_salva.criado_em %}</div>
+<div><strong>Situação:</strong> {{ conferencia_salva.get_situacao_display }}</div>
           <div><strong>Checklist:</strong> <a href="{{ checklist_url }}" target="_blank" rel="noopener">Abrir checklist salvo</a></div>
           <div><strong>Cliente:</strong> {{ locacao.nome_contratante }}</div>
           <div><strong>WhatsApp:</strong> {{ telefone_cliente_exibicao|default:"Não informado" }}</div>
@@ -405,7 +407,9 @@
       </form>
     </section>
     {% endif %}
-  </main>
+  <div style="color:#334155;font-size:12px;line-height:1.6">Agendamento: {% agenda_locacao tarefa.data_agendada tarefa.horario_agendado %}{% include "locacoes/includes/horarios_tarefa.html" %}</div>
+<p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 
   {% include "locacoes/includes/enter_nav.html" %}
 

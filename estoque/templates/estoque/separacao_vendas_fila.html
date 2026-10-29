@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Fila de separacao{% endblock %}
 {% block content %}
 <style>
@@ -203,7 +204,7 @@
                       <span class="sep-cliente">{{ separacao.venda.cliente.nome|default:"Consumidor" }}</span>
                     </div>
                     <div class="sep-meta">Responsavel: {{ separacao.responsavel.nome|default:"Nao definido" }}</div>
-                    <div class="sep-meta">Enviada em {{ separacao.enviado_em|date:"d/m/Y H:i" }}</div>
+                    <div class="sep-meta" style="color:#334155">Envio para separação registrado: {% instante_registro separacao.enviado_em %}</div>
                   </div>
                   <span class="sep-status {{ separacao.status_operacional }}">{{ separacao.texto_selo_fila }}</span>
                 </div>

@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 from estoque.models import Funcionario
+from estoque.horarios_recebimentos import horario_legivel
 from .models import AutorizacaoRecolhimento, TarefaOperacionalLocacao, EventoLocacao
 from .pickup_security import PICKUP_PERMISSIONS
 
@@ -124,7 +125,7 @@ def send(request, pk):
                       f'validade {grant.expira_em.isoformat()}; origem: envio operacional pelo painel.')
     link = _individual_url(request, token)
     message = (f'Recolhimento — {task.locacao.nome_contratante}\nResponsável: {employee.nome}\n'
-               f'Link individual válido até {timezone.localtime(grant.expira_em):%d/%m/%Y %H:%M}. '
+               f'Link individual válido até *{horario_legivel(grant.expira_em)}* (Horário de Belém, PA). '
                f'Não encaminhe a terceiros.\n{link}')
     return protect(JsonResponse({'whatsapp_url': whatsapp_web_url(phone, message),
         'autorizacao_id': grant.pk, 'reutilizado': reused, 'expira_em': grant.expira_em.isoformat()}))

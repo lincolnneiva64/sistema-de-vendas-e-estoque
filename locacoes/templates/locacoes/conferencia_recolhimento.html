@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -543,7 +544,7 @@
         <article class="historico-item">
           <div class="historico-topo">
             <strong>
-              {{ conferencia.criado_em|date:"d/m/Y H:i" }}
+              <span>Registro da conferência no servidor:</span> {% instante_registro conferencia.criado_em %}
             </strong>
 
             {% if conferencia.situacao == "completa" %}
@@ -600,7 +601,7 @@
           {% if conferencia.previsao_conclusao %}
             <div>
               <strong>Previsão para concluir:</strong>
-              {{ conferencia.previsao_conclusao|date:"d/m/Y H:i" }}
+              {% instante_registro conferencia.previsao_conclusao %}
             </div>
           {% endif %}
 
@@ -653,7 +654,9 @@
         </div>
       </div>
     </details>
-  </main>
+  <div style="color:#334155;font-size:12px;line-height:1.6">Agendamento: {% agenda_locacao tarefa.data_agendada tarefa.horario_agendado %}{% include "locacoes/includes/horarios_tarefa.html" %}</div>
+<p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 
   {% include "locacoes/includes/enter_nav.html" %}
 

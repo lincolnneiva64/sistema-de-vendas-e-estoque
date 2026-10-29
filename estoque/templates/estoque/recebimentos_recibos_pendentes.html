@@ -1,4 +1,4 @@
-{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}{% load horarios_documentos horarios_recebimentos %}
 {% block title %}Recibos pendentes{% endblock %}
 {% block content %}
 
@@ -317,7 +317,8 @@
             </div>
             <div class="recibo-meta-item">
               <span>Data/hora</span>
-              <strong>{{ pendencia.operacao.criado_em|date:"d/m/Y H:i" }}</strong>
+              <span>Data informada: {{ pendencia.operacao.data_recebimento|date:"d/m/Y" }}</span>
+              {% horarios_recebimento pendencia.operacao %}
             </div>
             <div class="recibo-meta-item">
               <span>Rota</span>

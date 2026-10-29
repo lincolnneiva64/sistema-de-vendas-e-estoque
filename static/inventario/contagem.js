@@ -164,6 +164,15 @@ document.querySelectorAll('form.contagem').forEach(form => {
         editar.textContent = form.dataset.confirmado === 'true' ? 'Recontar produto' : 'Continuar contagem';
     };
     const atualizarVisual = confirmado => {
+        const horarioOK = cartao.querySelector('[data-horario-ultimo-ok]');
+        if (horarioOK) {
+            const iso = ultimoOK?.ok_em;
+            const data = iso && /(Z|[+-]\d{2}:\d{2})$/.test(iso) ? new Date(iso) : null;
+            horarioOK.textContent = data && !Number.isNaN(data.getTime())
+                ? new Intl.DateTimeFormat('pt-BR', {timeZone:'America/Belem', day:'2-digit', month:'2-digit', year:'numeric',
+                    hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'}).format(data).replace(',', ' às')
+                : 'Horário não registrado';
+        }
         cartao.classList.toggle('produto-conferido', confirmado);
         cartao.classList.toggle('produto-pendente', !confirmado && jaConfirmado);
         cartao.querySelector('.estado-produto').textContent = confirmado ? 'Conferido'

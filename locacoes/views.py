@@ -24,6 +24,7 @@ from urllib.parse import quote, urlencode
 
 from .consulta import ABAS, MARCO_OPERACIONAL, classificar_locacao, consulta_operacional, resumo_financeiro_locacoes
 from .periodos import periodos_consulta
+from .horarios import agenda_locacao, instante_locacao
 from .services import funcionarios_operacionais_locacoes, indicador_operacional_locacao
 
 from .forms import (
@@ -180,14 +181,14 @@ def _mensagem_recibo_whatsapp(pagamento):
         "Cliente:",
         locacao.nome_contratante,
         "",
-        "Evento:",
-        f"{locacao.data_evento:%d/%m/%Y} as {locacao.horario_evento:%H:%M}",
+        "Evento agendado:",
+        f"*{agenda_locacao(locacao.data_evento, locacao.horario_evento)}*",
         "",
-        "Entrega:",
-        f"{locacao.data_entrega:%d/%m/%Y} as {locacao.horario_entrega:%H:%M}",
+        "Entrega agendada:",
+        f"*{agenda_locacao(locacao.data_entrega, locacao.horario_entrega)}*",
         "",
         "Devolucao prevista:",
-        f"{locacao.data_prevista_devolucao:%d/%m/%Y}",
+        f"*{agenda_locacao(locacao.data_prevista_devolucao, locacao.horario_previsto_devolucao)}*",
         "",
         "Materiais locados:",
         *(itens or ["- Nenhum material informado"]),
@@ -196,7 +197,16 @@ def _mensagem_recibo_whatsapp(pagamento):
         f"Situacao: {situacao}",
         f"Valor pago: R$ {pagamento.valor:.2f}",
         f"Saldo: R$ {locacao.saldo_devedor:.2f}",
+        f"Pagamento — horário informado: *{instante_locacao(pagamento.data_hora)}*",
+        f"Registro do pagamento no servidor: *{instante_locacao(pagamento.criado_em)}*",
+        "Horário de Belém (PA) · America/Belem",
+        "Agendamentos e previsões não comprovam execução física.",
     ]
+
+    if pagamento.recibo_enviado_em:
+        linhas.append(f"Confirmação de envio do recibo: *{instante_locacao(pagamento.recibo_enviado_em)}*")
+    if pagamento.recibo_dispensado_em:
+        linhas.append(f"Dispensa do recibo registrada: *{instante_locacao(pagamento.recibo_dispensado_em)}*")
 
     if pagamento.observacao:
         linhas.extend(["", "Observacao:", pagamento.observacao])
@@ -336,8 +346,9 @@ def _texto_checklist_entrega(conferencia):
         "Recebido por",
         conferencia.recebedor_nome,
         "",
-        "Data/Hora",
-        timezone.localtime(conferencia.criado_em).strftime("%d/%m/%Y %H:%M"),
+        "Registro da conferência no servidor",
+        f"*{instante_locacao(conferencia.criado_em)}*",
+        "Horário de Belém (PA) · America/Belem",
         "",
         "Responsavel pela entrega",
         conferencia.responsavel,
@@ -404,7 +415,8 @@ def _whatsapp_comprovante_recolhimento_url(conferencia, checklist_url):
     """Share the saved physical conference without recording a send event."""
     mensagem = "\n\n".join([
         f"Cliente: {conferencia.locacao.nome_contratante}",
-        f"Data/Hora: {timezone.localtime(conferencia.criado_em):%d/%m/%Y %H:%M}",
+        f"Registro da conferência no servidor: *{instante_locacao(conferencia.criado_em)}*",
+        "Horário de Belém (PA) · America/Belem",
         conferencia.mensagem_whatsapp_snapshot,
         f"Comprovante do recolhimento:\n{checklist_url}",
     ])
@@ -441,8 +453,8 @@ def _mensagem_tarefa_operacional_whatsapp(tarefa, checklist_url, ordem=None):
         titulo,
         f"Locação #{locacao.id} - {locacao.nome_contratante}",
     ]
-    if tarefa.tipo == TarefaOperacionalLocacao.TIPO_ENTREGA and tarefa.horario_agendado:
-        linhas.append(f"Horário: {tarefa.horario_agendado:%H:%M}")
+    linhas.append(f"Agendado: *{agenda_locacao(tarefa.data_agendada, tarefa.horario_agendado)}*")
+    linhas.append("Horário de Belém (PA) · America/Belem")
     linhas.extend([
         "",
         "Abrir checklist:",
@@ -541,7 +553,8 @@ def _mensagem_recolhimento_whatsapp(tarefa, checklist_url):
         f"Recolhimento da locacao #{locacao.id}",
         "",
         f"Cliente: {locacao.nome_contratante}",
-        f"Data: {tarefa.data_agendada:%d/%m/%Y}",
+        f"Recolhimento agendado: *{agenda_locacao(tarefa.data_agendada, tarefa.horario_agendado)}*",
+        "Horário de Belém (PA) · America/Belem",
         f"Endereco: {locacao.endereco_entrega}",
         (
             "Material: "
@@ -736,7 +749,8 @@ def _texto_checklist_recolhimento(conferencia, avarias):
         "",
         f"Cliente: {locacao.nome_contratante}",
         f"Endereco: {locacao.endereco_entrega}",
-        f"Data/Hora: {timezone.localtime(conferencia.criado_em):%d/%m/%Y %H:%M}",
+        f"Registro da conferência no servidor: *{instante_locacao(conferencia.criado_em)}*",
+        "Horário de Belém (PA) · America/Belem",
         "",
         (
             "Previsto: "

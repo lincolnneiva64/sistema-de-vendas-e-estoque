@@ -1,6 +1,7 @@
-{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}{% load horarios_documentos horarios_recebimentos %}
 {% block title %}Contas a Receber{% endblock %}
 {% block content %}
+<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
 <style>
   .contas-page { color: #172033; padding: 18px 0 32px; }
   .contas-shell { max-width: 1180px; margin: 0 auto; padding: 0 18px; }
@@ -323,7 +324,7 @@
                 <span class="contas-credito-valor">R$ {{ credito.total_credito|floatformat:2 }}</span>
               </div>
               <div class="contas-credito-meta">
-                Crédito mais recente: {{ credito.credito_mais_recente|date:"d/m/Y H:i"|default:"-" }}
+                <span style="color:#334155">Crédito registrado (mais recente): {% instante_registro credito.credito_mais_recente %}</span>
                 {% if credito.observacao %}
                   <br>{{ credito.observacao|truncatechars:120 }}
                 {% endif %}
@@ -365,7 +366,7 @@
                     Conta antiga #{{ conta.numero_legado|default:conta.id }}
                   {% endif %}
                 </td>
-                <td>{{ conta.data_emissao|date:"d/m/Y" }}</td>
+                <td>{{ conta.data_emissao|date:"d/m/Y" }}<div style="white-space:normal;max-width:200px;font-size:12px;color:#334155">Registro: {% instante_registro conta.criado_em %}<br>Atualização: {% instante_registro conta.atualizado_em %}</div></td>
                 <td>{{ conta.data_vencimento|date:"d/m/Y"|default:"-" }}</td>
                 <td class="contas-valor">R$ {{ conta.valor_original|floatformat:2 }}</td>
                 <td class="contas-valor">R$ {{ conta.valor_em_aberto|floatformat:2 }}</td>

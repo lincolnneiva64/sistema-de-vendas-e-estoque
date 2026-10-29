@@ -1,4 +1,4 @@
-{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}{% load horarios_documentos horarios_recebimentos %}
 {% block title %}Recebimento confirmado{% endblock %}
 {% block content %}
 
@@ -392,7 +392,7 @@
   }
   .rcp-route-history-row {
     display: grid;
-    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(100px, 165px) minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
     border: 1px solid #e2e8f0;
@@ -527,9 +527,10 @@
       <p class="rcp-line">
         <span class="rcp-paid">{{ valor_pago_formatado }}</span>
         &middot; {{ operacao.forma_pagamento|default:"-" }}
-        &middot; {{ comprovante_dados.data_recebimento|default:"-" }}
+        &middot; Data informada: {{ comprovante_dados.data_recebimento|default:"-" }}
         {% if operacao.rota_snapshot %}&middot; {{ operacao.rota_snapshot }}{% endif %}
       </p>
+      {% horarios_recebimento operacao dinamico=True %}
     </header>
 
     {% if messages %}
@@ -669,7 +670,7 @@
             <div class="rcp-route-history">
               {% for item in historico_recebimentos_rota_dia %}
                 <div class="rcp-route-history-row {% if item.atual %}atual{% endif %}">
-                  <span>{{ item.hora|default:"--:--" }}</span>
+                  <span>{% instante_registro item.criado_em %}</span>
                   <span class="rcp-route-history-main">
                     <strong>{{ item.cliente_nome }}</strong>
                     <span>{{ item.forma_pagamento }} &middot; {{ item.status_recibo }}</span>
@@ -874,6 +875,21 @@
       const dados = await resposta.json().catch(function () { return {}; });
       if (!resposta.ok || !dados.ok) {
         throw new Error(dados.mensagem || "Nao foi possivel confirmar o envio. Tente novamente.");
+      }
+      const horarioConfirmacao = document.getElementById("horarioConfirmacaoRecibo");
+      if (horarioConfirmacao && dados.confirmado_em && /(Z|[+-]\d{2}:\d{2})$/.test(dados.confirmado_em)) {
+        const instante = new Date(dados.confirmado_em);
+        if (!Number.isNaN(instante.getTime())) {
+          const textoHorario = new Intl.DateTimeFormat("pt-BR", {
+            timeZone: "America/Belem", day: "2-digit", month: "2-digit", year: "numeric",
+            hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23"
+          }).format(instante).replace(",", " às");
+          const valorHorario = document.createElement("strong");
+          valorHorario.className = "horario-registro";
+          valorHorario.style.color = "#1e293b";
+          valorHorario.textContent = textoHorario;
+          horarioConfirmacao.replaceChildren(valorHorario);
+        }
       }
       btnConfirmar.classList.remove("pulsando", "primary");
       btnConfirmar.classList.add("success", "recibo-confirmado-pulso");

@@ -1,0 +1,7 @@
+{% load horarios_documentos %}
+<div style="color:#334155;font-size:12px;line-height:1.6;overflow-wrap:anywhere">
+  <div>Pagamento — horário informado: {% instante_registro pagamento.data_hora %}</div>
+  <div>Registro do pagamento no servidor: {% instante_registro pagamento.criado_em %}</div>
+  {% if pagamento.recibo_enviado_em %}<div>Confirmação de envio do recibo: {% instante_registro pagamento.recibo_enviado_em %}</div>{% endif %}
+  {% if pagamento.recibo_dispensado_em %}<div>Dispensa do recibo registrada: {% instante_registro pagamento.recibo_dispensado_em %}</div>{% endif %}
+</div>

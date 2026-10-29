@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 {% block title %}Central de Cobranca{% endblock %}
 {% block content %}
 <style>
@@ -520,8 +521,8 @@
             </div>
             <div class="cobrancas-ultimo-contato">
               {% if cliente.ultimo_contato %}
-                <strong>&Uacute;ltimo contato:</strong>
-                {{ cliente.ultimo_contato.criado_em|date:"d/m/Y H:i" }} -
+                <strong style="color:#334155">Contato registrado (mais recente):</strong>
+                {% instante_registro cliente.ultimo_contato.criado_em %} -
                 {{ cliente.ultimo_contato.tipo_label }} -
                 {{ cliente.ultimo_contato.status_label }}
                 {% if cliente.ultimo_contato.proximo_contato %}
@@ -573,7 +574,7 @@
                   {% for registro in cliente.historico_cobranca %}
                     <div class="cobrancas-history-item">
                       <div class="cobrancas-history-meta">
-                        <span>{{ registro.criado_em|date:"d/m/Y H:i" }}</span>
+                        <span style="color:#334155">Contato registrado: {% instante_registro registro.criado_em %}</span>
                         <span>{{ registro.tipo_label }}</span>
                         <span>{{ registro.status_label }}</span>
                         {% if registro.proximo_contato %}

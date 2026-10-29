@@ -1,10 +1,10 @@
-{% extends 'inventario/base.html' %}{% load i18n %}
+{% extends 'inventario/base.html' %}{% load horarios_documentos i18n %}
 {% block title %}Registro manual #{{ movimento.pk }}{% endblock %}
 {% block content %}{% include 'inventario/navegacao.html' with conferencia_id=rodada.item.inventario_id tela="Registro manual" %}{% language 'pt-br' %}
 <a href="{% url 'inventario:historico_produto' rodada.item.inventario_id rodada.pk %}?periodo=completo">← Voltar ao extrato completo</a>
 <section class="card"><p class="muted">Somente consulta · Registro original de estoque manual</p>
 <h1>Registro manual #{{ movimento.pk }}</h1><h2>{{ rodada.item.cadastro.nome }}</h2>
-<p>{{ movimento.criado_em|date:'d/m/Y' }} · {{ movimento.criado_em|date:'l' }} · {{ movimento.criado_em|date:'H:i:s' }}</p>
+<p>{% instante_registro movimento.criado_em %}</p>
 <dl><dt>Tipo</dt><dd>{{ movimento.get_tipo_display }}</dd><dt>Saldo bruto anterior</dt><dd>{{ movimento.estoque_antes|floatformat:'-3' }}</dd><dt>Saldo bruto posterior</dt><dd>{{ movimento.estoque_depois|floatformat:'-3' }}</dd><dt>Diferença registrada</dt><dd>{{ movimento.diferenca|floatformat:'-3' }}</dd><dt>Responsável registrado</dt><dd>{{ movimento.operador_nome|default:'Não disponível' }}</dd><dt>Motivo</dt><dd>{{ movimento.motivo|default:'Não disponível' }}</dd><dt>Observação</dt><dd>{{ movimento.observacao|default:'Não disponível' }}</dd></dl>
 <p class="aviso">Unidade histórica não gravada neste registro. Nenhuma conversão atual foi utilizada. Estes valores brutos não certificam um saldo físico nem são somados novamente ao observador.</p>
 <p>A consulta deste registro não aplica ajustes de estoque.</p></section>

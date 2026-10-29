@@ -108,14 +108,51 @@ class FluxoTests(TestCase):
             self.assertNotIn(palavra, html.content.decode().lower())
         response = self.client.post(reverse("inventario:contar", args=[self.rodada.pk]),
             {"acao": "ok", "versao": 0, "embalagens": 8, "avulsos": 0})
-        self.assertEqual(set(response.json()["produto"]), {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo",
-            "passo_avulsos", "embalagens", "avulsos", "versao", "conferido", "ok_em", "guardado", "ultimo_ok"})
+        self.assertEqual(response.status_code, 200)
+        campos_esperados = {"id", "nome", "codigo", "base", "secundaria", "fracionado", "passo",
+            "passo_avulsos", "embalagens", "avulsos", "versao", "conferido", "ok_em", "guardado", "ultimo_ok",
+            "exibir_total", "total_convertido"}
+        self.assertEqual(set(response.json()["produto"]), campos_esperados)
+        self.assertIs(response.json()["produto"]["exibir_total"], False)
+        self.assertEqual(response.json()["produto"]["total_convertido"], "")
         self.assertIsInstance(response.json()["produto"]["guardado"], bool)
         self.assertEqual(set(response.json()["produto"]["ultimo_ok"]), {"embalagens", "avulsos", "ok_em"})
         self.assertEqual(self.client.get(reverse("inventario:ajustes", args=[self.inventario.pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse("inventario:detalhe", args=[self.inventario.pk])).status_code, 403)
         self.assertIn("no-store", html["Cache-Control"])
         self.assertEqual(html["Referrer-Policy"], "same-origin")
+
+        peso = produto(nome="Contagem PCT/KG", unidade_compra="PCT", unidade_venda_1="PCT",
+            unidade_venda_2="KG", fator_conversao=Decimal("10"), quantidade=Decimal("987.654"))
+        inventario = services.criar_inventario(self.usuario, "Contagem convertida", "manual", [peso.pk])
+        rodada = inventario.itens.get().rodadas.get()
+        acesso, token = services.gerar_acesso(self.usuario, inventario.pk, self.funcionario.pk, [rodada.pk])
+        self.assertEqual(self.client.post(reverse("inventario:convite", args=[token])).status_code, 302)
+        response = self.client.post(reverse("inventario:contar", args=[rodada.pk]),
+            {"acao": "ok", "versao": 0, "embalagens": "2", "avulsos": "5.5"})
+        self.assertEqual(response.status_code, 200)
+        convertido = response.json()["produto"]
+        self.assertEqual(set(convertido), campos_esperados)
+        self.assertIs(convertido["exibir_total"], True)
+        # Two counted packages plus 5.5 KG / frozen factor 10, never expected stock.
+        self.assertEqual(Decimal(rodada.item.cadastro["fator"]), Decimal("10"))
+        self.assertEqual(convertido["total_convertido"], "2,550")
+        rodada.refresh_from_db()
+        self.assertEqual(rodada.esperado, Decimal("987.654"))
+        self.assertNotIn("987.654", convertido.values())
+        self.assertNotIn("987,654", convertido.values())
+        Produto.objects.filter(pk=peso.pk).update(fator_conversao=99)
+        consulta = self.client.get(reverse("inventario:mobile"), HTTP_ACCEPT="application/json")
+        self.assertEqual(consulta.status_code, 200)
+        relido = consulta.json()["produtos"][0]
+        self.assertIs(relido["exibir_total"], True)
+        self.assertEqual(relido["total_convertido"], "2,550")
+        self.assertNotIn("987.654", relido.values())
+        self.assertNotIn("987,654", relido.values())
+        for campo_privado in ("esperado", "saldo", "preco", "custo_base", "divergencia", "sequencia_ok"):
+            self.assertNotIn(campo_privado, relido)
+        self.assertEqual(self.client.get(reverse("inventario:ajustes", args=[inventario.pk])).status_code, 403)
+        self.assertEqual(self.client.get(reverse("inventario:detalhe", args=[inventario.pk])).status_code, 403)
 
     def test_token_revogado_vencido_invalido_e_funcionario_inativo(self):
         self.entrar()

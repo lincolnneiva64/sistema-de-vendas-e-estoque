@@ -1,4 +1,5 @@
 import {openDB, Repository} from '/offline/assets/2-8f/core.js';
+import {catalogTimes, timeText} from '/offline/assets/2-8f/presentation.js';
 import {carregarSnapshotComercial, obterClientesSnapshot, obterProdutosSnapshot} from '/offline/assets/2-8f-fix/commercial.js';
 
 const state = window.salesOffline;
@@ -63,7 +64,7 @@ state.activate = async () => {
             options('tipoVenda', snapshot.formas_pagamento, f => f.valor, f => f.label);
             state.available = true;
             state.referenceSnapshot = {snapshot_id:snapshot.snapshot_id, prepared_at:snapshot.prepared_at || snapshot.gerado_em};
-            banner.textContent = `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Estoque/preços serão revalidados na futura sincronização. A venda pode ser salva neste aparelho, sem envio ao servidor.`;
+            timeText(banner, `Modo offline — dados locais de referência. ${catalogTimes(snapshot)}. Estoque/preços serão revalidados na futura sincronização. A venda pode ser salva neste aparelho, sem envio ao servidor.`);
         } catch (_) {
             snapshot = null;
             state.referenceSnapshot = null;
@@ -166,8 +167,11 @@ function showProtectedOnline() {
         banner.dataset.reason = 'protected-local-sale';
         banner.textContent = 'Servidor online. Montagem mantida com dados locais para preservar venda pendente, em revisão ou protegida. Consulte Status para verificar a pendência; nenhum envio foi iniciado.';
     }
-    if (snapshot) banner.append(document.createTextNode(' Catálogo local: '
-        + new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR') + '.'));
+    if (snapshot) {
+        const catalogTime = document.createElement('span');
+        timeText(catalogTime, ' Catálogo local: ' + catalogTimes(snapshot) + '.');
+        banner.append(catalogTime);
+    }
 }
 state.deactivate = async () => {
     // A cached shell must not advertise a restored metadata observation as a fresh connection.
@@ -236,9 +240,9 @@ function connectionChanged() {
     if (indicator?.dataset.connection === 'offline' && state.active && !state.activating) {
         delete banner.dataset.reason;
         banner.hidden = false;
-        banner.textContent = snapshot
-            ? `Modo offline — dados locais de referência. Catálogo: ${new Date(snapshot.prepared_at || snapshot.gerado_em).toLocaleString('pt-BR')}. Comunicação com o servidor indisponível. Venda local preservada; nenhum envio foi iniciado.`
-            : 'Comunicação com o servidor indisponível. Dados locais não preparados; montagem preservada.';
+        timeText(banner, snapshot
+            ? `Modo offline — dados locais de referência. ${catalogTimes(snapshot)}. Comunicação com o servidor indisponível. Venda local preservada; nenhum envio foi iniciado.`
+            : 'Comunicação com o servidor indisponível. Dados locais não preparados; montagem preservada.');
     }
     if (indicator?.dataset.connection === 'offline' && !state.active) state.ready = state.activate();
     if (indicator?.dataset.connection === 'online' && state.active) void state.deactivate().catch(() => {});

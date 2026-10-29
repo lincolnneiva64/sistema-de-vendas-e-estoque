@@ -1,3 +1,4 @@
+import {catalogTimes, timeText} from '/offline/assets/2-8f/presentation.js';
 import {openDB, Repository, validReceipt} from '/offline/assets/2-8f/core.js';
 import {draftScope} from '/offline/assets/2-8g-close/sales-drafts.js';
 import {carregarSnapshotComercial} from '/offline/assets/2-8f/commercial.js';
@@ -70,7 +71,7 @@ function render(){
     element('revision-original').textContent=JSON.stringify({motivo:record.motivo_original,payload:original.payload},null,2);
     const select=element('revision-customer-reference');select.replaceChildren(new Option('Selecione para trocar explicitamente',''));
     for(const customer of catalog?.clientes || [])select.append(new Option(`${customer.nome} (ID ${customer.id})`,customer.id));
-    element('revision-catalog').textContent=catalog?`Catálogo de referência de ${catalog.prepared_at || catalog.gerado_em}. Estoque, custo e conversões serão revalidados no servidor.`:'Catálogo não disponível. IDs e valores originais preservados. Não há autorização local de estoque ou preço.';
+    timeText(element('revision-catalog'),catalog?`Catálogo de referência: ${catalogTimes(catalog)}. Estoque, custo e conversões serão revalidados no servidor.`:'Catálogo não disponível. IDs e valores originais preservados. Não há autorização local de estoque ou preço.');
     renderItems();total();fields.disabled=record.status!=='rascunho'||blocked;
     element('revision-save').disabled=fields.disabled||!navigator.onLine;element('revision-discard').disabled=fields.disabled;
 }

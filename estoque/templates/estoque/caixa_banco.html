@@ -1,4 +1,5 @@
 {% extends 'estoque/base.html' %}
+{% load horarios_documentos %}
 
 {% block title %}Caixa e Banco{% endblock %}
 
@@ -1331,7 +1332,7 @@
         <tbody>
           {% for movimento in movimentos_reserva %}
             <tr>
-              <td>{{ movimento.criado_em|date:"d/m/Y H:i" }}</td>
+              <td style="color:#334155">Lançamento registrado: {% instante_registro movimento.criado_em %}</td>
               <td><span class="caixa-tipo {{ movimento.tipo }}">{{ movimento.get_tipo_display }}</span></td>
               <td class="caixa-valor">{{ movimento.valor_texto }}</td>
               <td>{{ movimento.conta.nome }}</td>
@@ -1355,7 +1356,7 @@
       {% for movimento in movimentos_reserva %}
         <article class="caixa-mobile-card">
           <div class="caixa-mobile-top">
-            <strong>{{ movimento.criado_em|date:"d/m/Y H:i" }}</strong>
+            <strong style="color:#334155">Lançamento registrado: {% instante_registro movimento.criado_em %}</strong>
             <span class="caixa-tipo {{ movimento.tipo }}">{{ movimento.get_tipo_display }}</span>
           </div>
           <div class="caixa-mobile-grid">

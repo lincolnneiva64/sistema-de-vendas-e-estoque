@@ -1,0 +1,6 @@
+{% if evidencia.nota is not None %}<strong>Nota: {{ evidencia.nota|floatformat:'-3' }} {{ evidencia.unidade_nota|default:'Unidade não disponível' }}</strong>{% endif %}
+{% if evidencia.baixa %}<small class="saida">Baixa registrada: {{ evidencia.baixa.quantidade|floatformat:'3' }} {{ evidencia.baixa.unidade }}</small>
+{% elif evidencia.variacao is not None %}<strong>Variação registrada: {% if evidencia.variacao > 0 %}+{% endif %}{{ evidencia.variacao|floatformat:'3' }}</strong><small>Variação bruta; unidade não comprovada</small>
+{% else %}<small>Baixa histórica não comprovada</small>{% endif %}
+<small class="indisponivel">{{ evidencia.aviso }}</small>
+{% if evidencia.motivo %}<small class="indisponivel">{{ evidencia.motivo }}</small>{% endif %}

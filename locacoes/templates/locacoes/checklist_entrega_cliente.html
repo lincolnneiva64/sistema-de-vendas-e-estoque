@@ -1,3 +1,4 @@
+{% load horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -346,7 +347,7 @@
 
         <div class="campo">
           <span class="rotulo">Data/Hora</span>
-          <div class="valor">{{ conferencia.criado_em|date:"d/m/Y H:i" }}</div>
+          <div class="valor"><span>Registro da conferência no servidor:</span> {% instante_registro conferencia.criado_em %}</div>
         </div>
 
         <div class="campo mb-0">
@@ -356,6 +357,7 @@
       </div>
     </section>
 
-  </main>
+  <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
+</main>
 </body>
 </html>

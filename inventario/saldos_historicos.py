@@ -86,7 +86,8 @@ def analisar(produto_id, pagina, referencia):
     validados, motivos = {}, {}
     for pk, r in registros.items():
         conflito = conflito_eventos(eventos[r['documento']],
-            outros_nomes[r['documento']] - nomes_alvo[r['documento']])
+            outros_nomes[r['documento']] - nomes_alvo[r['documento']],
+            aceitar_nota_impressa=True)
         if (excedeu or quantidade_alvo[r['documento']] != 1 or r['documento'] in removidas_alvo
                 or r['documento'] in ajustes or r['instante'] >= referencia or r['instante'] in ambiguos):
             conflito = 'Evidência incompleta, ajuste ou referência temporal incompatível; sequência interrompida.'

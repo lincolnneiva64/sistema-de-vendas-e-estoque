@@ -1,5 +1,6 @@
 import {commercialConflict} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {validClosure} from '/offline/assets/2-8g-close/sales-closures.js';
+import {formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
 // Opening details remains read-only. Review is an explicit separate navigation.
 export function operationDetails(operation, scope, revisionView = null,closure = null) {
     if (!operation || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
@@ -14,13 +15,13 @@ export function operationDetails(operation, scope, revisionView = null,closure =
     const originalCustomer = operation.original_labels?.cliente;
     const fields = {
         UUID:operation.operation_id, Status:operation.status, Tentativas:operation.attempts,
-        'Data/hora original':operation.created_at, Tipo:operation.type,
+        Tipo:operation.type,
         'Cliente original (ID)':payload.cliente_id ?? 'Não informado',
         'Nome original do cliente':originalCustomer && originalCustomer.id === payload.cliente_id ? originalCustomer.nome : 'Nome não preservado na operação',
         'Data da venda':payload.data_venda, Vencimento:payload.data_vencimento,
         'Condição/pagamento':payload.tipo_pagamento, Operador:payload.operador,
         Hash:operation.payload_hash, Sequência:operation.sequence,
-        'Snapshot de referência disponível na conclusão':operation.reference_snapshot?.prepared_at || 'Data não registrada nesta operação',
+        'Preparação do catálogo informada pelo dispositivo':formatOfflineTime(operation.reference_snapshot?.prepared_at),
         'Mensagem/erro':operation.last_error || operation.server_result?.erro || '',
         'Operação substituta':revisionView?.replacementId || 'Não registrada',
         Diagnóstico:operation.diagnostic_code || '',
@@ -28,17 +29,22 @@ export function operationDetails(operation, scope, revisionView = null,closure =
     const list = document.createElement('dl');
     for (const [label, value] of Object.entries(fields)) {
         const term = document.createElement('dt'), text = document.createElement('dd');
-        term.textContent = label; text.textContent = value == null ? 'Não informado' : String(value);
+        term.textContent = label; timeText(text, value == null ? 'Não informado' : String(value));
         text.style.overflowWrap = 'anywhere'; list.append(term, text);
     }
     details.append(list);
+    details.append(operationTimes(operation));
+    const missing = document.createElement('p');
+    missing.style.color = '#334155';
+    missing.textContent = 'Recebimento e início do processamento no servidor: horários não disponíveis nesta consulta. Tentativas: contador preservado; horário individual não registrado.';
+    details.append(missing);
     if (operation.payload?.revisao) {
         const origin = document.createElement('p');
         origin.textContent = 'Revisão da operação: ' + operation.payload.revisao.original_operation_id;
         details.append(origin);
     }
     if(validClosure(closure,operation)){
-        const text=document.createElement('p');text.textContent='Encerrada administrativamente — nenhuma venda gerada. Motivo: '+closure.motivo+' · '+closure.closed_at;details.append(text);
+        const text=document.createElement('p');timeText(text,'Encerrada administrativamente — nenhuma venda gerada. Motivo: '+closure.motivo+' · Encerramento registrado no servidor: '+formatOfflineTime(closure.closed_at));details.append(text);
     } else if (revisionView?.recordId) {
         const text = document.createElement('p'), link = document.createElement('a');
         text.textContent = revisionView.originalConfirmed ? 'Original confirmada oficialmente. Revisão bloqueada.'

@@ -1,3 +1,4 @@
+{% load horarios_documentos %}
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Autorizar recolhimento</title></head>
 <body><main style="max-width:600px;margin:20px auto;padding:16px;font-family:system-ui">
 <h1>Autorizar recolhimento #{{ tarefa.locacao_id }}</h1>
@@ -8,6 +9,6 @@
 <button name="acao" value="emitir">Gerar link individual</button></form>
 {% if link %}<p role="status">Link individual gerado. Compartilhe somente com o funcionário selecionado.</p><p><a id="enviar-link-individual" href="{{ whatsapp }}" target="_blank" rel="noopener noreferrer">Enviar link individual pelo WhatsApp</a></p><p><input aria-label="Link individual" readonly value="{{ link }}" style="width:100%"></p>{% endif %}
 <form method="post">{% csrf_token %}<button name="acao" value="revogar">Revogar links desta tarefa</button></form>
-<ul>{% for autorizacao in autorizacoes %}<li>{{ autorizacao.funcionario.nome }} — emitido por {{ autorizacao.emitida_por }} — validade {{ autorizacao.expira_em|date:'d/m/Y H:i' }}{% if autorizacao.revogada_em %} — revogado{% elif autorizacao.conferencia_id %} — utilizado{% endif %}</li>{% endfor %}</ul>
+<ul>{% for autorizacao in autorizacoes %}<li>{{ autorizacao.funcionario.nome }} — emitido por {{ autorizacao.emitida_por }} — <span style="color:#334155">Validade da autorização: {% instante_registro autorizacao.expira_em %}</span>{% if autorizacao.revogada_em %} — revogado{% elif autorizacao.conferencia_id %} — utilizado{% endif %}</li>{% endfor %}</ul>
 <a href="{% url 'locacoes:conferencia_recolhimento' tarefa.pk %}">Consultar checklist e histórico</a>
 </main></body></html>
