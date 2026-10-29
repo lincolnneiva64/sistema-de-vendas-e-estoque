@@ -148,3 +148,20 @@ main:has(.painel-inventario){max-width:1360px}
 .contado-coluna .edicao-contagem-admin>button{min-width:132px;white-space:nowrap;overflow-wrap:normal;padding:10px 12px}
 @media(min-width:1101px){.tabela-resumo th:first-child{width:19%}.tabela-resumo th:nth-child(4){width:14%}.tabela-resumo th:nth-child(8){width:17%}}
 @media(max-width:1100px){.tabela-resumo .resumo-linha>.contado-coluna{grid-column:1/-1;border-right:0}}
+
+/* Atenção visual da linha inteira: somente projeções de estados já existentes. */
+.tabela-resumo .resumo-linha{--linha-fundo:#fff;--linha-borda:transparent;background:var(--linha-fundo);box-shadow:none;border-inline-start:5px solid var(--linha-borda)}
+.tabela-resumo .resumo-linha[data-revisar="true"],.tabela-resumo .resumo-linha[data-resultado="pendente"]{--linha-fundo:#fff6d5;--linha-borda:#b88a13}
+.tabela-resumo .resumo-linha[data-resultado="falta"]{--linha-fundo:#fbe6e6;--linha-borda:#b42318}
+.tabela-resumo .resumo-linha[data-resultado="sobra"]{--linha-fundo:#fff0d8;--linha-borda:#bd6513}
+.tabela-resumo .resumo-linha[data-atualizacao="Aplicado"]:not([data-revisar="true"]){--linha-fundo:#fff;--linha-borda:transparent}
+.tabela-resumo .resumo-linha>th,.tabela-resumo .resumo-linha>td{background:var(--linha-fundo)}
+.tabela-resumo .resumo-linha>th:first-child{box-shadow:inset 5px 0 var(--linha-borda)}
+@media(max-width:1100px){.tabela-resumo .resumo-linha>th:first-child{box-shadow:none}}
+
+/* Delimitacao continua por produto, sem espacamento adicional entre linhas. */
+@media(min-width:1101px){
+ .tabela-resumo .resumo-linha>th,.tabela-resumo .resumo-linha>td{border-block:2px solid #879da3}
+ .tabela-resumo .resumo-linha>td:last-child{border-inline-end:1px solid #879da3}
+}
+@media(max-width:1100px){.tabela-resumo .resumo-linha{border-block:2px solid #879da3}}
