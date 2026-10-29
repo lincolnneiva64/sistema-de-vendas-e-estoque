@@ -23,12 +23,13 @@
         return payload;
     };
     const atualizarEstado = resumo => {
-        abrir.hidden = resumo.aptos === 0 || Boolean(resumo.erro);
-        if (abrir.hidden) abrir.removeAttribute('id'); else abrir.id = 'revisar-atualizacao';
         abrir.disabled = false;
         estado.textContent = resumo.erro || (resumo.aptos > 0
             ? resumo.aptos + ' produto(s) apto(s) com diferença. '
-            : resumo.pendentes || resumo.bloqueados.length ? 'Nenhum produto apto para atualizar agora. ' : 'Todos os ajustes disponíveis foram concluídos. ');
+            : resumo.sem_divergencias ? 'Conferência sem divergências. Nenhum ajuste necessário.'
+            : resumo.concluidos ? 'Todos os ajustes de estoque foram concluídos.'
+            : resumo.pendentes ? resumo.pendentes + ' ajuste(s) pendente(s). Nenhum produto apto para atualizar agora. '
+            : 'Revisão pendente. Consulte a situação dos produtos. ');
         if (resumo.bloqueados.length) estado.textContent += ' Bloqueados (' + resumo.bloqueados.length + '): ' + resumo.bloqueados.map(p => p.nome).join(', ') + '.';
     };
     const mostrarSucesso = payload => {

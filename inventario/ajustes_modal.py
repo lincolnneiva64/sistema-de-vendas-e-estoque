@@ -18,7 +18,12 @@ def estado(inventario):
                   for l in resultado['linhas'] if l['estado'] == 'Bloqueado']
     pendentes = sum(l['estado'] != 'Aplicado' and l['diferenca'] is not None and l['diferenca'] != 0
                     for l in resultado['linhas'])
-    return resultado, dict(aptos=len(resultado['aptas']), bloqueados=bloqueados,
+    sem_divergencias = bool(resultado['linhas']) and not resultado['erro'] and all(
+        l['estado'] == 'Sem ajuste' for l in resultado['linhas'])
+    concluidos = bool(resultado['linhas']) and not resultado['erro'] and all(
+        l['estado'] in ('Sem ajuste', 'Aplicado') for l in resultado['linhas']) and not sem_divergencias
+    return resultado, dict(sem_divergencias=sem_divergencias, concluidos=concluidos,
+        aptos=len(resultado['aptas']), bloqueados=bloqueados,
         pendentes=pendentes, aplicados=resultado['resumo'].get('aplicados', 0), erro=resultado['erro'])
 
 
@@ -56,7 +61,7 @@ def modal(request, inventario_id):
                                 if l['estado'] == 'Bloqueado' and l.get('bloqueio_codigo') != 'precisao']
             token = ajustes.previa_atualizacao(inventario.pk, resultado['aptas']) if resultado['aptas'] else ''
             html = render_to_string('inventario/previa_ajustes_modal.html', dict(
-                inventario=inventario, atualizacao=resultado, previa_lote=token,
+                inventario=inventario, atualizacao=resultado, previa_lote=token, resumo_modal=resumo,
                 pendentes_precisao=precisao, outros_bloqueados=outros_bloqueados,
                 revisao_historica=historica, ajustes_habilitados=getattr(settings,'INVENTARIO_AJUSTES_HABILITADOS',False)), request=request)
             return JsonResponse(dict(ok=True, html=html, resumo=resumo))

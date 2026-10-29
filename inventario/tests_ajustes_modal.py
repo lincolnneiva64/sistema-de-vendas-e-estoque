@@ -162,7 +162,7 @@ class AjustesModalHTTPTests(Fixture,TestCase):
     def test_finalizada_autorizacao_historica_no_clique_e_bloqueio_sem_token(self):
         self.finalizar()
         pagina=self.client.get(self.detalhe)
-        self.assertContains(pagina,'Revisar e atualizar estoque')
+        self.assertContains(pagina,'Revisar ajustes de estoque')
         payload,dados=self.prever()
         self.assertTrue(dados['revisao_historica'])
         r=self.client.post(self.modal,{**dados,'revisao_historica':''})
@@ -190,7 +190,7 @@ class AjustesModalHTTPTests(Fixture,TestCase):
         recibo=self.client.get(self.modal,{'resultado_atualizacao':dados['previa']}).json()
         self.assertTrue(recibo['ok']);self.assertEqual(recibo['quantidade'],2)
         pagina=self.client.get(self.detalhe)
-        self.assertNotContains(pagina,'id="revisar-atualizacao"')
+        self.assertContains(pagina,'id="revisar-atualizacao"')
         self.assertFalse(list(pagina.context['messages']))
 
     def test_parcialmente_aplicados_nao_entram_novamente_e_bloqueado_nao_muda(self):
@@ -310,8 +310,8 @@ class AjustesModalBrowserTests(Fixture,StaticLiveServerTestCase):
                 self.assertEqual(AplicacaoAjuste.objects.count(),1)
                 tab.call('Page.reload');tab.wait('window.inventarioAjustesModalPronto===true')
                 self.assertFalse(tab.evaluate("document.querySelector('#modal-sucesso-estoque').open"))
-                self.assertTrue(tab.evaluate("document.querySelector('[data-revisar-estoque]').hidden"))
-                self.assertEqual(tab.evaluate("getComputedStyle(document.querySelector('[data-revisar-estoque]')).display"),"none")
+                self.assertFalse(tab.evaluate("document.querySelector('[data-revisar-estoque]').hidden"))
+                self.assertNotEqual(tab.evaluate("getComputedStyle(document.querySelector('[data-revisar-estoque]')).display"),"none")
                 self.assertEqual(AplicacaoAjuste.objects.count(),1)
             finally:chrome.stop()
 

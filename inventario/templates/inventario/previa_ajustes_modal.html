@@ -1,3 +1,11 @@
+{% if resumo_modal.sem_divergencias %}
+<p>Conferência revisada — nenhum ajuste necessário. Todos os produtos conferidos estão corretos.</p>
+<button type="button" class="secondary" data-cancelar-ajustes>Fechar</button>
+{% elif resumo_modal.concluidos %}
+<p>Todos os ajustes de estoque foram concluídos.</p>
+<p>Consulte os saldos registrados e a evolução de cada produto na relação da conferência.</p>
+<button type="button" class="secondary" data-cancelar-ajustes>Fechar</button>
+{% else %}
 {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% endif %}
 <p>Somente os produtos aptos com diferenças abaixo terão seus saldos alterados. Produtos já ajustados ficam fora desta operação.</p>
 <h3>{{ atualizacao.aptas|length }} produto{{ atualizacao.aptas|length|pluralize:"s" }} que serão atualizados</h3>
@@ -11,3 +19,4 @@
 {% csrf_token %}<input type="hidden" name="acao" value="atualizar"><input type="hidden" name="previa" value="{{ previa_lote }}"><input type="hidden" name="revisao_historica" value="{{ revisao_historica }}"><input type="hidden" name="confirmacao" value="sim">
 <button type="submit" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar atualização</button><button type="button" class="secondary" data-cancelar-ajustes>Cancelar</button><p role="status" data-erro-ajustes></p>
 </form>{% else %}<button type="button" class="secondary" data-cancelar-ajustes>Cancelar</button>{% endif %}
+{% endif %}
