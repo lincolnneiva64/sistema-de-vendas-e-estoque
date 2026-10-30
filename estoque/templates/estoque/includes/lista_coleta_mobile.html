@@ -10,7 +10,9 @@
   const cards = () => [...document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]')];
   const idsSalvos = new Set(cards().map(c => c.dataset.produtoId));
   const form = document.getElementById('formGravarListaFornecedor');
-  let ocupado = false, bloqueado = false;
+  let ocupado = false, bloqueado = false, navegando = false;
+  const controlesPendentes = new Map();
+  const acoesGravacao = '#mobileSugestaoProdutos button:not([data-historico-toggle]), #itensListaMobile button:not([data-historico-toggle]), .sugestao-salvar-lista-extra, .sugestao-gravar-gerar-extra, #btnGravarListaFornecedor, #btnGravarGerarCompraFornecedor, #btnSalvarRascunhoListaMobile, #btnConfirmarGravar, #btnAdicionarProdutoSugestao, [data-iniciar-coleta]';
   const aviso = document.createElement('div');
   aviso.className = 'sugestao-progresso-mobile';
   aviso.setAttribute('role', 'status');
@@ -19,15 +21,38 @@
   document.getElementById('preListaMobileTitulo')?.after(aviso);
   function mensagem(texto) { aviso.replaceChildren(document.createTextNode(texto)); aviso.hidden = false; }
   function pronto() {
-    if (!dados || !mobile()) return true;
-    if (ocupado || bloqueado || !dados.estado.iniciada) {
+    if (ocupado || (mobile() && (bloqueado || (dados && !dados.estado.iniciada)))) {
       aviso.scrollIntoView({block:'center'});
       return false;
     }
     return true;
   }
+  function iniciar(inicio = false) {
+    if (ocupado || (mobile() && (bloqueado || (!inicio && dados && !dados.estado.iniciada)))) return false;
+    if (!mobile()) return true;
+    ocupado = true;
+    navegando = false;
+    document.querySelectorAll(acoesGravacao).forEach(el => {
+      controlesPendentes.set(el, el.disabled);
+      el.disabled = true;
+    });
+    return true;
+  }
+  function finalizar() {
+    controlesPendentes.forEach((disabled, el) => { el.disabled = disabled; });
+    controlesPendentes.clear();
+    ocupado = false;
+    navegando = false;
+  }
+  function falhar(erro) {
+    if (!mobile() && !ocupado) return;
+    bloqueado = true;
+    mensagem((erro instanceof TypeError ? 'Sem confirmação do servidor.' : erro.message) +
+      ' Reabra a lista para consultar o estado salvo antes de continuar.');
+  }
   function receber(resultado) {
-    if (!resultado.coleta) return;
+    if (!resultado.coleta || !Number.isInteger(resultado.coleta.versao) || !resultado.atualizada)
+      throw new Error('O servidor não confirmou a versão salva da lista.');
     if (!dados) dados = {legada:false};
     idsSalvos.clear();
     Object.keys(resultado.coleta.itens || {}).forEach(id => idsSalvos.add(id));
@@ -40,7 +65,7 @@
     if (acao === 'mover' && !pronto()) return false;
     // Newly added products are persisted by the existing explicit Save action.
     if (acao === 'mover' && !idsSalvos.has(String(produto))) return true;
-    ocupado = true;
+    if (!iniciar(acao !== 'mover')) return false;
     mensagem('Salvando coleta…');
     try {
       const body = new FormData();
@@ -57,13 +82,12 @@
       mensagem('Coleta salva.');
       return true;
     } catch (erro) {
-      bloqueado = true;
-      mensagem((erro instanceof TypeError ? 'Sem confirmação do servidor.' : erro.message) +
-        ' Reabra a lista para consultar o estado salvo antes de continuar.');
+      falhar(erro);
       return false;
-    } finally { ocupado = false; }
+    } finally { finalizar(); }
   }
-  window.coletaLista = {pronto, receber, get dados() { return dados; },
+  window.coletaLista = {pronto, receber, iniciar:() => iniciar(), finalizar, falhar,
+    navegar:() => { navegando = true; }, get ocupado() { return ocupado; }, get dados() { return dados; },
     mover:(produto, estado) => enviar('mover', produto, estado)};
   window.prepararColetaPayload = payload => {
     if (!mobile()) return payload;
@@ -74,8 +98,8 @@
         porId.get(String(l.produtoId))?.dataset.naLista === '1' ? 'pego' : 'pendente']))};
     return payload;
   };
-  if (!dados) return;
   function mostrarInicio() {
+    if (!dados) return;
     aviso.hidden = !mobile() || !!dados.estado.iniciada;
     if (dados.estado.iniciada) return;
     aviso.replaceChildren();
@@ -92,15 +116,15 @@
     });
   }
   mostrarInicio();
-  addEventListener('resize', () => { if (!dados.estado.iniciada) mostrarInicio(); });
+  addEventListener('resize', () => { if (dados && !dados.estado.iniciada) mostrarInicio(); });
   // Capture only actions of this list. Desktop and unrelated controls are untouched.
   document.addEventListener('click', event => {
     if (!mobile() || event.target.closest('[data-iniciar-coleta]')) return;
     if (event.target.closest('[data-historico-toggle]')) return;
-    if (event.target.closest('#mobileSugestaoProdutos button, #itensListaMobile button, .sugestao-salvar-lista-extra, .sugestao-gravar-gerar-extra, #btnGravarListaFornecedor, #btnGravarGerarCompraFornecedor, #btnSalvarRascunhoListaMobile, #btnAdicionarProdutoSugestao') && !pronto()) {
+    if (event.target.closest(acoesGravacao) && !pronto()) {
       event.preventDefault(); event.stopImmediatePropagation();
     }
   },true);
-  addEventListener('beforeunload',event => { if (ocupado) { event.preventDefault(); event.returnValue = ''; } });
+  addEventListener('beforeunload',event => { if (ocupado && !navegando) { event.preventDefault(); event.returnValue = ''; } });
 })();
 </script>

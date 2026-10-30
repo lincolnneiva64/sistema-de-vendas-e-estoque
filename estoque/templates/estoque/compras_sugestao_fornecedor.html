@@ -5366,9 +5366,15 @@
     }
   }
 
+  function listaEmGravacao() {
+    return salvamentoListaEmAndamento || !!window.coletaLista?.ocupado;
+  }
+
   function iniciarSalvamentoLista(botaoAcionado) {
-    if (salvamentoListaEmAndamento) return false;
-    salvamentoListaEmAndamento = true;
+    if (listaEmGravacao()) return false;
+    if (listaFornecedorMobile() && window.coletaLista) {
+      if (!window.coletaLista.iniciar()) return false;
+    } else salvamentoListaEmAndamento = true;
     bloquearBotoesSalvamentoLista(botaoAcionado);
     return true;
   }
@@ -5383,6 +5389,7 @@
         botao.textContent = textosOriginaisBotoesSalvamento.get(botao);
       }
     });
+    window.coletaLista?.finalizar();
   }
 
   function listaFornecedorMobile() {
@@ -5599,6 +5606,7 @@
   }
 
   function liberarEdicaoRascunhoProtegidoLista() {
+    if (listaEmGravacao()) return;
     fecharModalContinuarEditandoRascunhoLista();
     limparRascunhoProtegidoLista();
     aplicarRascunhoProtegidoLista(false);
@@ -5746,7 +5754,7 @@
 
   // Mostrar modal de confirmação
   function mostrarModalConfirmacao() {
-    if (salvamentoListaEmAndamento || modalConfirmacao.classList.contains("aberto")) return true;
+    if (listaEmGravacao() || modalConfirmacao.classList.contains("aberto")) return true;
 
     const zerados = getZeroItems();
     if (zerados.length === 0) return false;
@@ -5830,14 +5838,12 @@
       body: dados,
       credentials: "same-origin",
       headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
-    }).then(function(resposta) {
-      if (!resposta.ok) {
-        throw new Error("Falha ao salvar rascunho.");
-      }
+    }).then(async function(resposta) {
+      if (!resposta.ok) throw new Error((await resposta.json()).erro || "Falha ao salvar rascunho.");
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo) throw new Error("Salvamento nao confirmado.");
-      if (resultado.coleta) window.coletaLista?.receber(resultado);
+      window.coletaLista?.receber(resultado);
       const listaId = resultado.lista_id;
       if (listaId) {
         atualizarUrlEdicaoListaAposRascunho(listaId);
@@ -5848,15 +5854,17 @@
       if (avisoRascunhoProtegidoLista && typeof avisoRascunhoProtegidoLista.scrollIntoView === "function") {
         avisoRascunhoProtegidoLista.scrollIntoView({ behavior: "smooth", block: "center" });
       }
-    }).catch(function() {
+    }).catch(function(erro) {
+      window.coletaLista?.falhar(erro);
       restaurarBotoesSalvamentoLista();
-      alert("Nao foi possivel salvar o rascunho. Verifique a conexao e tente novamente.");
+      alert(erro.message + " Os dados continuam nesta tela. Reabra a lista para consultar o estado salvo.");
     });
     return true;
   }
 
   function enviarListaConfirmada() {
     if (gerarCompraAoGravar) {
+      window.coletaLista?.navegar();
       formGravarListaFornecedor.submit();
       return;
     }
@@ -5868,15 +5876,18 @@
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo || !resultado.redirect_url) throw new Error("Salvamento nao confirmado.");
+      if (listaFornecedorMobile()) window.coletaLista?.receber(resultado);
+      restaurarBotoesSalvamentoLista();
       window.location.assign(resultado.redirect_url);
     }).catch(function(erro) {
+      window.coletaLista?.falhar(erro);
       restaurarBotoesSalvamentoLista();
       alert(erro.message + " Os dados continuam nesta tela.");
     });
   }
 
   btnConfirmarGravar.addEventListener("click", function() {
-    if (salvamentoListaEmAndamento) return;
+    if (listaEmGravacao()) return;
     fecharModal();
     if (!formGravarListaFornecedor || !listaFornecedorPayload) return;
 
@@ -5975,7 +5986,7 @@
   }
 
   const novoClique = function(gerarCompra, botaoAcionado, opcoes) {
-    if (salvamentoListaEmAndamento) return;
+    if (listaEmGravacao()) return;
     gerarCompraAoGravar = gerarCompra === true;
     salvarRascunhoAoGravar = opcoes?.rascunho === true;
     const payload = {
