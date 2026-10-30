@@ -16617,6 +16617,18 @@ def vendas(request):
     mostrar_produtos_incompletos_vendas = request.GET.get("incompletos") == "1"
     avisos_visitas_fornecedores = obter_avisos_visitas_fornecedores()
     avisos_visitas_fornecedores_painel = _avisos_visitas_painel_vendas(avisos_visitas_fornecedores)
+    avisos_visitas_fornecedores_futuros = sorted(
+        (
+            aviso
+            for aviso in avisos_visitas_fornecedores
+            if aviso.get("dias_para_visita", 0) > 1
+            and aviso.get("estado") not in {
+                ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,
+                ESTADO_LISTA_ALTERADA_FALTA_REENVIAR,
+            }
+        ),
+        key=lambda aviso: (aviso["dias_para_visita"], aviso["fornecedor_nome"]),
+    )
     contexto_rascunho = _contexto_compras_rascunho_alerta()
 
     itens_revisao_precos_pendentes = _itens_revisao_precos_posterior()
@@ -16641,6 +16653,7 @@ def vendas(request):
         'local_sales_context': page_context(request),
         'avisos_visitas_fornecedores': avisos_visitas_fornecedores,
         'avisos_visitas_fornecedores_painel': avisos_visitas_fornecedores_painel,
+        'avisos_visitas_fornecedores_futuros': avisos_visitas_fornecedores_futuros,
         'pendencias_vendas_qtd': pendencias_vendas_qtd,
         'pendencias_vendas_prioridade': pendencias_vendas_prioridade,
         'revisao_precos_pendentes_qtd': revisao_precos_pendentes_qtd,

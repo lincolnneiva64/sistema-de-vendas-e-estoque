@@ -564,6 +564,38 @@
   }
 }
 
+.vendas-proximas-listas {
+  display: grid;
+  gap: 8px;
+  padding: 12px 10px;
+  border-top: 2px solid #dbeafe;
+  background: #f8fbff;
+}
+.vendas-proximas-listas h3 {
+  margin: 0;
+  color: #1e40af;
+  font-size: 13px;
+  font-weight: 800;
+}
+.vendas-proximas-listas-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.vendas-proximas-listas-item strong {
+  color: #1e293b;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.vendas-proximas-listas-item p {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+}
 </style>
 
 <div
@@ -851,6 +883,18 @@
             <a class="vendas-pendencias-item-acao" href="{{ compras_rascunho_url }}">{{ compras_rascunho_botao }}</a>
           </div>
         </article>
+      {% endif %}
+      {% if avisos_visitas_fornecedores_futuros %}
+        <section class="vendas-proximas-listas" aria-label="Proximas listas a preparar">
+          <h3>Proximas listas a preparar</h3>
+          {% for aviso in avisos_visitas_fornecedores_futuros %}
+            <article class="vendas-proximas-listas-item">
+              <strong>{{ aviso.fornecedor_nome }}</strong>
+              <p>Visita em {{ aviso.dias_para_visita }} dias - {{ aviso.data_visita_formatada|default:aviso.data_visita }}</p>
+              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            </article>
+          {% endfor %}
+        </section>
       {% endif %}
     </div>
   </aside>
