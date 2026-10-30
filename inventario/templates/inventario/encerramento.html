@@ -1,4 +1,4 @@
-﻿{% if encerramento_previa %}<section class="card" id="encerramento-administrativo">
+{% if encerramento_previa %}<section class="card" id="encerramento-administrativo">
 <h2>Finalizar conferência com ajuste pendente</h2>
 <p>{{ encerramento_previa.total }} produtos com OK válido. {{ encerramento_previa.aplicados }} produtos com ajuste já aplicado. {{ encerramento_previa.sem_ajuste }} produtos permanecerão sem ajuste aplicado, sendo {{ encerramento_previa.diferencas_pendentes }} com diferença registrada.</p>
 <p>O encerramento não aplica ajustes nem altera saldos. Bloqueios, contagens, rodadas, envios e auditorias serão preservados. Pendências de ajuste continuarão no histórico.</p>
@@ -6,4 +6,4 @@
 <input type="hidden" name="previa" value="{{ encerramento_previa.token }}">
 <label><input type="checkbox" name="confirmacao" value="sim" required> Confirmo o encerramento administrativo com os OKs registrados, sem exigir novos envios dos funcionários e sem aplicar os ajustes pendentes.</label>
 <button data-processando="Finalizando…">Finalizar conferência com ajuste pendente</button><p class="mensagem" data-feedback role="status" aria-live="polite"></p>
-</form></section>{% elif encerramento_erro %}<p class="aviso">Encerramento administrativo indisponível: {{ encerramento_erro }}</p>{% endif %}
+</form></section>{% endif %}
