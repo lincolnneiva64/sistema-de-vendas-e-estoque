@@ -16620,7 +16620,7 @@ def vendas(request):
     avisos_visitas_fornecedores_futuros = sorted(
         (
             aviso
-            for aviso in avisos_visitas_fornecedores
+            for aviso in obter_avisos_visitas_fornecedores(incluir_futuros=True)
             if aviso.get("dias_para_visita", 0) > 1
             and aviso.get("estado") not in {
                 ESTADO_LISTA_PREPARADA_FALTA_ENVIAR,

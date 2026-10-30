@@ -312,7 +312,7 @@ def _montar_aviso(
         "acao": acao,
     }
 
-def obter_avisos_visitas_fornecedores(data_referencia=None):
+def obter_avisos_visitas_fornecedores(data_referencia=None, incluir_futuros=False):
     data_hora_referencia = _data_hora_local_referencia(data_referencia)
     data_referencia = data_hora_referencia.date()
 
@@ -345,7 +345,14 @@ def obter_avisos_visitas_fornecedores(data_referencia=None):
             fornecedor,
             data_referencia=data_hora_referencia,
             resolucoes_por_ciclo=resolucoes_por_ciclo,
+            exigir_janela_operacional=not incluir_futuros,
         )
+        if incluir_futuros:
+            candidatos = sorted([
+                data_visita
+                for data_visita in candidatos
+                if (data_visita - data_referencia).days > 1
+            ])
         if candidatos:
             candidatos_por_fornecedor[fornecedor.id] = candidatos
             datas_consulta.update(candidatos)
