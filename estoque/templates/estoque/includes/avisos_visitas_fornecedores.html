@@ -896,7 +896,7 @@
                 </div>
               </div>
               <div class="vendas-pendencias-item-rodape">
-                <p class="vendas-pendencias-mensagem">Visita em {{ aviso.dias_para_visita }} dias - {{ aviso.data_visita_formatada|default:aviso.data_visita }}</p>
+                <p class="vendas-pendencias-mensagem">Visita em {{ aviso.dias_para_visita }} dias<br>{{ aviso.data_visita_formatada|default:aviso.data_visita }}</p>
                 <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
               {% if aviso.acao.tipo == "preparar_lista" %}
                 <details class="vendas-pendencias-sem-compra">
