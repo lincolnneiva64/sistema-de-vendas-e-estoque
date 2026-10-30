@@ -1,4 +1,7 @@
 """Release gate for the explicit inventory, pickup and purchase approvals."""
+import hashlib
+import inspect
+
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.management import create_permissions
@@ -15,11 +18,13 @@ from locacoes.management.commands.publicar_recolhimento import (
 
 TARGET = ('inventario', '0008_inventario_cancelamento')
 COMPRA = ('estoque', '0135_conciliacao_compra')
-AUTHORIZED = frozenset((RECOLHIMENTO, TARGET, COMPRA))
+PRECISAO = ('estoque', '0136_itemvenda_quantidade_precisao')
+COLETA = ('estoque', '0137_lista_coleta_mobile')
+AUTHORIZED = frozenset((RECOLHIMENTO, TARGET, COMPRA, PRECISAO, COLETA))
 
 
 class Command(BaseCommand):
-    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017 e estoque.0135 autorizadas.'
+    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017 e estoque.0135–0137 autorizadas.'
     requires_system_checks = []
 
     def add_arguments(self, parser):
@@ -48,7 +53,8 @@ class Command(BaseCommand):
             plan = self.checked_plan(executor)
             if not plan:
                 return
-            executor.migrate([RECOLHIMENTO, TARGET, COMPRA], plan=plan)
+            # The final stock target includes exactly the checked 0135 -> 0136 -> 0137 chain.
+            executor.migrate([RECOLHIMENTO, TARGET, COLETA], plan=plan)
             if any((m.app_label, m.name) == RECOLHIMENTO for m, _ in plan):
                 create_permissions(apps.get_app_config('locacoes'), verbosity=0, interactive=False)
             # A later failure here also rolls back both DDL and migration records.
@@ -123,6 +129,37 @@ class Command(BaseCommand):
                 or MigrationWriter.serialize(compra.operations)[0] != MigrationWriter.serialize(expected_compra)[0]):
             raise CommandError('Publicação recusada: estoque.0135 diverge da definição autorizada.')
 
+        precisao = loader.disk_migrations.get(PRECISAO)
+        if (precisao is None or not precisao.atomic or precisao.replaces or precisao.run_before
+                or precisao.dependencies != [COMPRA] or len(precisao.operations) != 1):
+            raise CommandError('Publicação recusada: estoque.0136 diverge da definição autorizada.')
+        operation = precisao.operations[0]
+        if (type(operation) is not migrations.RunPython or operation.reverse_code is not None
+                or operation.atomic is not None or operation.hints or operation.elidable
+                or getattr(operation.code, '__module__', '') != 'estoque.migrations.0136_itemvenda_quantidade_precisao'
+                or getattr(operation.code, '__name__', '') != 'corrigir_precisao'):
+            raise CommandError('Publicação recusada: estoque.0136 deve executar somente a correção de precisão autorizada.')
+        # Pin the approved Python body, not just its import name; normalize CRLF only.
+        try:
+            source = inspect.getsource(operation.code).replace('\r\n', '\n').strip()
+            digest = hashlib.sha256(source.encode('utf-8')).hexdigest()
+        except (OSError, TypeError) as exc:
+            raise CommandError('Publicação recusada: não foi possível validar o código de estoque.0136.') from exc
+        if digest != '6c78f06e6bdd7f168183bb11bb542881854294c11403542bc3d3e4dd6112abea':
+            raise CommandError('Publicação recusada: código de estoque.0136 diverge da correção autorizada.')
+
+        coleta = loader.disk_migrations.get(COLETA)
+        expected_coleta = [
+            migrations.AddField(model_name='listacomprafornecedor', name='coleta_mobile',
+                field=models.JSONField(null=True, blank=True)),
+            migrations.AlterField(model_name='listacomprafornecedor', name='coleta_mobile',
+                field=models.JSONField(default=dict, null=True, blank=True)),
+        ]
+        if (coleta is None or not coleta.atomic or coleta.replaces or coleta.run_before
+                or coleta.dependencies != [PRECISAO]
+                or MigrationWriter.serialize(coleta.operations)[0] != MigrationWriter.serialize(expected_coleta)[0]):
+            raise CommandError('Publicação recusada: estoque.0137 diverge da definição autorizada.')
+
     @staticmethod
     def verify_schema():
         with connection.cursor() as cursor:
@@ -131,6 +168,8 @@ class Command(BaseCommand):
             if name not in columns or not columns[name].null_ok:
                 raise CommandError('Publicação recusada: estrutura de cancelamento ausente ou incompatível.')
         expected = {
+            'estoque_itemvenda': {'quantidade': ('numeric(12,3)', True, None)},
+            'estoque_listacomprafornecedor': {'coleta_mobile': ('jsonb', False, None)},
             'estoque_compra': {'conciliacao_automatica': ('boolean', True, 'false')},
             'estoque_itemcompra': {'estoque_base_registrado': ('numeric(12,3)', False, None)},
             'estoque_conciliacaocompra': {
@@ -153,7 +192,9 @@ class Command(BaseCommand):
                     WHERE a.attrelid = to_regclass(%s) AND a.attnum > 0 AND NOT a.attisdropped''', [table])
                 actual = {name: (kind, required, default) for name, kind, required, default in cursor.fetchall()}
                 if any(actual.get(name) != definition for name, definition in fields.items()):
-                    raise CommandError('Publicação recusada: estrutura/default de estoque.0135 ausente ou incompatível.')
+                    name = ('0136' if table == 'estoque_itemvenda' else
+                            '0137' if table == 'estoque_listacomprafornecedor' else '0135')
+                    raise CommandError(f'Publicação recusada: estrutura/default de estoque.{name} ausente ou incompatível.')
             constraints = connection.introspection.get_constraints(cursor, 'estoque_conciliacaocompra')
             for column, target in [('compra_id', 'estoque_compra'), ('edicao_id', 'estoque_edicaocompra')]:
                 if (not any(c['columns'] == [column] and c['unique'] for c in constraints.values())
