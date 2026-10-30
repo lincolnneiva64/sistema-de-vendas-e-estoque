@@ -16096,7 +16096,13 @@ def registrar_visita_fornecedor_sem_compra(request):
         messages.error(request, "Selecione um operador autorizado para encerrar o ciclo sem compra.")
         return redirect("estoque:vendas")
 
-    if not data_ciclo_visita_valida(fornecedor, data_visita):
+    if not (
+        data_ciclo_visita_valida(fornecedor, data_visita)
+        or (
+            data_visita > timezone.localdate() + timedelta(days=1)
+            and data_pertence_calendario_visita_fornecedor(fornecedor, data_visita)
+        )
+    ):
         messages.error(request, "A data informada nao corresponde a um ciclo ativo deste fornecedor.")
         return redirect("estoque:vendas")
 

@@ -888,10 +888,30 @@
         <section class="vendas-proximas-listas" aria-label="Proximas listas a preparar">
           <h3>Proximas listas a preparar</h3>
           {% for aviso in avisos_visitas_fornecedores_futuros %}
-            <article class="vendas-proximas-listas-item">
-              <strong>{{ aviso.fornecedor_nome }}</strong>
-              <p>Visita em {{ aviso.dias_para_visita }} dias - {{ aviso.data_visita_formatada|default:aviso.data_visita }}</p>
-              <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+            <article class="vendas-pendencias-item prioridade-baixa" data-pendencia-fornecedor>
+              <div class="vendas-pendencias-item-corpo">
+                <div class="vendas-pendencias-item-topo">
+                  <strong class="vendas-pendencias-item-titulo">{{ aviso.fornecedor_nome }}</strong>
+                  <span class="vendas-pendencias-rotulo">Proxima visita</span>
+                </div>
+              </div>
+              <div class="vendas-pendencias-item-rodape">
+                <p class="vendas-pendencias-mensagem">Visita em {{ aviso.dias_para_visita }} dias - {{ aviso.data_visita_formatada|default:aviso.data_visita }}</p>
+                <a class="vendas-pendencias-item-acao" href="{{ aviso.acao.url }}">Preparar lista</a>
+              {% if aviso.acao.tipo == "preparar_lista" %}
+                <details class="vendas-pendencias-sem-compra">
+                  <summary>Sem compra</summary>
+                  <form method="post" action="{% url 'estoque:registrar_visita_fornecedor_sem_compra' %}" class="vendas-pendencias-sem-compra-form" data-form-sem-compra-visita>
+                    {% csrf_token %}
+                    <input type="hidden" name="fornecedor_id" value="{{ aviso.fornecedor_id }}">
+                    <input type="hidden" name="data_visita" value="{{ aviso.data_visita }}">
+                    <input type="hidden" name="operador" value="" data-operador-sem-compra-visita>
+                    <p class="vendas-pendencias-sem-compra-texto">Confirmar que nao havera compra da {{ aviso.fornecedor_nome }} neste ciclo de {{ aviso.data_visita_formatada|default:aviso.data_visita }}?</p>
+                    <button type="submit" class="vendas-pendencias-sem-compra-enviar">Confirmar sem compra</button>
+                  </form>
+                </details>
+              {% endif %}
+              </div>
             </article>
           {% endfor %}
         </section>
@@ -910,7 +930,7 @@
   const backdrop = document.getElementById("vendasPendenciasBackdrop");
   if (!lateral || !botao || !painel) return;
 
-  const itensPendenciasAlerta = Array.from(painel.querySelectorAll(".vendas-pendencias-item"));
+  const itensPendenciasAlerta = Array.from(painel.querySelectorAll(".vendas-pendencias-item")).filter(function(item) { return !item.closest(".vendas-proximas-listas"); });
   const possuiAlertaPreventivoFornecedor = itensPendenciasAlerta.some(function (item) {
     const textoItem = (item.textContent || "").toUpperCase();
 
