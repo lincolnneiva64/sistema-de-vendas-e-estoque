@@ -67,6 +67,7 @@ from .horarios_recebimentos import (horario_legivel, campos_comprovante, campos_
     metadados_recebimento, texto_horarios, imagem_com_horarios)
 from inventario.rastreabilidade import identificar, referenciar_venda
 from .services import decisoes_precos_compra as decisoes_compra
+from .services import coleta_lista
 from .services.diagnostico_finalizacao_compra import diagnosticar_finalizacao_http, etapa_finalizacao_compra
 from .services.separacao_vendas import (
     consolidar_alteracoes_fisicas_apos_separacao,
@@ -10206,7 +10207,8 @@ def _resposta_lista_fornecedor_salva(request, lista):
         if filtros:
             destino += "?" + urlencode(filtros)
     if request.headers.get("Accept") == "application/json":
-        return JsonResponse({"salvo": True, "lista_id": lista.pk, "redirect_url": destino})
+        return JsonResponse({"salvo": True, "lista_id": lista.pk, "redirect_url": destino,
+            "coleta": lista.coleta_mobile, "atualizada": lista.atualizado_em.isoformat()})
     return redirect(destino)
 
 
@@ -10332,6 +10334,8 @@ def compras_lista_fornecedor_gravar(request):
             total_sugerido_original=total_original,
             total_lista=total_lista,
             status=ListaCompraFornecedor.STATUS_ABERTA,
+            coleta_mobile=(dict(iniciada=True, versao=0, itens={str(i["produto"].pk): "pego" for i in itens_validos})
+                if payload.get("coletaMobileNova") is True else {}),
         )
         ItemListaCompraFornecedor.objects.bulk_create([
             ItemListaCompraFornecedor(lista=lista, **item)
@@ -10785,11 +10789,12 @@ def _compra_existente_lista_fornecedor(lista):
     )
 
 
-def _criar_compra_rascunho_da_lista_fornecedor(lista, request):
+def _criar_compra_rascunho_da_lista_fornecedor(lista, request, somente_coleta=False):
     itens_validos = [
         item
         for item in lista.itens.all()
         if item.produto_id and item.quantidade_final and item.quantidade_final > 0
+        and (not somente_coleta or (lista.coleta_mobile or {}).get("itens", {}).get(str(item.produto_id)) == "pego")
     ]
     if not itens_validos:
         raise ValueError("Esta lista nao tem itens validos para gerar compra.")
@@ -11048,6 +11053,21 @@ def compras_lista_fornecedor_editar(request, pk):
         messages.error(request, "Esta lista ja gerou uma compra finalizada e nao pode mais ser editada.")
         return redirect("estoque:compras_lista_fornecedor_detalhe", pk=lista.pk)
 
+    if request.method == "POST" and request.POST.get('acao_coleta_mobile'):
+        try:
+            dados_coleta = json.loads(request.POST['acao_coleta_mobile'])
+            if not isinstance(dados_coleta, dict):
+                raise ValueError()
+            with transaction.atomic():
+                atual = ListaCompraFornecedor.objects.select_for_update().get(pk=lista.pk)
+                compra_atual = _compra_existente_lista_fornecedor(atual)
+                if atual.status == ListaCompraFornecedor.STATUS_CANCELADA or (compra_atual and compra_atual.status == Compra.STATUS_FINALIZADA):
+                    return JsonResponse({'erro': 'Esta lista não pode mais ser editada.'}, status=409)
+                estado = coleta_lista.iniciar_ou_mover(atual, dados_coleta)
+            return JsonResponse({'coleta': estado, 'atualizada': atual.atualizado_em.isoformat()})
+        except (ValidationError, ValueError, TypeError, KeyError) as exc:
+            return JsonResponse({'erro': ' '.join(exc.messages) if isinstance(exc, ValidationError) else 'Dados de coleta inválidos.'}, status=409)
+
     if request.method == "POST":
         gerar_compra = str(request.POST.get("gerar_compra") or "").strip().lower() in {"1", "true", "sim", "on"}
         payload_raw = request.POST.get("lista_payload", "")
@@ -11139,6 +11159,20 @@ def compras_lista_fornecedor_editar(request, pk):
 
         compra_para_abrir = None
         with transaction.atomic():
+            lista = ListaCompraFornecedor.objects.select_for_update().get(pk=lista.pk)
+            compra_gerada = _compra_existente_lista_fornecedor(lista)
+            if lista.status == ListaCompraFornecedor.STATUS_CANCELADA or (compra_gerada and compra_gerada.status == Compra.STATUS_FINALIZADA):
+                return JsonResponse({'erro': 'Esta lista não pode mais ser editada.'}, status=409)
+            try:
+                coleta = payload.get('coletaMobile')
+                if coleta is not None and not isinstance(coleta, dict):
+                    raise ValidationError('Estado de coleta inválido.')
+                lista.coleta_mobile = coleta_lista.ao_salvar(lista,
+                    {str(i.produto_id) for i in itens_validos}, coleta)
+                if gerar_compra and coleta is not None and not any(e == 'pego' for e in lista.coleta_mobile['itens'].values()):
+                    raise ValidationError('Confirme pelo menos um produto com Peguei antes de gerar a compra.')
+            except ValidationError as exc:
+                return JsonResponse({'erro': ' '.join(exc.messages)}, status=409)
             lista.fornecedor = fornecedor
             lista.data_inicio_periodo = data_inicio
             lista.data_fim_periodo = data_fim
@@ -11149,6 +11183,7 @@ def compras_lista_fornecedor_editar(request, pk):
             if lista.status == ListaCompraFornecedor.STATUS_FINALIZADA and not compra_gerada:
                 lista.status = ListaCompraFornecedor.STATUS_ABERTA
             lista.save(update_fields=[
+                "coleta_mobile",
                 "fornecedor",
                 "data_inicio_periodo",
                 "data_fim_periodo",
@@ -11165,7 +11200,7 @@ def compras_lista_fornecedor_editar(request, pk):
                 lista = ListaCompraFornecedor.objects.select_related("fornecedor").prefetch_related("itens__produto").get(pk=lista.pk)
                 compra_para_abrir = _compra_existente_lista_fornecedor(lista)
                 if not compra_para_abrir:
-                    compra_para_abrir = _criar_compra_rascunho_da_lista_fornecedor(lista, request)
+                    compra_para_abrir = _criar_compra_rascunho_da_lista_fornecedor(lista, request, somente_coleta=coleta is not None)
 
         messages.success(request, f"Lista #{lista.id} atualizada com sucesso.")
         if gerar_compra and compra_para_abrir:
@@ -11232,6 +11267,7 @@ def compras_lista_fornecedor_editar(request, pk):
             fator = Decimal("1")
 
         linhas_edicao.append({
+            "coleta_pego": (lista.coleta_mobile or {}).get("itens", {}).get(str(item.produto_id)) == "pego",
             "produto_id": item.produto_id,
             "produto": produto,
             "fator_conversao": fator,
@@ -11325,6 +11361,8 @@ def compras_lista_fornecedor_editar(request, pk):
     periodo_edicao = int(dias_lista_edicao or 1)
 
     context = {
+        "coleta_mobile_contexto": dict(legada=lista.coleta_mobile is None, estado=lista.coleta_mobile or {},
+            atualizada=lista.atualizado_em.isoformat()),
         "modo_edicao_lista": True,
         "lista_edicao": lista,
         "fornecedor": fornecedor,

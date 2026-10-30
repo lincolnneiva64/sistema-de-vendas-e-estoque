@@ -1,0 +1,106 @@
+{% if modo_edicao_lista %}
+{{ coleta_mobile_contexto|json_script:"coleta-lista-contexto" }}
+{% endif %}
+<style>[data-coleta-aviso][hidden] { display:none !important; }</style>
+<script>
+(() => {
+  const contexto = document.getElementById('coleta-lista-contexto');
+  let dados = contexto ? JSON.parse(contexto.textContent) : null;
+  const mobile = () => matchMedia('(max-width:860px)').matches;
+  const cards = () => [...document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card[data-produto-id]')];
+  const idsSalvos = new Set(cards().map(c => c.dataset.produtoId));
+  const form = document.getElementById('formGravarListaFornecedor');
+  let ocupado = false, bloqueado = false;
+  const aviso = document.createElement('div');
+  aviso.className = 'sugestao-progresso-mobile';
+  aviso.setAttribute('role', 'status');
+  aviso.hidden = true;
+  aviso.dataset.coletaAviso = '1';
+  document.getElementById('preListaMobileTitulo')?.after(aviso);
+  function mensagem(texto) { aviso.replaceChildren(document.createTextNode(texto)); aviso.hidden = false; }
+  function pronto() {
+    if (!dados || !mobile()) return true;
+    if (ocupado || bloqueado || !dados.estado.iniciada) {
+      aviso.scrollIntoView({block:'center'});
+      return false;
+    }
+    return true;
+  }
+  function receber(resultado) {
+    if (!resultado.coleta) return;
+    if (!dados) dados = {legada:false};
+    idsSalvos.clear();
+    Object.keys(resultado.coleta.itens || {}).forEach(id => idsSalvos.add(id));
+    dados.estado = resultado.coleta;
+    dados.atualizada = resultado.atualizada;
+  }
+  async function enviar(acao, produto, estado) {
+    if (!dados || !mobile()) return true;
+    if (ocupado || bloqueado) return false;
+    if (acao === 'mover' && !pronto()) return false;
+    // Newly added products are persisted by the existing explicit Save action.
+    if (acao === 'mover' && !idsSalvos.has(String(produto))) return true;
+    ocupado = true;
+    mensagem('Salvando coleta…');
+    try {
+      const body = new FormData();
+      body.set('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
+      body.set('acao_coleta_mobile', JSON.stringify({acao, produto, estado,
+        versao:dados.estado.versao || 0, atualizada:dados.atualizada}));
+      const resposta = await fetch(form.action, {method:'POST',body,credentials:'same-origin',keepalive:true,
+        headers:{Accept:'application/json'}});
+      if (!resposta.headers.get('content-type')?.includes('application/json'))
+        throw new Error('Não foi possível confirmar o salvamento da coleta.');
+      const resultado = await resposta.json();
+      if (!resposta.ok || !resultado.coleta) throw new Error(resultado.erro || 'Não foi possível salvar a coleta.');
+      receber(resultado);
+      mensagem('Coleta salva.');
+      return true;
+    } catch (erro) {
+      bloqueado = true;
+      mensagem((erro instanceof TypeError ? 'Sem confirmação do servidor.' : erro.message) +
+        ' Reabra a lista para consultar o estado salvo antes de continuar.');
+      return false;
+    } finally { ocupado = false; }
+  }
+  window.coletaLista = {pronto, receber, get dados() { return dados; },
+    mover:(produto, estado) => enviar('mover', produto, estado)};
+  window.prepararColetaPayload = payload => {
+    if (!mobile()) return payload;
+    if (!dados) return {...payload, coletaMobileNova:true};
+    const porId = new Map(cards().map(c => [c.dataset.produtoId, c]));
+    payload.coletaMobile = {versao:dados.estado.versao || 0, atualizada:dados.atualizada,
+      itens:Object.fromEntries(payload.linhas.map(l => [String(l.produtoId),
+        porId.get(String(l.produtoId))?.dataset.naLista === '1' ? 'pego' : 'pendente']))};
+    return payload;
+  };
+  if (!dados) return;
+  function mostrarInicio() {
+    aviso.hidden = !mobile() || !!dados.estado.iniciada;
+    if (dados.estado.iniciada) return;
+    aviso.replaceChildren();
+    const texto = document.createElement('span');
+    texto.textContent = dados.legada ? 'Como deseja iniciar esta lista?' : 'Lista preparada. Inicie a compra para marcar o que já pegou.';
+    aviso.append(texto);
+    [['iniciar_pendente','Começar a compra — todos na pré-lista'],
+      ...(dados.legada ? [['iniciar_pego','Manter como já peguei']] : [])].forEach(([acao,rotulo]) => {
+      const botao = document.createElement('button');
+      botao.type = 'button'; botao.className = 'sugestao-btn sugestao-btn-primary';
+      botao.dataset.iniciarColeta = acao; botao.textContent = rotulo;
+      botao.addEventListener('click',async () => { if (await enviar(acao)) location.reload(); });
+      aviso.append(botao);
+    });
+  }
+  mostrarInicio();
+  addEventListener('resize', () => { if (!dados.estado.iniciada) mostrarInicio(); });
+  // Capture only actions of this list. Desktop and unrelated controls are untouched.
+  document.addEventListener('click', event => {
+    if (!mobile() || event.target.closest('[data-iniciar-coleta]')) return;
+    if (event.target.closest('[data-historico-toggle]')) return;
+    if (event.target.closest('#mobileSugestaoProdutos button, #itensListaMobile button, .sugestao-salvar-lista-extra, .sugestao-gravar-gerar-extra, #btnGravarListaFornecedor, #btnGravarGerarCompraFornecedor, #btnSalvarRascunhoListaMobile, #btnAdicionarProdutoSugestao') && !pronto()) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+  },true);
+  addEventListener('beforeunload',event => { if (ocupado) { event.preventDefault(); event.returnValue = ''; } });
+})();
+</script>

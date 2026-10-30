@@ -2289,6 +2289,9 @@ class EnvioInternoListaCompraFornecedor(models.Model):
 
 
 class ListaCompraFornecedor(models.Model):
+    # None identifies legacy lists; {} identifies a newly planned list.
+    # Item states belong to collection, independently of receiving/conference.
+    coleta_mobile = models.JSONField(default=dict, null=True, blank=True)
     STATUS_ABERTA = "aberta"
     STATUS_ENVIADA = "enviada"
     STATUS_FINALIZADA = "finalizada"

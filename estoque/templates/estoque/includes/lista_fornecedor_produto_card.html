@@ -1,4 +1,4 @@
-          <article class="sugestao-mobile-card{% if modo_edicao_lista %} item-adicionado-lista{% endif %}" data-produto-id="{{ linha.produto_id }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}"{% if modo_edicao_lista %} data-na-lista="1"{% endif %}>
+          <article class="sugestao-mobile-card{% if linha.coleta_pego %} item-adicionado-lista{% endif %}" data-produto-id="{{ linha.produto_id }}" data-sugestao-original="{{ linha.sugestao|floatformat:3 }}"{% if linha.coleta_pego %} data-na-lista="1"{% endif %}>
             <div class="sugestao-mobile-top">
               <div class="sugestao-mobile-produto">{{ linha.produto.nome }}</div>
             </div>

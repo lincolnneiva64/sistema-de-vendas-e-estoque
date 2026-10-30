@@ -2253,6 +2253,7 @@
         <h2 class="sugestao-pre-lista-titulo" id="preListaMobileTitulo">Pré-lista — Falta comprar</h2>
         <div class="sugestao-progresso-mobile" role="status" aria-live="polite" aria-atomic="true">
           <span>Pendentes: <strong data-produtos-pendentes>0</strong></span>
+          <span>Total previsto: <strong data-total-pre-lista>R$ 0,00</strong></span>
           <span>Confirmados: <strong data-produtos-confirmados>0</strong></span>
         </div>
         {% if not modo_edicao_lista %}<p>Pré-lista: toque em <strong>Peguei</strong> para confirmar. Somente os itens confirmados serão gravados.</p>{% endif %}
@@ -2954,8 +2955,10 @@
     const mobile = document.getElementById("mobileSugestaoProdutos");
     if (!mobile) return false;
     const itens = Array.from(document.querySelectorAll("#itensListaMobileLista .sugestao-item-lista-mobile[data-produto-id]"));
-    let total = 0n;
-    mobile.querySelectorAll(".sugestao-mobile-card[data-na-lista='1']").forEach((card) => {
+    let total = 0n, pendente = 0n;
+    mobile.querySelectorAll(".sugestao-mobile-card[data-produto-id]").forEach((card) => {
+      const confirmado = card.dataset.naLista === '1';
+      if (!confirmado && card.classList.contains('sugestao-tratada-mobile')) return;
       // Same precision and half-even rounding as the backend's Decimal fields.
       const quantidade = decimalEscalado(card.querySelector(".sugestao-qtd-input")?.value, 3);
       const preco = decimalEscalado(card.querySelector(".sugestao-preco-input")?.value, 2);
@@ -2963,11 +2966,13 @@
       const texto = centavosTexto(subtotal);
       const campo = card.querySelector(".sugestao-total-input");
       if (campo) campo.value = texto;
+      if (!confirmado) { pendente += subtotal; return; }
       const item = itens.find((item) => item.dataset.produtoId === card.dataset.produtoId);
       const subtotalItem = item?.querySelector(".sugestao-item-lista-mobile-total span");
       if (subtotalItem) subtotalItem.textContent = texto;
       total += subtotal;
     });
+    mobile.querySelectorAll("[data-total-pre-lista]").forEach(el => { el.textContent = "R$ " + centavosTexto(pendente); });
     document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
       el.textContent = "R$ " + centavosTexto(total);
     });
@@ -4006,6 +4011,7 @@
 })();
 </script>
 
+{% include "estoque/includes/lista_coleta_mobile.html" %}
 <script>
 (function () {
   const mobile = document.getElementById("mobileSugestaoProdutos");
@@ -4051,6 +4057,10 @@
   let focoPrecoPendentePorEnter = null;
   const produtosTratadosMobile = new Set();
 
+  function contextoColetaAtiva() {
+    return ehMobileLista() && !!window.coletaLista?.dados?.estado.iniciada;
+  }
+
   function ehMobileLista() {
     return window.matchMedia("(max-width: 860px)").matches;
   }
@@ -4079,7 +4089,8 @@
 
   window.sugestaoMobileCardsParaLista = function(cards) {
     const colecao = Array.from(cards || []);
-    return colecao.filter((card) => card?.dataset?.naLista === "1");
+    return contextoColetaAtiva() ? colecao.filter(card => !produtosTratadosMobile.has(String(card.dataset.produtoId)) || card.dataset.naLista === "1")
+      : colecao.filter((card) => card?.dataset?.naLista === "1");
   };
 
   window.sugestaoMobileItemEmEdicaoAberta = function() {
@@ -4269,6 +4280,7 @@
     const card = event.target.closest("#mobileSugestaoProdutos .sugestao-mobile-card");
     if (card) sincronizarDesktop(card);
     window.atualizarTotalListaPedidoMobile();
+    atualizarContadorItensLista();
   });
 
   function marcarBotao(card, adicionado) {
@@ -4477,9 +4489,10 @@
     if (itemEmEdicao === item) itemEmEdicao = null;
   }
 
-  function adicionarCardNaLista(card, confirmarFluxo = true) {
+  async function adicionarCardNaLista(card, confirmarFluxo = true) {
     if (!card || card.dataset.naLista === "1") return;
     if (card.dataset.editando === "1") { confirmarCardEdicaoDireta(card); if (card.dataset.editando === "1") return; }
+    if (confirmarFluxo && window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pego")) return;
     marcarBotao(card, true);
     renderItem(card);
     if (confirmarFluxo) confirmarAdicaoMobile(card);
@@ -4489,11 +4502,12 @@
 
   window.adicionarCardSugestaoNaLista = adicionarCardNaLista;
 
-  function devolverItemParaPreLista(item) {
+  async function devolverItemParaPreLista(item) {
     // Require a valid saved edit before moving an item; do not discard input.
     if (item.dataset.editando === "1" && !salvarEdicao(item)) return;
     const card = cardPorId(item.dataset.produtoId);
     if (!card) return;
+    if (window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pendente")) return;
     marcarBotao(card, false);
     produtosTratadosMobile.delete(String(card.dataset.produtoId));
     card.classList.remove("sugestao-tratada-mobile");
@@ -4581,7 +4595,7 @@
     }, 0);
   }
 
-  function confirmarRemocaoItem() {
+  async function confirmarRemocaoItem() {
     if ((!itemPendenteRemocao && !cardPendenteRemocao) || remocaoEmAndamento) return;
 
     remocaoEmAndamento = true;
@@ -4591,6 +4605,12 @@
     const botaoCard = card ? botaoRemoverOrigem : null;
 
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = true;
+    const produtoRemovido = (item || card)?.dataset.produtoId;
+    if (window.coletaLista && !await window.coletaLista.mover(produtoRemovido, 'removido')) {
+      remocaoEmAndamento = false;
+      if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
+      return;
+    }
     if (item) removerItemDaLista(item);
 
     fecharModalRemoverItem();
@@ -4769,6 +4789,9 @@
   });
 
   cards().forEach(window.prepararProdutoListaFornecedor);
+  if (ehMobileLista()) cards().forEach(card => {
+    if (window.coletaLista?.dados?.estado.itens?.[card.dataset.produtoId] === 'removido') ocultarProdutoTratado(card);
+  });
   cards().filter(card => card.dataset.naLista === "1").forEach(card => {
     card.dataset.naLista = "0"; adicionarCardNaLista(card, false);
   });
@@ -5796,7 +5819,7 @@
     if (!formGravarListaFornecedor || !listaFornecedorPayload) return false;
     if (!iniciarSalvamentoLista(botaoAcionado)) return false;
 
-    listaFornecedorPayload.value = JSON.stringify(payload);
+    listaFornecedorPayload.value = JSON.stringify(window.prepararColetaPayload ? window.prepararColetaPayload(payload) : payload);
     if (listaFornecedorGerarCompra) {
       listaFornecedorGerarCompra.value = "0";
     }
@@ -5814,6 +5837,7 @@
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo) throw new Error("Salvamento nao confirmado.");
+      if (resultado.coleta) window.coletaLista?.receber(resultado);
       const listaId = resultado.lista_id;
       if (listaId) {
         atualizarUrlEdicaoListaAposRascunho(listaId);
@@ -5839,15 +5863,15 @@
     fetch(formGravarListaFornecedor.action, {
       method: "POST", body: new FormData(formGravarListaFornecedor), credentials: "same-origin",
       headers: {"Accept": "application/json"}
-    }).then(function(resposta) {
-      if (!resposta.ok) throw new Error("Falha ao salvar.");
+    }).then(async function(resposta) {
+      if (!resposta.ok) throw new Error((await resposta.json()).erro || "Falha ao salvar.");
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo || !resultado.redirect_url) throw new Error("Salvamento nao confirmado.");
       window.location.assign(resultado.redirect_url);
-    }).catch(function() {
+    }).catch(function(erro) {
       restaurarBotoesSalvamentoLista();
-      alert("Nao foi possivel confirmar o salvamento. Os dados continuam nesta tela. Verifique e tente novamente.");
+      alert(erro.message + " Os dados continuam nesta tela.");
     });
   }
 
@@ -5861,7 +5885,7 @@
       alert("{% if modo_edicao_lista %}Nenhum item com quantidade maior que zero para salvar. Ajuste as quantidades antes de salvar.{% else %}Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.{% endif %}");
       return;
     }
-    listaFornecedorPayload.value = JSON.stringify(payload);
+    listaFornecedorPayload.value = JSON.stringify(window.prepararColetaPayload ? window.prepararColetaPayload(payload) : payload);
     if (listaFornecedorGerarCompra) {
       listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
     }
@@ -5975,7 +5999,7 @@
       alert("{% if modo_edicao_lista %}Selecione um fornecedor antes de salvar as alterações.{% else %}Selecione um fornecedor antes de gravar a lista.{% endif %}");
       return;
     }
-    if (!usarItensDesktop() && !temItensEscolhidosMobile()) {
+    if (!usarItensDesktop() && !temItensEscolhidosMobile() && (gerarCompra || !window.coletaLista?.dados?.estado.iniciada)) {
       orientarAdicionarItensMobile({ rascunho: salvarRascunhoAoGravar });
       return;
     }
@@ -5999,7 +6023,7 @@
       alert("{% if modo_edicao_lista %}Nenhum item com quantidade maior que zero para salvar. Ajuste as quantidades antes de salvar.{% else %}Nenhum item com quantidade maior que zero para gravar. Ajuste as quantidades antes de gravar a lista.{% endif %}");
       return;
     }
-    listaFornecedorPayload.value = JSON.stringify(payload);
+    listaFornecedorPayload.value = JSON.stringify(window.prepararColetaPayload ? window.prepararColetaPayload(payload) : payload);
     if (listaFornecedorGerarCompra) {
       listaFornecedorGerarCompra.value = gerarCompraAoGravar ? "1" : "0";
     }
