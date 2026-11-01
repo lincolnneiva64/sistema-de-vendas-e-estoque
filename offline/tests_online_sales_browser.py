@@ -4,16 +4,18 @@ from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
+from django.contrib.auth.models import Permission
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from estoque.models import Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, DespesaDiaria, Produto
 from .models import OperacaoSincronizacao
 from .browser_support import Chrome
 from . import tests_sales_drafts_browser as draft_tests
 CHROME = draft_tests.CHROME
+REQUEST_TRACKER = """if(location.origin!=='null'){const originalFetch=window.fetch.bind(window);window.fetch=(url,options={})=>{if(String(url).startsWith('/api/vendas/online/')){const method=(options.method||'GET').toUpperCase();const key=method==='POST'?'sale-test-posts':'sale-test-gets';localStorage.setItem(key,String(Number(localStorage.getItem(key)||'0')+1));if(method==='GET')localStorage.setItem('sale-test-get-path',new URL(url,location.href).pathname)}return originalFetch(url,options)}}"""
 
 
-def prepare(test, chrome, payment='A prazo'):
-    tab = test.open_sales(chrome)
+def prepare(test, chrome, payment='A prazo', init_script=None):
+    tab = test.open_sales(chrome, init_script=init_script)
     test.select_customer(tab, 'Cliente Comercial')
     test.add_product(tab, 'Produto Fracionado', '1')
     test.repository(tab)
@@ -29,7 +31,7 @@ def check_loss(test, reopen=False, payment='A prazo'):
     with TemporaryDirectory(prefix='online-sale-loss-') as profile:
         chrome = Chrome(CHROME, profile).start()
         try:
-            tab = prepare(test, chrome, payment)
+            tab = prepare(test, chrome, payment, REQUEST_TRACKER)
             # Invoke the same public submission method used by the sale button;
             # cash origin is explicit rather than faking an official receipt.
             tab.evaluate('window.realFetch=fetch;window.onlinePosts=0;window.fetch=async(url,options)=>{const response=await realFetch(url,options);if(String(url)==="/api/vendas/online/"){onlinePosts++;throw new TypeError("Resposta perdida depois do commit")};return response};window.done=salesDraftUI.submitOnline('+('{caixa:"10",banco:"14"}' if payment == 'À vista' else 'undefined')+',decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1]));true')
@@ -42,24 +44,22 @@ def check_loss(test, reopen=False, payment='A prazo'):
             test.assertEqual(test.product.quantidade, Decimal('1.5'))
             models = [Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, DespesaDiaria, Produto]
             before = {m.__name__:list(m.objects.order_by('pk').values()) for m in models}
-            test.assertTrue(tab.evaluate('btnGravarVenda.disabled'))
-            tab.evaluate('btnGravarVenda.click();true')
             test.assertEqual(tab.evaluate('onlinePosts'), 1)
             if reopen:
                 chrome.stop(); chrome = Chrome(CHROME, profile).start()
-                tab = test.open_sales(chrome)
+                tab = test.open_sales(chrome, init_script=REQUEST_TRACKER)
             else:
                 test.reload(tab)
             test.repository(tab)
             test.assertEqual(tab.evaluate('(await repo.all("operations"))[0].payload_hash'), operation['payload_hash'])
-            test.assertTrue(tab.evaluate('btnGravarVenda.disabled'))
-            tab.wait('!document.getElementById("sales-online-recover").hidden && !document.getElementById("sales-online-recover").disabled')
-            tab.evaluate('document.getElementById("sales-online-recover").click();true')
             try:
-                tab.wait('!salesDraftUI.finalization && !document.getElementById("sales-official-sale-link").hidden')
+                tab.wait('(await repo.all("operations"))[0].status==="confirmada"')
             except AssertionError:
                 raise AssertionError(tab.evaluate('JSON.stringify({message:document.querySelector("#sales-draft-status span").textContent,button:document.getElementById("sales-online-recover").outerHTML,operations:await repo.all("operations")})'))
             test.assertEqual(tab.evaluate('(await repo.all("operations"))[0].server_result.record_id'), Venda.objects.get().pk)
+            test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-posts')"), '1')
+            test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-gets')"), '1')
+            test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-get-path')"), f'/api/vendas/online/{operation["operation_id"]}/')
             test.assertEqual(before, {m.__name__:list(m.objects.order_by('pk').values()) for m in models})
             test.assertEqual(OperacaoSincronizacao.objects.count(), 1)
         finally:
@@ -87,7 +87,11 @@ def check_cleanup_failure(test):
 @skipUnless(Path(CHROME).is_file(), 'Chrome unavailable')
 class OnlineSaleBrowserTests(StaticLiveServerTestCase):
     reset_sequences = True
-    setUp = draft_tests.SalesDraftBrowserTests.setUp
+    def setUp(self):
+        draft_tests.SalesDraftBrowserTests.setUp(self)
+        self.user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label='estoque', codename__in=['add_venda', 'view_venda']))
+
     open_sales = draft_tests.SalesDraftBrowserTests.open_sales
     select_customer = draft_tests.SalesDraftBrowserTests.select_customer
     add_product = draft_tests.SalesDraftBrowserTests.add_product
@@ -121,6 +125,24 @@ class OnlineSaleBrowserTests(StaticLiveServerTestCase):
     def test_lost_commit_consumption_unique_expense(self):
         check_loss(self, payment='consumo_proprio')
         self.assertEqual(DespesaDiaria.objects.count(), 1)
+
+    def test_automatic_inconclusive_lookup_preserves_sale_without_post(self):
+        with TemporaryDirectory(prefix='online-unknown-') as profile:
+            chrome = Chrome(CHROME, profile).start()
+            try:
+                tab = prepare(self, chrome)
+                tab.evaluate('window.realFetch=fetch;window.reads=0;window.posts=0;window.fetch=async(url,options={})=>{if(String(url).startsWith("/api/vendas/online/")){if((options.method||"GET")==="POST"){posts++;throw TypeError("request did not arrive")}reads++;return new Response(JSON.stringify({lookup:"indeterminada"}),{status:503})}return realFetch(url,options)};btnGravarVenda.click();true')
+                tab.wait('(await repo.all("operations"))[0]?.status==="resultado_desconhecido"')
+                tab.evaluate('document.dispatchEvent(new CustomEvent("offline-connectivity",{detail:"offline"}));document.dispatchEvent(new CustomEvent("offline-connectivity",{detail:"online"}));true')
+                tab.wait('reads===1')
+                operation = tab.evaluate('(await repo.all("operations"))[0]')
+                self.assertEqual(operation['status'], 'resultado_desconhecido')
+                self.assertEqual(operation['diagnostic_code'], 'consulta_indeterminada')
+                self.assertEqual(tab.evaluate('posts'), 1)
+                self.assertFalse(OperacaoSincronizacao.objects.exists())
+                self.assertFalse(Venda.objects.exists())
+                self.assertEqual(tab.evaluate('(await repo.all("history")).length'), 0)
+            finally: chrome.stop()
 
     def test_absent_lookup_only_manual_stable_retry_same_command(self):
         from . import tests_sale_sync_browser as sync_tests
@@ -167,20 +189,21 @@ class OnlineSaleBrowserTests(StaticLiveServerTestCase):
         with TemporaryDirectory(prefix='online-inflight-f5-') as profile:
             chrome = Chrome(CHROME, profile).start()
             try:
-                tab = prepare(self, chrome)
+                tab = prepare(self, chrome, init_script=REQUEST_TRACKER)
                 tab.evaluate('window.realFetch=fetch;window.fetch=async(url,options)=>{const response=await realFetch(url,options);if(String(url)==="/api/vendas/online/"){window.committed=true;return new Promise(()=>{})}return response};btnGravarVenda.click();true')
                 tab.wait('window.committed===true')
                 operation = tab.evaluate('(await repo.all("operations"))[0]')
                 self.assertEqual(operation['status'], 'enviando')
                 self.assertEqual(Venda.objects.count(), 1)
                 self.reload(tab); self.repository(tab)
-                tab.wait('!document.getElementById("sales-online-recover").hidden && !document.getElementById("sales-online-recover").disabled')
-                tab.evaluate('document.getElementById("sales-online-recover").click();true')
-                tab.wait('!salesDraftUI.finalization')
+                tab.wait('(await repo.all("operations"))[0].status==="confirmada"')
                 recovered = tab.evaluate('(await repo.all("operations"))[0]')
                 self.assertEqual(recovered['operation_id'], operation['operation_id'])
                 self.assertEqual(recovered['payload_hash'], operation['payload_hash'])
                 self.assertEqual(recovered['attempts'], 1)
+                self.assertEqual(tab.evaluate("localStorage.getItem('sale-test-posts')"), '1')
+                self.assertEqual(tab.evaluate("localStorage.getItem('sale-test-gets')"), '1')
+                self.assertEqual(tab.evaluate("localStorage.getItem('sale-test-get-path')"), f'/api/vendas/online/{operation["operation_id"]}/')
                 self.assertEqual(Venda.objects.count(), 1)
                 self.assertEqual(ItemVenda.objects.count(), 1)
                 self.assertEqual(ContaReceber.objects.count(), 1)

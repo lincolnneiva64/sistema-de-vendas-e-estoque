@@ -212,7 +212,8 @@ export class Repository {
     record(operation, result) {
         if (!validReceipt(result, operation)) throw new Error('Confirmação do servidor inválida.');
         const updated = {...operation, status: result.status, server_result: result,
-            last_error: result.status === 'confirmada' ? '' : result.erro || ''};
+            last_error: result.status === 'confirmada' ? '' : result.erro || '',
+            diagnostic_code:'', diagnostic_response:null};
         return this.transaction(['operations', 'history'], true, tx => {
             const store = tx.objectStore('operations');
             store.get(operation.operation_id).onsuccess = event => {

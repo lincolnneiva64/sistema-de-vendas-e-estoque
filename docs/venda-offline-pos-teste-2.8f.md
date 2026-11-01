@@ -174,3 +174,26 @@ temporários, `.worktrees/` e todos os arquivos locais preexistentes.
 - `static/offline/sales-stock.js`
 - `static/offline/sales.js`
 - `static/offline/service-worker.js`
+
+## Reconciliação automática de resultado desconhecido
+
+Quando a conectividade validada retorna ou a tela abre online, vendas locais em
+`resultado_desconhecido` são consultadas por GET usando o UUID existente. A
+consulta verifica usuário, ambiente, dispositivo, tipo e hash do comando. Um
+recibo válido atualiza a operação e o histórico local; a consulta automática não
+envia POST. Ausência ou resultado inconclusivo mantém a operação. O retry manual
+existente permanece separado e continua sujeito à idempotência do servidor.
+
+O cache do Service Worker foi versionado para `v44-reconciliacao-leitura` para
+atualizar os módulos já publicados no namespace `sack-conversion-v1`. A troca
+remove somente caches antigos da Cache API; não apaga IndexedDB nem o histórico
+local. Nenhuma regra de gravação, serviço de idempotência ou migration foi
+alterada.
+
+Validação na worktree isolada baseada em `origin/backup/wip-pedidos-base-2026-06-04`:
+10 testes de navegador passaram em SQLite temporário, cobrindo gravação online,
+resposta perdida, consulta automática pelo mesmo UUID sem segundo POST, F5 e
+reabertura, estoque/despesa sem duplicidade, ausência e consulta inconclusiva,
+duas abas e atualização do Service Worker. O SQL de função PostgreSQL foi
+ignorado somente no processo de teste SQLite. PostgreSQL não estava disponível;
+nenhum banco de produção foi configurado ou acessado.

@@ -66,6 +66,7 @@ let localCompletion = null, finalizing = null;
 let completionView = null;
 let completionGeneration = 0;
 let recoveringOnline = false;
+let automaticRecoveryRunning = false;
 let queriedConfirmationId = null;
 let historicalCompletion = null;
 let queueBlocked = false, startingNext = false;
@@ -478,7 +479,7 @@ window.salesDraftUI = {
         } catch (error) { showError(error); }
         finally { startingNext = false; offlineActions(); }
     },
-    async recoverOnline(operationId = null) {
+    async recoverOnline(operationId = null, {automatic = false} = {}) {
         const marker = localCompletion || historicalCompletion;
         operationId ||= marker?.operation_id;
         if (recoveringOnline || !operationId || !await checkIdentity()) return;
@@ -503,7 +504,9 @@ window.salesDraftUI = {
             if (!response.ok || result.operation_id !== operation.operation_id || result.hash !== operation.payload_hash)
                 throw new Error('Consulta indisponivel ou incompatível. Venda preservada; autentique-se e consulte novamente.');
             if (result.lookup === 'nao_encontrada') {
-                message.textContent = 'Operacao ainda nao encontrada. O envio anterior pode estar em andamento. Identidade preservada; consulte novamente ou use Status → Sincronizar agora quando permitido.';
+                message.textContent = automatic
+                    ? 'Consulta automática: ainda não encontrada. Nenhum reenvio foi feito; a operação foi preservada.'
+                    : 'Operacao ainda nao encontrada. O envio anterior pode estar em andamento. Identidade preservada; consulte novamente ou use Status → Sincronizar agora quando permitido.';
                 return;
             }
             if (result.lookup !== 'encontrada' || result.actor_id !== scope.actor_id || result.environment_id !== scope.environment_id
@@ -757,6 +760,27 @@ await refreshCompletion().catch(showError);
 offlineActions();
 window.salesDraftResolve?.();
 document.dispatchEvent(new Event('sales-draft-ready'));
+async function reconcileUnknownSales() {
+    if (automaticRecoveryRunning || recoveringOnline || !scope || !navigator.onLine) return;
+    automaticRecoveryRunning = true;
+    try {
+        if (!await checkIdentity() || !navigator.onLine) return;
+        const operations = (await repo.all('operations')).filter(operation =>
+            operation.type === 'criar_venda' && operation.status === 'resultado_desconhecido'
+            && operation.actor_id === scope.actor_id && operation.environment_id === scope.environment_id
+            && operation.device_id === scope.device_id)
+            .sort((left, right) => left.sequence - right.sequence);
+        for (const operation of operations) {
+            if (!navigator.onLine) break;
+            await window.salesDraftUI.recoverOnline(operation.operation_id, {automatic:true});
+        }
+    } finally { automaticRecoveryRunning = false; }
+}
+document.addEventListener('offline-connectivity', event => {
+    if (event.detail === 'online') void reconcileUnknownSales().catch(showError);
+});
+if (document.getElementById('offline-global')?.dataset.connection === 'online')
+    void reconcileUnknownSales().catch(showError);
 document.addEventListener('sales-offline-active', offlineActions);
 new MutationObserver(offlineActions).observe(document.getElementById('btnGravarVenda'), {attributes:true, attributeFilter:['disabled'], childList:true});
 document.addEventListener('sales-draft-change', () => schedule(0));

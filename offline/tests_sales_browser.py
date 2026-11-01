@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
 
+from django.contrib.auth.models import Permission
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import Client
 
@@ -20,6 +21,8 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
 
     def test_slow_online_navigation_stays_online_without_reload_recovery(self):
         user, _, _, *_ = commercial_fixtures()
+        user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label='estoque', codename__in=['add_venda', 'view_venda']))
         client = Client()
         client.force_login(user)
         with TemporaryDirectory(prefix='offline-sales-slow-navigation-') as profile:
@@ -42,7 +45,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const current=keys.find(key=>key === 'offline-pilot-shell-v40-piloto-integrado');
+                    const current=keys.find(key=>key === 'offline-pilot-shell-v44-reconciliacao-leitura');
                     if(!current)return false;
                     const cache=await caches.open(current);
                     return keys.includes(current)
