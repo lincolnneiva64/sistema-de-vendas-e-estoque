@@ -11,8 +11,13 @@ from estoque.models import Compra, ContaPagar, ItemCompra, MovimentoFinanceiro, 
 @override_settings(SECURE_SSL_REDIRECT=False, ALLOWED_HOSTS=["testserver"])
 class RevisaoPrecosPosteriorTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import Permission
         from estoque.tests_precos_vinculados import criar_operador_precos
         self.operador=criar_operador_precos('posterior-authorized-test')
+        self.operador.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label='estoque',
+            codename__in=('view_compra', 'view_produto', 'view_venda', 'view_cliente'),
+        ))
         self.client.force_login(self.operador)
         self.produto = Produto.objects.create(
             nome="Produto de teste", preco_compra=Decimal("9.00"),
@@ -163,8 +168,8 @@ class RevisaoPrecosPosteriorTests(TestCase):
     def test_csrf_metodos_e_reenvio(self):
         from django.test import Client
         self.assertEqual(Client(enforce_csrf_checks=True).post(self.url, self.payload()).status_code, 403)
-        self.assertEqual(self.client.get(self.url).status_code, 405)
-        self.assertEqual(self.client.post(self.consulta).status_code, 405)
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+        self.assertEqual(self.client.post(self.consulta).status_code, 403)
         self.assertEqual(self.client.post(self.url, self.payload()).status_code, 200)
         self.assertEqual(self.client.post(self.url, self.payload()).status_code, 409)
 

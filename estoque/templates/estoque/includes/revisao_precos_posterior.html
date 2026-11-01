@@ -266,6 +266,7 @@
 <section id="revisaoPrecosPosterior" class="rp-compras-precos-modal" aria-hidden="true"
     data-pendentes="{{ revisao_precos_pendentes_qtd|default:0 }}"
     data-compras="{{ revisao_precos_compras_qtd|default:0 }}"
+    data-actor="{{ request.user.pk|default:'' }}"
     data-consulta="{% url 'estoque:revisao_precos_posterior_pendentes' %}"
     data-salvar="{% url 'estoque:revisao_precos_posterior_salvar' %}">
   <div class="rp-compras-precos-caixa rp-alerta" role="dialog" aria-modal="true" aria-labelledby="rpTitulo" tabindex="-1">
@@ -285,6 +286,8 @@
       <button type="button" id="rpAgora" class="rp-principal">Revisar agora</button>
       <button type="button" id="rpSalvar" class="rp-principal" hidden>Salvar e próximo</button>
       <button type="button" id="rpManter" hidden>Manter preços atuais</button>
+      <button type="button" id="rpAtualizar" hidden>Atualizar próxima revisão</button>
+      <button type="button" id="rpVerificar" hidden>Consultar estado no servidor</button>
     </footer>
     <div hidden>{% csrf_token %}</div>
   </div>
@@ -301,16 +304,61 @@
   const agora = document.getElementById("rpAgora");
   const salvar = document.getElementById("rpSalvar");
   const manter = document.getElementById("rpManter");
+  const atualizar = document.getElementById("rpAtualizar");
+  const verificar = document.getElementById("rpVerificar");
   const voltar = document.getElementById("rpVoltar");
   const depois = document.getElementById("rpDepois");
   let revisaoPrecosItens = [], revisaoPrecosIndice = 0, revisaoPrecosDecisoes = {};
   let pendentes = Number(modal.dataset.pendentes), compras = Number(modal.dataset.compras);
   let timer = null, ocupado = false, modoRevisao = false, focoAnterior = null, overflowAnterior = null;
   const concluidos = new Set();
+  const resultados = new Map();
+  const inconclusivas = new Map();
+  const chaveOperacaoIncerta = item => "revisao-precos-posterior:incerta:v1:" + modal.dataset.actor + ":" +
+    item.compra_id + ":" + item.item_id + ":" + item.produto_id;
+  const prefixoOperacaoIncerta = "revisao-precos-posterior:incerta:v1:" + modal.dataset.actor + ":";
+  let proximaRevisaoDesatualizada = false, proximoItemId = null;
   function compraMobile() { return window.matchMedia("(max-width: 768px)").matches; }
   {% include "estoque/includes/revisao_precos_posterior_simulador.js.html" %}
 
-  function mostrarErro(texto) { erro.textContent = texto; erro.hidden = !texto; }
+  function mostrarErro(texto, tipo="erro") {
+    erro.textContent = texto;
+    erro.classList.toggle("rp-sucesso", tipo === "sucesso");
+    erro.classList.toggle("rp-informacao", tipo === "informacao");
+    erro.hidden = !texto;
+  }
+  function salvarMarcadorIncerto(item) {
+    const marcador = {
+      compra_id:String(item.compra_id),
+      item_id:String(item.item_id),
+      produto_id:String(item.produto_id)
+    };
+    sessionStorage.setItem(chaveOperacaoIncerta(item), JSON.stringify(marcador));
+    inconclusivas.set(item.item_id, marcador);
+    resultados.set(item.item_id, "desconhecido");
+  }
+  function removerMarcadorIncerto(item) {
+    sessionStorage.removeItem(chaveOperacaoIncerta(item));
+    inconclusivas.delete(item.item_id);
+    resultados.delete(item.item_id);
+  }
+  function reconciliarMarcadoresIncertos(itens) {
+    const atuais = new Map(itens.map(item => [String(item.item_id), item]));
+    let resolvidas = 0;
+    for (const chave of Object.keys(sessionStorage).filter(valor => valor.startsWith(prefixoOperacaoIncerta))) {
+      const marcador = JSON.parse(sessionStorage.getItem(chave));
+      const item = atuais.get(String(marcador.item_id));
+      if (item && String(item.compra_id) === String(marcador.compra_id) &&
+          String(item.produto_id) === String(marcador.produto_id)) {
+        inconclusivas.set(item.item_id, marcador);
+        resultados.set(item.item_id, "desconhecido");
+      } else {
+        sessionStorage.removeItem(chave);
+        resolvidas++;
+      }
+    }
+    return resolvidas;
+  }
   async function consultar() {
     const resposta = await fetch(modal.dataset.consulta, {cache:"no-store", credentials:"same-origin"});
     if (!resposta.ok) throw new Error("Não foi possível consultar os preços pendentes. Tente novamente.");
@@ -378,18 +426,27 @@
   function renderizar() {
     const item = revisaoPrecosItens[revisaoPrecosIndice];
     const concluido = concluidos.has(item.item_id);
+    const incerto = inconclusivas.has(item.item_id);
+    const resultado = resultados.get(item.item_id);
+    const status = incerto ? " · Confirmação pendente" :
+      resultado === "mantido" ? " · Preço mantido" :
+      resultado === "alterado" ? " · Preço alterado e salvo" :
+      concluido ? " · Revisão salva" : "";
     listaConferenciaPrecosCompra.innerHTML =
       '<article class="rp-compras-preco-card"><div class="rp-compras-preco-card-topo"><div>' +
       '<h3 class="rp-compras-preco-produto">' + escapeHtml(item.nome) + '</h3>' + (item.grupo_precos ? '<p>'+escapeHtml(item.grupo_precos.nome)+(item.grupo_precos.regularizado?' — reajuste seletivo; confirme os destinatarios.':' — primeira revisao seletiva; confirme os destinatarios.')+'</p>' : '') +
       '<span class="rp-compras-preco-progresso">Produto ' + (revisaoPrecosIndice+1) + ' de ' + revisaoPrecosItens.length +
-      ' · Compra #' + item.compra_id + (concluido ? ' · Revisão salva' : '') + '</span></div></div>' +
+      ' · Compra #' + item.compra_id + status + '</span></div></div>' +
       '<div class="rp-compras-preco-blocos">' + renderizarCustosProdutoCompacto(item) +
       renderizarTabelaPrecosCompacta(item, decisaoProduto(item)) + '</div></article>';
     listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.disabled = concluido || !item.disponivel; });
     voltar.disabled = revisaoPrecosIndice === 0;
-    salvar.disabled = !item.disponivel;
+    salvar.disabled = !item.disponivel || proximaRevisaoDesatualizada || incerto;
+    manter.disabled = proximaRevisaoDesatualizada || incerto;
+    atualizar.hidden = !proximaRevisaoDesatualizada;
+    verificar.hidden = !incerto;
     salvar.textContent = concluido ? "Próximo" : (revisaoPrecosIndice === revisaoPrecosItens.length-1 ? "Salvar e concluir revisão" : "Salvar e próximo");
-    mostrarErro(item.disponivel ? "" : "Este produto foi removido. A pendência foi preservada; faça depois e confira o cadastro.");
+    if (!item.disponivel) mostrarErro("Este produto foi removido. A pendência foi preservada; faça depois e confira o cadastro.");
     listaConferenciaPrecosCompra.scrollTop = 0;
     const primeiro = listaConferenciaPrecosCompra.querySelector("input:not(:disabled)");
     if (primeiro && !compraMobile()) { primeiro.focus(); primeiro.select(); }
@@ -399,16 +456,113 @@
     ocupado = true; agora.disabled = true; mostrarErro("");
     try {
       revisaoPrecosItens = (await consultar()).map(adaptarItem);
+      const marcadoresResolvidos = reconciliarMarcadoresIncertos(revisaoPrecosItens);
       atualizarContagem();
       if (!pendentes) { fechar(); return; }
       revisaoPrecosIndice = 0; revisaoPrecosDecisoes = {}; concluidos.clear(); modoRevisao = true;
+      proximaRevisaoDesatualizada = false; proximoItemId = null;
       clearTimeout(timer); card.classList.remove("rp-alerta"); mensagem.hidden = true;
       listaConferenciaPrecosCompra.hidden = false; agora.hidden = true; salvar.hidden = false; manter.hidden = false; voltar.hidden = false;
+      atualizar.hidden = true; verificar.hidden = true;
       document.getElementById("rpAjuda").hidden = false;
       document.getElementById("rpTitulo").textContent = "Revisar preços de venda";
       exibir(); renderizar();
+      if (inconclusivas.has(revisaoPrecosItens[revisaoPrecosIndice].item_id)) {
+        mostrarErro("A resposta do salvamento anterior não chegou. Nenhum novo envio será feito. Consulte o estado no servidor antes de decidir novamente.", "informacao");
+      } else if (marcadoresResolvidos) {
+        mostrarErro("Uma revisão interrompida não consta mais entre as pendências do servidor. Nenhum novo envio foi feito.", "informacao");
+      }
     } catch(e) { mostrarErro(e.message); }
     finally { ocupado = false; agora.disabled = false; }
+  }
+  async function atualizarProximaRevisao(itemId) {
+    proximoItemId = itemId;
+    try {
+      const atuais = (await consultar()).map(adaptarItem);
+      if (!atuais.length) {
+        revisaoPrecosItens = [];
+        proximaRevisaoDesatualizada = false;
+        fechar();
+        agendar();
+        return true;
+      }
+      revisaoPrecosItens = atuais;
+      let indice = atuais.findIndex(item => String(item.item_id) === String(itemId));
+      if (indice < 0) indice = atuais.findIndex(item => !concluidos.has(item.item_id));
+      if (indice < 0) {
+        proximaRevisaoDesatualizada = false;
+        fechar();
+        agendar();
+        return true;
+      }
+      revisaoPrecosIndice = indice;
+      proximaRevisaoDesatualizada = false;
+      proximoItemId = null;
+      mostrarErro("");
+      renderizar();
+      return true;
+    } catch(e) {
+      proximaRevisaoDesatualizada = true;
+      mostrarErro("A revisão anterior foi salva. Não foi possível atualizar a próxima; tente atualizar antes de salvar outro produto.", "sucesso");
+      renderizar();
+      return false;
+    }
+  }
+  async function verificarResultadoIncerto() {
+    if (ocupado) return;
+    const item = revisaoPrecosItens[revisaoPrecosIndice];
+    if (!inconclusivas.has(item.item_id)) return;
+    ocupado = true;
+    verificar.disabled = true;
+    try {
+      const atuais = (await consultar()).map(adaptarItem);
+      const pendente = atuais.find(atual =>
+        String(atual.item_id) === String(item.item_id) &&
+        String(atual.compra_id) === String(item.compra_id) &&
+        String(atual.produto_id) === String(item.produto_id)
+      );
+      removerMarcadorIncerto(item);
+      if (pendente) {
+        revisaoPrecosItens[revisaoPrecosIndice] = pendente;
+        resultados.set(item.item_id, "pendente");
+        mostrarErro("O servidor informa que esta revisão continua pendente. Nenhuma nova gravação foi feita; confira e escolha manualmente a próxima ação.", "informacao");
+        renderizar();
+        return;
+      }
+      concluidos.add(item.item_id);
+      resultados.set(item.item_id, "desconhecido");
+      mostrarErro("Esta revisão não consta mais entre as pendências do servidor. Nenhum novo envio foi feito.", "informacao");
+      if (!atuais.length) {
+        fechar();
+        return;
+      }
+      revisaoPrecosItens = atuais;
+      const indice = atuais.findIndex(atual => !concluidos.has(atual.item_id));
+      if (indice < 0) {
+        fechar();
+        return;
+      }
+      revisaoPrecosIndice = indice;
+      renderizar();
+    } catch(e) {
+      mostrarErro("Não foi possível consultar o estado no servidor. A operação continua preservada e não será reenviada. Tente consultar novamente.", "informacao");
+    } finally {
+      ocupado = false;
+      verificar.disabled = false;
+    }
+  }
+  async function finalizarItemConfirmado(item) {
+    concluidos.add(item.item_id);
+    if (!resultados.has(item.item_id)) resultados.set(item.item_id, "mantido");
+    const proximo = revisaoPrecosItens[revisaoPrecosIndice + 1];
+    if (!proximo) {
+      fechar();
+      agendar();
+      return;
+    }
+    revisaoPrecosIndice++;
+    renderizar();
+    await atualizarProximaRevisao(proximo.item_id);
   }
   async function salvarAtual(preservar = false) {
     if (ocupado) return;
@@ -426,6 +580,7 @@
         if(!alterou && !preservar)throw new Error('Para concluir sem reajuste, escolha Manter preços atuais.');
         const dados = new URLSearchParams({compra_id:item.compra_id, item_id:item.item_id, produto_id:item.produtoId,
           decisao_precos:preservar?'manter':'alterar',previa_decisao_precos:item.previa_decisao_precos});
+        if (preservar) Object.values(decisao.precos).forEach(preco => { preco.atualizar = false; });
         if(item.grupo_precos)dados.set('versao_grupo_produto_'+item.produtoId,item.grupo_precos.versao);
         Object.entries(decisaoProduto(item).precos).forEach(([campo, preco]) => {
           if (!preco.atualizar) return;
@@ -442,28 +597,54 @@
             alvos.ids.forEach(id=>dados.append('destinatarios_precos_produto_'+item.produtoId,id));
           }
         }
-        const resposta = await fetch(modal.dataset.salvar, {method:"POST", credentials:"same-origin", body:dados,
-          headers:{"X-CSRFToken":modal.querySelector('[name="csrfmiddlewaretoken"]').value}});
-        const resultado = await resposta.json();
-        if (!resposta.ok) throw new Error(resultado.erro || "Não foi possível salvar a revisão.");
-        concluidos.add(item.item_id); pendentes = resultado.produtos; compras = resultado.compras;
+        salvarMarcadorIncerto(item);
+        let resposta;
+        try {
+          resposta = await fetch(modal.dataset.salvar, {method:"POST", credentials:"same-origin", body:dados,
+            headers:{"X-CSRFToken":modal.querySelector('[name="csrfmiddlewaretoken"]').value}});
+        } catch(e) {
+          renderizar();
+          mostrarErro("A resposta do salvamento não chegou. O resultado é inconclusivo; nenhum novo envio será feito. Consulte o estado no servidor.", "informacao");
+          return;
+        }
+        let resultado = {};
+        try { resultado = await resposta.json(); }
+        catch(e) {
+          if (resposta.ok || resposta.status >= 500) {
+            renderizar();
+            mostrarErro("O servidor pode ter recebido o salvamento, mas não foi possível confirmar o resultado. Nenhum novo envio será feito. Consulte o estado no servidor.", "informacao");
+            return;
+          }
+        }
+        if (resposta.status >= 500) {
+          renderizar();
+          mostrarErro("O servidor não confirmou o salvamento. O resultado é inconclusivo; nenhum novo envio será feito. Consulte o estado no servidor.", "informacao");
+          return;
+        }
+        if (!resposta.ok) {
+          removerMarcadorIncerto(item);
+          throw new Error(resultado.erro || "Não foi possível salvar a revisão.");
+        }
+        removerMarcadorIncerto(item);
+        concluidos.add(item.item_id);
+        resultados.set(item.item_id, resultado.resultado || (preservar ? "mantido" : "alterado"));
+        pendentes = resultado.produtos; compras = resultado.compras;
         atualizarContagem();
+        mostrarErro("A decisão foi confirmada e salva pelo servidor.", "sucesso");
+        await finalizarItemConfirmado(item);
+        return;
       }
-      if (revisaoPrecosIndice < revisaoPrecosItens.length-1) {
-        // Releitura: o mesmo Produto pode aparecer em mais de uma Compra.
-        const atuais = await consultar();
-        const proximo = revisaoPrecosItens[revisaoPrecosIndice+1];
-        const atualizado = atuais.find(i => i.item_id === proximo.item_id);
-        if (atualizado) {
-          revisaoPrecosItens[revisaoPrecosIndice+1] = adaptarItem(atualizado);
-          delete revisaoPrecosDecisoes[String(proximo.item_id)];
-        } else { concluidos.add(proximo.item_id); }
-        revisaoPrecosIndice++; renderizar();
-      } else { fechar(); agendar(); }
     } catch(e) { mostrarErro(e.message); }
     finally {
       ocupado = false; manter.disabled = false; depois.disabled = false;
-      salvar.disabled = !revisaoPrecosItens[revisaoPrecosIndice].disponivel;
+      const atual = revisaoPrecosItens[revisaoPrecosIndice];
+      if (atual) {
+        salvar.disabled = !atual.disponivel || proximaRevisaoDesatualizada || inconclusivas.has(atual.item_id);
+        manter.disabled = proximaRevisaoDesatualizada || inconclusivas.has(atual.item_id);
+      } else {
+        salvar.disabled = true;
+        manter.disabled = true;
+      }
       voltar.disabled = revisaoPrecosIndice === 0;
       listaConferenciaPrecosCompra.querySelectorAll("input").forEach(el => { el.readOnly = false; });
     }
@@ -471,6 +652,14 @@
   agora.addEventListener("click", iniciar);
   salvar.addEventListener("click", () => salvarAtual(false));
   manter.addEventListener('click',()=>salvarAtual(true));
+  atualizar.addEventListener("click", async function() {
+    if (ocupado || !proximaRevisaoDesatualizada) return;
+    ocupado = true;
+    atualizar.disabled = true;
+    try { await atualizarProximaRevisao(proximoItemId); }
+    finally { ocupado = false; atualizar.disabled = false; }
+  });
+  verificar.addEventListener("click", verificarResultadoIncerto);
   depois.addEventListener("click", function() { if (!ocupado) { fechar(); agendar(); } });
   voltar.addEventListener("click", function() {
     if (ocupado || revisaoPrecosIndice === 0) return;
