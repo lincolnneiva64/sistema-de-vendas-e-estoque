@@ -147,10 +147,12 @@ class OfflinePanelReadOnlyBrowserTests(StaticLiveServerTestCase):
                     window.original=JSON.stringify([await repo.all('operations'),await repo.all('history')]);
                     const channel=new BroadcastChannel('offline-pilot');channel.postMessage({type:'changed'});channel.close();return true;
                 })()''')
-                tab.wait('document.querySelectorAll("#offline-operations li").length === 5')
+                tab.wait('document.querySelectorAll("#offline-operations li").length === 4')
+                tab.evaluate('document.getElementById("offline-completed-history").open=true')
+                tab.wait('document.querySelectorAll("#offline-history-operations li").length === 1')
                 for width in (1366, 390, 320):
                     tab.call('Emulation.setDeviceMetricsOverride', {'width':width,'height':900,'deviceScaleFactor':1,'mobile':width<768})
-                    text = tab.evaluate('document.getElementById("offline-operations").innerText')
+                    text = tab.evaluate('document.getElementById("offline-pilot").innerText')
                     self.assertIn('24/10/2026 às 22:03:04', text)
                     self.assertIn('Mensagem preservada', text)
                     self.assertTrue(tab.evaluate('document.getElementById("offline-sync").disabled'))

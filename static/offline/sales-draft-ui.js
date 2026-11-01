@@ -486,8 +486,9 @@ window.salesDraftUI = {
         recoveringOnline = true;
         recover.disabled = true;
         let confirmedId = null;
+        let operation = null, lookupStarted = false;
         try {
-            const operation = await repo.get('operations', operationId);
+            operation = await repo.get('operations', operationId);
             if (!operation || await hash(commandOf(operation)) !== operation.payload_hash)
                 throw new Error('Comando local divergente. Operacao preservada; revisao tecnica necessaria.');
             if (operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
@@ -497,13 +498,14 @@ window.salesDraftUI = {
                 type:operation.type, device_id:operation.device_id, hash:operation.payload_hash});
             const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
             let response, result;
-            try { response = await fetch(`/api/vendas/online/${operation.operation_id}/?${query}`,
+            try { lookupStarted = true; response = await fetch(`/api/vendas/online/${operation.operation_id}/?${query}`,
                 {credentials:'same-origin', cache:'no-store', signal:controller.signal});
                 result = await response.json(); }
             finally { clearTimeout(timer); }
             if (!response.ok || result.operation_id !== operation.operation_id || result.hash !== operation.payload_hash)
                 throw new Error('Consulta indisponivel ou incompatível. Venda preservada; autentique-se e consulte novamente.');
             if (result.lookup === 'nao_encontrada') {
+                await repo.updateAttempt(operation, {last_lookup:{outcome:'not_found', checked_at:new Date().toISOString()}});
                 message.textContent = automatic
                     ? 'Consulta automática: ainda não encontrada. Nenhum reenvio foi feito; a operação foi preservada.'
                     : 'Operacao ainda nao encontrada. O envio anterior pode estar em andamento. Identidade preservada; consulte novamente ou use Status → Sincronizar agora quando permitido.';
@@ -512,7 +514,9 @@ window.salesDraftUI = {
             if (result.lookup !== 'encontrada' || result.actor_id !== scope.actor_id || result.environment_id !== scope.environment_id
                 || result.device_id !== operation.device_id || result.type !== operation.type || !validReceipt(result.receipt, operation))
                 throw new Error('Resultado da consulta invalido. Venda preservada.');
-            await repo.record(operation, result.receipt);
+            const checkedOperation = {...operation, last_lookup:{outcome:'found', checked_at:new Date().toISOString()}};
+            if (automatic) checkedOperation.resolution = {source:'automatic_reconciliation', resolved_at:new Date().toISOString()};
+            await repo.record(checkedOperation, result.receipt);
             if (result.receipt.status === 'confirmada') {
                 confirmedId = result.receipt.record_id;
                 queriedConfirmationId = operation.operation_id;
@@ -521,6 +525,9 @@ window.salesDraftUI = {
             document.dispatchEvent(new Event('offline-operations-changed'));
             operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
         } catch (error) {
+            if (lookupStarted && operation)
+                await repo.updateAttempt(operation, {last_lookup:{outcome:'inconclusive', checked_at:new Date().toISOString(),
+                    message:error.message, code:error.code || 'consulta_indeterminada'}});
             message.textContent = confirmedId
                 ? `Venda #${confirmedId} confirmada oficialmente. Falha local; reabra a tela. Nao repita a venda.`
                 : 'Resultado da venda ainda desconhecido. ' + error.message + ' Consulte novamente; nao repita a venda.';

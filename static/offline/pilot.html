@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb"><title>Piloto offline · Observações</title><link rel="stylesheet" href="/static/offline/pilot.css?v=7"><link rel="stylesheet" href="/static/offline/indicator.css?v=7"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb"><title>Piloto offline · Observações</title><link rel="stylesheet" href="/static/offline/pilot.css?v=8"><link rel="stylesheet" href="/static/offline/indicator.css?v=7"></head>
 <body><main id="offline-pilot">
 <nav aria-label="Navegação do piloto"><a id="offline-return-sales" href="{% url 'estoque:vendas' %}" style="display:inline-flex;align-items:center;box-sizing:border-box;min-height:44px;padding:8px 12px;border-radius:6px;background:#1d4ed8;color:white;font-weight:600;text-decoration:none">Voltar para Vendas</a> <a id="offline-return-home" href="{% url 'estoque:home' %}">Painel Central</a> <a id="offline-login" href="/offline/login/?next=/offline/">Autenticar online</a></nav>
 <p id="offline-session" role="status" aria-live="polite">Verificando autenticação online…</p>
@@ -13,6 +13,7 @@
 <form id="offline-form"><label for="offline-task">Tarefa disponível neste dispositivo</label><select id="offline-task" required></select><label for="offline-note">Observação</label><textarea id="offline-note" required maxlength="2000" rows="2" placeholder="Ex.: Ligar antes de chegar."></textarea></form>
 <div class="offline-actions"><button id="offline-save" form="offline-form" disabled>Salvar neste dispositivo</button><button id="offline-sync" type="button" disabled>Sincronizar agora</button></div>
 <p id="offline-message" role="status" aria-live="polite"></p>
-<h2>Fila e histórico</h2><ul id="offline-operations"></ul>
+<section class="offline-attention" aria-labelledby="offline-attention-title"><h2 id="offline-attention-title">Operações que precisam de atenção</h2><ul id="offline-operations"></ul></section>
+<details id="offline-completed-history" class="offline-history"><summary>Histórico de operações concluídas</summary><ul id="offline-history-operations"></ul></details>
 <details><summary>Diagnóstico e recuperação</summary><p>Dispositivo: <span id="offline-device"></span></p><p id="offline-storage"></p><p>Preserve os dados do site. A exportação contém observações e identificadores pessoais; guarde-a em local protegido. Não contém senhas, cookies ou tokens.</p><button id="offline-export" type="button">Exportar fila e histórico (JSON)</button></details>
 </main><script type="module" src="/offline/assets/2-8g-close/app.js"></script></body></html>

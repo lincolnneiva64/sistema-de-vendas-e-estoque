@@ -15,6 +15,7 @@ export function operationDetails(operation, scope, revisionView = null,closure =
     const originalCustomer = operation.original_labels?.cliente;
     const fields = {
         UUID:operation.operation_id, Status:operation.status, Tentativas:operation.attempts,
+        Usuário:operation.actor_id, Dispositivo:operation.device_id, Ambiente:operation.environment_id,
         Tipo:operation.type,
         'Cliente original (ID)':payload.cliente_id ?? 'Não informado',
         'Nome original do cliente':originalCustomer && originalCustomer.id === payload.cliente_id ? originalCustomer.nome : 'Nome não preservado na operação',
@@ -25,6 +26,7 @@ export function operationDetails(operation, scope, revisionView = null,closure =
         'Mensagem/erro':operation.last_error || operation.server_result?.erro || '',
         'Operação substituta':revisionView?.replacementId || 'Não registrada',
         Diagnóstico:operation.diagnostic_code || '',
+        'Última consulta':operation.last_lookup ? `${operation.last_lookup.outcome} · ${formatOfflineTime(operation.last_lookup.checked_at)}` : 'Ainda não consultado',
     };
     const list = document.createElement('dl');
     for (const [label, value] of Object.entries(fields)) {

@@ -57,6 +57,12 @@ def check_loss(test, reopen=False, payment='A prazo'):
             except AssertionError:
                 raise AssertionError(tab.evaluate('JSON.stringify({message:document.querySelector("#sales-draft-status span").textContent,button:document.getElementById("sales-online-recover").outerHTML,operations:await repo.all("operations")})'))
             test.assertEqual(tab.evaluate('(await repo.all("operations"))[0].server_result.record_id'), Venda.objects.get().pk)
+            if reopen:
+                operation_id = operation['operation_id']
+                test.assertEqual(tab.evaluate("(await repo.get('operations'," + json.dumps(operation_id) + ")).resolution.source"),
+                    'automatic_reconciliation')
+                test.assertEqual(tab.evaluate("(await repo.get('history'," + json.dumps(operation_id) + ")).resolution.source"),
+                    'automatic_reconciliation')
             test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-posts')"), '1')
             test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-gets')"), '1')
             test.assertEqual(tab.evaluate("localStorage.getItem('sale-test-get-path')"), f'/api/vendas/online/{operation["operation_id"]}/')
@@ -138,6 +144,7 @@ class OnlineSaleBrowserTests(StaticLiveServerTestCase):
                 operation = tab.evaluate('(await repo.all("operations"))[0]')
                 self.assertEqual(operation['status'], 'resultado_desconhecido')
                 self.assertEqual(operation['diagnostic_code'], 'consulta_indeterminada')
+                self.assertEqual(operation['last_lookup']['outcome'], 'inconclusive')
                 self.assertEqual(tab.evaluate('posts'), 1)
                 self.assertFalse(OperacaoSincronizacao.objects.exists())
                 self.assertFalse(Venda.objects.exists())
@@ -157,6 +164,7 @@ class OnlineSaleBrowserTests(StaticLiveServerTestCase):
                 original = tab.evaluate('(await repo.all("operations"))[0]')
                 tab.evaluate('await salesDraftUI.recoverOnline();true')
                 self.assertIn('ainda nao encontrada', tab.evaluate('document.querySelector("#sales-draft-status span").textContent'))
+                self.assertEqual(tab.evaluate("(await repo.get('operations'," + json.dumps(original['operation_id']) + ")).last_lookup.outcome"), 'not_found')
                 self.assertEqual(Venda.objects.count(), 0)
                 self.assertEqual(tab.evaluate('onlinePosts'), 1)
                 self.assertEqual(tab.evaluate('sent.length'), 0)

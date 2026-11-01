@@ -1,4 +1,4 @@
-import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState, saleOperationState} from '/offline/assets/2-8f/core.js';
+import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState} from '/offline/assets/2-8f/core.js';
 import {renderIndicator, formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
@@ -8,6 +8,8 @@ const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
 const globalSync = document.getElementById('offline-global-sync');
 let notice = null, remoteSync = null;
+const checkingOperations = new Set();
+let renderedHistoryKey = null;
 let authenticated = false;
 let salesIdentity = null;
 let healthEnvironment = location.host;
@@ -62,6 +64,84 @@ function syncButton(button, disabled, count, active = syncing) {
     button.classList.toggle('offline-sync-ready', !button.disabled);
     busyButton(button, active, active ? 'Sincronizando...' : syncOpening ? 'Aguardando confirmação...' : 'Sincronizar agora' + (!button.disabled ? ' — ' + count + (count === 1 ? ' operação' : ' operações') : ''));
 }
+function operationLabel(operation) {
+    return ({
+        criar_venda: 'Venda',
+        observacao_operacional: 'Observação de tarefa',
+        observacao_entrega_venda: 'Observação de entrega',
+        venda_local: 'Venda local',
+    })[operation.type] || 'Operação';
+}
+function saleTotal(operation) {
+    const items = operation.payload?.itens;
+    if (!Array.isArray(items) || !items.length) return null;
+    let total = 0;
+    for (const item of items) {
+        const quantity = Number(item.quantidade), price = Number(item.preco_unitario);
+        if (!['number', 'string'].includes(typeof item.quantidade) || !String(item.quantidade).trim()
+            || !['number', 'string'].includes(typeof item.preco_unitario) || !String(item.preco_unitario).trim()
+            || !Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(price) || price < 0) return null;
+        total += quantity * price;
+    }
+    return Number.isFinite(total) ? new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'}).format(total) : null;
+}
+function saleCustomer(operation) {
+    const customer = operation.original_labels?.cliente;
+    return customer && customer.id === operation.payload?.cliente_id && customer.nome
+        ? customer.nome : operation.payload?.tipo_pagamento === 'consumo_proprio'
+            ? 'Consumo próprio' : 'Não disponível nos dados locais';
+}
+function saleProducts(operation) {
+    const items = operation.payload?.itens;
+    if (!Array.isArray(items) || !items.length) return null;
+    const names = items.map((item, index) => {
+        const product = operation.original_labels?.produtos?.[index];
+        return product && product.id === item.produto_id && product.nome
+            ? `${item.quantidade} × ${product.nome}` : null;
+    });
+    return names.every(Boolean) ? names.join(', ') : `${items.length} ${items.length === 1 ? 'item' : 'itens'}; nomes não disponíveis`;
+}
+function attentionReason(operation) {
+    if (operation.status === 'conflito') return 'O servidor identificou uma divergência. Não repita esta operação; confira os detalhes antes de agir.';
+    if (operation.status === 'resultado_desconhecido' || operation.status === 'enviando')
+        return 'A conexão pode ter sido interrompida durante o envio. A operação pode já estar registrada no servidor.';
+    if (operation.status === 'erro') return 'O envio não foi confirmado. A operação continua guardada neste dispositivo.';
+    return 'Esta operação ainda aguarda envio ao servidor.';
+}
+function operationStatusLabel(operation) {
+    return ({
+        pendente:'Aguardando envio',
+        enviando:'Envio iniciado',
+        erro:'Falha no envio',
+        resultado_desconhecido:'Resultado ainda não confirmado',
+        conflito:'Precisa de revisão',
+    })[operation.status] || 'Precisa de atenção';
+}
+function lookupText(operation) {
+    const lookup = operation.last_lookup;
+    if (!lookup) return 'Ainda não consultado nesta tela.';
+    if (lookup.outcome === 'found') return 'O servidor confirmou que a operação já está registrada.';
+    if (lookup.outcome === 'not_found') return 'O servidor não encontrou a operação nesta consulta. Ela continua guardada; nenhuma venda foi reenviada.';
+    return 'Não foi possível confirmar o resultado nesta consulta. A operação continua guardada.';
+}
+function safeNextStep(operation) {
+    if (operation.status === 'conflito') return 'Não sincronize novamente. Peça ajuda para revisar a divergência.';
+    if (operation.last_lookup?.outcome === 'not_found')
+        return 'A operação foi mantida. Quando a conexão estiver estável, use “Sincronizar agora” para tentar com o mesmo identificador.';
+    if (operation.status === 'resultado_desconhecido' || operation.status === 'enviando')
+        return 'Verifique novamente no servidor antes de qualquer sincronização.';
+    return 'Você pode verificar o servidor agora; a consulta não envia nem altera a venda.';
+}
+function localDateText(value) {
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return 'Data não disponível';
+    return formatOfflineTime(value);
+}
+function appendTextField(list, label, value) {
+    const term = document.createElement('dt'), description = document.createElement('dd');
+    term.textContent = label;
+    description.textContent = value;
+    list.append(term, description);
+}
 function message(text) {
     if (globalIndicator) { notice = {kind: 'error', label: text, until: Date.now() + 10000}; void render().catch(() => {}); }
     const target = document.getElementById('offline-message');
@@ -103,15 +183,26 @@ async function render() {
     if (!repo) return;
     await refreshCommunication();
     const [operations, history] = await Promise.all([repo.all('operations'), pilot ? repo.all('history') : []]);
-    const historyTimes = new Map(history.map(row => [row.operation_id, row.synchronized_at]));
     const scope = communicationScope();
     const scoped = operations.filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
+    const scopedById = new Map(scoped.map(operation => [operation.operation_id, operation]));
     const closureMetadata=await repo.all('metadata');
     const revisions = new Map();
     for (const op of scoped.filter(op => op.status === 'conflito')) revisions.set(op.operation_id, await revisionPresentation(repo,op,scope));
     // Resolution is a presentation only: preserve historical conflict bytes.
     const unresolved = scoped.filter(op => !revisions.get(op.operation_id)?.recordId && !closedLocally(closureMetadata,op));
     const pending = unresolved.filter(op => op.status !== 'confirmada');
+    const completedById = new Map();
+    for (const row of history) {
+        if (row.actor_id !== scope.actor_id || row.environment_id !== scope.environment_id) continue;
+        const current = scopedById.get(row.operation_id) || row;
+        if (current.status === 'confirmada' || revisions.get(current.operation_id)?.recordId || closedLocally(closureMetadata, current))
+            completedById.set(current.operation_id, {...current, synchronized_at:row.synchronized_at || current.synchronized_at});
+    }
+    for (const operation of scoped) {
+        if (operation.status === 'confirmada' || revisions.get(operation.operation_id)?.recordId || closedLocally(closureMetadata, operation))
+            completedById.set(operation.operation_id, {...completedById.get(operation.operation_id), ...operation});
+    }
     const state = indicatorState({operations: unresolved, stability, now: performance.now(), wall: Date.now(),
         syncing: syncing || (remoteSync && Date.now() - remoteSync.at < POLICY.maxGap), progress: syncing ? progress : remoteSync?.progress, notice, authenticated});
     let resetLog = document.getElementById('offline-reset-log');
@@ -147,25 +238,168 @@ async function render() {
     prepareButton.disabled = syncing || preparing;
     busyButton(prepareButton, preparing, preparing ? 'Preparando...' : 'Preparar / atualizar dados online');
     const list = document.getElementById('offline-operations');
-    const expanded = new Set([...list.querySelectorAll('details[open]')].map(detail => detail.dataset.operationId));
+    const historyDetails = document.getElementById('offline-completed-history');
+    const historyWasOpen = historyDetails.open;
+    const focusedOperation = list.contains(document.activeElement)
+        ? document.activeElement.closest('[data-operation-id]')?.dataset.operationId
+            || document.activeElement.dataset.verifyOperation || null : null;
+    const expandedOperations = new Set([...list.querySelectorAll('details[open]')]
+        .map(detail => detail.dataset.operationId));
     list.replaceChildren();
-    for (const op of scoped.sort((a, b) => b.sequence - a.sequence)) {
+    if (!pending.length) {
+        const empty = document.createElement('li');
+        empty.className = 'offline-empty-state';
+        empty.textContent = 'Nenhuma operação precisa de atenção';
+        list.append(empty);
+    }
+    for (const op of pending.sort((a, b) => b.sequence - a.sequence)) {
         const row = document.createElement('li');
-        const sale = op.type === 'criar_venda' ? saleOperationState(op) : null;
-        row.textContent = sale
-            ? `${sale.label} · referência ${op.operation_id.slice(0,8)} · usuário ${op.actor_id}` + (sale.error ? ' · ' + sale.error : '')
-            : `${op.status} · ${op.payload.observacao} · tarefa #${op.aggregate_id} · usuário ${op.actor_id} · ${op.operation_id}` + (op.server_result?.record_id ? ` · evento #${op.server_result.record_id}` : '') + (op.last_error ? ' · ' + op.last_error : '');
+        row.className = 'offline-operation-card';
+        const title = document.createElement('h3');
+        title.textContent = operationLabel(op);
+        const status = document.createElement('p');
+        status.className = 'offline-operation-status';
+        status.textContent = operationStatusLabel(op);
+        const details = document.createElement('dl');
+        details.className = 'offline-operation-summary';
+        appendTextField(details, 'Data e hora', localDateText(op.created_at));
+        if (op.type === 'criar_venda' || op.type === 'venda_local') {
+            if (op.payload?.data_venda) appendTextField(details, 'Data da venda', String(op.payload.data_venda));
+            appendTextField(details, 'Cliente', saleCustomer(op));
+            const total = saleTotal(op);
+            if (total) appendTextField(details, 'Valor', total);
+            const products = saleProducts(op);
+            if (products) appendTextField(details, 'Produtos', products);
+        } else {
+            appendTextField(details, 'Tarefa', op.type === 'observacao_entrega_venda' ? 'Entrega de venda' : 'Tarefa operacional');
+            if (op.payload?.observacao) appendTextField(details, 'Observação', op.payload.observacao);
+        }
+        const reason = document.createElement('p');
+        reason.className = 'offline-operation-reason';
+        reason.textContent = attentionReason(op);
+        const lookup = document.createElement('p');
+        lookup.className = 'offline-operation-lookup';
+        lookup.textContent = 'Última consulta: ' + lookupText(op);
+        const nextStep = document.createElement('p');
+        nextStep.className = 'offline-operation-next-step';
+        nextStep.textContent = 'Próximo passo seguro: ' + safeNextStep(op);
+        row.append(title, status, details, reason, lookup, nextStep);
+        if (op.type !== 'venda_local' && op.status !== 'conflito') {
+            const verify = document.createElement('button');
+            verify.type = 'button';
+            verify.dataset.verifyOperation = op.operation_id;
+            verify.disabled = checkingOperations.has(op.operation_id);
+            verify.textContent = verify.disabled ? 'Consultando servidor…' : 'Verificar novamente no servidor';
+            verify.addEventListener('click', () => { void verifyOperation(op.operation_id); });
+            row.append(verify);
+        }
         const revisionView = revisions.get(op.operation_id);
-        if (revisionView?.recordId) row.textContent = `Conflito resolvido pela venda nº ${revisionView.recordId} · original ${op.operation_id}`;
-        const closure=closureMetadata.find(row=>row.key===closureKey(op))?.receipt;
-        if(closedLocally(closureMetadata,op))row.textContent=`Encerrada administrativamente — nenhuma venda gerada · original ${op.operation_id}`;
-        const shownOperation = {...op, synchronized_at: historyTimes.get(op.operation_id)};
-        row.append(operationTimes(shownOperation));
-        const diagnostic = operationDetails(shownOperation, scope, revisionView,closure);
-        if (diagnostic) { diagnostic.open = expanded.has(op.operation_id); row.append(diagnostic); }
+        const closure = closureMetadata.find(item => item.key === closureKey(op))?.receipt;
+        const diagnostic = operationDetails(op, scope, revisionView, closure);
+        if (diagnostic) { diagnostic.open = expandedOperations.has(op.operation_id); row.append(diagnostic); }
         list.append(row);
     }
+    const historyList = document.getElementById('offline-history-operations');
+    const focusedHistoryOperation = historyList.contains(document.activeElement)
+        ? document.activeElement.closest('[data-operation-id]')?.dataset.operationId || null : null;
+    const completed = [...completedById.values()].sort((a, b) =>
+        Date.parse(b.synchronized_at || b.server_result?.completed_at || b.created_at || 0)
+        - Date.parse(a.synchronized_at || a.server_result?.completed_at || a.created_at || 0));
+    historyDetails.querySelector('summary').textContent = `Histórico de operações concluídas (${completed.length})`;
+    const historyKey = JSON.stringify(completed.map(operation => [
+        operation.operation_id, operation.status, operation.synchronized_at,
+        operation.server_result?.record_id, operation.resolution?.source, operation.resolution?.resolved_at,
+    ]));
+    if (!historyDetails.open) {
+        historyList.replaceChildren();
+        renderedHistoryKey = null;
+    } else if (historyKey !== renderedHistoryKey) {
+        const expandedHistoryOperations = new Set([...historyList.querySelectorAll('details[open]')]
+            .map(detail => detail.dataset.operationId));
+        historyList.replaceChildren();
+        if (!completed.length) {
+            const empty = document.createElement('li');
+            empty.className = 'offline-empty-state';
+            empty.textContent = 'Ainda não há operações concluídas.';
+            historyList.append(empty);
+        }
+        for (const op of completed) {
+            const row = document.createElement('li');
+            row.className = 'offline-history-card';
+            const status = document.createElement('strong');
+            const revisionView = revisions.get(op.operation_id);
+            const closure = closureMetadata.find(item => item.key === closureKey(op))?.receipt;
+            if (closedLocally(closureMetadata, op)) status.textContent = 'Encerrada sem gerar venda';
+            else if (revisionView?.recordId) status.textContent = `Conflito resolvido pela venda nº ${revisionView.recordId}`;
+            else if (op.resolution?.source === 'automatic_reconciliation') status.textContent = 'Resolvida automaticamente';
+            else if (op.resolution?.source === 'server_check') status.textContent = 'Confirmada após consulta no servidor';
+            else status.textContent = operationLabel(op) + ' concluída';
+            const summary = document.createElement('span');
+            const recordId = op.server_result?.record_id;
+            summary.textContent = [recordId ? `Registro nº ${recordId}` : '', localDateText(op.synchronized_at || op.server_result?.completed_at || op.created_at)]
+                .filter(Boolean).join(' · ');
+            row.append(status, summary);
+            const technical = document.createElement('details');
+            technical.dataset.operationId = op.operation_id;
+            technical.open = expandedHistoryOperations.has(op.operation_id);
+            const technicalSummary = document.createElement('summary');
+            technicalSummary.textContent = 'Ver detalhes técnicos';
+            const technicalList = document.createElement('dl');
+            for (const [label, value] of Object.entries({
+                UUID:op.operation_id, Hash:op.payload_hash, Usuário:op.actor_id, Dispositivo:op.device_id,
+                Ambiente:op.environment_id, Tentativas:op.attempts ?? 0,
+                'Resolvida em':localDateText(op.resolution?.resolved_at || op.server_result?.completed_at),
+            })) appendTextField(technicalList, label, String(value ?? 'Não disponível'));
+            technical.append(technicalSummary, technicalList);
+            row.append(technical);
+            historyList.append(row);
+        }
+        renderedHistoryKey = historyKey;
+        if (focusedHistoryOperation)
+            historyList.querySelector(`details[data-operation-id="${CSS.escape(focusedHistoryOperation)}"] summary`)?.focus({preventScroll:true});
+    }
+    historyDetails.open = historyWasOpen;
+    if (focusedOperation) {
+        const target = list.querySelector(`[data-verify-operation="${CSS.escape(focusedOperation)}"]`)
+            || list.querySelector(`details[data-operation-id="${CSS.escape(focusedOperation)}"] summary`);
+        target?.focus({preventScroll:true});
+    }
     timeText(document.getElementById('offline-diagnostic'), snapshot ? `Usuário: ${snapshot.actor.name} · ambiente: ${snapshot.environment_id} · preparação informada pelo dispositivo: ${formatOfflineTime(snapshot.prepared_at)} · Horário de Belém (PA) · limite: 200 tarefas pendentes` : 'Prepare online após autenticar-se.');
+}
+async function verifyOperation(operationId) {
+    if (checkingOperations.has(operationId)) return;
+    checkingOperations.add(operationId);
+    try {
+        const operation = await repo.get('operations', operationId);
+        const scope = communicationScope();
+        const device = await repo.get('metadata', 'device');
+        if (!operation || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
+            || !device?.id || operation.device_id !== device.id || operation.type === 'venda_local'
+            || !['pendente', 'enviando', 'erro', 'resultado_desconhecido'].includes(operation.status)) {
+            message('Esta operação não corresponde ao usuário, dispositivo e ambiente ativos. Ela foi mantida sem consulta.');
+            return;
+        }
+        try {
+            const result = await reconcile(operation, {source:'server_check'});
+            if (result === 'nao_encontrada') {
+                await repo.updateAttempt(operation, {last_lookup:{outcome:'not_found', checked_at:new Date().toISOString()}});
+                message('O servidor não encontrou a operação nesta consulta. Ela foi mantida e não foi reenviada.');
+            } else {
+                message('O servidor confirmou a operação. A pendência local foi atualizada sem reenviar a venda.');
+            }
+        } catch (error) {
+            await repo.updateAttempt(operation, {last_lookup:{outcome:'inconclusive', checked_at:new Date().toISOString(),
+                message:error.message, code:error.code || 'consulta_indeterminada'}});
+            message('Não foi possível confirmar o resultado. A operação continua guardada; nenhum reenvio foi feito.');
+        }
+        document.dispatchEvent(new Event('offline-operations-changed'));
+        channel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
+    } catch (error) {
+        message('Não foi possível concluir a consulta local. Confira os detalhes da operação; nenhum reenvio foi feito. ' + error.message);
+    } finally {
+        checkingOperations.delete(operationId);
+        await render();
+    }
 }
 async function failConnection(event) {
     stopped = true;
@@ -474,7 +708,7 @@ async function runSynchronization() {
         }
     });
 }
-async function reconcile(operation) {
+async function reconcile(operation, {source = null} = {}) {
     const fail = (message, code = 'consulta_indeterminada', response = null) => {
         const error = new Error(message); error.code = code; error.response = response; throw error;
     };
@@ -495,7 +729,9 @@ async function reconcile(operation) {
         || result.environment_id !== operation.environment_id || result.type !== operation.type
         || result.device_id !== operation.device_id || !validReceipt(result.receipt, operation))
         fail('Resultado da consulta incompatível ou receipt inválido. Operação preservada.');
-    await repo.record(operation, result.receipt);
+    const checkedOperation = {...operation, last_lookup:{outcome:'found', checked_at:new Date().toISOString()}};
+    if (source) checkedOperation.resolution = {source, resolved_at:new Date().toISOString()};
+    await repo.record(checkedOperation, result.receipt);
     if (result.closure) {
         const device=await repo.get('metadata','device');
         await mirrorClosure(repo,{...communicationScope(),device_id:device?.id},await repo.get('operations',operation.operation_id),result.closure);

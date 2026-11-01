@@ -45,7 +45,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const current=keys.find(key=>key === 'offline-pilot-shell-v44-reconciliacao-leitura');
+                    const current=keys.find(key=>key === 'offline-pilot-shell-v45-central-operacoes');
                     if(!current)return false;
                     const cache=await caches.open(current);
                     return keys.includes(current)
@@ -97,6 +97,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
 
     def test_offline_assembly_safe_shell_and_no_mutations(self):
         user, customer, product, operator, *_ = commercial_fixtures()
+        user.user_permissions.add(Permission.objects.get(content_type__app_label='estoque', codename='view_venda'))
         product.quantidade = 10
         product.save(update_fields=['quantidade'])
         client = Client()
@@ -133,8 +134,15 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 worker.call('Network.emulateNetworkConditions', dict(offline=True, latency=0, downloadThroughput=0, uploadThroughput=0))
                 tab.call('Network.emulateNetworkConditions', dict(offline=True, latency=0, downloadThroughput=0, uploadThroughput=0))
                 tab.wait('salesOffline.active && document.getElementById("btnGravarVenda").textContent==="Salvar venda offline"')
-                tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                def navigate_offline_sales():
+                    previous_time_origin = tab.evaluate('performance.timeOrigin')
+                    tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
+                    tab.wait('performance.timeOrigin !== ' + str(previous_time_origin) + ' && !!window.salesOffline?.ready', timeout=25)
+                    tab.evaluate('await window.salesOffline.ready;true')
+
+                navigate_offline_sales()
                 tab.wait('window.salesOffline?.shell && !!window.salesOffline?.clients && !!document.querySelector("#produto option[data-produto-id]")')
+                tab.wait('window.salesOffline?.active && window.salesOffline?.available && document.getElementById("sales-offline-notice").textContent.includes("Modo offline")', timeout=25)
                 self.assertTrue(tab.evaluate('salesOffline.shell && salesOffline.active'))
                 self.assertIn('Modo offline', tab.evaluate('document.getElementById("sales-offline-notice").textContent'))
                 tab.evaluate('clienteBusca.value="Mercadinho";clienteBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
@@ -173,20 +181,20 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('(await repo.all("operations")).length'), 0)
                 self.assertEqual(tab.evaluate('(await repo.get("metadata","device")).sequence'), 0)
                 tab.evaluate('window.oldCatalog=(await repo.all("snapshots")).find(s=>s.tipo==="comercial_vendas");oldCatalog.prepared_at="2000-01-01T12:00:00Z";await repo.put("snapshots",oldCatalog);true')
-                tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
-                tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("2000")')
+                navigate_offline_sales()
+                tab.wait('window.salesOffline?.active && window.salesOffline?.available && document.getElementById("sales-offline-notice").textContent.includes("2000")', timeout=25)
                 self.assertTrue(tab.evaluate('salesOffline.available'))
                 tab.evaluate("window.repo=new (await import('/offline/assets/2-8f/core.js')).Repository(await (await import('/offline/assets/2-8f/core.js')).openDB());true")
                 # A fresh shell must never choose another actor/environment's catalog.
                 for replacement in ["{key:'sales-identity',actor_id:'99999',environment_id:'offline-isolated-tests'}", "{key:'sales-identity',actor_id:'" + str(user.pk) + "',environment_id:'other'}"]:
                     tab.evaluate('await repo.put("metadata",' + replacement + ');true')
-                    tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
-                    tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("não preparados")')
+                    navigate_offline_sales()
+                    tab.wait('!window.salesOffline?.available && document.getElementById("sales-offline-notice").textContent.includes("preparados")')
                     self.assertEqual(tab.evaluate('produto.options.length'), 1)
                     tab.evaluate("window.repo=new (await import('/offline/assets/2-8f/core.js')).Repository(await (await import('/offline/assets/2-8f/core.js')).openDB());true")
                 tab.evaluate("await repo.put('metadata',{key:'sales-identity',actor_id:'" + str(user.pk) + "',environment_id:'offline-isolated-tests'}); await repo.transaction(['snapshots'],true,(tx,done)=>{tx.objectStore('snapshots').clear();done(true)});true")
-                tab.call('Page.navigate', {'url':self.live_server_url + '/vendas/'})
-                tab.wait('!!document.getElementById("sales-offline-notice") && document.getElementById("sales-offline-notice").textContent.includes("não preparados")')
+                navigate_offline_sales()
+                tab.wait('!window.salesOffline?.available && document.getElementById("sales-offline-notice").textContent.includes("preparados")')
                 self.assertEqual(tab.evaluate('produto.options.length'), 1)
             finally:
                 chrome.stop()

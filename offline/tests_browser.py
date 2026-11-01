@@ -1197,7 +1197,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 tab.evaluate("""window.realFetch=window.fetch;window.fetch=async(...args)=>{
                     const r=await realFetch(...args);if(args[0]==='/api/offline/observations/'){await r.text();window.fetch=realFetch;throw Error('response lost after commit')}return r};
                     document.getElementById('offline-sync').click();true""")
-                tab.wait("document.getElementById('offline-operations').textContent.includes('resultado_desconhecido')")
+                tab.wait("document.getElementById('offline-operations').textContent.includes('Resultado ainda não confirmado')")
                 tab.wait("document.getElementById('offline-modal-text').textContent==='Sincronização interrompida — operações preservadas'")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 1)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).filter(o=>o.status==='pendente').length"), 1)
@@ -1205,15 +1205,16 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 # A lost send response with a successful health-check preserves stability.
                 self.assertFalse(tab.evaluate("document.getElementById('offline-sync').disabled"))
                 tab.evaluate("document.getElementById('offline-sync').click()")
-                tab.wait("document.getElementById('offline-operations').textContent.includes('confirmada')")
                 tab.wait("(await testRepo.all('operations')).every(o=>o.status==='confirmada')")
+                tab.evaluate("document.getElementById('offline-completed-history').open=true")
+                tab.wait("document.getElementById('offline-history-operations').textContent.includes('concluída')")
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 2)
                 self.assertEqual(tab.evaluate("(await testRepo.all('history'))[0].status"), 'confirmada')
                 # Actual five-second timeout: no acknowledgement, no loss, no subsequent send.
                 self.save(tab, 'Timeout preserva operação')
                 self.save(tab, 'Não enviar depois do timeout')
                 tab.evaluate("window.timeoutFetch=window.fetch;window.fetch=(...a)=>a[0]==='/api/offline/observations/'?new Promise((resolve,reject)=>a[1].signal.addEventListener('abort',()=>reject(new DOMException('Timeout','AbortError')))):timeoutFetch(...a);document.getElementById('offline-sync').click();true")
-                tab.wait("document.getElementById('offline-operations').textContent.includes('resultado_desconhecido')", timeout=10)
+                tab.wait("document.getElementById('offline-operations').textContent.includes('Resultado ainda não confirmado')", timeout=10)
                 self.assertEqual(OperacaoSincronizacao.objects.count(), 2)
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).filter(o=>o.status==='pendente').length"), 1)
                 tab.evaluate('window.fetch=timeoutFetch;true')
@@ -1232,7 +1233,7 @@ class OfflineBrowserTests(StaticLiveServerTestCase):
                 # Missing task produces retained conflict.
                 task.delete()
                 tab.evaluate("document.getElementById('offline-sync').click()")
-                tab.wait("document.getElementById('offline-operations').textContent.includes('conflito')")
+                tab.wait("document.getElementById('offline-operations').textContent.includes('O servidor identificou uma divergência')")
                 tab.wait("document.getElementById('offline-modal-text').textContent==='Conflito de sincronização — revisão necessária'")
                 self.assertEqual(tab.evaluate("(await testRepo.all('operations')).find(o=>o.status==='conflito').payload.observacao"), 'Sessão expirada preserva fila')
             finally:

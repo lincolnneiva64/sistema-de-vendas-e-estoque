@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
 
+from django.contrib.auth.models import Permission
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.conf import settings
 from django.test import Client
@@ -52,6 +53,8 @@ class ChecklistNavigationTests(StaticLiveServerTestCase):
 
     def test_integrated_worker_refreshes_old_modules_preserving_indexeddb(self):
         user, _, _, _ = fixtures()
+        user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label='estoque', codename__in=['view_venda', 'view_cliente', 'view_produto']))
         self.client.force_login(user)
         with TemporaryDirectory(prefix='integrated-cache-upgrade-') as profile:
             chrome = Chrome(CHROME, profile).start()

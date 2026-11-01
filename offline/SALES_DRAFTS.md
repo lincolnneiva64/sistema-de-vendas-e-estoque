@@ -231,3 +231,22 @@ uma futura extensão precisará de contrato de origem separado.
 Continuam pendentes conclusão offline autorizada, contrato/idempotência de `criar_venda`,
 fila, sincronização, revalidação de preço/conversão/cliente/operador/estoque, financeiro,
 consumo próprio, pedido e reconciliação/conflitos. Nada disso foi implementado aqui.
+
+## Central de operações offline
+
+A tela `/offline/` separa operações que precisam de atenção do histórico concluído.
+Os dados comerciais são projetados apenas dos campos já preservados no IndexedDB:
+nomes locais são exibidos somente quando seus IDs correspondem aos itens do comando;
+o total é calculado apenas quando quantidades e preços estão presentes e válidos.
+
+“Verificar novamente no servidor” consulta `GET /api/offline/operations/<UUID>/`.
+A ausência ou uma consulta inconclusiva atualiza somente o resultado local da consulta
+e mantém a operação original; a ação não envia `POST` nem altera uma venda.
+Uma confirmação encontrada é registrada localmente com o mesmo UUID. A reconciliação
+automática de venda guarda a origem em `resolution.source` também na entrada de histórico,
+sem alterar o comando ou seu hash. Não há migração nem limpeza do IndexedDB.
+
+O shell do Service Worker usa um novo nome de cache para carregar a interface atualizada;
+a troca de cache não remove dados das stores `operations` ou `history`.
+`offline.tests_queue_center_browser` cobre cartões, GET-only, ausência/inconclusão,
+reabertura, múltiplas abas e histórico extenso em tela estreita.

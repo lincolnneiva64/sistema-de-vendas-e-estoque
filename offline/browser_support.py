@@ -96,7 +96,8 @@ class Chrome:
             startup = subprocess.STARTUPINFO()
             startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startup.wShowWindow = subprocess.SW_HIDE
-        self.process = subprocess.Popen([self.executable, '--headless=new', '--disable-gpu', '--no-first-run',
+        self.process = subprocess.Popen([self.executable, '--headless=new', '--disable-gpu', '--disable-crash-reporter',
+            '--disable-breakpad', '--no-first-run',
             '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', f'--user-data-dir={self.profile}', 'about:blank'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startup)
         deadline = time.monotonic() + 15

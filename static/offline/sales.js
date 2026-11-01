@@ -63,7 +63,8 @@ state.activate = async () => {
             options('operadorVenda', snapshot.operadores, o => o.nome, o => o.nome);
             options('tipoVenda', snapshot.formas_pagamento, f => f.valor, f => f.label);
             state.available = true;
-            state.referenceSnapshot = {snapshot_id:snapshot.snapshot_id, prepared_at:snapshot.prepared_at || snapshot.gerado_em};
+            state.referenceSnapshot = {snapshot_id:snapshot.snapshot_id, prepared_at:snapshot.prepared_at || snapshot.gerado_em,
+                gerado_em:snapshot.gerado_em};
             timeText(banner, `Modo offline — dados locais de referência. ${catalogTimes(snapshot)}. Estoque/preços serão revalidados na futura sincronização. A venda pode ser salva neste aparelho, sem envio ao servidor.`);
         } catch (_) {
             snapshot = null;
@@ -84,7 +85,7 @@ state.activate = async () => {
 state.clients = async term => {
     await checkIdentity();
     if (!state.active) return [];
-    if (!snapshot) return [];
+    if (!state.available) return [];
     const normalize = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const query = normalize(term);
     try {
@@ -240,8 +241,9 @@ function connectionChanged() {
     if (indicator?.dataset.connection === 'offline' && state.active && !state.activating) {
         delete banner.dataset.reason;
         banner.hidden = false;
-        timeText(banner, snapshot
-            ? `Modo offline — dados locais de referência. ${catalogTimes(snapshot)}. Comunicação com o servidor indisponível. Venda local preservada; nenhum envio foi iniciado.`
+        const availableSnapshot = snapshot || (state.available ? state.referenceSnapshot : null);
+        timeText(banner, availableSnapshot
+            ? `Modo offline — dados locais de referência. ${catalogTimes(availableSnapshot)}. Comunicação com o servidor indisponível. Venda local preservada; nenhum envio foi iniciado.`
             : 'Comunicação com o servidor indisponível. Dados locais não preparados; montagem preservada.');
     }
     if (indicator?.dataset.connection === 'offline' && !state.active) state.ready = state.activate();
