@@ -69,11 +69,15 @@ transacional e idempotente. A janela de 15 minutos e o envio manual não mudam.
 
 ### Conflito, navegação e mensagens
 
-A montagem continua protegida diante de conflito, envio ou resultado desconhecido.
-Consultar Vendas, navegação de leitura, diagnóstico, revisão e fechamento do aviso
-de operador permanecem acessíveis. Não há liberação automática da operação em
-conflito nem remoção de histórico. O fechamento do modal evita focar um operador
-desabilitado na montagem protegida.
+Uma operação anterior em envio ou com resultado desconhecido não bloqueia a
+montagem nem a conclusão de uma nova venda. A operação original permanece no
+IndexedDB com o mesmo UUID, payload e histórico; cada nova montagem recebe seu
+próprio UUID. A sincronização da fila continua manual e não substitui operações
+ambíguas. Na lista de vendas do dispositivo, “Vincular venda já registrada”
+permite conferir a página oficial e associar manualmente uma venda existente;
+essa ação registra auditoria local sem fabricar recibo nem apagar o histórico.
+Consultar Vendas, navegação de leitura, diagnóstico e revisão permanecem
+acessíveis.
 
 A mensagem identifica a origem da venda e aponta a conexão atual no painel Status.
 Conflito oferece “Revisar venda”; não sugere reenviar a original. O aviso antigo

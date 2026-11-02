@@ -259,9 +259,6 @@ export function ambiguousSales(operations, scope) {
         && op.environment_id === scope.environment_id && (['enviando','resultado_desconhecido'].includes(op.status)
             || op.transport === 'online' && !['confirmada','conflito'].includes(op.status)));
 }
-function requireUnambiguous(operations, scope) {
-    if (ambiguousSales(operations,scope).length) throw new Error('Há venda com resultado desconhecido ou envio em andamento. Consulte o resultado ou sincronize manualmente quando permitido. Operações preservadas.');
-}
 // Explicit operator action: release only the assembly marker, never the queue.
 export async function startNextOfflineDraft(repo, scope, operationId, expectedRevision) {
     const operation = await repo.get('operations',operationId);
@@ -273,10 +270,15 @@ export async function startNextOfflineDraft(repo, scope, operationId, expectedRe
         const current = operations.find(op => op.operation_id === operationId);
         if (!marker || marker.operation_id !== operationId || revision !== expectedRevision)
             throw new Error('Montagem atualizada em outra aba. Reabra a tela para carregar a versão salva.');
-        requireUnambiguous(operations,scope);
-        if (marker.conclusion_mode !== 'offline' || !current || canonical(current) !== signature
-            || current.type !== 'criar_venda' || current.transport !== 'offline' || current.status !== 'pendente'
-            || current.attempts !== 0 || current.server_result || current.actor_id !== scope.actor_id
+        const safeOfflinePending = marker.conclusion_mode === 'offline' && current?.transport === 'offline'
+            && current.status === 'pendente' && current.attempts === 0 && !current.server_result;
+        const safeUnknownResult = current?.status === 'resultado_desconhecido' && current.attempts > 0
+            && !current.server_result;
+        const manuallyLinked = current?.status === 'confirmada' && Number.isSafeInteger(current.manual_resolution?.sale_id)
+            && current.manual_resolution.sale_id > 0 && !current.server_result;
+        if (!current || canonical(current) !== signature
+            || current.type !== 'criar_venda' || !(safeOfflinePending || safeUnknownResult || manuallyLinked)
+            || current.actor_id !== scope.actor_id
             || current.environment_id !== scope.environment_id || current.device_id !== scope.device_id
             || current.operation_id !== marker.draft_id || current.aggregate_id !== marker.draft_id)
             throw new Error('Esta montagem não é uma conclusão offline pendente segura. Consulte seu resultado.');
@@ -307,7 +309,6 @@ export async function releaseConfirmedDraft(repo, scope, operationId) {
             const operations = request.result;
             store.get(resolutionObservationKey(scope,operationId)).onsuccess = event => {
               try {
-                requireUnambiguous(operations,scope);
                 const snapshot = {operations,observed:event.target.result || null};
                 if (canonical(snapshot) !== prepared.signature) throw new Error('Operações atualizadas durante a liberação. Consulte novamente.');
                 const operation = operations.find(op => op.operation_id === operationId);
@@ -335,7 +336,6 @@ export function lastConfirmedDraft(repo, scope) {
 export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfirmed = false) {
     const safe = projectAssembly(assembly);
     return access(repo, scope, true, ({store, key, revisionKey, revision, record, operations}) => {
-        requireUnambiguous(operations,scope);
         rejectFinalized(record, scope, revision);
         if (revision !== expectedRevision) throw new Error('Rascunho atualizado em outra aba. Reabra a tela para carregar a versão salva.');
         const existing = validateRecord(record, scope, revision);
@@ -353,7 +353,6 @@ export function saveDraft(repo, scope, assembly, expectedRevision, replaceConfir
 }
 export function discardDraft(repo, scope, expectedRevision) {
     return access(repo, scope, true, ({store, key, revisionKey, revision, record, operations}) => {
-        requireUnambiguous(operations,scope);
         rejectFinalized(record, scope, revision);
         if (revision !== expectedRevision) throw new Error('Rascunho atualizado em outra aba. Reabra a tela antes de descartar.');
         store.delete(key);
@@ -434,7 +433,6 @@ export async function finalizeDraftOffline(repo, scope, {revision:expectedRevisi
                 return {finalization:marker, alreadyFinalized:true};
             }
             const draft = validateRecord(record, scope, revision);
-            requireUnambiguous(operations,scope);
             if (stock && stockSignature(stock) !== stockSignature(currentStock)) throw new Error('Estoque ou fila atualizados em outra aba. Revise antes de concluir.');
             if (!draft || draft.draft_id !== draftId || revision !== prepared.revision)
                 throw new Error('Rascunho atualizado em outra aba. Reabra a tela antes de concluir.');

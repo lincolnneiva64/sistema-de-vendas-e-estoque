@@ -69,13 +69,14 @@ let recoveringOnline = false;
 let automaticRecoveryRunning = false;
 let queriedConfirmationId = null;
 let historicalCompletion = null;
-let queueBlocked = false, startingNext = false;
+let hasAmbiguousSales = false, startingNext = false;
+const manualLinkCandidates = new Map();
+const manualLinkRunning = new Set();
 let stockView = null;
 let hasCurrentDraft = false, recoveryCandidates = [];
 const navigation = '#btnConsultarVendas, [data-sales-navigation], #sales-draft-status, #modal-operador-obrigatorio';
 const editingFields = () => [...document.querySelectorAll('#layout-vendas input, #layout-vendas select, #layout-vendas button')]
     .filter(field => !field.closest(navigation));
-const ambiguityControls = new Map();
 const completionControls = new Map();
 const channel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-drafts') : null;
 const tabChannel = 'BroadcastChannel' in window ? new BroadcastChannel('sales-draft-tabs') : null;
@@ -162,6 +163,27 @@ function renderDeviceSales(operations) {
             query.addEventListener('click', () => { void window.salesDraftUI.recoverOnline(operation.operation_id); });
             row.append(query);
         }
+        if (operation.status === 'resultado_desconhecido') {
+            const detail = operationDetails(operation, scope);
+            if (detail) row.append(detail);
+            const manual = document.createElement('button');
+            manual.type = 'button';
+            manual.textContent = manualLinkCandidates.has(operation.operation_id)
+                ? 'Confirmar vínculo manual' : 'Vincular venda já registrada';
+            manual.disabled = manualLinkRunning.has(operation.operation_id);
+            manual.addEventListener('click', () => {
+                void window.salesDraftUI.linkManualSale(operation.operation_id, row, manual).catch(showError);
+            });
+            row.append(manual);
+            const candidate = manualLinkCandidates.get(operation.operation_id);
+            if (candidate) {
+                const link = document.createElement('a');
+                link.href = `/vendas/${candidate.saleId}/`;
+                link.textContent = ` Conferir venda #${candidate.saleId}`;
+                link.target = '_blank'; link.rel = 'noopener noreferrer';
+                row.append(link);
+            }
+        }
         deviceSalesList.append(row);
     }
 }
@@ -225,11 +247,11 @@ recoveryButton.addEventListener('click', async () => {
 });
 function offlineActions() {
     if (!nextSale.hidden) nextSale.disabled = startingNext || !!finalizing;
-    if (!window.salesOffline.active && !localCompletion && !queueBlocked) return;
+    if (!window.salesOffline.active && !localCompletion) return;
     const button = document.getElementById('btnGravarVenda');
     const label = localCompletion ? completionView?.recordId ? 'Venda sincronizada'
         : completionView?.status === 'conflito' ? 'Venda offline em revisão' : 'Venda offline pendente' : 'Salvar venda offline';
-    const disabled = !!localCompletion || !!finalizing || blocked || queueBlocked || !scope || !bridge.eligible;
+    const disabled = !!localCompletion || !!finalizing || blocked || !scope || !bridge.eligible;
     if (button.textContent !== label) button.textContent = label;
     if (button.disabled !== disabled) button.disabled = disabled;
     const confirm = document.getElementById('btnConfirmarFechamentoVenda');
@@ -269,24 +291,14 @@ async function refreshCompletion() {
     const pendingCount = sales.filter(op => op.status !== 'confirmada' && !closedLocally(nextStock.closures,op)).length;
     queueCount.textContent = `${pendingCount} venda(s) aguardando sincronização ou resolução.`;
     queueCount.hidden = pendingCount === 0;
-    queueBlocked = ambiguousSales(operations,scope).length > 0;
+    hasAmbiguousSales = ambiguousSales(operations,scope).length > 0;
     nextSale.hidden = true;
     if (!localCompletion) {
-        if (queueBlocked) {
-            for (const field of editingFields()) {
-                if (!ambiguityControls.has(field)) ambiguityControls.set(field,field.disabled);
-                field.disabled = true;
-            }
-            message.textContent = 'Há venda com resultado desconhecido ou envio em andamento. Montagem preservada. Abra Status para consultar ou sincronizar manualmente quando permitido.';
+        if (hasAmbiguousSales) {
+            message.textContent = 'Há uma venda anterior aguardando confirmação. Ela foi preservada; você pode continuar uma nova venda. Consulte ou sincronize a anterior somente pela ação manual.';
             message.setAttribute('role','alert');
-        } else if (ambiguityControls.size) {
-            for (const [field,disabled] of ambiguityControls) field.disabled = disabled;
-            ambiguityControls.clear();
-            message.textContent = 'Resultado anterior resolvido. Montagem preservada; você pode continuar.';
-            message.setAttribute('role','status');
         }
         offlineActions();
-        if (queueBlocked && !marker) return;
     }
     if (!marker) return;
     const operation = await repo.get('operations', marker.operation_id);
@@ -323,20 +335,28 @@ async function refreshCompletion() {
         message.setAttribute('role', 'alert');
     } else message.setAttribute('role', 'status');
     timeText(message, message.textContent);
-    const canStartNext = localCompletion?.conclusion_mode === 'offline' && operation?.transport === 'offline'
-        && operation.status === 'pendente' && operation.attempts === 0 && !operation.server_result && !queueBlocked;
+    const safeOfflinePending = localCompletion?.conclusion_mode === 'offline' && operation?.transport === 'offline'
+        && operation.status === 'pendente' && operation.attempts === 0 && !operation.server_result;
+    const safeUnknownResult = operation?.status === 'resultado_desconhecido' && operation.attempts > 0
+        && !operation.server_result;
+    const manuallyLinked = operation?.status === 'confirmada'
+        && operation.manual_resolution?.source === 'manual_operator';
+    const canStartNext = !!localCompletion && (safeOfflinePending || safeUnknownResult || manuallyLinked);
     if (canStartNext) {
-        message.textContent = `Venda salva neste dispositivo. Aguardando sincronização. Sem número oficial. Ainda não existe oficialmente no servidor. Identificação local: ${marker.operation_id}.`;
+        message.textContent = safeOfflinePending
+            ? `Venda salva neste dispositivo e aguardando sincronização. Identificação local: ${marker.operation_id}.`
+            : manuallyLinked ? `Venda #${operation.manual_resolution.sale_id} vinculada manualmente. Histórico preservado.`
+                : `Venda anterior com resultado desconhecido preservada. Você pode iniciar outra venda; consulte ou sincronize a anterior separadamente. Referência ${marker.operation_id}.`;
         message.setAttribute('role','status');
         nextSale.hidden = false; nextSale.disabled = startingNext || !!finalizing;
-        recover.hidden = true;
+        if (safeOfflinePending || manuallyLinked) recover.hidden = true;
     }
     officialLink.hidden = !completionView.recordId;
     if (completionView.recordId) {
         officialLink.href = completionView.url;
         officialLink.textContent = `Ver venda #${completionView.recordId}`;
     } else { officialLink.removeAttribute('href'); officialLink.textContent = ''; }
-    if(localCompletion && closed && !queueBlocked){
+    if(localCompletion && closed){
         const result=await mirrorClosure(repo,scope,operation,closure);
         const current=await loadDraft(repo,scope);
         if(generation!==completionGeneration)return;
@@ -351,7 +371,7 @@ async function refreshCompletion() {
             document.dispatchEvent(new Event('sales-completion-released'));
         }else message.textContent+=' Montagem posterior ou revisão local preservada; reabra a tela para conferir.';
     }
-    if (localCompletion && completionView.recordId && !queueBlocked) {
+    if (localCompletion && completionView.recordId && !operation?.manual_resolution) {
         const result = await releaseConfirmedDraft(repo, scope, marker.operation_id);
         if (generation !== completionGeneration) return;
         historicalCompletion = marker; localCompletion = null;
@@ -370,14 +390,14 @@ async function refreshCompletion() {
 }
 function schedule(delay = 250) {
     offlineActions();
-    if (suppress || ignoreReset || blocked || queueBlocked || !scope || !bridge.eligible) return;
+    if (suppress || ignoreReset || blocked || !scope || !bridge.eligible) return;
     clearTimeout(timer);
     timer = setTimeout(() => { void flush(); }, delay);
 }
 function flush() {
     offlineActions();
     clearTimeout(timer);
-    if (suppress || ignoreReset || blocked || window.salesOffline.identityBlocked || queueBlocked || !scope || !bridge.eligible) return pending;
+    if (suppress || ignoreReset || blocked || window.salesOffline.identityBlocked || !scope || !bridge.eligible) return pending;
     if (!saved && meaningful(bridge.capture())) {
         bridge.ensureNewDate?.();
         dateNote.textContent = 'Data da nova montagem: ' + bridge.capture().data_venda + '.'; dateNote.hidden = false;
@@ -533,8 +553,62 @@ window.salesDraftUI = {
                 : 'Resultado da venda ainda desconhecido. ' + error.message + ' Consulte novamente; nao repita a venda.';
         } finally { recoveringOnline = false; recover.disabled = false; }
     },
+    async linkManualSale(operationId, row, button) {
+        if (!operationId || manualLinkRunning.has(operationId) || !await checkIdentity()) return;
+        manualLinkRunning.add(operationId); button.disabled = true;
+        try {
+            const operation = await repo.get('operations', operationId);
+            if (!operation || operation.status !== 'resultado_desconhecido'
+                || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
+                || operation.device_id !== scope.device_id || await hash(commandOf(operation)) !== operation.payload_hash)
+                throw new Error('A operação não está disponível para vínculo manual. Ela foi preservada.');
+            let candidate = manualLinkCandidates.get(operationId);
+            if (!candidate) {
+                const value = window.prompt('Informe o número da venda já registrada e confirmada no servidor. Nenhuma venda será enviada.');
+                if (value === null) return;
+                if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))
+                    throw new Error('Informe um número de venda válido.');
+                const saleId = Number(value), path = `/vendas/${saleId}/`;
+                const response = await fetch(path, {credentials:'same-origin', cache:'no-store'});
+                if (!response.ok || response.redirected || new URL(response.url).origin !== location.origin
+                    || new URL(response.url).pathname !== path || !response.headers.get('content-type')?.includes('text/html'))
+                    throw new Error('Não foi possível confirmar a página dessa venda. Nenhum vínculo foi feito.');
+                await response.body?.cancel();
+                candidate = {saleId, payloadHash:operation.payload_hash};
+                manualLinkCandidates.set(operationId, candidate);
+                button.textContent = 'Confirmar vínculo manual';
+                const link = document.createElement('a');
+                link.href = path; link.textContent = ` Conferir venda #${saleId}`;
+                link.target = '_blank'; link.rel = 'noopener noreferrer';
+                row.append(link);
+                message.textContent = `Abra a venda #${saleId}, compare os dados com a operação local e confirme somente se forem a mesma venda.`;
+                return;
+            }
+            if (candidate.payloadHash !== operation.payload_hash)
+                throw new Error('A operação mudou durante a conferência. Nenhum vínculo foi feito.');
+            if (!window.confirm(`Confirma que você abriu a venda #${candidate.saleId}, verificou que está registrada e confirmada no servidor e comparou cliente, data, produtos, quantidades e total com o diagnóstico local? A operação local será marcada como resolvida e não será reenviada. O histórico será preservado.`))
+                return;
+            if (!navigator.locks) throw new Error('O navegador não permite proteger o vínculo contra sincronização simultânea.');
+            const linked = await navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
+                if (!lock) throw new Error('Há uma sincronização em andamento. Tente novamente quando ela terminar.');
+                if (!await checkIdentity()) throw new Error('A identidade mudou. Nenhum vínculo foi feito.');
+                const latest = await repo.get('operations', operationId);
+                if (!latest || await hash(commandOf(latest)) !== latest.payload_hash)
+                    throw new Error('A operação mudou. Nenhum vínculo foi feito.');
+                return repo.linkManualSale(latest, candidate.saleId);
+            });
+            if (!linked) throw new Error('A sincronização está ocupada. Nenhum vínculo foi feito.');
+            manualLinkCandidates.delete(operationId);
+            message.textContent = `Venda #${candidate.saleId} vinculada manualmente. A operação local foi preservada e não será reenviada.`;
+            await refreshCompletion();
+            document.dispatchEvent(new Event('offline-operations-changed'));
+        } finally {
+            manualLinkRunning.delete(operationId);
+            button.disabled = false;
+        }
+    },
     async submitOnline(origin, csrf) {
-        if (!scope || !repo || !bridge.eligible || blocked || queueBlocked || localCompletion || !navigator.locks)
+        if (!scope || !repo || !bridge.eligible || blocked || localCompletion || !navigator.locks)
             throw new Error('Gravacao protegida indisponivel. Reabra a tela em navegador compativel; montagem preservada.');
         return navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
             if (!lock) throw new Error('Outra aba esta enviando. Aguarde e consulte o resultado.');
@@ -591,20 +665,14 @@ window.salesDraftUI = {
         const refuse = reason => { this.lastOnlineRecoveryBlock = reason; return false; };
         if (!this.ready) return refuse('initializing');
         if (!bridge.eligible) return refuse('ineligible-context');
-        if (blocked || queueBlocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset)
-            return refuse(queueBlocked ? 'unknown-result' : localCompletion ? 'local-finalization'
+        if (blocked || localCompletion || finalizing || preparedSubmission || submitted || ignoreReset)
+            return refuse(localCompletion ? 'local-finalization'
                 : finalizing || preparedSubmission || submitted ? 'submission-in-progress' : 'protected-draft');
         if (!await checkIdentity()) return refuse('identity');
         await flush();
         const current = await loadDraft(repo, scope);
         if (blocked || localCompletion || finalizing || current.finalization || current.confirmation || current.revision !== revision)
             return refuse('protected-current-draft');
-        const operations = await repo.all('operations');
-        for (const op of operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
-            && op.environment_id === scope.environment_id && op.status !== 'confirmada')) {
-            if(closedLocally(await repo.all('metadata'),op))continue;
-            if (!(await revisionPresentation(repo,op,scope))?.recordId) return refuse('pending-operation');
-        }
         this.lastOnlineRecoveryBlock = null;
         return true;
     },
@@ -619,7 +687,7 @@ window.salesDraftUI = {
             try {
                 await flush();
                 await checkIdentity();
-                if (blocked || queueBlocked) throw new Error('Montagem bloqueada. Consulte o resultado anterior antes de concluir.');
+                if (blocked) throw new Error('Montagem bloqueada. Reabra Vendas para continuar.');
                 const current = await loadDraft(repo, scope);
                 if (current.finalization) { completed(current.finalization); return {finalization:current.finalization, alreadyFinalized:true}; }
                 if (current.revision !== revision || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))

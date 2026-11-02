@@ -158,3 +158,23 @@ preexistentes e não rastreados.
 - `static/offline/sales-revisions.js`
 - `static/offline/sales.js`
 - `static/offline/service-worker.js`
+
+## Correção emergencial — vendas independentes
+
+Uma operação anterior em envio ou com resultado desconhecido não bloqueia mais
+rascunhos, clientes, produtos ou a conclusão online/offline de outra venda. A
+conclusão continua protegida por revisão, transação local e UUID próprio; nenhuma
+operação anterior é editada ou reenviada automaticamente. A consulta automática
+existente é somente GET e não repete o POST.
+
+Para resultado desconhecido, a lista de vendas do dispositivo permite informar
+o número de uma venda existente, conferir sua página oficial e confirmar o
+vínculo. O IndexedDB marca essa operação como confirmada manualmente e acrescenta
+uma entrada de auditoria em `metadata`; não cria recibo falso, não reescreve o
+payload e não substitui nem apaga `history`. Esse estado fica fora da fila de
+sincronização. A ação exige UUID ainda ambíguo, identidade compatível e Web Lock
+livre.
+
+Os testes direcionados estão em `offline/tests_sales_consecutive_browser.py`.
+O cache do Service Worker foi versionado para `offline-pilot-shell-v46-independente`
+para que o navegador atualize os módulos sem limpar o IndexedDB.

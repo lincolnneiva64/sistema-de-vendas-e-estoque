@@ -45,7 +45,7 @@ class OfflineSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(tab.evaluate('performance.getEntriesByType("navigation")[0].responseStatus'), 200)
                 cache_has_sales_shell = tab.evaluate("""(async()=>{
                     const keys=await caches.keys();
-                    const current=keys.find(key=>key === 'offline-pilot-shell-v45-central-operacoes');
+                    const current=keys.find(key=>key === 'offline-pilot-shell-v46-independente');
                     if(!current)return false;
                     const cache=await caches.open(current);
                     return keys.includes(current)

@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from unittest import skipUnless
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.contrib.auth.models import Permission
 from estoque.models import Venda, ItemVenda, ContaReceber, MovimentoFinanceiro, Produto
 from .models import OperacaoSincronizacao
 from .browser_support import Chrome
@@ -217,63 +218,112 @@ class ConsecutiveSalesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(Venda.objects.count(),0)
             finally: chrome.stop()
 
-    def test_detached_unknown_blocks_new_assembly_without_discarding_it(self):
+    def test_unknown_sale_does_not_block_new_online_sale_or_reuse_its_uuid(self):
         with TemporaryDirectory(prefix='consecutive-unknown-') as profile:
             chrome = Chrome(sync.CHROME,profile).start()
             try:
+                self.user.user_permissions.add(*Permission.objects.filter(
+                    content_type__app_label='estoque', codename__in=['add_venda', 'view_venda']))
                 tab = self.prepare(chrome,quantity='0.5'); self.disconnect(tab)
                 original = tab.evaluate('operation')
                 self.next_sale(tab)
                 self.select_customer(tab,'Cliente Comercial'); self.add_product(tab,'Segundo Produto','1')
                 saved = tab.evaluate('(await drafts.loadDraft(repo,scope)).draft')
                 self.reconnect(tab); self.stable(tab)
-                tab.evaluate('window.fetch=async(u,o)=>{const r=await realFetch(u,o);if(String(u)==="/api/offline/observations/"){sent.push(JSON.parse(o.body));throw TypeError("Lost after offline commit")};return r};true')
+                tab.evaluate('window.fetch=async(u,o)=>{if(String(u)==="/api/offline/observations/"){sent.push(JSON.parse(o.body));throw TypeError("request did not arrive")};return realFetch(u,o)};true')
                 self.manual(tab)
-                self.assertEqual(Venda.objects.count(),1)
+                self.assertEqual(Venda.objects.count(),0)
                 self.assertEqual(tab.evaluate('sent.length'),1)
-                self.assertEqual(tab.evaluate('(await repo.get("operations",operation.operation_id)).status'),'resultado_desconhecido')
-                tab.evaluate('window.savedDraft=(await drafts.loadDraft(repo,scope)).draft;await salesDraftUI.refreshCompletion();window.before=JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history"),draft:(await drafts.loadDraft(repo,scope)).draft});true')
-                self.assertTrue(tab.evaluate('clienteBusca.disabled && btnGravarVenda.disabled'))
-                self.assertTrue(tab.evaluate('try{await drafts.finalizeDraftOffline(repo,scope,{revision:savedDraft.revision,draft_id:savedDraft.draft_id});false}catch(e){true}'))
-                self.assertTrue(tab.evaluate('try{await drafts.saveDraft(repo,scope,savedDraft,savedDraft.revision);false}catch(e){true}'))
-                self.assertTrue(tab.evaluate('try{await drafts.discardDraft(repo,scope,savedDraft.revision);false}catch(e){true}'))
-                self.assertTrue(tab.evaluate('before===JSON.stringify({ops:await repo.all("operations"),history:await repo.all("history"),draft:(await drafts.loadDraft(repo,scope)).draft})'))
-                self.reload(tab); self.repository(tab)
-                self.assertTrue(tab.evaluate('clienteBusca.disabled && btnGravarVenda.disabled'))
+                old = tab.evaluate('await repo.get("operations",operation.operation_id)')
+                self.assertEqual(old['status'],'resultado_desconhecido')
+                self.assertEqual(old['payload'],original['payload'])
+                self.assertEqual(old['payload_hash'],original['payload_hash'])
+                self.assertTrue(tab.evaluate('!clienteBusca.disabled && !btnGravarVenda.disabled'))
                 self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'),saved)
-                self.assertEqual(Venda.objects.count(),1)
-                # Reconcile the detached UUID manually, then resume the SAME draft.
-                self.disconnect(tab); self.reconnect(tab); self.stable(tab); self.manual(tab)
-                tab.wait('!clienteBusca.disabled && !btnGravarVenda.disabled')
-                self.assertEqual(tab.evaluate('(await drafts.loadDraft(repo,scope)).draft'),saved)
+                self.assertTrue(tab.evaluate('await salesDraftUI.canRecoverOnline()'))
+                csrf = tab.evaluate('decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1])')
+                tab.evaluate('await salesDraftUI.submitOnline(undefined,'+json.dumps(csrf)+');true')
+                tab.wait('!salesDraftUI.finalization && !document.getElementById("sales-official-sale-link").hidden')
                 self.assertEqual(Venda.objects.count(),1)
                 self.assertEqual(ItemVenda.objects.count(),1)
-                self.assertEqual(ContaReceber.objects.count(),1)
-                current = tab.evaluate('(await repo.all("operations"))[0]')
-                self.assertEqual(current['operation_id'],original['operation_id'])
+                operations = tab.evaluate('await repo.all("operations")')
+                self.assertEqual(len(operations),2)
+                new_operation = next(item for item in operations if item['operation_id'] != original['operation_id'])
+                current = tab.evaluate('await repo.get("operations",'+json.dumps(original['operation_id'])+')')
+                self.assertNotEqual(new_operation['operation_id'],original['operation_id'])
+                self.assertEqual(current['status'],'resultado_desconhecido')
+                self.assertEqual(current['payload'],original['payload'])
                 self.assertEqual(current['payload_hash'],original['payload_hash'])
                 self.assertEqual(current['attempts'],1)
-                self.assertEqual(tab.evaluate('sent.length'),0)
+                self.assertEqual(tab.evaluate('sent.length'),1)
                 self.assertEqual(OperacaoSincronizacao.objects.count(),1)
             finally: chrome.stop()
 
-    def test_online_lost_commit_cannot_use_new_offline_sale_action(self):
+    def test_manual_link_of_existing_sale_preserves_operation_and_stops_retry(self):
         with TemporaryDirectory(prefix='consecutive-online-') as profile:
             chrome = Chrome(sync.CHROME,profile).start()
             try:
-                tab = online.prepare(self,chrome)
-                tab.evaluate('window.fetch=async(u,o)=>{const r=await realFetch(u,o);if(String(u)==="/api/vendas/online/")throw TypeError("Lost after commit");return r};await salesDraftUI.submitOnline(undefined,decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1]));true')
-                marker = tab.evaluate('salesDraftUI.finalization')
+                self.user.user_permissions.add(*Permission.objects.filter(
+                    content_type__app_label='estoque', codename__in=['add_venda', 'view_venda']))
+                tab = self.prepare(chrome)
+                operation = tab.evaluate('operation')
+                sale_total = sum(float(item['quantidade']) * float(item['preco_unitario']) for item in operation['payload']['itens'])
+                sale = Venda.objects.create(cliente=self.customer, data_venda=operation['payload']['data_venda'],
+                    operador=operation['payload']['operador'], tipo_pagamento=operation['payload']['tipo_pagamento'],
+                    total=Decimal(str(sale_total)))
+                ItemVenda.objects.create(venda=sale, produto=self.product,
+                    quantidade=Decimal(operation['payload']['itens'][0]['quantidade']),
+                    unidade=operation['payload']['itens'][0]['unidade'],
+                    preco_unitario=Decimal(operation['payload']['itens'][0]['preco_unitario']),
+                    valor_total=Decimal(str(sale_total)))
+                original_history = tab.evaluate('await repo.all("history")')
+                tab.evaluate('operation.status="resultado_desconhecido";operation.attempts=1;operation.server_result=null;await repo.put("operations",operation);await salesDraftUI.refreshCompletion();window.prompt=()=>'+json.dumps(str(sale.pk))+';window.confirm=()=>true;true')
+                tab.wait('document.getElementById("sales-device-operations").textContent.includes("Vincular venda já registrada")')
+                tab.evaluate('[...document.querySelectorAll("#sales-device-operations button")].find(button=>button.textContent.includes("Vincular venda")).click();true')
+                tab.wait('document.getElementById("sales-device-operations").textContent.includes("Conferir venda #'+str(sale.pk)+'")')
+                tab.evaluate('[...document.querySelectorAll("#sales-device-operations button")].find(button=>button.textContent.includes("Confirmar vínculo")).click();true')
+                tab.wait('(await repo.get("operations",operation.operation_id)).manual_resolution?.sale_id==='+str(sale.pk))
+                linked = tab.evaluate('await repo.get("operations",operation.operation_id)')
+                self.assertEqual(linked['status'],'confirmada')
+                self.assertEqual(linked['manual_resolution']['source'],'manual_operator')
+                self.assertEqual(linked['manual_resolution']['sale_id'],sale.pk)
+                self.assertIsNone(linked['server_result'])
+                self.assertEqual(linked['payload'],operation['payload'])
+                self.assertEqual(linked['payload_hash'],operation['payload_hash'])
+                self.assertEqual(tab.evaluate('await repo.all("history")'),original_history)
+                self.assertEqual(tab.evaluate('(await repo.all("metadata")).filter(item=>item.key==="manual-sale-resolution:"+operation.operation_id).length'),1)
+                self.assertEqual(tab.evaluate('sent.length'),0)
                 self.assertEqual(Venda.objects.count(),1)
-                self.assertTrue(tab.evaluate('document.getElementById("sales-new-offline-sale").hidden'))
-                self.assertTrue(tab.evaluate('try{await drafts.startNextOfflineDraft(repo,scope,salesDraftUI.finalization.operation_id,salesDraftUI.revision);false}catch(e){true}'))
-                self.reload(tab); self.repository(tab)
-                self.assertEqual(tab.evaluate('salesDraftUI.finalization.operation_id'),marker['operation_id'])
-                self.assertTrue(tab.evaluate('document.getElementById("sales-new-offline-sale").hidden && btnGravarVenda.disabled'))
-                tab.evaluate('await salesDraftUI.recoverOnline();true')
-                tab.wait('!salesDraftUI.finalization && !btnGravarVenda.disabled')
+            finally: chrome.stop()
+
+    def test_online_unknown_result_allows_explicit_new_sale(self):
+        with TemporaryDirectory(prefix='consecutive-online-unknown-') as profile:
+            chrome = Chrome(sync.CHROME,profile).start()
+            try:
+                self.user.user_permissions.add(*Permission.objects.filter(
+                    content_type__app_label='estoque', codename__in=['add_venda', 'view_venda']))
+                tab = online.draft_tests.SalesDraftBrowserTests.open_sales(
+                    self, chrome, init_script=online.REQUEST_TRACKER)
+                self.repository(tab)
+                self.select_customer(tab,'Cliente Comercial')
+                self.add_product(tab,'Produto Fracionado','1')
+                tab.evaluate('tipoVenda.value="A prazo";tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();window.realFetch=fetch;window.onlinePosts=0;window.fetch=async(url,options={})=>{if(String(url).startsWith("/api/vendas/online/")&&(options.method||"GET").toUpperCase()==="GET")return new Response(JSON.stringify({lookup:"indeterminada"}),{status:503});const response=await realFetch(url,options);if(String(url)==="/api/vendas/online/"&&++onlinePosts===1)throw TypeError("response lost after commit");return response};const csrf=decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1]);await salesDraftUI.submitOnline(undefined,csrf);true')
+                tab.wait('(await repo.all("operations"))[0]?.status==="resultado_desconhecido" && !document.getElementById("sales-new-offline-sale").hidden')
+                original = tab.evaluate('(await repo.all("operations"))[0]')
                 self.assertEqual(Venda.objects.count(),1)
-                self.assertEqual(ItemVenda.objects.count(),1)
-                self.assertEqual(ContaReceber.objects.count(),1)
-                self.assertEqual(OperacaoSincronizacao.objects.count(),1)
+                self.next_sale(tab)
+                self.select_customer(tab,'Cliente Comercial')
+                self.add_product(tab,'Segundo Produto','1')
+                tab.evaluate('tipoVenda.value="A prazo";tipoVenda.dispatchEvent(new Event("change",{bubbles:true}));await salesDraftUI.flush();const csrf=decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1]);await salesDraftUI.submitOnline(undefined,csrf);true')
+                tab.wait('!salesDraftUI.finalization && !document.getElementById("sales-official-sale-link").hidden')
+                operations = tab.evaluate('await repo.all("operations")')
+                self.assertEqual(len(operations),2)
+                self.assertEqual(len({item['operation_id'] for item in operations}),2)
+                current = tab.evaluate('await repo.get("operations",'+json.dumps(original['operation_id'])+')')
+                self.assertEqual(current['status'],'resultado_desconhecido')
+                self.assertEqual(current['payload'],original['payload'])
+                self.assertEqual(current['payload_hash'],original['payload_hash'])
+                self.assertEqual(Venda.objects.count(),2)
+                self.assertEqual(OperacaoSincronizacao.objects.count(),2)
+                self.assertEqual(tab.evaluate('onlinePosts'),2)
             finally: chrome.stop()

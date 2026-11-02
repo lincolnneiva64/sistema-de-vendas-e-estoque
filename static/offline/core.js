@@ -239,6 +239,39 @@ export class Repository {
             };
         });
     }
+    linkManualSale(operation, saleId) {
+        if (!Number.isSafeInteger(saleId) || saleId <= 0) throw new Error('Identificador de venda inválido.');
+        return new Promise((resolve, reject) => {
+            let updated = null, failure = null;
+            const tx = this.db.transaction(['operations', 'metadata'], 'readwrite');
+            tx.oncomplete = () => resolve(updated);
+            tx.onabort = () => reject(failure || tx.error || new Error('Vínculo manual não foi salvo.'));
+            tx.onerror = () => {};
+            const operations = tx.objectStore('operations');
+            operations.get(operation.operation_id).onsuccess = event => {
+                const current = event.target.result;
+                if (!current || current.type !== 'criar_venda' || current.status !== 'resultado_desconhecido'
+                    || current.server_result || current.manual_resolution
+                    || current.actor_id !== operation.actor_id || current.environment_id !== operation.environment_id
+                    || current.device_id !== operation.device_id
+                    || current.payload_hash !== operation.payload_hash
+                    || canonical(commandOf(current)) !== canonical(commandOf(operation))) {
+                    failure = new Error('A operação mudou ou já foi resolvida. Nenhum vínculo foi feito.');
+                    tx.abort();
+                    return;
+                }
+                const linkedAt = new Date().toISOString();
+                const manual_resolution = {source:'manual_operator', sale_id:saleId, linked_at:linkedAt};
+                updated = {...current, status:'confirmada', manual_resolution};
+                operations.put(updated);
+                tx.objectStore('metadata').add({
+                    key:'manual-sale-resolution:' + current.operation_id,
+                    operation_id:current.operation_id, sale_id:saleId,
+                    actor_id:current.actor_id, environment_id:current.environment_id, linked_at:linkedAt,
+                });
+            };
+        });
+    }
     diagnose(operation, error, code = 'consulta_indeterminada', response = null) {
         return this.updateAttempt(operation, {status:'resultado_desconhecido', last_error:error,
             diagnostic_code:code, diagnostic_response:response});
@@ -262,6 +295,12 @@ export function validReceipt(result, operation, httpStatus) {
 
 export function saleOperationState(operation) {
     const error = operation?.last_error || operation?.server_result?.erro || '';
+    if (operation?.status === 'confirmada' && operation.manual_resolution?.source === 'manual_operator'
+        && Number.isSafeInteger(operation.manual_resolution.sale_id) && operation.manual_resolution.sale_id > 0) {
+        const recordId = operation.manual_resolution.sale_id;
+        return {status:'confirmada', label:`Venda #${recordId} vinculada manualmente.`, recordId,
+            url:`/vendas/${recordId}/`, completedAt:operation.manual_resolution.linked_at, error:''};
+    }
     if (operation?.status === 'confirmada' && validReceipt(operation.server_result, operation)) {
         const recordId = operation.server_result.record_id;
         return {status:'confirmada', label:`Venda #${recordId} sincronizada.`, recordId,
