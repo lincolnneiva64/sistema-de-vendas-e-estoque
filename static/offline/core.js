@@ -221,7 +221,7 @@ export class Repository {
                 if (!current || canonical(commandOf(current)) !== canonical(commandOf(operation))
                     || current.payload_hash !== operation.payload_hash) { tx.abort(); return; }
                 // A stale tab/response must never overwrite an official confirmation.
-                if (current.status === 'confirmada') return;
+                if (['confirmada', 'substituida_manual'].includes(current.status)) return;
                 store.put({...current, ...updated});
                 tx.objectStore('history').put({...current, ...updated, synchronized_at: new Date().toISOString()});
             };
@@ -232,7 +232,7 @@ export class Repository {
             const store = tx.objectStore('operations');
             store.get(operation.operation_id).onsuccess = event => {
                 const current = event.target.result;
-                if (!current || ['confirmada', 'conflito'].includes(current.status)) { done(null); return; }
+                if (!current || ['confirmada', 'conflito', 'substituida_manual'].includes(current.status)) { done(null); return; }
                 if (current.payload_hash !== operation.payload_hash || canonical(commandOf(current)) !== canonical(commandOf(operation))) { tx.abort(); return; }
                 const updated = {...current, ...changes};
                 store.put(updated); done(updated);
@@ -272,6 +272,41 @@ export class Repository {
             };
         });
     }
+    replaceManualSale(operation, saleId) {
+        if (!Number.isSafeInteger(saleId) || saleId <= 0) throw new Error('Identificador de venda inválido.');
+        return new Promise((resolve, reject) => {
+            let updated = null, failure = null;
+            const tx = this.db.transaction(['operations', 'metadata'], 'readwrite');
+            tx.oncomplete = () => resolve(updated);
+            tx.onabort = () => reject(failure || tx.error || new Error('Encerramento da operação não foi salvo.'));
+            tx.onerror = () => {};
+            const operations = tx.objectStore('operations');
+            operations.get(operation.operation_id).onsuccess = event => {
+                const current = event.target.result;
+                if (!current || current.type !== 'criar_venda' || current.status !== 'resultado_desconhecido'
+                    || current.server_result || current.manual_resolution || current.manual_replacement
+                    || current.actor_id !== operation.actor_id || current.environment_id !== operation.environment_id
+                    || current.device_id !== operation.device_id || current.payload_hash !== operation.payload_hash
+                    || canonical(commandOf(current)) !== canonical(commandOf(operation))) {
+                    failure = new Error('A operação mudou ou já foi resolvida. Nenhum encerramento foi feito.');
+                    tx.abort();
+                    return;
+                }
+                const replacedAt = new Date().toISOString();
+                const reason = 'Substituída por lançamento manual corrigido; o conteúdo pode divergir da operação original e a operação antiga não deve ser enviada.';
+                const manual_replacement = {source:'manual_corrected_sale', sale_id:saleId,
+                    replaced_at:replacedAt, reason, confirmed_no_resend:true};
+                updated = {...current, status:'substituida_manual', manual_replacement};
+                operations.put(updated);
+                tx.objectStore('metadata').add({
+                    key:'manual-sale-replacement:' + current.operation_id,
+                    operation_id:current.operation_id, sale_id:saleId, actor_id:current.actor_id,
+                    environment_id:current.environment_id, device_id:current.device_id,
+                    replaced_at:replacedAt, reason,
+                });
+            };
+        });
+    }
     diagnose(operation, error, code = 'consulta_indeterminada', response = null) {
         return this.updateAttempt(operation, {status:'resultado_desconhecido', last_error:error,
             diagnostic_code:code, diagnostic_response:response});
@@ -295,6 +330,14 @@ export function validReceipt(result, operation, httpStatus) {
 
 export function saleOperationState(operation) {
     const error = operation?.last_error || operation?.server_result?.erro || '';
+    if (operation?.status === 'substituida_manual'
+        && Number.isSafeInteger(operation.manual_replacement?.sale_id) && operation.manual_replacement.sale_id > 0) {
+        const recordId = operation.manual_replacement.sale_id;
+        return {status:'substituida_manual',
+            label:`Operação antiga encerrada como substituída pela venda corrigida #${recordId}. Não será enviada.`,
+            recordId, url:`/vendas/${recordId}/`, completedAt:operation.manual_replacement.replaced_at,
+            error:operation.manual_replacement.reason || ''};
+    }
     if (operation?.status === 'confirmada' && operation.manual_resolution?.source === 'manual_operator'
         && Number.isSafeInteger(operation.manual_resolution.sale_id) && operation.manual_resolution.sale_id > 0) {
         const recordId = operation.manual_resolution.sale_id;
@@ -319,7 +362,7 @@ export function saleOperationState(operation) {
 
 // Both the detailed panel and the global indicator consume this projection.
 export function indicatorState({operations, stability, now, wall, syncing = false, progress = '', notice = null, authenticated = true}) {
-    const pending = operations.filter(op => op.status !== 'confirmada');
+    const pending = operations.filter(op => !['confirmada', 'substituida_manual'].includes(op.status));
     const count = pending.length;
     const connected = stability.valid(now, wall);
     const ready = stability.ready(now, wall);

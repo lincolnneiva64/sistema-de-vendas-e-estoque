@@ -89,6 +89,7 @@ export function validateStock(state,scope,items,fallback = []) {
         }
     }
     for (const op of sales) {
+        if (op.status === 'substituida_manual') continue;
         if (replaced.has(op.operation_id)) continue;
         if (closedLocally(state.closures,op)) continue;
         if (incorporated.has(op.operation_id) && op.status === 'confirmada' && validReceipt(op.server_result,op)) continue;

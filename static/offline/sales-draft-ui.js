@@ -72,6 +72,7 @@ let historicalCompletion = null;
 let hasAmbiguousSales = false, startingNext = false;
 const manualLinkCandidates = new Map();
 const manualLinkRunning = new Set();
+const manualReplacementRunning = new Set();
 let stockView = null;
 let hasCurrentDraft = false, recoveryCandidates = [];
 const navigation = '#btnConsultarVendas, [data-sales-navigation], #sales-draft-status, #modal-operador-obrigatorio';
@@ -151,6 +152,11 @@ function renderDeviceSales(operations) {
         timeText(summary, summary.textContent);
         row.append(summary);
         row.append(operationTimes(operation));
+        if (operation.status === 'substituida_manual') {
+            const replacementNote = document.createElement('span');
+            replacementNote.textContent = `Motivo: ${operation.manual_replacement?.reason || 'substituída por venda corrigida'} · Encerrada em ${formatOfflineTime(operation.manual_replacement?.replaced_at)}`;
+            row.append(replacementNote);
+        }
         if (state.recordId) {
             const link = document.createElement('a');
             link.href = state.url; link.textContent = ` Abrir venda #${state.recordId}`;
@@ -175,6 +181,14 @@ function renderDeviceSales(operations) {
                 void window.salesDraftUI.linkManualSale(operation.operation_id, row, manual).catch(showError);
             });
             row.append(manual);
+            const replacement = document.createElement('button');
+            replacement.type = 'button';
+            replacement.textContent = 'Encerrar como substituída por venda corrigida';
+            replacement.disabled = manualReplacementRunning.has(operation.operation_id);
+            replacement.addEventListener('click', () => {
+                void window.salesDraftUI.replaceManualSale(operation.operation_id, replacement).catch(showError);
+            });
+            row.append(replacement);
             const candidate = manualLinkCandidates.get(operation.operation_id);
             if (candidate) {
                 const link = document.createElement('a');
@@ -288,7 +302,8 @@ async function refreshCompletion() {
             finalized_at:latest.created_at, historical:true} : null;
     }
     const marker = localCompletion || historicalCompletion;
-    const pendingCount = sales.filter(op => op.status !== 'confirmada' && !closedLocally(nextStock.closures,op)).length;
+    const pendingCount = sales.filter(op => !['confirmada', 'substituida_manual'].includes(op.status)
+        && !closedLocally(nextStock.closures,op)).length;
     queueCount.textContent = `${pendingCount} venda(s) aguardando sincronização ou resolução.`;
     queueCount.hidden = pendingCount === 0;
     hasAmbiguousSales = ambiguousSales(operations,scope).length > 0;
@@ -341,10 +356,14 @@ async function refreshCompletion() {
         && !operation.server_result;
     const manuallyLinked = operation?.status === 'confirmada'
         && operation.manual_resolution?.source === 'manual_operator';
-    const canStartNext = !!localCompletion && (safeOfflinePending || safeUnknownResult || manuallyLinked);
+    const manuallyReplaced = operation?.status === 'substituida_manual'
+        && operation.manual_replacement?.source === 'manual_corrected_sale'
+        && operation.manual_replacement.confirmed_no_resend === true;
+    const canStartNext = !!localCompletion && (safeOfflinePending || safeUnknownResult || manuallyLinked || manuallyReplaced);
     if (canStartNext) {
         message.textContent = safeOfflinePending
             ? `Venda salva neste dispositivo e aguardando sincronização. Identificação local: ${marker.operation_id}.`
+            : manuallyReplaced ? `Venda corrigida #${operation.manual_replacement.sale_id} registrada. Operação antiga encerrada e não será enviada; histórico preservado.`
             : manuallyLinked ? `Venda #${operation.manual_resolution.sale_id} vinculada manualmente. Histórico preservado.`
                 : `Venda anterior com resultado desconhecido preservada. Você pode iniciar outra venda; consulte ou sincronize a anterior separadamente. Referência ${marker.operation_id}.`;
         message.setAttribute('role','status');
@@ -604,6 +623,42 @@ window.salesDraftUI = {
             document.dispatchEvent(new Event('offline-operations-changed'));
         } finally {
             manualLinkRunning.delete(operationId);
+            button.disabled = false;
+        }
+    },
+    async replaceManualSale(operationId, button) {
+        if (!operationId || manualReplacementRunning.has(operationId) || !await checkIdentity()) return;
+        manualReplacementRunning.add(operationId); button.disabled = true;
+        try {
+            const operation = await repo.get('operations', operationId);
+            if (!operation || operation.type !== 'criar_venda' || operation.status !== 'resultado_desconhecido'
+                || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
+                || operation.device_id !== scope.device_id || operation.server_result
+                || await hash(commandOf(operation)) !== operation.payload_hash)
+                throw new Error('A operação não está disponível para encerramento. Ela foi preservada.');
+            const value = window.prompt('Informe o número da venda corrigida que já foi lançada manualmente. Os itens e valores podem ser diferentes.');
+            if (value === null) return;
+            if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)))
+                throw new Error('Informe um número de venda válido.');
+            const saleId = Number(value);
+            if (!window.confirm(`A venda corrigida #${saleId} já foi lançada manualmente e pode ter itens e valores diferentes da operação antiga. Confirma que a operação antiga NÃO deve ser enviada? Ela será marcada como substituída, sem alterar a venda corrigida, estoque ou financeiro.`))
+                return;
+            if (!navigator.locks) throw new Error('O navegador não permite proteger o encerramento contra sincronização simultânea.');
+            const replaced = await navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
+                if (!lock) throw new Error('Há uma sincronização em andamento. Tente novamente quando ela terminar.');
+                if (!await checkIdentity()) throw new Error('A identidade mudou. Nenhum encerramento foi feito.');
+                const latest = await repo.get('operations', operationId);
+                if (!latest || await hash(commandOf(latest)) !== latest.payload_hash)
+                    throw new Error('A operação mudou. Nenhum encerramento foi feito.');
+                return repo.replaceManualSale(latest, saleId);
+            });
+            if (!replaced) throw new Error('A sincronização está ocupada. Nenhum encerramento foi feito.');
+            message.textContent = `Operação antiga encerrada como substituída pela venda corrigida #${saleId}. A operação antiga não será enviada; histórico preservado.`;
+            await refreshCompletion();
+            document.dispatchEvent(new Event('offline-operations-changed'));
+            operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
+        } finally {
+            manualReplacementRunning.delete(operationId);
             button.disabled = false;
         }
     },

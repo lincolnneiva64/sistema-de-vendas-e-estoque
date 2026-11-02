@@ -246,6 +246,15 @@ Uma confirmação encontrada é registrada localmente com o mesmo UUID. A reconc
 automática de venda guarda a origem em `resolution.source` também na entrada de histórico,
 sem alterar o comando ou seu hash. Não há migração nem limpeza do IndexedDB.
 
+Para uma tentativa antiga substituída por uma venda corrigida já lançada, a ação
+separada “Encerrar como substituída por venda corrigida” pede o número dessa venda
+e confirmação explícita de que a tentativa antiga não deve ser enviada. Ela grava
+`substituida_manual` e uma auditoria em `metadata`, mantendo UUID, payload e histórico
+da tentativa; não afirma que produtos/valores coincidam nem altera a venda, estoque
+ou financeiro. Esse estado é terminal, não entra na fila nem na projeção de estoque
+e não pode ser revertido por resposta atrasada ou tentativa de outra aba. O operador
+deve informar somente o número da venda corrigida já existente.
+
 O shell do Service Worker usa um novo nome de cache para carregar a interface atualizada;
 a troca de cache não remove dados das stores `operations` ou `history`.
 `offline.tests_queue_center_browser` cobre cartões, GET-only, ausência/inconclusão,

@@ -276,8 +276,13 @@ export async function startNextOfflineDraft(repo, scope, operationId, expectedRe
             && !current.server_result;
         const manuallyLinked = current?.status === 'confirmada' && Number.isSafeInteger(current.manual_resolution?.sale_id)
             && current.manual_resolution.sale_id > 0 && !current.server_result;
+        const manuallyReplaced = current?.status === 'substituida_manual'
+            && current.manual_replacement?.source === 'manual_corrected_sale'
+            && current.manual_replacement.confirmed_no_resend === true
+            && Number.isSafeInteger(current.manual_replacement.sale_id) && current.manual_replacement.sale_id > 0
+            && !current.server_result;
         if (!current || canonical(current) !== signature
-            || current.type !== 'criar_venda' || !(safeOfflinePending || safeUnknownResult || manuallyLinked)
+            || current.type !== 'criar_venda' || !(safeOfflinePending || safeUnknownResult || manuallyLinked || manuallyReplaced)
             || current.actor_id !== scope.actor_id
             || current.environment_id !== scope.environment_id || current.device_id !== scope.device_id
             || current.operation_id !== marker.draft_id || current.aggregate_id !== marker.draft_id)

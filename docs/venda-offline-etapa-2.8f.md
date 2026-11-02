@@ -176,5 +176,13 @@ sincronização. A ação exige UUID ainda ambíguo, identidade compatível e We
 livre.
 
 Os testes direcionados estão em `offline/tests_sales_consecutive_browser.py`.
-O cache do Service Worker foi versionado para `offline-pilot-shell-v46-independente`
+Quando a venda definitiva foi lançada manualmente com conteúdo corrigido, uma
+ação separada encerra a tentativa antiga como `substituida_manual`, registra o
+identificador da venda corrigida, horário e motivo em `metadata` e mantém
+inalterados UUID, payload e histórico. A confirmação declara que a operação
+antiga não deve ser enviada; o estado terminal é excluído da fila e protegido
+contra atualizações atrasadas. Isso não afirma que os dois conteúdos sejam
+idênticos nem altera a venda definitiva ou seus efeitos.
+
+O cache do Service Worker foi versionado para `offline-pilot-shell-v47-substituida-manual`
 para que o navegador atualize os módulos sem limpar o IndexedDB.

@@ -190,17 +190,20 @@ async function render() {
     const revisions = new Map();
     for (const op of scoped.filter(op => op.status === 'conflito')) revisions.set(op.operation_id, await revisionPresentation(repo,op,scope));
     // Resolution is a presentation only: preserve historical conflict bytes.
-    const unresolved = scoped.filter(op => !revisions.get(op.operation_id)?.recordId && !closedLocally(closureMetadata,op));
+    const unresolved = scoped.filter(op => !revisions.get(op.operation_id)?.recordId && !closedLocally(closureMetadata,op)
+        && op.status !== 'substituida_manual');
     const pending = unresolved.filter(op => op.status !== 'confirmada');
     const completedById = new Map();
     for (const row of history) {
         if (row.actor_id !== scope.actor_id || row.environment_id !== scope.environment_id) continue;
         const current = scopedById.get(row.operation_id) || row;
-        if (current.status === 'confirmada' || revisions.get(current.operation_id)?.recordId || closedLocally(closureMetadata, current))
+        if (['confirmada', 'substituida_manual'].includes(current.status)
+            || revisions.get(current.operation_id)?.recordId || closedLocally(closureMetadata, current))
             completedById.set(current.operation_id, {...current, synchronized_at:row.synchronized_at || current.synchronized_at});
     }
     for (const operation of scoped) {
-        if (operation.status === 'confirmada' || revisions.get(operation.operation_id)?.recordId || closedLocally(closureMetadata, operation))
+        if (['confirmada', 'substituida_manual'].includes(operation.status)
+            || revisions.get(operation.operation_id)?.recordId || closedLocally(closureMetadata, operation))
             completedById.set(operation.operation_id, {...completedById.get(operation.operation_id), ...operation});
     }
     const state = indicatorState({operations: unresolved, stability, now: performance.now(), wall: Date.now(),
@@ -309,6 +312,7 @@ async function render() {
     const historyKey = JSON.stringify(completed.map(operation => [
         operation.operation_id, operation.status, operation.synchronized_at,
         operation.server_result?.record_id, operation.resolution?.source, operation.resolution?.resolved_at,
+        operation.manual_replacement?.sale_id, operation.manual_replacement?.replaced_at, operation.manual_replacement?.reason,
     ]));
     if (!historyDetails.open) {
         historyList.replaceChildren();
@@ -329,14 +333,17 @@ async function render() {
             const status = document.createElement('strong');
             const revisionView = revisions.get(op.operation_id);
             const closure = closureMetadata.find(item => item.key === closureKey(op))?.receipt;
-            if (closedLocally(closureMetadata, op)) status.textContent = 'Encerrada sem gerar venda';
+            if (op.status === 'substituida_manual') status.textContent = `Operação antiga substituída pela venda corrigida nº ${op.manual_replacement?.sale_id || 'não informada'}`;
+            else if (closedLocally(closureMetadata, op)) status.textContent = 'Encerrada sem gerar venda';
             else if (revisionView?.recordId) status.textContent = `Conflito resolvido pela venda nº ${revisionView.recordId}`;
             else if (op.resolution?.source === 'automatic_reconciliation') status.textContent = 'Resolvida automaticamente';
             else if (op.resolution?.source === 'server_check') status.textContent = 'Confirmada após consulta no servidor';
             else status.textContent = operationLabel(op) + ' concluída';
             const summary = document.createElement('span');
             const recordId = op.server_result?.record_id;
-            summary.textContent = [recordId ? `Registro nº ${recordId}` : '', localDateText(op.synchronized_at || op.server_result?.completed_at || op.created_at)]
+            const replacementId = op.manual_replacement?.sale_id;
+            summary.textContent = [recordId ? `Registro nº ${recordId}` : replacementId ? `Venda corrigida nº ${replacementId}` : '',
+                localDateText(op.manual_replacement?.replaced_at || op.synchronized_at || op.server_result?.completed_at || op.created_at)]
                 .filter(Boolean).join(' · ');
             row.append(status, summary);
             const technical = document.createElement('details');
@@ -348,7 +355,9 @@ async function render() {
             for (const [label, value] of Object.entries({
                 UUID:op.operation_id, Hash:op.payload_hash, Usuário:op.actor_id, Dispositivo:op.device_id,
                 Ambiente:op.environment_id, Tentativas:op.attempts ?? 0,
-                'Resolvida em':localDateText(op.resolution?.resolved_at || op.server_result?.completed_at),
+                'Resolvida em':localDateText(op.manual_replacement?.replaced_at || op.resolution?.resolved_at || op.server_result?.completed_at),
+                'Motivo do encerramento':op.manual_replacement?.reason,
+                'Venda corrigida':op.manual_replacement?.sale_id,
             })) appendTextField(technicalList, label, String(value ?? 'Não disponível'));
             technical.append(technicalSummary, technicalList);
             row.append(technical);
@@ -698,7 +707,8 @@ async function runSynchronization() {
                 if (closedLocally(closures,op)) continue;
                 if (!(await revisionPresentation(repo,op,scope))?.recordId) conflict = true;
             }
-            const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id) && op.status !== 'confirmada' && !closedLocally(closures,op));
+            const remaining = results.some(op => operations.some(original => original.operation_id === op.operation_id)
+                && !['confirmada', 'substituida_manual'].includes(op.status) && !closedLocally(closures,op));
             const text = conflict ? 'Conflito de sincronização — revisão necessária' : stopped || remaining ? 'Sincronização interrompida — operações preservadas' : 'Sincronização concluída';
             finishModal(text);
             const feedback = document.getElementById('offline-message');
