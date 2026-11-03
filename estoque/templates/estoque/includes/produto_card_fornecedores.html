@@ -2,12 +2,22 @@
 {% if dados.expansivel %}
 <details class="produto-fornecedores produto-fornecedor">
   <summary>{{ dados.resumo }}</summary>
-  <ul class="produto-fornecedores-lista" aria-label="Fornecedores de {{ produto.nome }}">
-    {% for item in dados.itens %}
+  {% if dados.atuais %}
+  <ul class="produto-fornecedores-lista" aria-label="Fornecedores ativos de {{ produto.nome }}">
+    {% for item in dados.atuais %}
+    <li><span>{{ item.nome }}</span> <small>Vinculado</small></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if dados.historicos or dados.legado %}
+  <div>Histórico e vínculos inativos</div>
+  <ul class="produto-fornecedores-lista" aria-label="Histórico de fornecedores de {{ produto.nome }}">
+    {% for item in dados.historicos %}
     <li><span>{{ item.nome }}</span> <small>{{ item.origem }}{% if not item.cadastro_ativo %} · Cadastro inativo{% endif %}</small></li>
     {% endfor %}
     {% if dados.legado %}<li><span>{{ dados.legado }}</span> <small>Informado no cadastro · texto legado</small></li>{% endif %}
   </ul>
+  {% endif %}
 </details>
 {% else %}
 <span class="produto-fornecedor" title="{{ dados.resumo }}">{{ dados.resumo }}</span>

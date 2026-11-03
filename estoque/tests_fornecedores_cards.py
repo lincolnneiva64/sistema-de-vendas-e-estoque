@@ -2,6 +2,7 @@
 from datetime import date
 
 from django.db import connection
+from django.template.loader import render_to_string
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -33,11 +34,12 @@ class FornecedoresCardsTests(TestCase):
 
     def test_ausencia_e_texto_legado_sem_converter_em_vinculo(self):
         p = self.produto()
-        self.assertEqual(self.resolver(p)["resumo"], "Fornecedor não informado")
+        self.assertEqual(self.resolver(p)["resumo"], "Nenhum fornecedor ativo")
         p.fornecedor = "Distribuidor antigo"
         dados = self.resolver(p)
-        self.assertIn("Distribuidor antigo", dados["resumo"])
-        self.assertIn("Cadastro", dados["resumo"])
+        self.assertEqual(dados["resumo"], "Nenhum fornecedor ativo")
+        self.assertEqual(dados["legado"], "Distribuidor antigo")
+        self.assertTrue(dados["expansivel"])
         self.assertEqual(dados["itens"], [])
         self.assertFalse(ProdutoFornecedor.objects.exists())
 
@@ -45,7 +47,7 @@ class FornecedoresCardsTests(TestCase):
         p = self.produto()
         ativo = self.fornecedor("Z fornecedor ativo")
         ProdutoFornecedor.objects.create(produto=p, fornecedor=ativo)
-        self.assertEqual(self.resolver(p)["resumo"], f"Fornecedor: {ativo.nome}")
+        self.assertEqual(self.resolver(p)["resumo"], f"1 fornecedor ativo: {ativo.nome}")
         self.compra(p, ativo)
         inativo = self.fornecedor("A vínculo desativado")
         ProdutoFornecedor.objects.create(produto=p, fornecedor=inativo, ativo=False)
@@ -53,7 +55,15 @@ class FornecedoresCardsTests(TestCase):
         historico = self.fornecedor("B histórico")
         self.compra(p, historico)
         dados = self.resolver(p)
-        self.assertEqual(dados["resumo"], "3 fornecedores")
+        self.assertEqual(dados["resumo"], f"1 fornecedor ativo: {ativo.nome}")
+        self.assertEqual([i["id"] for i in dados["atuais"]], [ativo.pk])
+        self.assertEqual([i["id"] for i in dados["historicos"]], [inativo.pk, historico.pk])
+        html = render_to_string("estoque/includes/produto_card_fornecedores.html", {"produto": p})
+        atuais_html, historico_html = html.split("Histórico e vínculos inativos")
+        self.assertNotIn(inativo.nome, atuais_html)
+        self.assertIn(inativo.nome, historico_html)
+        self.assertIn("Vínculo inativo", historico_html)
+        self.assertNotIn("3 fornecedores", html)
         self.assertEqual([i["id"] for i in dados["itens"]], [ativo.pk, inativo.pk, historico.pk])
         self.assertEqual([i["origem"] for i in dados["itens"]], ["Vinculado", "Vínculo inativo", "Histórico"])
 
@@ -62,7 +72,7 @@ class FornecedoresCardsTests(TestCase):
         for nome in ("Fornecedor B", "Fornecedor A"):
             ProdutoFornecedor.objects.create(produto=p, fornecedor=self.fornecedor(nome))
         dados = self.resolver(p)
-        self.assertEqual(dados["resumo"], "2 fornecedores")
+        self.assertEqual(dados["resumo"], "2 fornecedores ativos")
         self.assertEqual(dados["legado"], p.fornecedor)
         self.assertEqual([i["nome"] for i in dados["itens"]], ["Fornecedor A", "Fornecedor B"])
         p.fornecedor = " fornecedor a "
@@ -81,6 +91,9 @@ class FornecedoresCardsTests(TestCase):
             self.compra(p, self.fornecedor(status), status=status)
         self.compra(p, self.fornecedor("Cancelada por indicador"), cancelada=True)
         self.compra(p, None)
+        self.assertEqual(self.resolver(p)["resumo"], "Nenhum fornecedor ativo")
+        self.assertEqual(self.resolver(p)["atuais"], [])
+        self.assertEqual(len(self.resolver(p)["historicos"]), 7)
         self.assertEqual(len(self.resolver(p)["itens"]), 7)
         self.assertTrue(all(i["origem"] == "Histórico" for i in self.resolver(p)["itens"]))
 
@@ -88,17 +101,26 @@ class FornecedoresCardsTests(TestCase):
         p = self.produto()
         f = self.fornecedor(ativo=False)
         self.compra(p, f)
-        self.assertIn("Histórico", self.resolver(p)["resumo"])
-        self.assertIn("Cadastro inativo", self.resolver(p)["resumo"])
-        ProdutoFornecedor.objects.create(produto=p, fornecedor=f, ativo=False)
-        self.assertIn("Vínculo inativo", self.resolver(p)["resumo"])
-        self.assertNotIn("Histórico", self.resolver(p)["resumo"])
+        self.assertEqual(self.resolver(p)["resumo"], "Nenhum fornecedor ativo")
+        self.assertEqual(self.resolver(p)["historicos"][0]["origem"], "Histórico")
+        vinculo = ProdutoFornecedor.objects.create(produto=p, fornecedor=f, ativo=True)
+        dados = self.resolver(p)
+        self.assertEqual(dados["resumo"], "Nenhum fornecedor ativo")
+        self.assertEqual(dados["atuais"], [])
+        self.assertEqual(len(dados["historicos"]), 1)
+        html = render_to_string("estoque/includes/produto_card_fornecedores.html", {"produto": p})
+        self.assertIn("Cadastro inativo", html)
+        vinculo.ativo = False
+        vinculo.save(update_fields=["ativo"])
+        dados = self.resolver(p)
+        self.assertEqual(dados["historicos"][0]["origem"], "Vínculo inativo")
+        self.assertEqual(dados["resumo"], "Nenhum fornecedor ativo")
 
     def test_dois_ids_com_mesmo_nome_nao_sao_fundidos(self):
         p = self.produto()
         for _ in range(2):
             ProdutoFornecedor.objects.create(produto=p, fornecedor=self.fornecedor("Mesmo nome"))
-        self.assertEqual(self.resolver(p)["resumo"], "2 fornecedores")
+        self.assertEqual(self.resolver(p)["resumo"], "2 fornecedores ativos")
 
     def test_consulta_real_escape_filtros_nomes_longos_e_leitura_sem_escrita(self):
         p = self.produto(nome="Produto com nome longo " * 4, fornecedor="Texto legado <b>antigo</b>")

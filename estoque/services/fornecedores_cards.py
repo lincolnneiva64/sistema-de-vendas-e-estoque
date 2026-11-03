@@ -40,19 +40,19 @@ def preparar_fornecedores_cards(produtos):
         # exata serve apenas para evitar repetir a mesma informação na apresentação.
         if any(item["nome"].strip().casefold() == legado.casefold() for item in itens):
             legado = ""
-        if len(itens) > 1:
-            resumo = f"{len(itens)} fornecedores"
-        elif itens:
-            item = itens[0]
-            resumo = f'Fornecedor: {item["nome"]}'
-            if item["origem"] != "Vinculado":
-                resumo += f' · {item["origem"]}'
-            if not item["cadastro_ativo"]:
-                resumo += " · Cadastro inativo"
+        atuais = [item for item in itens
+                  if item["origem"] == "Vinculado" and item["cadastro_ativo"]]
+        historicos = [item for item in itens
+                      if item["origem"] != "Vinculado" or not item["cadastro_ativo"]]
+        if len(atuais) > 1:
+            resumo = f"{len(atuais)} fornecedores ativos"
+        elif atuais:
+            resumo = f'1 fornecedor ativo: {atuais[0]["nome"]}'
         else:
-            resumo = f"Fornecedor: {legado} · Cadastro" if legado else "Fornecedor não informado"
+            resumo = "Nenhum fornecedor ativo"
         produto.fornecedores_card = {
             "itens": itens, "legado": legado, "resumo": resumo,
-            "expansivel": len(itens) > 1 or bool(itens and legado),
+            "atuais": atuais, "historicos": historicos,
+            "expansivel": len(atuais) > 1 or bool(historicos or legado),
         }
     return produtos
