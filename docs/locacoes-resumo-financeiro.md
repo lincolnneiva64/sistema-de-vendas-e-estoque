@@ -1,5 +1,11 @@
 # Resumo financeiro na Consulta de Locações
 
+Atualização local: o padrão agora é **Este mês**, com opção **Todo o histórico**,
+categorias de saldo de todo o histórico e recebimento no modal. A implementação,
+as validações atuais e a pendência de correção estão em
+[Saldos e recebimento local](locacoes-saldos-recebimento-local.md).
+As validações de etapas anteriores abaixo ficam preservadas como histórico.
+
 Resumo integrado à página existente, sem alterar rotinas de gravação financeira.
 
 ## Regras
@@ -75,7 +81,8 @@ sua paginação como antes, mantendo o período financeiro. Abas, Histórico e l
 de paginação preservam o período; Limpar filtros limpa somente o operacional.
 URLs anteriores com `data_inicio`/`data_fim` continuam filtrando a tabela e não
 definem implicitamente o período financeiro. Sem parâmetros `resumo_*`, o resumo
-considera todo o histórico elegível.
+abre no mês atual de Belém, do dia 1 até hoje. Todo o histórico continua disponível
+no seletor ou com as duas datas explicitamente vazias.
 
 ## Limites históricos
 

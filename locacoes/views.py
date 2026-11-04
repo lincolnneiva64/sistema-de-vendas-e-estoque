@@ -806,6 +806,11 @@ def _funcionarios_checklist_recolhimento_envio(conferencia, checklist_url, funci
 
 
 def lista(request):
+    from .saldos_consulta import contexto_saldos
+    from django.template.loader import render_to_string
+    if request.GET.get('fragmento_saldos') == '1':
+        context = contexto_saldos(request.GET.get('saldo_categoria', 'total'), request.GET.get('saldo_pagina', 1))
+        return JsonResponse({'html': render_to_string('locacoes/includes/saldos_consulta.html', context, request)})
     aba_original = request.GET.get("aba", "entregas")
     historico = request.GET.get("visao") == "historico" or aba_original == "historico"
     realizadas = request.GET.get("situacao") == "realizadas" or aba_original == "concluidas"
@@ -829,19 +834,33 @@ def lista(request):
     datas_invalidas = bool((data_inicio_texto and not data_inicio) or (data_fim_texto and not data_fim) or (data_inicio and data_fim and data_inicio > data_fim))
     resumo_inicio_texto = request.GET.get("resumo_inicio", "").strip()
     resumo_fim_texto = request.GET.get("resumo_fim", "").strip()
+    periodos = periodos_consulta()
+    periodos['historico'] = {'rotulo': 'Todo o histórico', 'inicio': '', 'fim': ''}
+    if not any(key in request.GET for key in ('resumo_inicio', 'resumo_fim')):
+        selected = request.GET.get('resumo_periodo', 'mes')
+        if selected in periodos:
+            resumo_inicio_texto, resumo_fim_texto = periodos[selected]['inicio'], periodos[selected]['fim']
     resumo_inicio, resumo_fim = ler_data(resumo_inicio_texto), ler_data(resumo_fim_texto)
     datas_financeiras_invalidas = bool(
         (resumo_inicio_texto and not resumo_inicio) or (resumo_fim_texto and not resumo_fim)
         or (resumo_inicio and resumo_fim and resumo_inicio > resumo_fim)
     )
-    periodos = periodos_consulta()
-    periodo = request.GET.get("resumo_periodo", "escolha")
+    periodo = request.GET.get("resumo_periodo", "mes" if not any(key in request.GET for key in ('resumo_inicio', 'resumo_fim')) else "escolha")
     if periodo not in periodos or (resumo_inicio_texto, resumo_fim_texto) != (periodos[periodo]["inicio"], periodos[periodo]["fim"]):
         periodo = "escolha"
     resumo_financeiro = None if datas_financeiras_invalidas else resumo_financeiro_locacoes(
         inicio=resumo_inicio, fim=resumo_fim,
     )
     parametros_resumo = {chave: request.GET[chave] for chave in ("resumo_periodo", "resumo_inicio", "resumo_fim") if request.GET.get(chave)}
+    parametros_resumo.update(resumo_periodo=periodo, resumo_inicio=resumo_inicio_texto, resumo_fim=resumo_fim_texto)
+    if request.GET.get('fragmento_financeiro') == '1':
+        context = contexto_saldos(request.GET.get('saldo_categoria', 'total'), request.GET.get('saldo_pagina', 1))
+        context.update(resumo_financeiro=resumo_financeiro, datas_financeiras_invalidas=datas_financeiras_invalidas,
+                       resumo_inicio=resumo_inicio_texto, resumo_fim=resumo_fim_texto)
+        return JsonResponse({
+            'saldos': render_to_string('locacoes/includes/saldos_consulta.html', context, request),
+            'periodo': render_to_string('locacoes/includes/resumo_valores.html', context, request),
+        })
     locacoes_qs = (
         Locacao.objects
         .select_related("cliente", "faixa_preco")
@@ -941,6 +960,7 @@ def lista(request):
         {
             "locacoes": locacoes,
             "resumo_financeiro": resumo_financeiro,
+            **contexto_saldos(request.GET.get('saldo_categoria'), request.GET.get('saldo_pagina', 1)),
             "periodos_consulta": periodos,
             "periodo_selecionado": periodo,
             "datas_financeiras_invalidas": datas_financeiras_invalidas,
@@ -1390,7 +1410,7 @@ def nova(request):
                             sinal_valor,
                             locacao_form.cleaned_data.get("sinal_forma_pagamento"),
                             observacao=locacao_form.cleaned_data.get("sinal_observacao", "") or "Sinal da locacao.",
-                            responsavel="",
+                            responsavel=locacao_form.cleaned_data["sinal_responsavel"],
                         )
             except ValidationError as exc:
                 if hasattr(exc, "message_dict"):
@@ -2525,7 +2545,22 @@ def tarefa_operacional_nao_possivel(request, pk):
 
 @ensure_csrf_cookie
 def registrar_pagamento(request, pk):
+    if request.GET.get('consulta') == '1':
+        from estoque.documentos_horarios import FUSO_DOCUMENTOS
+        with timezone.override(FUSO_DOCUMENTOS):
+            return _registrar_pagamento(request, pk)
+    return _registrar_pagamento(request, pk)
+
+
+def _registrar_pagamento(request, pk):
     locacao = get_object_or_404(Locacao.objects.prefetch_related("itens").select_related("cliente"), pk=pk)
+    modo_consulta = request.GET.get('consulta') == '1'
+    if modo_consulta and request.method == 'GET' and request.GET.get('historico') == '1':
+        pagina = Paginator(locacao.pagamentos.order_by('-criado_em', '-id'), 10).get_page(request.GET.get('pagina'))
+        return render(request, 'locacoes/includes/historico_pagamentos_resumo.html',
+                      {'locacao': locacao, 'pagina_pagamentos': pagina})
+    if modo_consulta and locacao.status == Locacao.STATUS_CANCELADA:
+        return JsonResponse({'erro': 'Locação cancelada. Nenhum recebimento foi registrado.'}, status=403)
     if request.method == "POST":
         form = PagamentoLocacaoForm(request.POST)
         operacao_token = request.POST.get("operacao_token", "")
@@ -2547,19 +2582,34 @@ def registrar_pagamento(request, pk):
                     recibo_token=recibo_token,
                 )
             except ValidationError as exc:
-                messages.warning(request, "; ".join(exc.messages))
+                if modo_consulta:
+                    form.add_error(None, "; ".join(exc.messages))
+                else:
+                    messages.warning(request, "; ".join(exc.messages))
             except Exception:
                 logger.exception("Falha na gravação transacional do pagamento direto")
                 form.add_error(None, "Não foi possível confirmar o pagamento. Tente novamente usando este mesmo formulário, para evitar duplicidade.")
             else:
+                if modo_consulta:
+                    return JsonResponse({'ok': True, 'pagamento': pagamento.pk,
+                                         'recibo_url': reverse('locacoes:recibo_pagamento', args=[pagamento.pk])})
                 messages.success(request, "Pagamento de locacao registrado.")
                 return redirect("locacoes:recibo_pagamento", pk=pagamento.pk)
         else:
-            messages.warning(request, "Revise o pagamento antes de salvar.")
+            if not modo_consulta:
+                messages.warning(request, "Revise o pagamento antes de salvar.")
     else:
         form = PagamentoLocacaoForm()
         operacao_token = signing.dumps({"locacao": pk, "usuario": request.user.pk, "recibo": str(uuid4())}, salt="locacoes.pagamento-direto")
-    return render(request, "locacoes/pagamento.html", {"locacao": locacao, "form": form, "operacao_token": operacao_token})
+    if modo_consulta and not form.is_bound:
+        form.initial['valor'] = locacao.saldo_devedor
+        form.initial['data_hora'] = timezone.localtime().replace(tzinfo=None, second=0, microsecond=0)
+    elif modo_consulta:
+        locacao.refresh_from_db()
+    return render(request, "locacoes/includes/form_pagamento.html" if modo_consulta else "locacoes/pagamento.html",
+                  {"locacao": locacao, "form": form, "operacao_token": operacao_token, 'modo_consulta': modo_consulta,
+                   'csrf_cookie_name': settings.CSRF_COOKIE_NAME},
+                  status=422 if modo_consulta and request.method == 'POST' else 200)
 
 
 @require_POST

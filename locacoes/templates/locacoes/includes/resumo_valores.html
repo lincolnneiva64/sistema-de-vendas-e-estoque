@@ -1,0 +1,21 @@
+<div id="resumo-valores">
+      {% if datas_financeiras_invalidas %}
+        <p class="alert alert-warning" role="alert">Resumo indisponível. {{ erro_periodo_financeiro }}</p>
+      {% else %}
+        <p class="muted resumo-periodo">{% if resumo_inicio or resumo_fim %}Período: {{ resumo_financeiro.inicio|date:"d/m/Y"|default:"início do histórico" }} a {{ resumo_financeiro.fim|date:"d/m/Y"|default:"sem limite final" }}.{% else %}Todo o histórico elegível, sem limite de datas.{% endif %} Cadastro para contratos; data do pagamento para recebimentos. Os filtros da tabela não alteram este resumo.</p>
+        {% if resumo_financeiro.restricoes %}<p class="filtros-ativos"><strong>Valores restritos:</strong> {{ resumo_financeiro.restricoes|join:" · " }}.</p>{% endif %}
+        <dl class="resumo-financeiro-blocos">
+          <div><dt>Locações cadastradas no período</dt><dd>{% if resumo_financeiro.somente_canceladas %}{{ resumo_financeiro.canceladas_quantidade }}{% else %}{{ resumo_financeiro.quantidade }}{% endif %}</dd></div>
+          <div><dt>Total contratado no período</dt><dd>R$ {% if resumo_financeiro.somente_canceladas %}{{ resumo_financeiro.canceladas_contratado|floatformat:"2g" }}{% else %}{{ resumo_financeiro.contratado|floatformat:"2g" }}{% endif %}</dd></div>
+          <div><dt>Recebido no período</dt><dd>R$ {% if resumo_financeiro.somente_canceladas %}{{ resumo_financeiro.canceladas_recebido|floatformat:"2g" }}{% else %}{{ resumo_financeiro.recebido|floatformat:"2g" }}{% endif %}</dd></div>
+          <div><dt>Saldo a receber no período</dt><dd>{% if resumo_financeiro.somente_canceladas %}Não se aplica{% else %}R$ {{ resumo_financeiro.saldo|floatformat:"2g" }}{% endif %}</dd></div>
+        </dl>
+        {% if resumo_financeiro.somente_canceladas %}
+          <p class="resumo-canceladas">Grupo cancelado: pagamentos preservados não indicam devolução automática. O saldo cadastral não é apresentado como dívida cobrável.</p>
+        {% else %}
+          <p class="resumo-canceladas"><strong>Canceladas — fora dos indicadores:</strong> {{ resumo_financeiro.canceladas_quantidade }} cadastrada{{ resumo_financeiro.canceladas_quantidade|pluralize:"s" }} no período · Contratado cancelado: R$ {{ resumo_financeiro.canceladas_contratado|floatformat:"2g" }} · Pagamentos no período, inclusive de contratos anteriores: R$ {{ resumo_financeiro.canceladas_recebido|floatformat:"2g" }}.</p>
+        {% endif %}
+        <p class="muted resumo-explicacao">Contratado não é dinheiro recebido nem lucro. Recebido inclui pagamentos de contratos anteriores e pode incluir cartões ainda não liquidados no banco. Saldo a receber no período é o saldo atual das locações cadastradas no intervalo, não uma previsão de vencimento.</p>
+        <p class="muted resumo-explicacao">Valores e status refletem os registros atuais, após desfazimentos. A tabela usa as datas de entrega/recolhimento; sua quantidade pode ser diferente.</p>
+      {% endif %}
+</div>

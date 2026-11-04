@@ -887,6 +887,12 @@
             {{ locacao_form.sinal_observacao }}
             {{ locacao_form.sinal_observacao.errors }}
           </div>
+          <div id="bloco-responsavel-pagamento">
+            <label class="form-label" for="{{ locacao_form.sinal_responsavel.id_for_label }}">Responsável pelo recebimento</label>
+            {{ locacao_form.sinal_responsavel }}
+            {{ locacao_form.sinal_responsavel.errors }}
+            <div class="form-text">Obrigatório quando houver pagamento inicial.</div>
+          </div>
           <div id="bloco-vencimento-saldo">
             <label class="form-label">Vencimento do saldo</label>
             {{ locacao_form.data_vencimento_saldo }}

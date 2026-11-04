@@ -1,0 +1,25 @@
+{% if modo_consulta %}<h2 id="titulo-recebimento">Receber / Quitar</h2>
+<p>{{ locacao.nome_contratante }} · Locação #{{ locacao.pk }}</p>
+<p>Contratado: R$ {{ locacao.total|floatformat:"2g" }} · Pago: R$ {{ locacao.total_pago|floatformat:"2g" }} · <strong>Saldo: R$ {{ locacao.saldo_devedor|floatformat:"2g" }}</strong></p>{% endif %}
+<form method="post" action="{% url 'locacoes:registrar_pagamento' locacao.id %}{% if modo_consulta %}?consulta=1{% endif %}" class="cardx" data-enter-nav data-csrf-cookie="{{ csrf_cookie_name }}" {% if modo_consulta %}id="form-recebimento-resumo"{% endif %}>
+  {% csrf_token %}
+  <input type="hidden" name="operacao_token" value="{{ operacao_token }}">
+  {{ form.non_field_errors }}
+  <div class="grid">
+    <div><label class="form-label" for="{{ form.valor.id_for_label }}">Valor</label>{{ form.valor }}{{ form.valor.errors }}</div>
+    <div><label class="form-label" for="{{ form.data_hora.id_for_label }}">Data/hora{% if modo_consulta %} do recebimento — Belém{% endif %}</label>{{ form.data_hora }}{{ form.data_hora.errors }}{% if modo_consulta %}<small>Você pode alterar o horário informado. O horário real do registro no servidor é preservado.</small>{% endif %}</div>
+    <div><label class="form-label" for="{{ form.forma_pagamento.id_for_label }}">Forma</label>{{ form.forma_pagamento }}{{ form.forma_pagamento.errors }}</div>
+    <div><label class="form-label" for="{{ form.responsavel.id_for_label }}">Responsável</label>{{ form.responsavel }}{{ form.responsavel.errors }}</div>
+    <div><label class="form-label" for="{{ form.observacao.id_for_label }}">Observação</label>{{ form.observacao }}{{ form.observacao.errors }}</div>
+  </div>
+  <div class="d-flex justify-content-end gap-2 mt-3">
+    {% if modo_consulta %}<button type="button" data-fechar-recebimento>Cancelar</button>{% else %}<a class="btn btn-outline-secondary" href="{% url 'locacoes:detalhe' locacao.id %}">Cancelar</a>{% endif %}
+    <button class="btn btn-success" type="submit">{% if modo_consulta %}Confirmar recebimento{% else %}Salvar pagamento{% endif %}</button>
+  </div>
+</form>
+{% if modo_consulta %}
+<details id="historico-recebimentos" data-historico-url="{% url 'locacoes:registrar_pagamento' locacao.pk %}?consulta=1&amp;historico=1">
+  <summary>Histórico de pagamentos</summary>
+  <div data-conteudo-historico></div>
+</details>
+{% endif %}

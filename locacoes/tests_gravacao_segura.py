@@ -10,22 +10,25 @@ from django.db import close_old_connections, connections
 from django.test import Client, TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.urls import reverse
 
-from estoque.models import MovimentoFinanceiro
+from estoque.models import Funcionario, MovimentoFinanceiro
 from . import tests_formulario_erros as formulario
 from .models import EventoLocacao, ItemLocacao, Locacao, PagamentoLocacao
 
 
 class GravacaoSeguraTests(TestCase):
-    setUp = formulario.FormularioErrosTests.setUp
+    def setUp(self):
+        formulario.FormularioErrosTests.setUp(self)
+        self.operador = Funcionario.objects.create(nome="Operador fictício", ativo=True, pode_operar_caixa=True)
     dados_nova_locacao = formulario.FormularioErrosTests.dados_nova_locacao
 
     def criar(self, **campos):
+        campos.setdefault("sinal_responsavel", str(self.operador.pk))
         return self.client.post(reverse("locacoes:nova"), self.dados_nova_locacao(endereco_entrega="", **campos))
 
     def dados_pagamento(self, locacao, **campos):
         url = reverse("locacoes:registrar_pagamento", args=[locacao.pk])
         token = self.client.get(url).context["operacao_token"]
-        return {"valor": "5.00", "forma_pagamento": "pix", "observacao": "Parcela fictícia", "operacao_token": token, **campos}
+        return {"valor": "5.00", "forma_pagamento": "pix", "responsavel": str(self.operador.pk), "observacao": "Parcela fictícia", "operacao_token": token, **campos}
 
     def pagar(self, locacao, dados):
         return self.client.post(reverse("locacoes:registrar_pagamento", args=[locacao.pk]), dados)
@@ -168,7 +171,7 @@ class GravacaoSeguraTests(TestCase):
     def test_chamada_sem_token_do_recebimento_unificado_permanece_sem_movimento_individual(self):
         self.criar()
         locacao = Locacao.objects.get()
-        pagamento = locacao.registrar_pagamento(Decimal("5"), "pix", criar_movimento_financeiro=False)
+        pagamento = locacao.registrar_pagamento(Decimal("5"), "pix", criar_movimento_financeiro=False, responsavel=self.operador.nome)
         self.assertIsNone(pagamento.movimento_financeiro_id)
         self.assertEqual(locacao.total_pago, Decimal("5"))
         self.assertFalse(MovimentoFinanceiro.objects.exists())
@@ -212,7 +215,7 @@ class PagamentosSimultaneosTests(TransactionTestCase):
             try:
                 objeto = Locacao.objects.get(pk=locacao.pk)
                 barreira.wait(timeout=10)
-                return objeto.registrar_pagamento(Decimal("2"), "pix", recibo_token=token).pk
+                return objeto.registrar_pagamento(Decimal("2"), "pix", recibo_token=token, responsavel=self.operador.nome).pk
             finally:
                 connections.close_all()
         with ThreadPoolExecutor(max_workers=2) as pool:

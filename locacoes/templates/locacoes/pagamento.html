@@ -30,42 +30,7 @@
       <p>Total pago: <strong>R$ {{ locacao.total_pago|floatformat:2 }}</strong></p>
       <p>Saldo devedor: <span class="saldo">R$ {{ locacao.saldo_devedor|floatformat:2 }}</span></p>
     </section>
-    <form method="post" class="cardx" data-enter-nav>
-      {% csrf_token %}
-      <input type="hidden" name="operacao_token" value="{{ operacao_token }}">
-      {{ form.non_field_errors }}
-      <div class="grid">
-        <div>
-          <label class="form-label">Valor</label>
-          {{ form.valor }}
-          {{ form.valor.errors }}
-        </div>
-        <div>
-          <label class="form-label">Data/hora</label>
-          {{ form.data_hora }}
-          {{ form.data_hora.errors }}
-        </div>
-        <div>
-          <label class="form-label">Forma</label>
-          {{ form.forma_pagamento }}
-          {{ form.forma_pagamento.errors }}
-        </div>
-        <div>
-          <label class="form-label">Responsavel</label>
-          {{ form.responsavel }}
-          {{ form.responsavel.errors }}
-        </div>
-        <div>
-          <label class="form-label">Observacao</label>
-          {{ form.observacao }}
-          {{ form.observacao.errors }}
-        </div>
-      </div>
-      <div class="d-flex justify-content-end gap-2 mt-3">
-        <a class="btn btn-outline-secondary" href="{% url 'locacoes:detalhe' locacao.id %}">Cancelar</a>
-        <button class="btn btn-success" type="submit">Salvar pagamento</button>
-      </div>
-    </form>
+    {% include "locacoes/includes/form_pagamento.html" %}
   </main>
   {% include "locacoes/includes/enter_nav.html" %}
 </body>

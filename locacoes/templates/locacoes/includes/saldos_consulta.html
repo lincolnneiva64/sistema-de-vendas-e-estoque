@@ -1,0 +1,29 @@
+<section id="saldos-consulta" class="cardx saldos-consulta" aria-labelledby="titulo-saldos" data-categoria="{{ categoria_saldo }}" data-pagina="{{ pagina_saldos.number|default:'1' }}">
+  <h2 id="titulo-saldos">Quem compõe o saldo a receber</h2>
+  <p class="muted">Posição atual de todo o histórico, independentemente do período acima. Canceladas e quitadas ficam fora dos saldos em aberto.</p>
+  <div class="saldos-indicadores">
+    {% for item in indicadores_saldos %}
+    <button type="button" data-saldo-categoria="{{ item.chave }}" aria-pressed="{% if mostrar_lista_saldos and categoria_saldo == item.chave %}true{% else %}false{% endif %}">
+      <span class="saldo-titulo">{{ item.rotulo }}{% if item.chave == 'atrasadas' %}<small class="saldo-explicacao">(Recolhidas, mas não quitadas)</small>{% endif %}</span><strong>R$ {{ item.valor|floatformat:"2g" }}</strong><small>{{ item.quantidade }} locaç{{ item.quantidade|pluralize:"ão,ões" }}</small>
+    </button>
+    {% endfor %}
+  </div>
+  {% if mostrar_lista_saldos %}
+  <h3>{{ categoria_saldo_rotulo }} <small>· {{ pagina_saldos.paginator.count }} locaç{{ pagina_saldos.paginator.count|pluralize:"ão,ões" }}</small></h3>
+  <div class="saldos-lista">
+    {% for locacao in pagina_saldos %}
+    <article class="saldo-locacao" data-saldo-locacao="{{ locacao.pk }}">
+      <div class="saldo-cliente"><a href="{% url 'locacoes:detalhe' locacao.pk %}"><strong>{{ locacao.nome_contratante }}</strong> · #{{ locacao.pk }}</a><span>{% if locacao.categoria_saldo == 'reservas' %}Reserva futura{% elif locacao.categoria_saldo == 'atrasadas' %}Em atraso{% else %}Entregues a receber{% endif %} · {{ locacao.get_status_display }}</span></div>
+      <dl><div><dt>Contratado</dt><dd>R$ {{ locacao.total|floatformat:"2g" }}</dd></div><div><dt>Pagamentos</dt><dd>R$ {{ locacao.total_pago|floatformat:"2g" }}</dd></div><div><dt>Saldo</dt><dd><strong>R$ {{ locacao.saldo_devedor|floatformat:"2g" }}</strong></dd></div></dl>
+      <div class="saldo-datas">Cadastro: {{ locacao.criado_em|date:"d/m/Y" }} · Entrega prevista: {{ locacao.data_entrega|date:"d/m/Y" }} · Recolhimento previsto: {{ locacao.data_prevista_devolucao|date:"d/m/Y" }}{% if locacao.data_vencimento_saldo %} · Vencimento: {{ locacao.data_vencimento_saldo|date:"d/m/Y" }}{% endif %}</div>
+      {% if request.user.is_superuser and request.user.is_active %}<button type="button" class="btn btn-outline-success" data-receber-locacao="{% url 'locacoes:registrar_pagamento' locacao.pk %}?consulta=1">Receber / Quitar</button>{% endif %}
+    </article>
+    {% empty %}<p>Nenhuma locação com saldo nesta categoria.</p>{% endfor %}
+  </div>
+  {% if pagina_saldos.has_other_pages %}<nav class="saldos-paginacao" aria-label="Páginas dos saldos">
+    {% if pagina_saldos.has_previous %}<button type="button" data-saldo-pagina="{{ pagina_saldos.previous_page_number }}">Anterior</button>{% endif %}
+    <span>Página {{ pagina_saldos.number }} de {{ pagina_saldos.paginator.num_pages }}</span>
+    {% if pagina_saldos.has_next %}<button type="button" data-saldo-pagina="{{ pagina_saldos.next_page_number }}">Próxima</button>{% endif %}
+  </nav>{% endif %}
+  {% else %}<p>Selecione um indicador para ver as locações e receber pagamentos.</p>{% endif %}
+</section>

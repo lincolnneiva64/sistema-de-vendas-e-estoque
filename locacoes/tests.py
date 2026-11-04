@@ -968,8 +968,8 @@ class LocacoesPagamentosTermoTests(TestCase):
     def test_varios_pagamentos_atualizam_total_pago_e_saldo(self):
         locacao = self.criar_locacao()
 
-        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
-        locacao.registrar_pagamento(Decimal("11.00"), PagamentoLocacao.FORMA_DINHEIRO)
+        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
+        locacao.registrar_pagamento(Decimal("11.00"), PagamentoLocacao.FORMA_DINHEIRO, responsavel="Operador ficticio")
         locacao.refresh_from_db()
 
         self.assertEqual(locacao.total_pago, Decimal("16.00"))
@@ -980,12 +980,12 @@ class LocacoesPagamentosTermoTests(TestCase):
         locacao = self.criar_locacao()
 
         with self.assertRaises(ValidationError):
-            locacao.registrar_pagamento(Decimal("17.00"), PagamentoLocacao.FORMA_PIX)
+            locacao.registrar_pagamento(Decimal("17.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
 
     def test_pagamento_cria_no_maximo_um_movimento_financeiro_de_locacao(self):
         locacao = self.criar_locacao()
 
-        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_PIX)
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
         pagamento.criar_movimento_financeiro()
         pagamento.refresh_from_db()
 
@@ -998,7 +998,7 @@ class LocacoesPagamentosTermoTests(TestCase):
     def test_pagamento_cartao_usa_cartoes_a_receber(self):
         locacao = self.criar_locacao()
 
-        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_CARTAO)
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_CARTAO, responsavel="Operador ficticio")
         movimento = pagamento.criar_movimento_financeiro()
 
         self.assertEqual(movimento.conta.nome, "Cartoes a receber")
@@ -1007,7 +1007,7 @@ class LocacoesPagamentosTermoTests(TestCase):
     def test_pagamento_outro_preserva_destino_banco_pix(self):
         locacao = self.criar_locacao()
 
-        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_OUTRO)
+        pagamento = locacao.registrar_pagamento(Decimal("8.00"), PagamentoLocacao.FORMA_OUTRO, responsavel="Operador ficticio")
         movimento = pagamento.criar_movimento_financeiro()
 
         self.assertEqual(movimento.conta, self.conta_banco)
@@ -1076,7 +1076,7 @@ class LocacoesPagamentosTermoTests(TestCase):
 
     def test_recibo_pendente_enviado_e_dispensado(self):
         locacao = self.criar_locacao()
-        pagamento = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX)
+        pagamento = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
 
         self.assertEqual(pagamento.recibo_status, PagamentoLocacao.RECIBO_PENDENTE)
         pagamento.confirmar_recibo_enviado(responsavel="Camila")
@@ -1084,7 +1084,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         self.assertEqual(pagamento.recibo_status, PagamentoLocacao.RECIBO_ENVIADO)
         self.assertIsNotNone(pagamento.recibo_enviado_em)
 
-        outro = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX)
+        outro = locacao.registrar_pagamento(Decimal("4.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
         outro.dispensar_recibo(responsavel="Camila", observacao="Cliente dispensou")
         outro.refresh_from_db()
         self.assertEqual(outro.recibo_status, PagamentoLocacao.RECIBO_DISPENSADO)
@@ -1095,6 +1095,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             Decimal("5.00"),
             PagamentoLocacao.FORMA_PIX,
+            responsavel="Operador ficticio",
         )
 
         response = self.client.get(
@@ -1117,6 +1118,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             locacao.total,
             PagamentoLocacao.FORMA_DINHEIRO,
+            responsavel="Operador ficticio",
         )
 
         response = self.client.get(
@@ -1142,6 +1144,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             Decimal("4.00"),
             PagamentoLocacao.FORMA_PIX,
+            responsavel="Operador ficticio",
         )
 
         Funcionario.objects.create(
@@ -1179,6 +1182,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             Decimal("4.00"),
             PagamentoLocacao.FORMA_PIX,
+            responsavel="Operador ficticio",
         )
 
         response = self.client.get(
@@ -1214,6 +1218,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             Decimal("4.00"),
             PagamentoLocacao.FORMA_PIX,
+            responsavel="Operador ficticio",
         )
         operador = Funcionario.objects.create(
             nome="Lincoln Albuquerque Neiva",
@@ -1272,6 +1277,7 @@ class LocacoesPagamentosTermoTests(TestCase):
         pagamento = locacao.registrar_pagamento(
             Decimal("4.00"),
             PagamentoLocacao.FORMA_PIX,
+            responsavel="Operador ficticio",
         )
         operador = Funcionario.objects.create(
             nome="Roseli Da Costa Gama",
@@ -1340,7 +1346,7 @@ class LocacoesPagamentosTermoTests(TestCase):
     def test_pagamentos_nao_criam_venda_produto_itemvenda_ou_conta_receber(self):
         locacao = self.criar_locacao()
 
-        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX)
+        locacao.registrar_pagamento(Decimal("5.00"), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
 
         self.assertEqual(Venda.objects.count(), 0)
         self.assertEqual(ItemVenda.objects.count(), 0)
@@ -1473,7 +1479,7 @@ class LocacoesAlertasCobrancaTests(TestCase):
         response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
         self.assertContains(response, f"Locacao #{locacao.id}")
 
-        locacao.registrar_pagamento(locacao.total, PagamentoLocacao.FORMA_PIX)
+        locacao.registrar_pagamento(locacao.total, PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
 
         response = self.client.get(reverse("estoque:central_cobrancas"), secure=True)
         self.assertNotContains(response, f"Locacao #{locacao.id}")
@@ -1604,7 +1610,7 @@ class LocacoesFinanceiroConsultaCobrancaTests(TestCase):
             locacao.save(update_fields=["status", "atualizado_em"])
         pagamento = extras.pop("pagamento", None)
         if pagamento is not None:
-            locacao.registrar_pagamento(Decimal(str(pagamento)), PagamentoLocacao.FORMA_PIX)
+            locacao.registrar_pagamento(Decimal(str(pagamento)), PagamentoLocacao.FORMA_PIX, responsavel="Operador ficticio")
         return locacao
 
     def locacao_ids_receber_cliente(self, cliente):

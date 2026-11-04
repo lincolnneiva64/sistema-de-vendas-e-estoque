@@ -1,0 +1,18 @@
+<div class="historico-pagamentos">
+  <p>{{ pagina_pagamentos.paginator.count }} pagamento{{ pagina_pagamentos.paginator.count|pluralize:"s" }} · Horário de Belém (PA).</p>
+  {% for pagamento in pagina_pagamentos %}
+  <article class="historico-pagamento" data-historico-pagamento="{{ pagamento.pk }}">
+    <strong>R$ {{ pagamento.valor|floatformat:"2g" }} · {{ pagamento.get_forma_pagamento_display }}</strong>
+    {% include 'locacoes/includes/horarios_pagamento.html' %}
+    <p>Responsável: {{ pagamento.responsavel|default:'Não informado' }}{% if pagamento.operacao_recebimento_cliente_id %} · Recebimento unificado #{{ pagamento.operacao_recebimento_cliente_id }}{% endif %}</p>
+    {% if pagamento.observacao %}<p>{{ pagamento.observacao|linebreaksbr }}</p>{% endif %}
+    <a href="{% url 'locacoes:recibo_pagamento' pagamento.pk %}" target="_blank" rel="noopener">Ver recibo #{{ pagamento.pk }}</a>
+  </article>
+  {% empty %}<p>Nenhum pagamento registrado nesta locação.</p>{% endfor %}
+  {% if pagina_pagamentos.has_other_pages %}<nav class="saldos-paginacao" aria-label="Páginas dos pagamentos">
+    {% if pagina_pagamentos.has_previous %}<button type="button" data-historico-pagina="{{ pagina_pagamentos.previous_page_number }}">Anterior</button>{% endif %}
+    <span>{{ pagina_pagamentos.number }} / {{ pagina_pagamentos.paginator.num_pages }}</span>
+    {% if pagina_pagamentos.has_next %}<button type="button" data-historico-pagina="{{ pagina_pagamentos.next_page_number }}">Próxima</button>{% endif %}
+  </nav>{% endif %}
+  {% if pagina_pagamentos.paginator.count %}<p class="historico-aviso">A correção de pagamentos ainda não está disponível neste modal. Os pagamentos e os recibos permanecem preservados.</p>{% endif %}
+</div>

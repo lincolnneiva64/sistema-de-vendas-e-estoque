@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from django.apps import apps
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -26,6 +27,7 @@ from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao
 class DadosResumo:
     def setUp(self):
         ConfiguracaoLocacao.obter()
+        self.usuario_recebimento = get_user_model().objects.create_user('ator-resumo-ficticio')
         self.faixa, _ = FaixaPrecoLocacao.objects.get_or_create(
             codigo=FaixaPrecoLocacao.CENTRO_PERTO,
             defaults={"nome": "Centro fictício", "preco_jogo_diaria": 10},
@@ -47,6 +49,7 @@ class DadosResumo:
         return locacao
 
     def pagar(self, locacao, valor, quando="2026-10-15", **campos):
+        campos.setdefault('responsavel', 'Operador fictício')
         return locacao.registrar_pagamento(Decimal(str(valor)), "pix", data_hora=self.instante(quando), **campos)
 
     def consultar(self, **campos):
@@ -97,6 +100,7 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
         resultado = _criar_operacao_recebimento_cliente(
             cliente, Decimal("30"), date(2026, 10, 15), "PIX",
             dividas_selecionadas=[f"locacao:{locacao.pk}"],
+            usuario=self.usuario_recebimento,
         )
         pagamento = locacao.pagamentos.get()
         self.assertIsNone(pagamento.movimento_financeiro_id)
@@ -203,7 +207,7 @@ class ResumoFinanceiroBrowserTests(DadosResumo, TestCase):
         html = re.sub(r'<link[^>]+href="https://[^>]+>', '', html)
         html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
         html = html.replace('<link rel="stylesheet" href="/static/locacoes/consulta-operacional.css">', '<style>' + (settings.BASE_DIR / "static/locacoes/consulta-operacional.css").read_text(encoding="utf-8") + '</style>')
-        destino = settings.BASE_DIR / "amostras/previa-resumo-financeiro"
+        destino = settings.BASE_DIR / "tmp_whatsapp_visual_resumo_financeiro/regressao"
         destino.mkdir(parents=True, exist_ok=True)
         destino = Path(tempfile.mkdtemp(prefix="resumo-", dir=destino))
         with tempfile.TemporaryDirectory(prefix="resumo-locacoes-", ignore_cleanup_errors=True) as perfil:

@@ -1,0 +1,44 @@
+.saldos-consulta h2{font-size:1.05rem;margin-bottom:6px}
+.resumo-financeiro-blocos>div{display:flex;flex-direction:column;justify-content:space-between}
+.saldos-consulta h3{font-size:1rem;margin:16px 0 8px}
+.saldos-consulta h3 small{font-weight:500;color:#64748b}
+.saldos-indicadores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.saldos-indicadores button{padding:10px;text-align:left;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;color:#7c2d12;cursor:pointer;min-width:0}
+.saldos-indicadores button{display:flex;flex-direction:column}
+.saldo-titulo{min-height:4em;line-height:1.3}
+.saldos-indicadores .saldo-explicacao{font-size:.75rem;color:#64748b;line-height:1.25;margin-top:3px;font-weight:400}
+@supports(grid-template-rows:subgrid){.saldos-indicadores button{display:grid;grid-template-rows:subgrid;grid-row:span 3;row-gap:4px}.saldo-titulo{min-height:0}}
+.saldos-indicadores button[aria-pressed=true]{border:2px solid #ea580c;background:#ffedd5;padding:9px}
+.saldos-indicadores strong,.saldos-indicadores small{display:block;margin-top:4px;overflow-wrap:anywhere}
+.saldos-indicadores strong{font-size:1.15rem}
+.saldos-lista{display:grid;gap:8px}
+.saldo-locacao{border:1px solid #e2e8f0;border-radius:8px;padding:10px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;align-items:center}
+.saldo-cliente a{overflow-wrap:anywhere;color:#7c2d12}
+.saldo-cliente span{display:block;color:#64748b;font-size:.8rem}
+.saldo-locacao dl{display:flex;gap:18px;margin:0;grid-column:1;flex-wrap:wrap}
+.saldo-locacao dt,.saldo-datas{font-size:.77rem;color:#64748b}
+.saldo-locacao dd{margin:0;font-size:.9rem}
+.saldo-datas{grid-column:1;overflow-wrap:anywhere}
+.saldo-locacao button{grid-column:2;grid-row:1/4;min-height:42px}
+.saldo-locacao button[data-receber-locacao]{background:#15803d;border-color:#15803d;color:#fff;min-height:44px;font-weight:700}
+.saldo-locacao button[data-receber-locacao]:hover{background:#166534;border-color:#166534;color:#fff}
+.saldo-locacao button[data-receber-locacao]:focus-visible{outline:3px solid #172033;outline-offset:3px;background:#166534;color:#fff}
+.saldos-paginacao{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px}
+#modal-recebimento{border:1px solid #fed7aa;border-radius:10px;padding:20px;width:min(700px,calc(100% - 20px));max-height:90dvh;overflow:auto;color:#172033}
+#modal-recebimento::backdrop{background:rgba(15,23,42,.55)}
+#modal-recebimento>button{float:right;min-width:40px;min-height:40px;background:white;border:1px solid #cbd5e1;border-radius:6px;font-size:1.3rem}
+#modal-recebimento h2{font-size:1.25rem;color:#7c2d12}
+#modal-recebimento .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#modal-recebimento .grid>div{min-width:0}
+#modal-recebimento .form-control,#modal-recebimento .form-select{width:100%;min-height:42px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box}
+#modal-recebimento .errorlist{color:#b91c1c}
+#modal-recebimento .cardx{padding:0;border:0}
+#modal-recebimento form button{min-height:44px;margin-top:12px}
+#status-saldos:empty{display:none}
+#historico-recebimentos{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:12px}
+#historico-recebimentos summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;color:#7c2d12}
+.historico-pagamento{border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin:8px 0;overflow-wrap:anywhere;font-size:.88rem}
+.historico-pagamento p{margin:6px 0}
+.historico-aviso{font-size:.8rem;color:#475569}
+@media(max-width:700px){.saldos-indicadores{grid-template-columns:repeat(2,minmax(0,1fr))}.saldo-locacao{grid-template-columns:minmax(0,1fr)}.saldo-locacao button{grid-column:1;grid-row:auto;justify-self:start}.saldo-locacao dl{gap:12px}#modal-recebimento .grid{grid-template-columns:1fr}}
+@media(max-width:359px){.saldos-indicadores{grid-template-columns:1fr}}

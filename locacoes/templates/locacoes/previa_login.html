@@ -1,0 +1,3 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Prévia financeira fictícia</title>
+<style>body{font-family:system-ui;max-width:400px;margin:40px auto;padding:16px;color:#172033}label,input{display:block;margin:8px 0}input,button{padding:10px;max-width:100%;box-sizing:border-box}button{background:#ea580c;color:white;border:0;border-radius:6px}</style></head>
+<body><h1>Prévia financeira</h1><p>Somente dados fictícios. Use o usuário e a senha mostrados no terminal.</p><form method="post">{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next }}"><button type="submit">Entrar na prévia</button></form></body></html>

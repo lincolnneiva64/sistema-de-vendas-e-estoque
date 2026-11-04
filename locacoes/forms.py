@@ -213,6 +213,20 @@ class LocacaoForm(forms.Form):
         ),
     )
 
+    sinal_responsavel = forms.ModelChoiceField(
+        required=False, queryset=Funcionario.objects.none(), empty_label="Selecione o responsável",
+        widget=forms.Select(attrs={"class": "form-select"}),
+        error_messages={"invalid_choice": "Selecione um funcionário ativo e autorizado a operar o caixa."},
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["sinal_responsavel"].queryset = Funcionario.operadores_do_caixa()
+
+    def clean_sinal_responsavel(self):
+        funcionario = self.cleaned_data.get("sinal_responsavel")
+        return funcionario.nome if funcionario else ""
+
     def clean(self):
         cleaned_data = super().clean()
         tipo_pessoa = cleaned_data.get("tipo_pessoa")
@@ -241,6 +255,8 @@ class LocacaoForm(forms.Form):
             cleaned_data["data_vencimento_saldo"] = data_entrega
         if sinal_valor and sinal_valor > 0 and not sinal_forma:
             self.add_error("sinal_forma_pagamento", "Informe a forma de pagamento do sinal.")
+        if sinal_valor and sinal_valor > 0 and not cleaned_data.get("sinal_responsavel") and "sinal_responsavel" not in self.errors:
+            self.add_error("sinal_responsavel", Locacao.RESPONSAVEL_RECEBIMENTO_OBRIGATORIO)
 
         cleaned_data["pessoa_avulsa_nome"] = " ".join(pessoa_avulsa_nome.split()).title()
         cleaned_data["pessoa_avulsa_telefone"] = pessoa_avulsa_telefone
@@ -362,10 +378,16 @@ class PagamentoLocacaoForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     responsavel = forms.ModelChoiceField(
-        required=False,
+        required=True,
         queryset=Funcionario.objects.none(),
-        empty_label="Selecione o responsavel",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        empty_label="Selecione o responsável",
+        error_messages={
+            "required": Locacao.RESPONSAVEL_RECEBIMENTO_OBRIGATORIO,
+            "invalid_choice": "Selecione um funcionário ativo e autorizado a operar o caixa.",
+        },
+        widget=forms.Select(attrs={"class": "form-select",
+            "oninvalid": "this.setCustomValidity('" + Locacao.RESPONSAVEL_RECEBIMENTO_OBRIGATORIO + "')",
+            "onchange": "this.setCustomValidity('')"}),
     )
     observacao = forms.CharField(
         required=False,

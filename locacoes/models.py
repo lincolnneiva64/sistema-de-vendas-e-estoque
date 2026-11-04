@@ -269,6 +269,7 @@ class FaixaPrecoLocacao(models.Model):
 
 
 class Locacao(models.Model):
+    RESPONSAVEL_RECEBIMENTO_OBRIGATORIO = "O campo Responsável é obrigatório. Selecione quem recebeu o pagamento."
     STATUS_RESERVADA = "reservada"
     STATUS_SAIU_PARA_ENTREGA = "saiu_para_entrega"
     STATUS_ENTREGUE = "entregue"
@@ -1034,6 +1035,9 @@ class Locacao(models.Model):
                         raise ValidationError("Este envio já foi registrado com outros dados. Abra um novo pagamento para registrar outro recebimento.")
                     self.refresh_from_db()
                     return existente
+            responsavel = str(responsavel or "").strip()
+            if not responsavel:
+                raise ValidationError(self.RESPONSAVEL_RECEBIMENTO_OBRIGATORIO)
             locacao.atualizar_financeiro()
             if valor > locacao.saldo_devedor:
                 raise ValidationError("Pagamento nao pode superar o saldo devedor da locacao.")
@@ -2873,6 +2877,8 @@ class PagamentoLocacao(models.Model):
     def clean(self):
         if self.valor is not None and self.valor <= Decimal("0.00"):
             raise ValidationError({"valor": "Informe um valor maior que zero."})
+        if self._state.adding and not str(self.responsavel or "").strip():
+            raise ValidationError({"responsavel": Locacao.RESPONSAVEL_RECEBIMENTO_OBRIGATORIO})
 
     def save(self, *args, **kwargs):
         self.full_clean()

@@ -112,7 +112,7 @@ class PeriodosBrowserTests(resumo.DadosResumo, TestCase):
         html = re.sub(r'<script(?![^>]*type="application/json")\b[^>]*>.*?</script>', '', html, flags=re.S)
         html = html.replace('<link rel="stylesheet" href="/static/locacoes/consulta-operacional.css">', '<style>' + (settings.BASE_DIR / "static/locacoes/consulta-operacional.css").read_text(encoding="utf-8") + '</style>')
         html = html.replace('</body>', render_to_string("locacoes/includes/filtros_consulta.html") + '</body>')
-        destino = settings.BASE_DIR / "amostras/previa-resumo-financeiro"
+        destino = settings.BASE_DIR / "tmp_whatsapp_visual_resumo_financeiro/regressao"
         destino.mkdir(parents=True, exist_ok=True)
         destino = Path(tempfile.mkdtemp(prefix="periodos-", dir=destino))
         with tempfile.TemporaryDirectory(prefix="periodos-locacoes-", ignore_cleanup_errors=True) as perfil:
@@ -123,7 +123,7 @@ class PeriodosBrowserTests(resumo.DadosResumo, TestCase):
                     tab.call("Emulation.setDeviceMetricsOverride", {"width": largura, "height": 1200, "deviceScaleFactor": 1, "mobile": largura < 600})
                     tab.call("Page.setDocumentContent", {"frameId": tab.call("Page.getFrameTree")["frameTree"]["frame"]["id"], "html": html})
                     tab.wait('!!document.getElementById("periodo-locacoes")')
-                    self.assertEqual(tab.evaluate('document.querySelectorAll("#periodo-locacoes option").length'), 7)
+                    self.assertEqual(tab.evaluate('document.querySelectorAll("#periodo-locacoes option").length'), 8)
                     self.assertEqual(tab.evaluate('document.querySelectorAll("#filtros-locacoes input[type=date]").length'), 2)
                     self.assertTrue(tab.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                     tab.evaluate('window.scrollTo(0,0);true')
