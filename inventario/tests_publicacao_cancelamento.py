@@ -13,7 +13,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import SimpleTestCase, TransactionTestCase
 
-from inventario.management.commands.publicar_cancelamento import Command, TARGET, RECOLHIMENTO, LOCK
+from inventario.management.commands.publicar_cancelamento import Command, TARGET, RECOLHIMENTO, COMPROVANTE, LOCK
 from inventario.tests_cancelamento import Fixture
 
 
@@ -105,8 +105,13 @@ class PublicacaoCancelamentoTests(Fixture, TransactionTestCase):
         self.assertEqual(before, self.snapshot())
         self.run_gate()
         self.previous(inventory=False, pickup=True)
+        # The original gate still cannot authorize 0018, now also pending.
+        with self.assertRaisesMessage(CommandError, 'migrations inesperadas'):
+            call_command('publicar_recolhimento', stdout=StringIO())
+        self.run_gate()
         call_command('publicar_recolhimento', stdout=StringIO())
         self.assertIn(RECOLHIMENTO, self.recorder.applied_migrations())
+        self.assertIn(COMPROVANTE, self.recorder.applied_migrations())
 
     def unexpected(self, target):
         self.recorder.record_unapplied(*target)

@@ -20,11 +20,12 @@ TARGET = ('inventario', '0008_inventario_cancelamento')
 COMPRA = ('estoque', '0135_conciliacao_compra')
 PRECISAO = ('estoque', '0136_itemvenda_quantidade_precisao')
 COLETA = ('estoque', '0137_lista_coleta_mobile')
-AUTHORIZED = frozenset((RECOLHIMENTO, TARGET, COMPRA, PRECISAO, COLETA))
+COMPROVANTE = ('locacoes', '0018_comprovante_cliente')
+AUTHORIZED = frozenset((RECOLHIMENTO, COMPROVANTE, TARGET, COMPRA, PRECISAO, COLETA))
 
 
 class Command(BaseCommand):
-    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017 e estoque.0135–0137 autorizadas.'
+    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017–0018 e estoque.0135–0137 autorizadas.'
     requires_system_checks = []
 
     def add_arguments(self, parser):
@@ -54,7 +55,7 @@ class Command(BaseCommand):
             if not plan:
                 return
             # The final stock target includes exactly the checked 0135 -> 0136 -> 0137 chain.
-            executor.migrate([RECOLHIMENTO, TARGET, COLETA], plan=plan)
+            executor.migrate([COMPROVANTE, TARGET, COLETA], plan=plan)
             if any((m.app_label, m.name) == RECOLHIMENTO for m, _ in plan):
                 create_permissions(apps.get_app_config('locacoes'), verbosity=0, interactive=False)
             # A later failure here also rolls back both DDL and migration records.
@@ -88,6 +89,25 @@ class Command(BaseCommand):
                 or not isinstance(legacy.operations[0], CreateModel)
                 or legacy.operations[0].name != 'AutorizacaoRecolhimento'):
             raise CommandError('Publicação recusada: locacoes.0017 não corresponde à criação autorizada.')
+        receipt = loader.disk_migrations.get(COMPROVANTE)
+        expected_receipt = [
+            ('comprovante_token_hash', models.CharField(
+                max_length=64, null=True, blank=True, unique=True, editable=False)),
+            ('comprovante_expira_em', models.DateTimeField(null=True, blank=True, editable=False)),
+            ('comprovante_revogado_em', models.DateTimeField(null=True, blank=True, editable=False)),
+        ]
+        if (receipt is None or receipt.atomic is not True or receipt.replaces or receipt.run_before
+                or receipt.initial is not None or receipt.dependencies != [RECOLHIMENTO]
+                or len(receipt.operations) != len(expected_receipt)):
+            raise CommandError('Publicação recusada: locacoes.0018 diverge da migration autorizada.')
+        for operation, (name, field) in zip(receipt.operations, expected_receipt):
+            if (type(operation) is not migrations.AddField
+                    or operation.model_name != 'conferenciarecolhimentolocacao'
+                    or operation.name != name or operation.preserve_default is not True
+                    or operation.elidable is not False
+                    or type(operation.field) is not type(field)
+                    or operation.field.deconstruct()[1:] != field.deconstruct()[1:]):
+                raise CommandError('Publicação recusada: locacoes.0018 deve adicionar somente os três campos opcionais autorizados.')
         current = loader.disk_migrations.get(TARGET)
         expected = [
             ('cancelada_em', models.DateTimeField(blank=True, null=True)),
@@ -168,6 +188,11 @@ class Command(BaseCommand):
             if name not in columns or not columns[name].null_ok:
                 raise CommandError('Publicação recusada: estrutura de cancelamento ausente ou incompatível.')
         expected = {
+            'locacoes_conferenciarecolhimentolocacao': {
+                'comprovante_token_hash': ('character varying(64)', False, None),
+                'comprovante_expira_em': ('timestamp with time zone', False, None),
+                'comprovante_revogado_em': ('timestamp with time zone', False, None),
+            },
             'estoque_itemvenda': {'quantidade': ('numeric(12,3)', True, None)},
             'estoque_listacomprafornecedor': {'coleta_mobile': ('jsonb', False, None)},
             'estoque_compra': {'conciliacao_automatica': ('boolean', True, 'false')},
@@ -192,9 +217,22 @@ class Command(BaseCommand):
                     WHERE a.attrelid = to_regclass(%s) AND a.attnum > 0 AND NOT a.attisdropped''', [table])
                 actual = {name: (kind, required, default) for name, kind, required, default in cursor.fetchall()}
                 if any(actual.get(name) != definition for name, definition in fields.items()):
+                    if table == 'locacoes_conferenciarecolhimentolocacao':
+                        raise CommandError('Publicação recusada: estrutura/default de locacoes.0018 ausente ou incompatível.')
                     name = ('0136' if table == 'estoque_itemvenda' else
                             '0137' if table == 'estoque_listacomprafornecedor' else '0135')
                     raise CommandError(f'Publicação recusada: estrutura/default de estoque.{name} ausente ou incompatível.')
+            cursor.execute('''SELECT EXISTS (
+                SELECT 1 FROM pg_constraint c
+                JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attname = 'comprovante_token_hash'
+                JOIN pg_index i ON i.indexrelid = c.conindid
+                WHERE c.conrelid = to_regclass('locacoes_conferenciarecolhimentolocacao')
+                  AND c.contype = 'u' AND c.conkey = ARRAY[a.attnum]
+                  AND c.convalidated AND NOT c.condeferrable
+                  AND i.indisvalid AND i.indisready AND i.indpred IS NULL AND i.indexprs IS NULL
+            )''')
+            if not cursor.fetchone()[0]:
+                raise CommandError('Publicação recusada: unicidade do hash de locacoes.0018 ausente ou incompatível.')
             constraints = connection.introspection.get_constraints(cursor, 'estoque_conciliacaocompra')
             for column, target in [('compra_id', 'estoque_compra'), ('edicao_id', 'estoque_edicaocompra')]:
                 if (not any(c['columns'] == [column] and c['unique'] for c in constraints.values())
