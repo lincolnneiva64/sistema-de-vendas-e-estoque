@@ -12489,7 +12489,7 @@ def compra_editar(request, pk):
                 messages.error(request, "Nao foi possivel salvar a correcao. Nenhuma alteracao foi aplicada; recarregue a compra.")
                 return redirect("estoque:compra_editar", pk=pk)
             resultado = "Compra corrigida com histórico preservado."
-            if request.POST.get("acao_compra") == "salvar_correcao_simples":
+            if request.POST.get("acao_compra") == "salvar_correcao_simples" and "ajustes" in registro.depois:
                 ajustes = registro.depois["ajustes"]
                 formatar = lambda v: f"{Decimal(v):.2f}".replace(".", ",")
                 resultado = (f"Alterações salvas. Total: R$ {formatar(ajustes['total_anterior'])} → R$ {formatar(ajustes['total_corrigido'])}. "

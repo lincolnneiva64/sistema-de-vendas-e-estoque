@@ -139,6 +139,8 @@ def bloqueio_financeiro(compra, estado, permitir_reversao_automatica=False):
         return "Existe movimento financeiro ou vinculo legado ambiguo. Registro nao comprova pagamento: correcao de lancamento e devolucao real exigem conciliacao."
     if estado["cartao"] or compra.cartao_id:
         return "Compra vinculada a cartao/fatura; alteracoes financeiras exigem conciliacao."
+    if any(c["documento_legado"] for c in estado["contas"]):
+        return "Conta com documento legado vinculado; alteracoes financeiras exigem conciliacao."
     if any(c["status"] != ContaPagar.STATUS_CANCELADA and (
         c["status"] != ContaPagar.STATUS_ABERTA or Decimal(c["valor_em_aberto"]) != Decimal(c["valor_original"])
     ) for c in estado["contas"]):
@@ -333,6 +335,9 @@ def salvar_edicao(request, compra_id):
             mesmos_ids = set(ids_contas) == {c.pk for c in ativos} and None not in ids_contas
             por_conta = {c.pk: c for c in ativos}
             mudou_valores = not mesmos_ids or any(p["valor"] != por_conta[pk].valor_original for p, pk in zip(parcelas, ids_contas) if pk)
+            mudou_plano = mudou_valores or any(p["data_vencimento"] != por_conta[pk].data_vencimento for p, pk in zip(parcelas, ids_contas) if pk)
+            if mudou_plano and ConciliacaoCompra.objects.filter(compra=compra).exists():
+                raise ValueError("Compra com conciliação auditada; reparcelamento exige conciliação específica.")
             if bloqueio and ids_contas != [c.pk for c in ativos]:
                 raise ValueError("Contas com historico nao podem ser reordenadas ou substituidas.")
             if antigo_prazo and not ativos:
@@ -363,6 +368,11 @@ def salvar_edicao(request, compra_id):
         afetados_catalogo = []
         originais_catalogo = {i['id']:i for i in antes['itens']}
         for item, linha in planos:
+            if item is not None and item.produto_id == linha["produto"].pk and all(
+                getattr(item, campo) == linha[campo]
+                for campo in ("quantidade", "preco_unitario", "valor_total", "unidade", "observacao")
+            ):
+                continue
             if item is None:
                 item = ItemCompra(compra=compra)
             for campo in ("quantidade", "preco_unitario", "valor_total", "unidade", "observacao"):

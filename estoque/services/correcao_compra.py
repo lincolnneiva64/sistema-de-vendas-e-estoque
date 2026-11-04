@@ -276,6 +276,38 @@ def etapa_correcao(nome):
     """Fault-injection seam, no operational side effects."""
 
 
+def _salvar_boletos_sem_alterar_itens(request, compra):
+    """Use the existing installment editor for the current Save button."""
+    from estoque.views import _dados_compra_post, _dados_parcelas_pagamento_nota, _valor_monetario_obrigatorio_lista_fornecedor
+    from .edicao_compra import salvar_edicao, bloqueio_financeiro
+    if _tipo_formulario(compra.tipo_pagamento) != "aprazo" or "compra_forma_cobranca_nota" not in request.POST:
+        return None
+    dados = _dados_compra_post(request, exigir_itens=True, compra_edicao=compra)
+    forma = request.POST.get("compra_forma_cobranca_nota")
+    valor = _valor_monetario_obrigatorio_lista_fornecedor(request.POST.get("compra_valor_nota_boleto"))
+    parcelas = _dados_parcelas_pagamento_nota(request, forma, valor, "compra_", dados["data_vencimento"])
+    contas = list(compra.contas_pagar.exclude(status=ContaPagar.STATUS_CANCELADA).order_by("numero_parcela", "pk"))
+    mudou_plano = [(p["valor"], p["data_vencimento"]) for p in parcelas] != [(c.valor_original, c.data_vencimento) for c in contas]
+    antigos = {i.pk: i for i in compra.itens.all()}
+    mesmos_itens = len(antigos) == len(dados["itens"]) and {l["item_id"] for l in dados["itens"]} == set(antigos)
+    if mesmos_itens:
+        mesmos_itens = all(antigos[l["item_id"]].produto_id == l["produto"].pk and all(
+            getattr(antigos[l["item_id"]], c) == l[c]
+            for c in ("quantidade", "unidade", "preco_unitario", "valor_total", "observacao")
+        ) for l in dados["itens"])
+    mesma_base = mesmos_itens and all(getattr(compra, c) == dados[c] for c in (
+        "data_compra", "total", "total_produtos", "ajuste_total"
+    )) and compra.fornecedor_id == dados["fornecedor"].pk and _tipo_formulario(compra.tipo_pagamento) == _tipo_formulario(dados["tipo_pagamento"])
+    if not mesma_base:
+        if mudou_plano:
+            raise ValueError("Alterar itens e boletos juntos exige conciliação específica. Nenhuma alteração foi salva.")
+        return None
+    bloqueio = bloqueio_financeiro(compra, estado_compra(compra))
+    if mudou_plano and (bloqueio or ConciliacaoCompra.objects.filter(compra=compra).exists()):
+        raise ValueError(bloqueio or "Compra com conciliação auditada; reparcelamento exige conciliação específica.")
+    return salvar_edicao(request, compra.pk)
+
+
 def aplicar(request, compra_id, automatica=False):
     if not request.user.is_authenticated or not request.user.has_perm("estoque.change_compra"):
         raise ValueError("Usuário sem permissão para corrigir compras.")
@@ -294,7 +326,11 @@ def aplicar(request, compra_id, automatica=False):
         compra = Compra.objects.select_for_update().get(pk=compra_id)
         anterior = EdicaoCompra.objects.filter(operacao=token["operacao"]).first()
         if anterior:
-            if anterior.compra_id != compra_id or anterior.usuario_id != request.user.pk or anterior.payload_hash != token["payload"]:
+            hash_esperado = token["payload"]
+            if automatica and "ajustes" not in anterior.depois:
+                hash_esperado = _hash({k: request.POST.getlist(k) for k in request.POST
+                    if k not in {"csrfmiddlewaretoken", "edicao_token"}})
+            if anterior.compra_id != compra_id or anterior.usuario_id != request.user.pk or anterior.payload_hash != hash_esperado:
                 raise ValueError("Identificação de correção já utilizada com outros dados.")
             return anterior,False
         list(ItemCompra.objects.select_for_update().filter(compra=compra).order_by("pk"))
@@ -307,6 +343,10 @@ def aplicar(request, compra_id, automatica=False):
         list(Produto.objects.select_for_update().filter(pk__in=ids).order_by("pk"))
         if automatica and _hash(estado_compra(compra)) != token.get("versao"):
             raise ValueError("A compra ou pagamentos mudaram. Recarregue antes de corrigir; nenhuma alteração foi salva.")
+        if automatica:
+            boletos = _salvar_boletos_sem_alterar_itens(request, compra)
+            if boletos is not None:
+                return boletos
         plano = _planejar(request,compra,automatica=automatica)
         if not automatica and (_hash(plano["estado"]) != token["estado"] or _hash(plano["resumo"]) != token["resumo"]):
             raise ValueError("Estoque, cadastro, compra ou pagamentos mudaram após a prévia. Gere nova confirmação.")
