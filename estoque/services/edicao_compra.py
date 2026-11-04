@@ -1,7 +1,7 @@
 """Edicao historica: deltas de estoque, obrigacoes abertas e nenhuma saida de dinheiro."""
 import hashlib
 import json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
 from django.core import signing
@@ -11,7 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from estoque.models import (
-    Compra, ContaPagar, EdicaoCompra, ItemCompra, LancamentoCartao, ListaCompraFornecedor,
+    Compra, ConciliacaoCompra, ContaPagar, EdicaoCompra, ItemCompra, LancamentoCartao, ListaCompraFornecedor,
     MovimentoFinanceiro, PagamentoContaPagar, ParcelaCompra, ParcelaNotaListaCompraFornecedor, Produto,
 )
 from estoque.services.precos_vinculados import bloquear_catalogo
@@ -45,6 +45,7 @@ def estado_compra(compra):
         "parcelas_diretas": list(compra.parcelas_nota.order_by("pk").values()),
         "lista": ListaCompraFornecedor.objects.filter(pk=lista.pk).values().get() if lista else None,
         "parcelas_lista": list(lista.parcelas_nota.order_by("pk").values()) if lista else [],
+        "conciliacao": list(ConciliacaoCompra.objects.filter(compra=compra).values()),
     })
 
 
@@ -148,6 +149,41 @@ def bloqueio_financeiro(compra, estado, permitir_reversao_automatica=False):
     return ""
 
 
+def _validar_reparcelamento_conciliado(compra, estado, valor_nota):
+    """Allow only redistribution of an unchanged, wholly unpaid obligation."""
+    conciliacao = ConciliacaoCompra.objects.select_related("edicao").select_for_update().filter(compra=compra).first()
+    if conciliacao is None:
+        return
+    erro = "Compra com conciliação auditada; reparcelamento exige conciliação específica."
+    efeitos = conciliacao.efeitos
+    if (
+        conciliacao.tipo != "erro_lancamento"
+        or conciliacao.edicao.compra_id != compra.pk
+        or not isinstance(efeitos, dict)
+        or not isinstance(conciliacao.edicao.depois, dict)
+        or conciliacao.edicao.depois.get("ajustes") != efeitos
+        or efeitos.get("tipo") != "erro_lancamento"
+        or any(getattr(conciliacao, c) != 0 for c in ("valor_pago", "valor_devolvido", "credito_fornecedor"))
+        or bloqueio_financeiro(compra, estado)
+    ):
+        raise ValueError(erro)
+    try:
+        sem_dinheiro = all(Decimal(str(efeitos[c])) == 0 for c in (
+            "pago_registrado_antes", "pago_preservado", "devolvido_antes", "devolvido_agora", "credito_fornecedor"
+        ))
+        total = Decimal(compra.total)
+        saldo = sum((Decimal(c["valor_em_aberto"]) for c in estado["contas"]
+            if c["status"] != ContaPagar.STATUS_CANCELADA), Decimal("0"))
+        mesmo_saldo = total > 0 and total == saldo == valor_nota == conciliacao.saldo_a_pagar == Decimal(str(efeitos["saldo_a_pagar"])) == Decimal(str(efeitos["total_corrigido"]))
+    except (KeyError, InvalidOperation, TypeError, ValueError):
+        raise ValueError(erro)
+    if not sem_dinheiro or not mesmo_saldo or any(efeitos.get(c) for c in (
+        "correcao_registro_financeiro", "movimento_devolucao_id", "conta_devolucao", "data_devolucao",
+        "registro_automatico_retificavel",
+    )):
+        raise ValueError(erro)
+
+
 def contexto_edicao(compra, usuario):
     from estoque.views import _compra_pagamento_a_prazo
     estado = estado_compra(compra)
@@ -240,12 +276,12 @@ def salvar_edicao(request, compra_id):
             if anterior.compra_id != compra_id or anterior.usuario_id != request.user.pk or anterior.payload_hash != payload_hash:
                 raise ValueError("Identificacao ja utilizada em outra correcao. Recarregue a compra.")
             return anterior, False
-        from estoque.models import ConciliacaoCompra
         if compra.cancelada or compra.status != Compra.STATUS_FINALIZADA or not compra.estoque_entrada_realizada:
             raise ValueError("Compra cancelada ou nao finalizada com estoque confirmado. Nenhuma alteracao foi salva.")
         itens = list(ItemCompra.objects.select_for_update().filter(compra=compra).order_by("pk"))
         contas = list(ContaPagar.objects.select_for_update().filter(compra=compra).order_by("numero_parcela", "pk"))
         list(PagamentoContaPagar.objects.select_for_update().filter(conta__in=contas))
+        list(ConciliacaoCompra.objects.select_for_update().filter(compra=compra))
         if compra.lista_fornecedor_id:
             compra.lista_fornecedor = ListaCompraFornecedor.objects.select_for_update().get(pk=compra.lista_fornecedor_id)
         antes = estado_compra(compra)
@@ -336,8 +372,8 @@ def salvar_edicao(request, compra_id):
             por_conta = {c.pk: c for c in ativos}
             mudou_valores = not mesmos_ids or any(p["valor"] != por_conta[pk].valor_original for p, pk in zip(parcelas, ids_contas) if pk)
             mudou_plano = mudou_valores or any(p["data_vencimento"] != por_conta[pk].data_vencimento for p, pk in zip(parcelas, ids_contas) if pk)
-            if mudou_plano and ConciliacaoCompra.objects.filter(compra=compra).exists():
-                raise ValueError("Compra com conciliação auditada; reparcelamento exige conciliação específica.")
+            if mudou_plano:
+                _validar_reparcelamento_conciliado(compra, antes, valor_nota)
             if bloqueio and ids_contas != [c.pk for c in ativos]:
                 raise ValueError("Contas com historico nao podem ser reordenadas ou substituidas.")
             if antigo_prazo and not ativos:

@@ -303,8 +303,8 @@ def _salvar_boletos_sem_alterar_itens(request, compra):
             raise ValueError("Alterar itens e boletos juntos exige conciliação específica. Nenhuma alteração foi salva.")
         return None
     bloqueio = bloqueio_financeiro(compra, estado_compra(compra))
-    if mudou_plano and (bloqueio or ConciliacaoCompra.objects.filter(compra=compra).exists()):
-        raise ValueError(bloqueio or "Compra com conciliação auditada; reparcelamento exige conciliação específica.")
+    if mudou_plano and bloqueio:
+        raise ValueError(bloqueio)
     return salvar_edicao(request, compra.pk)
 
 
@@ -336,6 +336,7 @@ def aplicar(request, compra_id, automatica=False):
         list(ItemCompra.objects.select_for_update().filter(compra=compra).order_by("pk"))
         contas = list(ContaPagar.objects.select_for_update().filter(compra=compra).order_by("pk"))
         list(PagamentoContaPagar.objects.select_for_update().filter(conta__in=contas).order_by("pk"))
+        list(ConciliacaoCompra.objects.select_for_update().filter(compra=compra))
         if compra.lista_fornecedor_id:
             ListaCompraFornecedor.objects.select_for_update().get(pk=compra.lista_fornecedor_id)
         list(MovimentoFinanceiro.objects.select_for_update(of=("self",)).filter(Q(compra=compra)|Q(pagamento_conta_pagar__conta__compra=compra)).order_by("pk"))
