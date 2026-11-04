@@ -414,13 +414,14 @@ def _mensagem_checklist_recolhimento_link_whatsapp(nome_destinatario, checklist_
 def _whatsapp_comprovante_recolhimento_url(conferencia, checklist_url):
     """Share the saved physical conference without recording a send event."""
     mensagem = "\n\n".join([
-        f"Cliente: {conferencia.locacao.nome_contratante}",
-        f"Registro da conferência no servidor: *{instante_locacao(conferencia.criado_em)}*",
-        "Horário de Belém (PA) · America/Belem",
-        conferencia.mensagem_whatsapp_snapshot,
-        f"Comprovante do recolhimento:\n{checklist_url}",
+        f"Olá, {conferencia.locacao.nome_contratante}!",
+        "Os materiais da sua locação foram recolhidos no local combinado.",
+        "Segue o checklist de recolhimento com os itens retirados, as quantidades e as condições registradas na conferência:",
+        checklist_url,
     ])
     telefone = _telefone_whatsapp_locacao(conferencia.locacao)
+    if not telefone or "#" not in checklist_url:
+        return ""
     return f"https://wa.me/{telefone}?{urlencode({'text': mensagem})}"
 
 
@@ -725,7 +726,11 @@ def _avarias_recolhimento(conferencia):
                 nome = singular if quantidade == 1 else plural
                 avarias.append({
                     "quantidade": quantidade,
-                    "descricao": f"{quantidade} {nome} com problema",
+                    "descricao": f"{quantidade} {nome}: " + {
+                        "quebrada": "quebra registrada",
+                        "perdida": "perda registrada (não recolhido)",
+                        "descartada": "descarte registrado (não recolhido)",
+                    }[prefixo],
                 })
     return avarias
 
@@ -1996,8 +2001,7 @@ def checklist_entrega_cliente(request, pk):
 
 
 def checklist_recolhimento_cliente(request, pk):
-    pode_operar = request.user.is_authenticated and request.user.has_perms(PICKUP_PERMISSIONS)
-    if request.method == 'POST' and not pode_operar:
+    if request.method not in {'GET', 'HEAD'}:
         return HttpResponseForbidden('Este comprovante é somente para consulta. Operações internas exigem autorização própria.')
     conferencia = get_object_or_404(
         ConferenciaRecolhimentoLocacao.objects.select_related(
@@ -2008,132 +2012,13 @@ def checklist_recolhimento_cliente(request, pk):
         pk=pk,
     )
     locacao = conferencia.locacao
-    funcionarios_checklist = _funcionarios_checklist_locacoes()
-    evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
-    checklist_url = request.build_absolute_uri(
-        reverse(
-            "locacoes:checklist_recolhimento_cliente",
-            kwargs={"pk": conferencia.pk},
-        )
-    )
+    from .customer_receipts import can_share, receipt_context, protect
+    context = receipt_context(conferencia)
+    context.update(_dados_contato_locacao(locacao))
+    context['pode_compartilhar_cliente'] = can_share(request, conferencia)
+    context['tem_whatsapp_cliente'] = bool(_telefone_whatsapp_locacao(locacao))
+    return protect(render(request, 'locacoes/checklist_recolhimento_cliente.html', context))
 
-    if request.method == "POST" and not evento_envio:
-        funcionario_id = str(request.POST.get("checklist_funcionario") or "").strip()
-        funcionario = funcionarios_checklist.filter(pk=funcionario_id).first()
-        if funcionario:
-            telefone = _telefone_funcionario_checklist(funcionario)
-            responsavel = _responsavel_request(request, conferencia.responsavel)
-            EventoLocacao.objects.create(
-                locacao=locacao,
-                tipo="checklist_recolhimento_enviado",
-                descricao=(
-                    f"Checklist de recolhimento enviado ao funcionario.\n"
-                    f"Conferencia #{conferencia.pk}\n"
-                    f"Enviado para: {funcionario.nome}\n"
-                    f"Telefone: {telefone}"
-                ),
-                responsavel=responsavel,
-            )
-            messages.success(request, "Checklist confirmado como enviado.")
-            if _request_ajax(request):
-                evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
-                return JsonResponse(
-                    {
-                        "ok": True,
-                        "redirectUrl": reverse(
-                            "locacoes:checklist_recolhimento_cliente",
-                            kwargs={"pk": conferencia.pk},
-                        ),
-                        "envio": _dados_evento_checklist_recolhimento(evento_envio),
-                    }
-                )
-            return redirect("locacoes:checklist_recolhimento_cliente", pk=conferencia.pk)
-        if _request_ajax(request):
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "erro": "Selecione um funcionario habilitado para receber o checklist.",
-                },
-                status=400,
-            )
-        messages.warning(
-            request,
-            "Selecione um funcionario habilitado para receber o checklist.",
-        )
-
-    evento_envio = _evento_checklist_recolhimento_enviado(conferencia)
-    envio_checklist = _dados_evento_checklist_recolhimento(evento_envio)
-    funcionarios_checklist_envio = _funcionarios_checklist_recolhimento_envio(
-        conferencia,
-        checklist_url,
-        funcionarios_checklist,
-    )
-    funcionario_selecionado_id = str(request.GET.get("funcionario") or "")
-    funcionario_selecionado = (
-        funcionarios_checklist.filter(pk=funcionario_selecionado_id).first()
-        if funcionario_selecionado_id
-        else None
-    )
-    funcionario_selecionado_whatsapp_url = (
-        _whatsapp_checklist_funcionario_url(
-            funcionario_selecionado,
-            _mensagem_checklist_recolhimento_link_whatsapp(
-                funcionario_selecionado.nome,
-                checklist_url,
-                locacao,
-            ),
-        )
-        if funcionario_selecionado
-        else ""
-    )
-    if envio_checklist.get("telefone"):
-        envio_checklist["whatsapp_url"] = _whatsapp_web_url(
-            envio_checklist["telefone"],
-            _mensagem_checklist_recolhimento_link_whatsapp(
-                envio_checklist.get("funcionario_nome"),
-                checklist_url,
-                locacao,
-            ),
-        )
-
-    telefone_cliente = _telefone_whatsapp_locacao(locacao)
-    whatsapp_url = _whatsapp_comprovante_recolhimento_url(conferencia, checklist_url)
-    recolhido_mesas = (
-        conferencia.boa_mesas
-        + conferencia.quebrada_mesas
-        + conferencia.perdida_mesas
-        + conferencia.descartada_mesas
-    )
-    recolhido_cadeiras = (
-        conferencia.boa_cadeiras
-        + conferencia.quebrada_cadeiras
-        + conferencia.perdida_cadeiras
-        + conferencia.descartada_cadeiras
-    )
-    avarias = _avarias_recolhimento(conferencia)
-
-    return render(
-        request,
-        "locacoes/checklist_recolhimento_cliente.html",
-        {
-            "conferencia": conferencia,
-            "locacao": locacao,
-            "pode_operar_checklist": pode_operar,
-            **_dados_contato_locacao(locacao),
-            "checklist_url": checklist_url,
-            "whatsapp_url": whatsapp_url,
-            "funcionarios_checklist": funcionarios_checklist,
-            "funcionarios_checklist_envio": funcionarios_checklist_envio,
-            "funcionario_selecionado": funcionario_selecionado,
-            "funcionario_selecionado_whatsapp_url": funcionario_selecionado_whatsapp_url,
-            "evento_envio_checklist": evento_envio,
-            "envio_checklist": envio_checklist,
-            "avarias": avarias,
-            "texto_checklist": _texto_checklist_recolhimento(conferencia, avarias),
-            "recolhido_mesas": recolhido_mesas,
-            "recolhido_cadeiras": recolhido_cadeiras,
-        },
-    )
 
 
 @xframe_options_sameorigin
@@ -2389,6 +2274,9 @@ def conferencia_recolhimento(request, pk):
                 "funcionario": grant.funcionario_id if grant else request.GET.get("funcionario") or Funcionario.objects.filter(ativo=True).order_by("nome").values_list("pk", flat=True).first(),
             }),
         )
+
+    if conferencia_salva:
+        return checklist_recolhimento_cliente(request, conferencia_salva.pk)
 
     checklist_url = (
         request.build_absolute_uri(

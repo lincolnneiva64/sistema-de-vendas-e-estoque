@@ -11,7 +11,7 @@ from django.utils import timezone
 from locacoes.models import AutorizacaoRecolhimento, ConferenciaRecolhimentoLocacao, EventoLocacao
 from locacoes import tests as rental_tests
 from locacoes.services import obter_ou_criar_tarefa_operacional
-from .test_pickup_checklist import PickupFixture
+from .test_pickup_checklist import PickupFixture, prepare_customer_whatsapp
 from .browser_support import Chrome
 from .tests_sale_sync_browser import CHROME
 
@@ -57,8 +57,15 @@ class PickupLinkTests(LinkFixture, TestCase):
         self.assertNotContains(receipt, 'id="form-envio-checklist"')
         grant = AutorizacaoRecolhimento.objects.get()
         self.assertIsNotNone(grant.conferencia_id)
-        self.assertNotIn(link, receipt.context['whatsapp_url'])
-        self.assertNotIn('recolhimento-individual', receipt.context['whatsapp_url'])
+        grant_before = list(AutorizacaoRecolhimento.objects.values())
+        shared = employee.post(reverse('locacoes:compartilhar_comprovante_cliente', args=[grant.conferencia_id]),
+            {'csrfmiddlewaretoken': employee.cookies['csrftoken'].value})
+        self.assertEqual(shared.status_code, 200)
+        self.assertNotIn(link, shared.json()['whatsapp_url'])
+        self.assertNotIn('recolhimento-individual', shared.json()['whatsapp_url'])
+        self.assertNotIn('acesso_operacional', shared.json()['whatsapp_url'])
+        self.assertEqual(list(AutorizacaoRecolhimento.objects.values()), grant_before)
+        self.assertEqual(employee.get(link).status_code, 302)
         # A receipt may be read by a customer; POST cannot confer operational access.
         self.assertEqual(Client().post(response.url, {'checklist_funcionario':self.employee.pk}).status_code, 403)
         self.assertEqual(employee.post(self.url, data).status_code, 401)
@@ -208,11 +215,11 @@ class PickupLinkMobileTests(LinkFixture, StaticLiveServerTestCase):
                 saved=ConferenciaRecolhimentoLocacao.objects.get()
                 self.assertEqual((saved.boa_mesas,saved.boa_cadeiras),(10,40))
                 self.assertEqual(EventoLocacao.objects.filter(tipo='recolhimento_usuario_confirmou').count(),1)
-                href=tab.evaluate('Array.from(document.querySelectorAll("a")).find(a=>a.href.startsWith("https://wa.me/")).href')
+                href=prepare_customer_whatsapp(tab)
                 message=parse_qs(urlparse(href).query)['text'][0]
                 self.assertNotIn('recolhimento-individual',message)
                 self.assertNotIn(link,message)
-                self.assertIn('Comprovante do recolhimento:',message)
+                self.assertIn('/comprovante-recolhimento/#',message)
                 self.assertFalse(tab.evaluate('(await(await fetch("/api/offline/session/")).json()).authenticated'))
                 self.task.refresh_from_db();self.assertEqual(self.task.status,'confirmada')
             finally:

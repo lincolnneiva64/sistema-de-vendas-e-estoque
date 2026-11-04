@@ -2,11 +2,14 @@ from django.urls import path
 
 from . import views
 from . import pickup_links
+from . import customer_receipts
 
 
 app_name = "locacoes"
 
 urlpatterns = [
+    path('comprovante-recolhimento/', customer_receipts.public, name='comprovante_cliente'),
+    path('conferencias-recolhimento/<int:pk>/compartilhar-cliente/', customer_receipts.share, name='compartilhar_comprovante_cliente'),
     path('tarefas-operacionais/<int:pk>/enviar-recolhimento/', pickup_links.send, name='enviar_recolhimento'),
     path('tarefas-operacionais/<int:pk>/autorizar-recolhimento/', pickup_links.manage, name='autorizar_recolhimento'),
     path('recolhimento-individual/<str:token>/', pickup_links.individual, name='recolhimento_individual'),

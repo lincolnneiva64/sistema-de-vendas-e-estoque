@@ -2046,6 +2046,9 @@ class ConferenciaEntregaLocacao(models.Model):
 
 
 class ConferenciaRecolhimentoLocacao(models.Model):
+    comprovante_token_hash = models.CharField(max_length=64, null=True, blank=True, unique=True, editable=False)
+    comprovante_expira_em = models.DateTimeField(null=True, blank=True, editable=False)
+    comprovante_revogado_em = models.DateTimeField(null=True, blank=True, editable=False)
     SITUACAO_PARCIAL = "parcial"
     SITUACAO_COMPLETA = "completa"
     SITUACAO_CHOICES = [

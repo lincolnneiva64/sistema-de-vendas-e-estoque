@@ -101,7 +101,8 @@ class PickupRecoveryBrowserTests(PickupFixture, StaticLiveServerTestCase):
                 tab.wait('location.search.includes("conferencia=") && document.body.textContent.includes("Recolhimento registrado")')
                 self.assertEqual(ConferenciaRecolhimentoLocacao.objects.count(), 1)
                 self.assertEqual(EventoLocacao.objects.get(tipo='recolhimento_usuario_confirmou').responsavel, self.user.username)
-                self.assertTrue(tab.evaluate('document.querySelector(".sucesso a").href.startsWith("https://wa.me/")'))
+                from .test_pickup_checklist import prepare_customer_whatsapp
+                self.assertTrue(prepare_customer_whatsapp(tab).startswith('https://wa.me/'))
             finally:
                 chrome.stop()
 

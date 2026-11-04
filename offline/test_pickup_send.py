@@ -73,7 +73,7 @@ class SendTests(SendFixture, TestCase):
         self.user.user_permissions.add(Permission.objects.get(content_type__app_label='locacoes', codename='autorizar_recolhimento'))
         secure = Client(enforce_csrf_checks=True); secure.force_login(self.user)
         self.assertEqual(self.send(secure).status_code, 403)
-        secure.get('/vendas/')
+        secure.get(reverse('locacoes:conferencia_recolhimento', args=[self.task.pk]))
         token = secure.cookies['csrftoken'].value
         with override_settings(DEBUG=False):
             response = secure.post(self.send_url, {'funcionario':self.employee.pk}, HTTP_X_CSRFTOKEN=token)

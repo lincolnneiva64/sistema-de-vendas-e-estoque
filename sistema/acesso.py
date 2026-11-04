@@ -7,6 +7,7 @@ from django.utils.cache import patch_cache_control, patch_vary_headers
 
 # These endpoints enforce their own actor, permission or capability checks.
 PROTECAO_PROPRIA = {
+    'locacoes.customer_receipts': {'public', 'share'},
     'inventario.views': {'lista', 'detalhe', 'relatorio', 'historico_produto', 'movimento_manual',
         'convite', 'mobile', 'contar', 'sinalizar', 'finalizar', 'previa_conversao'},
     'inventario.ajustes_views': {'painel'},

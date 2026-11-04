@@ -1,0 +1,16 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comprovante de recolhimento</title>
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <style>body{font-family:system-ui,sans-serif;margin:20px auto;padding:12px;max-width:560px;color:#172033}</style>
+</head>
+<body>
+  <main><p role="status" id="acesso-status">Carregando comprovante…</p>{% csrf_token %}
+  <noscript>Ative o JavaScript para consultar este comprovante com segurança.</noscript></main>
+  <script src="{% static 'locacoes/comprovante-cliente.js' %}" defer></script>
+</body>
+</html>

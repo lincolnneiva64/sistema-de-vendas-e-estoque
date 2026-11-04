@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 from urllib.parse import urlparse, parse_qs
 
 from django.contrib.sessions.models import Session
-from django.test import Client
+from django.test import Client, override_settings
 from django.utils import timezone
 
 from locacoes.models import ConferenciaRecolhimentoLocacao, EventoLocacao
@@ -43,6 +43,7 @@ class PickupSessionTests(PickupChecklistTests):
         self.assertFalse(ConferenciaRecolhimentoLocacao.objects.exists())
 
 
+@override_settings(DEBUG=True, CHECKLIST_BASE_URL='', SISTEMA_ONLINE_URL='')
 class PickupMobileSessionTests(PickupChecklistBrowserTests):
     def mobile_scenario(self, expired=False, csrf=False, ten_sets=False, concurrent=False, partial=False):
         if ten_sets:
@@ -107,11 +108,12 @@ class PickupMobileSessionTests(PickupChecklistBrowserTests):
                     self.task.refresh_from_db()
                     self.assertEqual(self.task.status, 'parcial' if partial else 'confirmada')
                 self.assertEqual(EventoLocacao.objects.filter(tipo='recolhimento_usuario_confirmou').count(), 1)
-                href = tab.evaluate('document.querySelector(".sucesso a").href')
+                from .test_pickup_checklist import prepare_customer_whatsapp
+                href = prepare_customer_whatsapp(tab)
                 self.assertEqual(urlparse(href).hostname, 'wa.me')
                 text = parse_qs(urlparse(href).query)['text'][0]
-                self.assertIn('Comprovante do recolhimento:', text)
-                receipt_url = text.split('Comprovante do recolhimento:\n')[1]
+                self.assertIn('/comprovante-recolhimento/#', text)
+                receipt_url = text.split('\n')[-1]
                 before = EventoLocacao.objects.count()
                 # Follow the actual communication target locally; never send a WhatsApp message.
                 tab.call('Network.deleteCookies', {'name': 'sessionid', 'url': self.live_server_url})

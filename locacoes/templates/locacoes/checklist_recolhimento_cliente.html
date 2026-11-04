@@ -1,11 +1,11 @@
-{% load horarios_documentos horarios_locacoes %}
+{% load static horarios_documentos horarios_locacoes %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Checklist de recolhimento #{{ locacao.id }}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
   <style>
     :root {
       --loc-orange: #ea580c;
@@ -121,94 +121,72 @@
     .btn-whats { background: var(--loc-green); border-color: var(--loc-green); color: #fff; }
     .btn-whats:hover, .btn-whats:focus { background: #166534; border-color: #166534; color: #fff; }
     .nota { margin-top: 10px; color: var(--loc-muted); font-size: .88rem; }
-    .envio-operacional {
-      margin-top: 12px;
-      padding: 12px;
-      border: 1px solid #bfdbfe;
-      border-left: 5px solid var(--loc-blue);
-      border-radius: 8px;
-      background: #fff;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, .08);
-    }
-    .envio-operacional h2,
-    .envio-operacional summary {
-      margin: 0 0 8px;
-      color: #1e3a8a;
-      font-size: 1rem;
-      font-weight: 950;
-    }
-    .envio-operacional summary { cursor: pointer; list-style-position: inside; }
-    .funcionarios-envio { display: grid; gap: 7px; }
-    .funcionario-envio {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 8px;
-      align-items: start;
-      padding: 9px;
-      border: 1px solid #dbeafe;
-      border-radius: 8px;
-      background: #f8fafc;
-      cursor: pointer;
-    }
-    .funcionario-envio input { margin-top: 4px; accent-color: var(--loc-blue); }
-    .funcionario-envio:has(input:checked) {
-      border-color: var(--loc-blue);
-      background: #eff6ff;
-    }
-    .funcionario-envio strong,
-    .envio-valor {
-      display: block;
-      color: #0f172a;
-      font-weight: 950;
-    }
-    .funcionario-envio span,
-    .envio-label {
-      display: block;
-      color: #64748b;
-      font-size: .86rem;
-      font-weight: 850;
-    }
-    .envio-acoes {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .btn-confirmar-envio {
-      min-height: 48px;
-      border-radius: 8px;
-      border: 1px solid var(--loc-blue);
-      background: var(--loc-blue);
-      color: #fff;
-      font-weight: 950;
-    }
-    .envio-confirmado {
-      display: grid;
-      gap: 8px;
-      padding: 10px;
-      border: 1px solid #86efac;
-      border-radius: 8px;
-      background: #f0fdf4;
-      color: #14532d;
-    }
-    .envio-confirmado h2 { margin: 0; color: #166534; }
-    .btn-discreto {
-      min-height: 42px;
-      border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      background: #fff;
-      color: #475569;
-      font-weight: 900;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
     @media (max-width: 520px) {
       .topo { display: block; }
       .topo .btn { width: 100%; margin-top: 10px; }
       .acoes, .resumo { grid-template-columns: 1fr; }
     }
+    .check-item-list {
+      display: grid;
+      gap: 6px;
+      margin: 8px 0 14px;
+    }
+    .check-row {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      border: 1px solid #e5edf5;
+      border-radius: 9px;
+      padding: 7px 9px;
+      background: #fcfdff;
+    }
+    .check-row.is-checked {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      box-shadow: inset 3px 0 0 #16a34a;
+    }
+    .check-row.is-pending {
+      border-color: #f7d98b;
+      background: #fff7ed;
+      box-shadow: inset 3px 0 0 #f59e0b;
+    }
+    .check-mark {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: #16a34a;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .86rem;
+      font-weight: 950;
+      line-height: 1;
+    }
+    .check-row-text {
+      display: block;
+      color: #172033;
+      font-size: .92rem;
+      font-weight: 850;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+    .check-row-sub {
+      display: block;
+      color: #64748b;
+      font-size: .76rem;
+      font-weight: 760;
+      margin-top: 1px;
+      line-height: 1.15;
+    }
+    .btn-doc { display:inline-flex;align-items:center;justify-content:center;padding:12px;border:1px solid #15803d;text-decoration:none;font:inherit;font-weight:800;cursor:pointer;max-width:100%;overflow-wrap:anywhere; }
+    .btn-whats { background:#15803d;color:white; }
+    .btn-doc:disabled { background:#e2e8f0;color:#64748b;border-color:#cbd5e1;cursor:default; }
+    .acoes-cliente {margin-top:16px;}
+    .acoes-cliente button {width:100%;}
+    [hidden] {display:none!important;}
+    .valor {overflow-wrap:anywhere;}
   </style>
 </head>
 <body>
@@ -218,7 +196,7 @@
         <h1>Checklist de recolhimento</h1>
         <div class="subtitulo">Locação #{{ locacao.id }}</div>
       </div>
-      <a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar</a>
+      {% if not publico_cliente %}<a class="btn btn-outline-secondary btn-sm" href="{% url 'locacoes:detalhe' locacao.id %}">Voltar</a>{% endif %}
     </header>
 
     {% if messages %}
@@ -230,25 +208,13 @@
     <section class="doc-card">
       <div class="doc-head">
         <h2 class="doc-title">Checklist de recolhimento</h2>
+        <p class="subtitulo">Olá, {{ cliente_nome_checklist }}! Confirmamos que os materiais da sua locação foram recolhidos. Confira abaixo as quantidades retiradas e as condições registradas na conferência.</p>
       </div>
 
       <div class="doc-body" id="card-checklist-recolhimento">
         <div class="campo">
           <span class="rotulo">Cliente</span>
           <div class="valor">{{ cliente_nome_checklist }}</div>
-        </div>
-
-        <div class="campo">
-          <span class="rotulo">Endereço</span>
-          <div class="valor">{% if cliente_endereco_checklist %}{{ cliente_endereco_checklist }}{% if cliente_endereco_mapa_url %} · <a href="{{ cliente_endereco_mapa_url }}" target="_blank" rel="noopener">Abrir endereço cadastral no mapa</a>{% endif %}{% else %}Não cadastrado{% endif %}</div>
-        </div>
-        <div class="campo">
-          <span class="rotulo">Local do recolhimento</span>
-          <div class="valor">{% if local_operacao_checklist %}{{ local_operacao_checklist }}{% if local_operacao_mapa_url %} · <a href="{{ local_operacao_mapa_url }}" target="_blank" rel="noopener">Abrir no mapa</a>{% endif %}{% else %}Não informado{% endif %}</div>
-        </div>
-        <div class="campo">
-          <span class="rotulo">Telefone</span>
-          <div class="valor">{% if cliente_tel_url %}<a href="{{ cliente_tel_url }}">{{ cliente_telefone_checklist }}</a>{% else %}Não informado{% endif %}</div>
         </div>
 
         <div class="campo">
@@ -267,6 +233,15 @@
           </div>
         </div>
 
+        <span class="rotulo">Materiais efetivamente recolhidos</span>
+        <div class="check-item-list">
+          {% for material in materiais_recolhidos %}
+          <div class="check-row {% if material.bom %}is-checked{% else %}is-pending{% endif %}">
+            <span class="check-mark" {% if not material.bom %}style="background:#b45309"{% endif %} aria-hidden="true">{% if material.bom %}&#10003;{% else %}!{% endif %}</span>
+            <span><span class="check-row-text">{{ material.nome }}: {{ material.quantidade }}</span><span class="check-row-sub">{{ material.condicao }}</span></span>
+          </div>
+          {% empty %}<p>Nenhum material recolhido nesta conferência.</p>{% endfor %}
+        </div>
         <div class="campo">
           <span class="rotulo">Situação</span>
           <div class="valor">{{ conferencia.get_situacao_display }}</div>
@@ -281,12 +256,15 @@
               {% endfor %}
             </ul>
           </div>
-        {% else %}
+        {% elif materiais_recolhidos %}
           <div class="campo">
             <div class="status-ok">Materiais recolhidos sem avarias.</div>
           </div>
         {% endif %}
 
+        {% if conferencia.justificativa_parcial %}
+        <div class="campo"><span class="rotulo">Pendência registrada</span><div class="valor">{{ conferencia.justificativa_parcial }}</div></div>
+        {% endif %}
         {% if conferencia.observacao %}
           <div class="campo">
             <span class="rotulo">Observação</span>
@@ -310,270 +288,24 @@
       </div>
     </section>
 
-    {% if pode_operar_checklist %}<section class="envio-operacional">
-      {% if evento_envio_checklist %}
-        <div class="envio-confirmado">
-          <h2>&#10004; Checklist enviado</h2>
-          <div>
-            <span class="envio-label">Enviado para:</span>
-            <span class="envio-valor">{{ envio_checklist.funcionario_nome|default:"Funcionário" }}</span>
-          </div>
-          <div>
-            <span class="envio-label">Enviado por:</span>
-            <span class="envio-valor">{{ envio_checklist.responsavel|default:"Sistema" }}</span>
-          </div>
-          <div>
-            <span class="envio-label">Data:</span>
-            <span class="envio-valor">{% instante_registro envio_checklist.criado_em %}</span>
-          </div>
-          {% if envio_checklist.whatsapp_url %}
-            <a class="btn-discreto" href="{{ envio_checklist.whatsapp_url }}" target="_blank" rel="noopener">Abrir WhatsApp novamente</a>
-          {% endif %}
-        </div>
-      {% else %}
-        {% if funcionarios_checklist %}
-          <form method="post" id="form-envio-checklist">
-            {% csrf_token %}
-            <details id="envio-checklist-funcionarios">
-              <summary>Enviar checklist para</summary>
-              <div class="funcionarios-envio">
-                {% for envio in funcionarios_checklist_envio %}
-                  <label class="funcionario-envio">
-                    <input
-                      type="radio"
-                      name="checklist_funcionario"
-                      value="{{ envio.funcionario.id }}"
-                      data-whatsapp-url="{{ envio.whatsapp_url }}"
-                      {% if funcionario_selecionado and funcionario_selecionado.id == envio.funcionario.id %}checked{% endif %}
-                    >
-                    <span>
-                      <strong>{{ envio.funcionario.nome }}</strong>
-                      <span>{{ envio.funcionario.telefone_whatsapp }}</span>
-                    </span>
-                  </label>
-                {% endfor %}
-              </div>
-            </details>
-            <div class="envio-acoes" id="acoes-envio-checklist" hidden>
-              <a
-                class="btn btn-whats btn-doc"
-                id="abrir-whatsapp-funcionario"
-                href="{{ funcionario_selecionado_whatsapp_url|default:'#' }}"
-                target="_blank"
-                rel="noopener"
-              >
-                Enviar checklist pelo WhatsApp
-              </a>
-              <button
-                class="btn-confirmar-envio"
-                type="submit"
-                data-envio-pendente="{% if funcionario_selecionado %}true{% else %}false{% endif %}"
-                {% if not funcionario_selecionado %}hidden{% endif %}
-              >
-                Confirmar envio do checklist
-              </button>
-            </div>
-            <div class="nota" id="aviso-envio-checklist" hidden>WhatsApp aberto. Depois de enviar a mensagem, confirme o envio aqui.</div>
-          </form>
-        {% else %}
-          <div class="nota">Nenhum funcionário habilitado para receber checklist.</div>
-        {% endif %}
-      {% endif %}
-    </section>
-
-    {% endif %}
+    {% if pode_compartilhar_cliente %}
     <p role="status">Recolhimento registrado. Este comprovante pode ser compartilhado com o cliente.</p>
-    <div class="acoes">
-      <button class="btn btn-outline-primary btn-doc" id="copiar-checklist" type="button">
-        Copiar checklist
-      </button>
-
-      {% if whatsapp_url %}
-        <a class="btn btn-whats btn-doc" href="{{ whatsapp_url }}" target="_blank" rel="noopener">
-          Abrir WhatsApp
-        </a>
-      {% else %}
-        <button class="btn btn-outline-secondary btn-doc" type="button" disabled>
-          Abrir WhatsApp
-        </button>
-      {% endif %}
-
-      <button class="btn btn-outline-success btn-doc" id="enviar-celular" type="button">
-        Enviar para o celular
-      </button>
-    </div>
-
-    {% if not whatsapp_url %}
-      <div class="nota">Telefone não informado para abrir o WhatsApp automaticamente.</div>
+    <section class="acoes-cliente">
+      <form id="envio-comprovante-cliente" data-sem-whatsapp="{% if not tem_whatsapp_cliente %}true{% else %}false{% endif %}" method="post" action="{% url 'locacoes:compartilhar_comprovante_cliente' conferencia.pk %}">
+        {% csrf_token %}
+        <button class="btn-doc btn-whats" type="submit" disabled>Enviar comprovante de recolhimento ao cliente</button>
+      </form>
+      <p id="envio-cliente-status" class="nota" role="status">{% if not tem_whatsapp_cliente %}Cliente sem WhatsApp cadastrado. Cadastre o telefone do cliente para enviar o comprovante.{% endif %}</p>
+      <a id="envio-cliente-whatsapp" class="btn-doc btn-whats" target="_blank" rel="noopener noreferrer" hidden>Abrir mensagem preparada no WhatsApp</a>
+      <details><summary>Acesso ao comprovante</summary>
+        <p>O link vale por 30 dias. Para renovar, use o botão de envio. O link anterior deixará de funcionar e o histórico será preservado.</p>
+        <button class="btn-doc" type="button" id="revogar-comprovante-cliente" {% if not conferencia.comprovante_token_hash or conferencia.comprovante_revogado_em %}disabled{% endif %}>Revogar link do cliente</button>
+      </details>
+    </section>
+    <script src="{% static 'locacoes/comprovante-envio-cliente.js' %}" defer></script>
     {% endif %}
-
-    {{ texto_checklist|json_script:"texto-checklist-recolhimento" }}
   <p style="color:#334155;font-size:12px;line-height:1.6">Horário de Belém (PA) · America/Belem. Agendamentos e previsões não comprovam execução física. Registros e confirmações indicam o horário registrado no sistema.</p>
 </main>
 
-  <script>
-    (function () {
-      const botao = document.getElementById("copiar-checklist");
-      const enviarCelular = document.getElementById("enviar-celular");
-      const fonte = document.getElementById("texto-checklist-recolhimento");
-      const acoesEnvio = document.getElementById("acoes-envio-checklist");
-      const formEnvioChecklist = document.getElementById("form-envio-checklist");
-      const abrirWhatsappFuncionario = document.getElementById("abrir-whatsapp-funcionario");
-      const confirmarEnvioChecklist = document.querySelector(".btn-confirmar-envio");
-      const avisoEnvioChecklist = document.getElementById("aviso-envio-checklist");
-      const envioFuncionarios = document.getElementById("envio-checklist-funcionarios");
-      const radiosFuncionarios = Array.from(document.querySelectorAll("input[name='checklist_funcionario']"));
-      const envioStorageKey = "checklistRecolhimentoWhatsappAberto:{{ conferencia.pk }}";
-      const envioPendenteInicial = confirmarEnvioChecklist?.dataset.envioPendente === "true";
-
-      if (!fonte) { return; }
-
-      function copiarTexto(texto) {
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(texto);
-        } else {
-          const area = document.createElement("pre");
-          area.value = texto;
-          area.textContent = texto;
-          area.style.position = "fixed";
-          area.style.opacity = "0";
-          document.body.appendChild(area);
-          const selecao = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(area);
-          selecao.removeAllRanges();
-          selecao.addRange(range);
-          document.execCommand("copy");
-          selecao.removeAllRanges();
-          area.remove();
-        }
-      }
-
-      function atualizarEnvioFuncionario() {
-        if (!acoesEnvio || !abrirWhatsappFuncionario) { return; }
-        const selecionado = radiosFuncionarios.find(function (radio) { return radio.checked; });
-        if (!selecionado) {
-          acoesEnvio.hidden = true;
-          abrirWhatsappFuncionario.removeAttribute("href");
-          if (confirmarEnvioChecklist) {
-            confirmarEnvioChecklist.hidden = true;
-          }
-          return;
-        }
-        abrirWhatsappFuncionario.href = selecionado.dataset.whatsappUrl || "#";
-        acoesEnvio.hidden = false;
-        if (
-          confirmarEnvioChecklist &&
-          !envioPendenteInicial &&
-          abrirWhatsappFuncionario.dataset.whatsappAberto !== "true"
-        ) {
-          confirmarEnvioChecklist.hidden = true;
-        }
-      }
-
-      function liberarConfirmacaoEnvio() {
-        if (abrirWhatsappFuncionario) {
-          abrirWhatsappFuncionario.dataset.whatsappAberto = "true";
-        }
-        try {
-          sessionStorage.setItem(envioStorageKey, "true");
-        } catch (erro) {}
-        if (avisoEnvioChecklist) {
-          avisoEnvioChecklist.hidden = false;
-        }
-        if (confirmarEnvioChecklist) {
-          confirmarEnvioChecklist.hidden = false;
-        }
-      }
-
-      botao?.addEventListener("click", function () {
-        const texto = JSON.parse(fonte.textContent);
-        copiarTexto(texto);
-        botao.textContent = "Checklist copiado";
-      });
-
-      enviarCelular?.addEventListener("click", function () {
-        const texto = JSON.parse(fonte.textContent);
-        const payload = {
-          title: "Checklist de recolhimento",
-          text: texto,
-          url: window.location.href
-        };
-        if (navigator.share) {
-          navigator.share(payload).catch(function () {});
-          return;
-        }
-        copiarTexto(window.location.href);
-        enviarCelular.textContent = "Link copiado";
-      });
-
-      radiosFuncionarios.forEach(function (radio) {
-        radio.addEventListener("change", function () {
-          if (abrirWhatsappFuncionario) {
-            abrirWhatsappFuncionario.dataset.whatsappAberto = "false";
-          }
-          try {
-            sessionStorage.removeItem(envioStorageKey);
-          } catch (erro) {}
-          atualizarEnvioFuncionario();
-        });
-      });
-      atualizarEnvioFuncionario();
-
-      try {
-        if (sessionStorage.getItem(envioStorageKey) === "true") {
-          liberarConfirmacaoEnvio();
-        }
-      } catch (erro) {}
-
-      abrirWhatsappFuncionario?.addEventListener("click", function () {
-        liberarConfirmacaoEnvio();
-      });
-
-      formEnvioChecklist?.addEventListener("submit", function (event) {
-        event.preventDefault();
-        const selecionado = radiosFuncionarios.find(function (radio) { return radio.checked; });
-        if (!selecionado) {
-          if (envioFuncionarios) {
-            envioFuncionarios.open = true;
-          }
-          return;
-        }
-        if (confirmarEnvioChecklist) {
-          confirmarEnvioChecklist.disabled = true;
-          confirmarEnvioChecklist.textContent = "Confirmando...";
-        }
-        fetch(formEnvioChecklist.action || window.location.href, {
-          method: "POST",
-          credentials: "same-origin",
-          headers: {
-            "X-Requested-With": "XMLHttpRequest"
-          },
-          body: new FormData(formEnvioChecklist)
-        })
-          .then(function (resposta) {
-            return resposta.json().catch(function () { return {}; }).then(function (dados) {
-              if (!resposta.ok || !dados.ok) {
-                throw new Error(dados.erro || "Não foi possível confirmar o envio.");
-              }
-              return dados;
-            });
-          })
-          .then(function (dados) {
-            window.location.href = dados.redirectUrl || window.location.pathname;
-          })
-          .catch(function (erro) {
-            if (avisoEnvioChecklist) {
-              avisoEnvioChecklist.textContent = erro.message || "Não foi possível confirmar o envio.";
-              avisoEnvioChecklist.hidden = false;
-            }
-            if (confirmarEnvioChecklist) {
-              confirmarEnvioChecklist.disabled = false;
-              confirmarEnvioChecklist.textContent = "Confirmar envio do checklist";
-            }
-          });
-      });
-    })();
-  </script>
 </body>
 </html>

@@ -20,6 +20,14 @@ from . import test_sales_sidebars_browser as sidebars
 from .tests_sale_sync_browser import CHROME
 
 
+def prepare_customer_whatsapp(tab):
+    """Exercise the send action without contacting WhatsApp."""
+    tab.wait('document.readyState === "complete" && !!document.querySelector("#envio-comprovante-cliente button")')
+    tab.evaluate('window.open = () => null; document.querySelector("#envio-comprovante-cliente button").click(); true')
+    tab.wait('!document.getElementById("envio-cliente-whatsapp").hidden')
+    return tab.evaluate('document.getElementById("envio-cliente-whatsapp").href')
+
+
 class PickupFixture:
     def seed(self):
         FaixaPrecoLocacao.objects.get_or_create(codigo='centro_perto', defaults={'nome': 'Teste', 'preco_jogo_diaria': '8.00'})
@@ -56,7 +64,7 @@ class PickupChecklistTests(PickupFixture, TestCase):
         response = self.client.post(self.url, self.payload)
         self.assertEqual(response.status_code, 302)
         receipt = self.client.get(response.url)
-        self.assertContains(receipt, 'Enviar checklist pelo WhatsApp')
+        self.assertContains(receipt, 'Enviar comprovante de recolhimento ao cliente')
         self.task.refresh_from_db(); self.rental.refresh_from_db()
         self.assertEqual(self.task.status, 'confirmada')
         self.assertEqual(self.rental.status, 'devolvida')
@@ -116,14 +124,13 @@ class PickupChecklistTests(PickupFixture, TestCase):
         self.assertEqual(conference.pessoa_local_nome, 'Maria Devolvente')
         self.assertEqual(conference.responsavel, self.employee.nome)
 
-    def test_receipt_can_be_forwarded_without_client_phone(self):
+    def test_receipt_without_client_phone_does_not_offer_wrong_recipient(self):
         self.rental.pessoa_avulsa_telefone = ''
         self.rental.save(update_fields=['pessoa_avulsa_telefone'])
         response = self.client.post(self.url, self.payload)
         receipt = self.client.get(response.url)
-        self.assertContains(receipt, 'Enviar checklist pelo WhatsApp')
-        self.assertIn('text=', receipt.context['whatsapp_url'])
-        self.assertNotIn('phone=', receipt.context['whatsapp_url'])
+        self.assertContains(receipt, 'Cliente sem WhatsApp cadastrado')
+        self.assertFalse(receipt.context['tem_whatsapp_cliente'])
 
     def test_security_and_conditional_validation(self):
         anonymous = Client()
@@ -237,7 +244,7 @@ class PickupChecklistBrowserTests(PickupFixture, StaticLiveServerTestCase):
                 tab.wait('location.search.includes("conferencia=") && document.body.textContent.includes("Recolhimento registrado")')
                 self.task.refresh_from_db()
                 self.assertEqual(self.task.status, 'parcial' if mode == 'partial' else 'confirmada')
-                self.assertTrue(tab.evaluate('document.body.textContent.includes("Enviar checklist pelo WhatsApp")'))
+                self.assertTrue(tab.evaluate('document.body.textContent.includes("Enviar comprovante de recolhimento ao cliente")'))
                 tab.call('Page.navigate', {'url': self.live_server_url + '/vendas/'})
                 tab.wait('!!window.salesDraftUI?.ready')
                 self.assertEqual(tab.evaluate('document.querySelector("[data-locacoes-filtro=recolhimento]").textContent.trim()'), 'Recolhimentos ' + ('1' if mode == 'partial' else '0'))
