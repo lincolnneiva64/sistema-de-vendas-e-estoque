@@ -45,7 +45,7 @@ class PublicacaoCancelamentoTests(Fixture, TransactionTestCase):
             for table in connection.introspection.table_names(cursor):
                 if business and not table.startswith(('estoque_', 'inventario_', 'offline_', 'locacoes_')):
                     continue
-                if business and table == 'locacoes_autorizacaorecolhimento':
+                if business and table in {'locacoes_autorizacaorecolhimento', 'locacoes_correcaopagamentolocacao'}:
                     continue
                 columns = [c.name for c in connection.introspection.get_table_description(cursor, table)]
                 if business and table == 'inventario_inventario':

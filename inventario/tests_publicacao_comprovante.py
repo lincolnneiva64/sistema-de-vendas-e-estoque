@@ -16,7 +16,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from inventario.management.commands.publicar_cancelamento import (
-    AUTHORIZED, COLETA, COMPRA, COMPROVANTE, LOCK, PRECISAO, RECOLHIMENTO, TARGET, Command,
+    AUTHORIZED, COLETA, COMPRA, COMPROVANTE, CORRECAO, LOCK, PRECISAO, RECOLHIMENTO, TARGET, Command,
 )
 from offline import test_pickup_checklist as pickup_tests
 
@@ -27,7 +27,7 @@ FIELDS = ('comprovante_token_hash', 'comprovante_expira_em', 'comprovante_revoga
 
 class ComprovanteDefinitionTests(SimpleTestCase):
     def test_allowlist_adds_only_0018_and_exact_definition_is_accepted(self):
-        self.assertEqual(AUTHORIZED, {RECOLHIMENTO, COMPROVANTE, TARGET, COMPRA, PRECISAO, COLETA})
+        self.assertEqual(AUTHORIZED, {RECOLHIMENTO, COMPROVANTE, CORRECAO, TARGET, COMPRA, PRECISAO, COLETA})
         Command.validate_definitions(MigrationLoader(None))
 
     def test_all_definition_changes_are_refused(self):
@@ -111,7 +111,7 @@ class PublicacaoComprovanteTests(pickup_tests.PickupFixture, TransactionTestCase
         result = {}
         with connection.cursor() as cursor:
             for table in connection.introspection.table_names(cursor):
-                if business and table == 'django_migrations':
+                if business and table in {'django_migrations', 'locacoes_correcaopagamentolocacao'}:
                     continue
                 columns = [c.name for c in connection.introspection.get_table_description(cursor, table)]
                 if business and table == TABLE:
@@ -121,7 +121,7 @@ class PublicacaoComprovanteTests(pickup_tests.PickupFixture, TransactionTestCase
                 result[table] = sorted(map(repr, cursor.fetchall()))
         return result
 
-    def test_apply_only_0018_preserves_records_and_targets_the_new_leaf(self):
+    def test_apply_0018_and_0019_preserves_records_and_targets_the_new_leaf(self):
         self.previous()
         before = self.snapshot(business=True)
         migrate = MigrationExecutor.migrate
@@ -130,12 +130,12 @@ class PublicacaoComprovanteTests(pickup_tests.PickupFixture, TransactionTestCase
         def checked(executor, targets, **kwargs):
             targets_seen.append(targets)
             self.assertEqual([(m.app_label, m.name, backwards) for m, backwards in kwargs['plan']],
-                             [(*COMPROVANTE, False)])
+                             [(*COMPROVANTE, False), (*CORRECAO, False)])
             return migrate(executor, targets, **kwargs)
 
         with patch.object(MigrationExecutor, 'migrate', checked):
             self.assertIn('APLICAR locacoes.0018_comprovante_cliente', self.gate())
-        self.assertEqual(targets_seen, [[COMPROVANTE, TARGET, COLETA]])
+        self.assertEqual(targets_seen, [[CORRECAO, TARGET, COLETA]])
         self.assertEqual(before, self.snapshot(business=True))
         self.assertIn(COMPROVANTE, self.recorder.applied_migrations())
         self.assertEqual(self.recorder.migration_qs.filter(app=COMPROVANTE[0], name=COMPROVANTE[1]).count(), 1)
@@ -182,9 +182,9 @@ class PublicacaoComprovanteTests(pickup_tests.PickupFixture, TransactionTestCase
         for conflict in (False, True):
             def inject(loader):
                 original(loader)
-                for name in (['0019_inesperada', '0019_conflito'] if conflict else ['0019_inesperada']):
+                for name in (['0020_inesperada', '0021_conflito'] if conflict else ['0020_inesperada']):
                     migration = migrations.Migration(name, 'locacoes')
-                    migration.dependencies = [COMPROVANTE]
+                    migration.dependencies = [CORRECAO]
                     migration.operations = [migrations.RunSQL('CREATE TABLE publicacao_nao_autorizada (id int)')]
                     loader.disk_migrations[('locacoes', name)] = migration
             with self.subTest(conflict=conflict):
