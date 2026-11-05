@@ -112,8 +112,7 @@ def apresentar_unidades(pagina, produto_id):
             continue
         item = docs[0]
         base, motivo = snapshot_base(item)
-        conflito = conflito_eventos(por_evento[venda_id], outros[venda_id]-nomes_alvo[venda_id],
-            aceitar_nota_impressa=True)
+        conflito = conflito_eventos(por_evento[venda_id], outros[venda_id]-nomes_alvo[venda_id])
         seguro = not (conflito or item['venda__cancelada'] or
             item['venda__estoque_devolvido_cancelamento'] or len(movimentos) > 1)
         correspondente = bool(len(movimentos) == 1 and movimentos[0]['origem'] in ('venda', 'consumo_proprio')

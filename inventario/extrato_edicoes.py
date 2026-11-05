@@ -36,7 +36,7 @@ def etapas_comprovadas(itens, eventos, movimentos, removida, nome_unico, outros_
     edicoes = []
     atribuida = False
     for evento in eventos:
-        if evento.tipo_evento in BENIGNOS | {'nota_impressa'}:
+        if evento.tipo_evento in BENIGNOS:
             continue
         if (evento.tipo_evento == 'alteracao_separacao_atendida' and atribuida
                 and evento.descricao.strip() in {

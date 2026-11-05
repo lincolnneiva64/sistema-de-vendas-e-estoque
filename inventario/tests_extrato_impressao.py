@@ -11,18 +11,18 @@ from . import tests_ajustes as ajustes_tests
 from . import tests_conciliacao_documental as conciliacao_tests
 from . import tests_historico as historico_tests
 from . import tests_saldos_historicos as saldos_tests
-from .evidencia_saldos import conflito_eventos
+from .evidencia_saldos import BENIGNOS, conflito_eventos
 from .models import (AplicacaoAjuste, ConfirmacaoContagem, MovimentoObservado,
                      PropostaAjuste, RodadaContagem)
 
 
 class PoliticaImpressaoTests(SimpleTestCase):
-    def test_default_conservador_e_opcao_limitada_a_impressao(self):
+    def test_politica_compartilhada_aceita_impressao_sem_liberar_desconhecidos(self):
         eventos = [dict(tipo_evento='nota_impressa', descricao='Nota impressa.')]
-        self.assertTrue(conflito_eventos(eventos, set()))
-        self.assertEqual(conflito_eventos(eventos, set(), aceitar_nota_impressa=True), '')
+        self.assertIn('nota_impressa', BENIGNOS)
+        self.assertEqual(conflito_eventos(eventos, set()), '')
         eventos.append(dict(tipo_evento='evento_desconhecido', descricao='Sem prova'))
-        self.assertTrue(conflito_eventos(eventos, set(), aceitar_nota_impressa=True))
+        self.assertTrue(conflito_eventos(eventos, set()))
 
 
 class ImpressaoExtratoTests(historico_tests.HistoricoFixture, TestCase):
@@ -86,7 +86,14 @@ class ImpressaoExtratoTests(historico_tests.HistoricoFixture, TestCase):
             with self.subTest(campos=campos):
                 ItemVenda.objects.filter(pk=self.posterior.pk).update(**campos)
                 vendas, compras, _ = self.linhas()
-                self.assertIsNone(vendas[self.posterior.pk]['saldo'])
+                if 'unidade' in campos:
+                    # Existing read-only policy: a base snapshot is visible,
+                    # but it cannot certify conversion or reconstruct a bridge.
+                    self.assertEqual(vendas[self.posterior.pk]['saldo'], 51)
+                    self.assertTrue(vendas[self.posterior.pk]['saldo_base_avulso'])
+                    self.assertIn('Conversão histórica não comprovada', vendas[self.posterior.pk]['saldo_aviso'])
+                else:
+                    self.assertIsNone(vendas[self.posterior.pk]['saldo'])
                 self.assertIsNone(compras[0]['saldo'])
                 ItemVenda.objects.filter(pk=self.posterior.pk).update(
                     estoque_depois=51, estoque_antes=58, unidade='CX', quantidade=7)
@@ -125,18 +132,39 @@ class ImpressaoExtratoTests(historico_tests.HistoricoFixture, TestCase):
 class ConciliacaoImpressaoTests(ajustes_tests.AjustesFixture, TestCase):
     vender = conciliacao_tests.ConciliacaoDocumentalTests.vender
 
-    def test_conciliacao_real_permanece_conservadora_apos_impressao(self):
+    def test_conciliacao_aceita_impressao_sem_alterar_evidencia_ou_estoque(self):
         venda, _, movimento = self.vender()
         # SQLite's observer clock has millisecond precision. Keep the synthetic
         # sale and its observer at an explicit instant after the count.
         MovimentoObservado.objects.filter(pk=movimento.pk).update(registrado_em=venda.criado_em)
         movimento.refresh_from_db()
-        self.assertEqual(len(conciliacao_documental.conciliar(self.fresca(), [movimento])), 1)
-        resposta = self.client.post(reverse('estoque:registrar_impressao', args=[venda.pk]))
-        self.assertEqual(resposta.status_code, 200)
-        with self.assertRaises(ValueError):
-            conciliacao_documental.conciliar(self.fresca(), [movimento])
+        anterior = conciliacao_documental.conciliar(self.fresca(), [movimento])
+        self.assertEqual(len(anterior), 1)
+        for _ in range(2):
+            resposta = self.client.post(reverse('estoque:registrar_impressao', args=[venda.pk]))
+            self.assertEqual(resposta.status_code, 200)
+            self.assertEqual(conciliacao_documental.conciliar(self.fresca(), [movimento]), anterior)
         self.produto.refresh_from_db()
         self.assertEqual(self.produto.quantidade, 4)
         self.assertFalse(PropostaAjuste.objects.exists())
         self.assertFalse(AplicacaoAjuste.objects.exists())
+
+    def test_impressao_nao_libera_edicao_ambigua_ou_snapshot_incompativel(self):
+        from django.db import transaction
+        venda, item, movimento = self.vender()
+        MovimentoObservado.objects.filter(pk=movimento.pk).update(registrado_em=venda.criado_em)
+        movimento.refresh_from_db()
+        self.client.post(reverse('estoque:registrar_impressao', args=[venda.pk]))
+        for tipo, descricao in [('evento_desconhecido', 'Sem atribuição'),
+                ('quantidade_item_alterada', 'Quantidade alterada na nota: Nome sem identidade. De 6 CX para 7 CX.')]:
+            with self.subTest(tipo=tipo), transaction.atomic():
+                EventoVenda.objects.create(venda=venda, tipo_evento=tipo, descricao=descricao)
+                with self.assertRaises(ValueError):
+                    conciliacao_documental.conciliar(self.fresca(), [movimento])
+                transaction.set_rollback(True)
+        for campos in (dict(estoque_depois=3), dict(estoque_antes=None), dict(unidade='KG')):
+            with self.subTest(campos=campos), transaction.atomic():
+                ItemVenda.objects.filter(pk=item.pk).update(**campos)
+                with self.assertRaises(ValueError):
+                    conciliacao_documental.conciliar(self.fresca(), [movimento])
+                transaction.set_rollback(True)
