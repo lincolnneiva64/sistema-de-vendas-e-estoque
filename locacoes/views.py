@@ -2154,7 +2154,7 @@ def conferencia_recolhimento(request, pk):
     ):
         messages.warning(
             request,
-            "Esta locacao nao possui recolhimento pendente.",
+            "Não é possível recolher esta locação porque a entrega ainda não foi confirmada.",
         )
         return redirect(
             "locacoes:detalhe",
@@ -2859,8 +2859,7 @@ def registrar_devolucao(request, pk):
         messages.warning(
             request,
             (
-                "O recolhimento somente pode ser iniciado "
-                "depois da entrega ser concluida."
+                "Não é possível recolher esta locação porque a entrega ainda não foi confirmada."
             ),
         )
         return redirect(

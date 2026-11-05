@@ -9,6 +9,7 @@ import secrets
 from datetime import timedelta
 from urllib.parse import urlsplit
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -20,7 +21,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 from estoque.models import Funcionario
 from estoque.horarios_recebimentos import horario_legivel
-from .models import AutorizacaoRecolhimento, TarefaOperacionalLocacao, EventoLocacao
+from .models import AutorizacaoRecolhimento, TarefaOperacionalLocacao, EventoLocacao, Locacao
 from .pickup_security import PICKUP_PERMISSIONS
 
 
@@ -88,6 +89,10 @@ def send(request, pk):
     task = TarefaOperacionalLocacao.objects.select_for_update().filter(pk=pk, tipo='recolhimento').first()
     if not task:
         return error('Recolhimento não encontrado.', 404)
+    try:
+        Locacao.objects.select_for_update().get(pk=task.locacao_id).validar_novo_recolhimento()
+    except ValidationError as exc:
+        return error('; '.join(exc.messages), 400)
     employee_id = request.POST.get('funcionario', '')
     employee = Funcionario.habilitados_para_checklist().filter(pk=employee_id).first() if employee_id.isdigit() else None
     if not employee:
@@ -147,6 +152,10 @@ def manage(request, pk):
         if action not in ('emitir', 'revogar'):
             return HttpResponse('Ação inválida.', status=400)
         if action == 'emitir':
+            try:
+                Locacao.objects.select_for_update().get(pk=task.locacao_id).validar_novo_recolhimento()
+            except ValidationError as exc:
+                return protect(HttpResponse('; '.join(exc.messages), status=400))
             employee_id = request.POST.get('funcionario', '')
             employee = Funcionario.habilitados_para_checklist().filter(pk=employee_id).first() if employee_id.isdigit() else None
             if not employee:

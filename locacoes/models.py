@@ -1151,9 +1151,15 @@ class Locacao(models.Model):
             responsavel=responsavel,
         )
 
+    def validar_novo_recolhimento(self):
+        if self.status not in {self.STATUS_ENTREGUE, self.STATUS_PENDENTE_DEVOLUCAO}:
+            raise ValidationError("Não é possível recolher esta locação porque a entrega ainda não foi confirmada.")
+
+    @transaction.atomic
     def registrar_devolucao(self, retornos, responsavel="", observacao=""):
-        if self.status not in {self.STATUS_SAIU_PARA_ENTREGA, self.STATUS_ENTREGUE, self.STATUS_PENDENTE_DEVOLUCAO}:
-            raise ValidationError("Somente locacao em entrega ou pendente pode registrar devolucao.")
+        atual = type(self).objects.select_for_update().get(pk=self.pk)
+        atual.validar_novo_recolhimento()
+        self.refresh_from_db()
 
         houve_avaria = False
         with transaction.atomic():
@@ -1268,10 +1274,17 @@ class TarefaOperacionalLocacao(models.Model):
             if not responsavel or len(responsavel) > 120:
                 raise ValidationError("Informe o responsavel pela entrega (ate 120 caracteres).")
         with transaction.atomic():
-            locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
-            tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+            if recolhimento_realizado:
+                # Match the pickup view and link issuer: task, then rental.
+                tarefa = type(self).objects.select_for_update().get(pk=self.pk)
+                locacao = Locacao.objects.select_for_update().get(pk=tarefa.locacao_id)
+            else:
+                locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
+                tarefa = type(self).objects.select_for_update().get(pk=self.pk)
             if recolhimento_realizado and tarefa.tipo != self.TIPO_RECOLHIMENTO:
                 raise ValidationError("Este resultado e exclusivo para tarefas de recolhimento.")
+            if recolhimento_realizado:
+                locacao.validar_novo_recolhimento()
             regularizacao_posterior = (
                 entrega_realizada and tarefa.status == self.STATUS_RESOLVIDA_ADMIN
                 and locacao.status == Locacao.STATUS_RESERVADA
@@ -1353,8 +1366,7 @@ class TarefaOperacionalLocacao(models.Model):
                 evento_tipo = "checklist_entrega_confirmada"
                 descricao_padrao = "Entrega confirmada pela checklist operacional."
             elif tarefa.tipo == self.TIPO_RECOLHIMENTO:
-                if locacao.status not in {Locacao.STATUS_ENTREGUE, Locacao.STATUS_PENDENTE_DEVOLUCAO}:
-                    raise ValidationError("Esta locacao nao possui recolhimento pendente.")
+                locacao.validar_novo_recolhimento()
                 evento_tipo = "checklist_recolhimento_confirmado"
                 descricao_padrao = "Recolhimento confirmado pela checklist operacional."
             else:
@@ -2328,13 +2340,7 @@ class ConferenciaRecolhimentoLocacao(models.Model):
                     "Este recolhimento ja foi concluido."
                 )
 
-            if locacao.status not in {
-                Locacao.STATUS_ENTREGUE,
-                Locacao.STATUS_PENDENTE_DEVOLUCAO,
-            }:
-                raise ValidationError(
-                    "Esta locacao nao possui recolhimento pendente."
-                )
+            locacao.validar_novo_recolhimento()
 
             previsto = cls.totais_entregues(locacao)
             anterior = cls.totais_recolhidos(locacao)
@@ -2732,7 +2738,12 @@ class ItemLocacao(models.Model):
             return {"mesas": 0, "cadeiras": quantidade}
         return {"mesas": 0, "cadeiras": 0}
 
+    @transaction.atomic
     def registrar_retorno(self, devolvida_boa=0, quebrada=0, perdida=0, descartada=0, responsavel="", observacao=""):
+        locacao = Locacao.objects.select_for_update().get(pk=self.locacao_id)
+        locacao.validar_novo_recolhimento()
+        type(self).objects.select_for_update().get(pk=self.pk)
+        self.refresh_from_db()
         incrementos = {
             "devolvida_boa": int(devolvida_boa or 0),
             "quebrada": int(quebrada or 0),
