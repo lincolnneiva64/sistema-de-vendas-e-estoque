@@ -3,6 +3,7 @@ import base64
 import json
 import os
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
@@ -20,14 +21,15 @@ TEMPLATE=Path(__file__).parent/'templates/estoque/compras_sugestao_fornecedor.ht
 
 @skipUnless(Path(CHROME).is_file(),'Navegador indisponível')
 class ColetaBrowserTests(ColetaFixture,StaticLiveServerTestCase):
-    def navegador(self,width=390):
+    def navegador(self,width=390,touch=True):
         profile=TemporaryDirectory(prefix='coleta-ficticia-',ignore_cleanup_errors=True)
         self.addCleanup(profile.cleanup)
         browser=Chrome(CHROME,profile.name).start();self.addCleanup(browser.stop)
         t=browser.tab();t.call('Network.enable')
         t.call('Network.setCookie',dict(name='sessionid',value=self.client.cookies['sessionid'].value,url=self.live_server_url))
-        t.call('Emulation.setDeviceMetricsOverride',dict(width=width,height=844,deviceScaleFactor=1,mobile=width<860))
-        t.call('Emulation.setTouchEmulationEnabled',dict(enabled=width<860,maxTouchPoints=1))
+        t.call('Emulation.setDeviceMetricsOverride',dict(width=width,height=844,deviceScaleFactor=1,mobile=width<860 and touch))
+        t.call('Emulation.setTouchEmulationEnabled',dict(enabled=width<860 and touch,maxTouchPoints=1))
+        t.touch_coleta = touch
         t.call('Page.addScriptToEvaluateOnNewDocument',dict(source="window.errosColeta=[];addEventListener('error',e=>errosColeta.push(e.message));addEventListener('unhandledrejection',e=>errosColeta.push(String(e.reason)));") )
         return t
 
@@ -41,7 +43,7 @@ class ColetaBrowserTests(ColetaFixture,StaticLiveServerTestCase):
             "await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const b=e.getBoundingClientRect();"
             "const x=b.x+b.width/2,y=b.y+b.height/2;if(!b.width||!b.height||!e.contains(document.elementFromPoint(x,y)))return null;return{x,y}})()")
         self.assertIsNotNone(ponto,'Ação inacessível: '+selector)
-        if t.evaluate("innerWidth<860"):
+        if t.evaluate("innerWidth<860") and getattr(t, 'touch_coleta', True):
             t.call('Input.dispatchTouchEvent',dict(type='touchStart',touchPoints=[ponto]))
             t.call('Input.dispatchTouchEvent',dict(type='touchEnd',touchPoints=[]))
         else:
@@ -113,6 +115,58 @@ class ColetaBrowserTests(ColetaFixture,StaticLiveServerTestCase):
         t.wait("location.pathname.includes('/compras/') && location.search.includes('continuar_itens=1')")
         compra=Compra.objects.get();self.assertEqual(compra.total,45);self.assertEqual(compra.itens.count(),1)
         self.produtos[0].refresh_from_db();self.assertEqual(self.produtos[0].quantidade,10)
+
+    def fluxo_sem_inicio_manual(self, touch=True):
+        t=self.navegador(touch=touch);self.abrir(t)
+        card=f'#mobileSugestaoProdutos [data-produto-id="{self.produtos[0].pk}"]'
+        self.tocar(t,card+' .sugestao-confirmar-card-mobile')
+        t.wait("document.querySelector("+json.dumps(card)+").querySelector('.sugestao-confirmar-card-mobile').textContent==='Confirmar'")
+        t.evaluate("const c=document.querySelector("+json.dumps(card)+");c.querySelector('.sugestao-qtd-input').value='4';c.querySelector('.sugestao-preco-input').value='11,25';c.querySelector('.sugestao-preco-input').dispatchEvent(new Event('input',{bubbles:true}));true")
+        self.tocar(t,card+' .sugestao-confirmar-card-mobile')
+        self.pegar(t)
+        self.resumo(t,1,1,'5,20','45,00')
+        self.tocar(t,f'#mobileSugestaoProdutos [data-produto-id="{self.produtos[1].pk}"] .sugestao-remover-item')
+        self.tocar(t,'#btnConfirmarRemoverItemListaMobile')
+        self.resumo(t,0,1,'0,00','45,00')
+        self.tocar(t,'#btnSalvarAlteracoesListaMobile')
+        t.wait('location.pathname==='+json.dumps(reverse('estoque:compras_listas_fornecedor')))
+        self.lista.refresh_from_db()
+        item=self.lista.itens.get()
+        self.assertEqual((item.produto_id,item.quantidade_final,item.preco_compra,item.unidade,item.total),
+                         (self.produtos[0].pk,4,Decimal('11.25'),'CX',45))
+        self.sem_operacoes()
+        self.abrir(t);self.resumo(t,0,1,'0,00','45,00')
+        item_selector=f'#itensListaMobileLista [data-produto-id="{self.produtos[0].pk}"]'
+        self.tocar(t,item_selector+' .sugestao-editar-lista-mobile')
+        t.evaluate("const i=document.querySelector("+json.dumps(item_selector)+");i.querySelector('.sugestao-item-lista-qtd-input').value='5';i.querySelector('.sugestao-item-lista-qtd-input').dispatchEvent(new Event('input',{bubbles:true}));true")
+        self.tocar(t,item_selector+' .sugestao-editar-lista-mobile')
+        self.resumo(t,0,1,'0,00','56,25')
+        self.tocar(t,'#btnSalvarGerarCompraConfirmados')
+        t.wait("location.search.includes('continuar_itens=1')")
+        compra=Compra.objects.get()
+        self.assertEqual((compra.total,compra.itens.count()),(Decimal('56.25'),1))
+        self.lista.refresh_from_db()
+        self.assertEqual(self.lista.itens.get().quantidade_final,5)
+        self.produtos[0].refresh_from_db();self.assertEqual(self.produtos[0].quantidade,10)
+        self.assertEqual(t.evaluate('errosColeta'),[])
+
+    def test_lista_salva_acoes_diretas_touch_sem_inicio_manual(self):
+        self.fluxo_sem_inicio_manual()
+
+    def test_lista_legada_acoes_diretas_mouse_viewport_mobile(self):
+        self.lista.coleta_mobile=None;self.lista.save(update_fields=['coleta_mobile'])
+        self.fluxo_sem_inicio_manual(touch=False)
+
+    def test_peguei_como_primeira_acao_da_lista_salva(self):
+        t=self.navegador();self.abrir(t);self.pegar(t)
+        self.resumo(t,1,1,'5,20','30,15');self.sem_operacoes()
+
+    def test_excluir_como_primeira_acao_da_lista_salva(self):
+        t=self.navegador();self.abrir(t)
+        self.tocar(t,'#mobileSugestaoProdutos .sugestao-remover-item')
+        t.wait("document.querySelector('#modalRemoverItemListaMobile').classList.contains('aberto')")
+        self.tocar(t,'#btnConfirmarRemoverItemListaMobile')
+        self.resumo(t,1,0,'5,20','0,00');self.sem_operacoes()
 
     def test_remover_confirmado_nao_retorna_a_prelista(self):
         t=self.navegador();self.abrir(t);self.iniciar(t);self.pegar(t)

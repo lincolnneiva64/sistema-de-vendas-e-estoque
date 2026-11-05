@@ -118,9 +118,20 @@
   mostrarInicio();
   addEventListener('resize', () => { if (dados && !dados.estado.iniciada) mostrarInicio(); });
   // Capture only actions of this list. Desktop and unrelated controls are untouched.
-  document.addEventListener('click', event => {
+  document.addEventListener('click', async event => {
     if (!mobile() || event.target.closest('[data-iniciar-coleta]')) return;
     if (event.target.closest('[data-historico-toggle]')) return;
+    const acaoProduto = event.target.closest('#mobileSugestaoProdutos .sugestao-confirmar-card-mobile, #mobileSugestaoProdutos .sugestao-adicionar-lista-mobile, #mobileSugestaoProdutos .sugestao-remover-item');
+    if (acaoProduto && dados && !dados.estado.iniciada && !ocupado && !bloqueado) {
+      // A direct product action starts with the saved items still pending.
+      // Replay only after the server acknowledges initialization and its version.
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (await enviar('iniciar_pendente')) {
+        aviso.hidden = true;
+        acaoProduto.click();
+      }
+      return;
+    }
     if (event.target.closest(acoesGravacao) && !pronto()) {
       event.preventDefault(); event.stopImmediatePropagation();
     }
