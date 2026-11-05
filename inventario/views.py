@@ -120,7 +120,7 @@ def linhas_revisao(inventario):
     com_evidencias = [r for r in atuais if r.ok_em or r.confirmacoes.all()]
     prefetch_related_objects(com_evidencias, "conciliacoes__responsavel")
     with carregar(com_evidencias) if com_evidencias else nullcontext(None) as lote:
-        from . import revisao_historico
+        from . import revisao_historico, remocoes_legadas
         if lote is not None:
             revisao_historico.carregar(lote)
         for item in itens:
@@ -164,6 +164,7 @@ def linhas_revisao(inventario):
                 "contado_texto": quantidade(rodada.contado_base if rodada.ok_em else None, item.cadastro),
                 "diferenca_texto": quantidade(rodada.contado - rodada.esperado if rodada.ok_em else None, item.cadastro, diferenca=True),
                 "sinalizacoes": sinalizacoes, "chave_sinalizacao": str(uuid4()),
+                "remocoes_legadas": remocoes_legadas.sugestoes(rodada, lote) if lote else [],
                 "movimentos": [{"registro": m, "origem": ORIGENS.get(m.origem, ORIGENS["nao_identificada"]),
                     "quantidade": quantidade(m.depois - m.antes, item.cadastro, diferenca=True) if m.antes is not None and m.depois is not None else "Saldo desconhecido",
                     "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
@@ -226,7 +227,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         try:
             acao = request.POST.get("acao")
             rodada_id = request.POST.get("rodada")
-            if acao in {"recontar", "conciliar", "revisar", "aprovar", "sinalizar"}:
+            if acao in {"recontar", "conciliar", "revisar", "aprovar", "sinalizar", "reconhecer_remocao_legada"}:
                 get_object_or_404(RodadaContagem, pk=rodada_id, item__inventario=inventario)
             if acao == "revisar_ajustes_historicos":
                 acesso = acesso_ajustes.iniciar(request.user, inventario)
@@ -279,6 +280,12 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
                 services.recontar(request.user, rodada_id, request.POST.get("motivo", ""))
             elif acao == "conciliar":
                 services.conciliar(request.user, rodada_id, request.POST.get("movimento"), request.POST.get("motivo", ""))
+            elif acao == "reconhecer_remocao_legada":
+                from .remocoes_legadas import reconhecer
+                reconhecer(request.user, inventario.pk, int(rodada_id), request.POST.get('previa'),
+                    request.POST.get('registro'), request.POST.get('documento'), request.POST.get('evidencia'),
+                    request.POST.get('motivo'), request.POST.get('confirmacao') == 'sim')
+                sucesso = 'Reconhecimento administrativo registrado. Estoque e evento original preservados.'
             elif acao == "revisar":
                 if request.POST.get("correspondencia_fisica") != "sim":
                     raise ValueError("Confirme a verificação física e os lançamentos pendentes.")

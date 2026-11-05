@@ -11,6 +11,7 @@ from estoque.models import Venda, ItemVenda, EventoVenda, ItemVendaRemovido, Aju
 from .models import (ConfirmacaoContagem, MovimentoObservado, RodadaContagem,
                      DecisaoAjuste, PropostaAjuste, ConciliacaoMovimento, SequenciaEstoque)
 from .selecao import itens_incluidos
+from .evidencia_remocoes import CAMPOS
 
 
 @contextmanager
@@ -88,6 +89,7 @@ class _Lote:
             vendas = vendas.select_for_update(nowait=True)
             itens = itens.select_for_update(of=('self',), nowait=True)
         self.itens = defaultdict(list)
+        self.registros_removidos = defaultdict(list)
         self.erro_documentos = ''
         try:
             # Keep the savepoint so a NOWAIT error cannot poison the caller's transaction.
@@ -95,11 +97,16 @@ class _Lote:
                 self.vendas = {v.pk: v for v in vendas}
                 for item in itens:
                     self.itens[item.venda_id].append(item)
+                removidos = ItemVendaRemovido.objects.filter(venda_id__in=vendas_ids).order_by('pk')
+                if self.travar:
+                    removidos = removidos.select_for_update(nowait=True)
+                for registro in removidos.values(*CAMPOS):
+                    self.registros_removidos[registro['venda_id']].append(registro)
         except DatabaseError:
             self.erro_documentos = 'Documento em alteração concorrente; revise novamente antes de aprovar ou aplicar.'
             self.vendas = {}
-        self.removidos = set(ItemVendaRemovido.objects.filter(venda_id__in=vendas_ids,
-            produto_id__in=produtos).values_list('venda_id','produto_id'))
+        self.removidos = {(venda, r['produto_id']) for venda, registros in self.registros_removidos.items()
+                         for r in registros}
         self.ajustes = set(AjusteItemVendaQuitada.objects.filter(venda_id__in=vendas_ids,
             produto_id__in=produtos).values_list('venda_id','produto_id'))
         self.contagens = {(r['produto_id'],r['referencia']):r['total'] for r in MovimentoObservado.objects.filter(
@@ -112,3 +119,5 @@ class _Lote:
         for evento in eventos:
             venda = evento.pop('venda_id')
             self.eventos[venda].append(evento)
+        from .remocoes_legadas import carregar as carregar_reconhecimentos
+        carregar_reconhecimentos(self)

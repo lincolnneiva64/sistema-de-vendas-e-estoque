@@ -36,6 +36,7 @@
 {% if linha.rodada.ok_em %}<p class="status">OK em {% instante_registro linha.rodada.ok_em %} · Sequência {{ linha.rodada.sequencia_ok }}</p>
 
 <p class="muted">Quantidade calculada antes do arredondamento: {{ linha.rodada.contado }} {{ linha.item.cadastro.base }}. Estoque compatível com três casas decimais.</p><p>{{ linha.bloqueio }}</p>
+{% include 'inventario/remocoes_legadas.html' %}
 {% if linha.decisao %}<p class="status">Ajuste aplicado por {{ linha.decisao.aprovado_por }} em {{ linha.decisao.aprovado_em }} · Movimento {{ linha.decisao.movimentacao_id }}</p>{% endif %}
 <details><summary>Movimentos entre confirmações, posteriores e conciliação física</summary><p class="muted">Um novo OK não comprova que a mercadoria ficou imóvel entre contagens. O registro digital não comprova a movimentação física. Não concilie sem documento e evidência. Conciliações anteriores ao último OK precisam de nova verificação.</p>
 {% for movimento in linha.movimentos %}<div class="historico movimento-digital"><p><strong>{{ movimento.origem }}</strong> · {{ movimento.registro.referencia }} · {{ movimento.quantidade }} · {% instante_registro movimento.registro.registrado_em %}</p><p class="muted">{% if movimento.entre_confirmacoes %}Entre confirmações individuais{% else %}Posterior ao último OK{% endif %} · Registro digital · sequência {{ movimento.registro.sequencia }} · {{ movimento.registro.antes }} → {{ movimento.registro.depois }} {{ linha.item.cadastro.base }}. A origem registrada não comprova a movimentação física.</p>

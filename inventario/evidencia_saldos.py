@@ -31,7 +31,7 @@ BENIGNOS = frozenset(('venda_gravada', 'nota_visualizada', 'nota_impressa', 'wha
     'pedido_parcial'))
 
 
-def conflito_eventos(eventos, outros_nomes):
+def conflito_eventos(eventos, outros_nomes, *, remocoes_comprovadas=None):
     """Ignore a stock edit only if its exact named item is independently another SKU.
 
     Unknown events, target edits and ambiguous names invalidate the candidate.
@@ -52,6 +52,11 @@ def conflito_eventos(eventos, outros_nomes):
     genericos = []
     for evento in eventos:
         if evento['tipo_evento'] in BENIGNOS:
+            continue
+        if evento['tipo_evento'] == 'item_removido_da_nota' and remocoes_comprovadas is not None:
+            if evento.get('pk') not in remocoes_comprovadas:
+                return 'Remoção sem atribuição histórica comprovada; snapshot não certificado.'
+            atribuicoes.append(evento)
             continue
         if evento['tipo_evento'] == 'alteracao_separacao_atendida':
             if evento.get('descricao', '').strip() not in resumos or not evento.get('criado_em'):

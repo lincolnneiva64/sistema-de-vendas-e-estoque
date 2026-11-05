@@ -81,7 +81,7 @@ def validar(rodada, produto, lote):
     lote.conferir(rodada)
     movimentos = lote.movimentos[rodada.item.produto_id]
     vendas = [m for m in movimentos if m.origem == 'venda']
-    documentos = conciliar(rodada, vendas, _lote=lote) if vendas else []
+    documentos = conciliar(rodada, vendas, travar=lote.travar, _lote=lote) if vendas else []
     comprovados = {d['observador'] for d in documentos}
     # An audit record alone never skips subsequent movements or chain checks.
     for m in movimentos:

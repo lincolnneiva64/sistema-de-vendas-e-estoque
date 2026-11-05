@@ -1,0 +1,22 @@
+{% if pode_revisar %}{% for remocao in linha.remocoes_legadas %}
+<details><summary>Reconhecer remoção antiga — venda #{{ remocao.venda }}, evento #{{ remocao.evento.pk }}</summary>
+<p>{{ remocao.evento.descricao }}</p>
+{% if remocao.candidatos %}
+<p>Os registros abaixo são candidatos, não comprovação automática. É necessário documento independente que identifique a venda, o produto removido e seu item original.</p>
+<form method="post">{% csrf_token %}
+<input type="hidden" name="acao" value="reconhecer_remocao_legada">
+<input type="hidden" name="rodada" value="{{ linha.rodada.pk }}">
+<input type="hidden" name="previa" value="{{ remocao.previa }}">
+<label>Registro histórico correspondente<select name="registro" required><option value="">Selecione após conferir a documentação</option>
+{% for registro in remocao.candidatos %}<option value="{{ registro.id }}">Remoção #{{ registro.id }} · Produto #{{ registro.produto_id }} · Item original #{{ registro.item_venda_original_id }} · {{ registro.produto_nome_snapshot }} · {{ registro.quantidade_snapshot }} {{ registro.unidade_snapshot }}</option>{% endfor %}
+</select></label>
+<label>Documento independente e sua referência<input name="documento" maxlength="4000" required></label>
+<label>Evidência que vincula o evento ao produto e item original<textarea name="evidencia" maxlength="4000" required></textarea></label>
+<label>Motivo do reconhecimento<textarea name="motivo" maxlength="4000" required></textarea></label>
+<label><input type="checkbox" name="confirmacao" value="sim" required> Conferi o documento independente e sua ligação com a venda, produto e item original. Não estou usando apenas nome, valores ou proximidade de horários.</label>
+<button>Registrar reconhecimento administrativo</button>
+<p>Esta decisão não altera estoque, contagem ou evento original. Sem documento independente suficiente, não confirme: o bloqueio deve permanecer.</p>
+</form>
+{% else %}<p class="aviso">Falta registro histórico compatível e inequívoco, com produto e item original identificados e dados consistentes. O bloqueio permanece; não há reconhecimento disponível para este evento.</p>{% endif %}
+</details>
+{% endfor %}{% endif %}

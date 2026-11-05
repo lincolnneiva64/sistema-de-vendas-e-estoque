@@ -10,6 +10,7 @@ from estoque.models import (Venda, ItemVenda, EventoVenda, ItemVendaRemovido,
                             AjusteItemVendaQuitada)
 from .models import MovimentoObservado
 from .evidencia_saldos import conflito_eventos, snapshot, unidade
+from .evidencia_remocoes import CAMPOS, comprovar
 
 
 def conciliar(rodada, movimentos, travar=False, *, _lote=None):
@@ -29,6 +30,7 @@ def conciliar(rodada, movimentos, travar=False, *, _lote=None):
             if not venda:
                 raise ValueError(erro)
             itens = _lote.itens[venda.pk]
+            remocoes = _lote.registros_removidos[venda.pk]
         else:
             vendas = Venda.objects.filter(pk=int(match[1]))
             if travar:
@@ -42,6 +44,10 @@ def conciliar(rodada, movimentos, travar=False, *, _lote=None):
                     if travar:
                         itens = itens.select_for_update(of=('self',), nowait=True)
                     itens = list(itens)
+                    removidos = ItemVendaRemovido.objects.filter(venda=venda).order_by('pk')
+                    if travar:
+                        removidos = removidos.select_for_update(nowait=True)
+                    remocoes = list(removidos.values(*CAMPOS))
             except DatabaseError:
                 raise ValueError('Documento em alteração concorrente; revise novamente antes de aprovar ou aplicar.')
         alvos = [i for i in itens if i.produto_id == m.produto_id]
@@ -49,7 +55,7 @@ def conciliar(rodada, movimentos, travar=False, *, _lote=None):
             raise ValueError(erro)
         i = alvos[0]
         if (((venda.pk, m.produto_id) in _lote.removidos or (venda.pk, m.produto_id) in _lote.ajustes)
-                if _lote is not None else (ItemVendaRemovido.objects.filter(venda=venda, produto_id=m.produto_id).exists()
+                if _lote is not None else (any(r['produto_id'] == m.produto_id for r in remocoes)
                 or AjusteItemVendaQuitada.objects.filter(venda=venda, produto_id=m.produto_id).exists())):
             raise ValueError(erro)
         # Require the same observer identity to occur exactly once for this SKU.
@@ -65,7 +71,19 @@ def conciliar(rodada, movimentos, travar=False, *, _lote=None):
             'pk', 'tipo_evento', 'descricao', 'criado_em')[:501]))
         if len(eventos) > 500:
             raise ValueError(erro)
-        conflito = conflito_eventos(eventos, outros)
+        from .remocoes_legadas import ACAO, LEGADO, mapa
+        from .models import EventoInventario
+        reconhecimentos = (_lote.reconhecimentos_legados[rodada.pk] if _lote is not None else
+            list(EventoInventario.objects.filter(rodada=rodada, acao=ACAO))
+            if any(LEGADO.fullmatch(e.get('descricao', '')) for e in eventos) else [])
+        legados = mapa(rodada, reconhecimentos, eventos, remocoes, venda.pk)
+        comprovadas = comprovar(venda.pk, m.produto_id, nomes_alvo, itens, eventos, remocoes, legados=legados)
+        for prova in comprovadas:
+            if prova['evento'] in legados:
+                prova['reconhecimento_administrativo'] = next(x.pk for x in reconhecimentos
+                    if x.dados['reconhecimento']['evento']['pk'] == prova['evento'])
+        conflito = conflito_eventos(eventos, outros,
+            remocoes_comprovadas={r['evento'] for r in comprovadas})
         validado, motivo = snapshot(dict(cancelada=venda.cancelada,
             devolvido=venda.estoque_devolvido_cancelamento,
             antes=i.estoque_antes, depois=i.estoque_depois,
@@ -88,4 +106,6 @@ def conciliar(rodada, movimentos, travar=False, *, _lote=None):
             eventos=[dict(pk=e['pk'], tipo=e['tipo_evento'], descricao=e['descricao'],
                          criado_em=e['criado_em'].isoformat())
                      for e in eventos if e['tipo_evento'] not in BENIGNOS]))
+        if comprovadas:
+            evidencias[-1]['remocoes_outros_produtos'] = comprovadas
     return evidencias
