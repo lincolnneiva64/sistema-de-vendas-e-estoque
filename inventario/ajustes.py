@@ -12,7 +12,7 @@ from django.db.models import OuterRef, Subquery
 from estoque.models import Produto, MovimentacaoEstoqueManual
 from estoque.services.estoque_manual import conferir_ou_ajustar_estoque
 from . import services
-from .conversao_fisica import exigir_precisao_ajuste, PrecisaoInsuficiente
+from .conversao_fisica import exigir_precisao_ajuste, PrecisaoInsuficiente, representacao_fisica
 from .selecao import itens_incluidos, rodadas_incluidas
 from .models import (Inventario, ItemInventario, RodadaContagem, DecisaoAjuste,
                      PropostaAjuste, AplicacaoAjuste, EventoAjuste, MovimentoObservado,
@@ -92,6 +92,12 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
             documentos=documentos,
             diferenca=str(diferenca), resultante=str(resultante),
             sinais=list(_lote.sinais[item.pk]) if _lote is not None else list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
+        fisico = representacao_fisica(rodada)
+        if fisico:
+            dados['representacao_fisica'] = fisico
+            resultado['representacao_fisica'] = fisico
+            from .apresentacao import comparacao_fisica
+            resultado['comparacao_fisica'] = comparacao_fisica(fisico)
         resultado.update(evidencia=dados, assinatura=assinatura(dados))
         resultado['token'] = token(dict(tipo='preparacao', rodada=rodada.pk, assinatura=resultado['assinatura']))
         proposta = (_lote.propostas.get((rodada.pk, resultado['assinatura'])) if _lote is not None
@@ -231,6 +237,13 @@ def _validar_proposta(proposta, atual):
         raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
 
 
+def descricao_representacao(atual):
+    fisico = atual['evidencia'].get('representacao_fisica', {})
+    if fisico.get('natureza') == 'normalizacao_decimal':
+        return 'Normalização decimal da contagem física; sem falta física comprovada. '
+    return ''
+
+
 def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
     """The existing stock/audit writer, shared by both authorized entry points.
 
@@ -246,7 +259,7 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
         # this read and the stock service's UPDATE. Always current + difference.
         resultado = conferir_ou_ajustar_estoque(produto.pk, MovimentacaoEstoqueManual.TIPO_AJUSTE,
             novo_estoque=atual['resultante'], motivo=proposta.justificativa,
-            observacao=f'Conferência {inventario_id}; proposta {proposta.pk}; lote {lote}', usuario=usuario)
+            observacao=descricao_representacao(atual) + f'Conferência {inventario_id}; proposta {proposta.pk}; lote {lote}', usuario=usuario)
         if not MovimentoObservado.objects.filter(produto=produto,
                 sequencia=atual['evidencia']['sequencia'] + 1,
                 antes=resultado['estoque_antes'], depois=resultado['estoque_depois'],
@@ -277,7 +290,7 @@ def _gravar_lote(usuario, inventario_id, avaliacoes):
     lote = uuid4()
     movimentos = gravar(usuario, [dict(produto=p, antes=a['atual'], depois=a['resultante'],
         sequencia=a['evidencia']['sequencia'], motivo=pr.justificativa,
-        observacao=f'Conferência {inventario_id}; proposta {pr.pk}; lote {lote}')
+        observacao=descricao_representacao(a) + f'Conferência {inventario_id}; proposta {pr.pk}; lote {lote}')
         for pr, r, p, a in avaliacoes])
     decisoes = [DecisaoAjuste(item=r.item, rodada=r, movimentacao=m['historico'],
         diferenca=a['diferenca'], justificativa=pr.justificativa, aprovado_por=usuario)

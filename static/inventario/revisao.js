@@ -3,6 +3,8 @@ document.querySelectorAll('a[data-detalhe]').forEach(link => {
     link.addEventListener('click', () => {
         const details = document.getElementById(link.dataset.detalhe);
         if (details) details.open = true;
+        const painel = link.closest('.detalhes-conferencia');
+        if (painel?.hidePopover) painel.hidePopover();
     });
 });
 window.inventarioRevisaoPronta = true;

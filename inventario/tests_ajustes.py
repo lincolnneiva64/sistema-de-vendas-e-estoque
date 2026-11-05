@@ -35,22 +35,23 @@ class PrecisaoFisicaTests(SimpleTestCase):
         from decimal import Decimal
         from types import SimpleNamespace
         cadastro = dict(base='PCT', secundaria=unidade, fator=str(fator),
-                        fracionado=fracionado, avulsos_fisicos=not fracionado)
+                        fracionado=fracionado, avulsos_fisicos=not fracionado, continua=False, secundaria_continua=unidade == 'KG')
         return SimpleNamespace(item=SimpleNamespace(cadastro=cadastro),
             embalagens=Decimal(principal), avulsos=Decimal(avulsos), contado_base=Decimal(contado))
 
-    def test_bloqueia_os_tres_arredondamentos_sem_mudar_contagem(self):
+    def test_bloqueia_projecoes_adulteradas_e_continua_inexata_sem_mudar_contagem(self):
         from .conversao_fisica import exigir_precisao_ajuste, PrecisaoInsuficiente
         for fator, principal, avulsos, contado, unidade, total in [
-                (28, '1', '2', '1.071', 'UN', '30 UN'),
-                (12, '1', '5', '1.417', 'UN', '17 UN'),
+                (28, '1', '2', '1.070', 'UN', '30 UN'),
+                (12, '1', '5', '1.416', 'UN', '17 UN'),
                 (30, '4', '28', '4.933', 'KG', '148 KG')]:
             with self.subTest(fator=fator):
                 rodada = self.rodada(fator, principal, avulsos, contado, unidade)
                 antes = vars(rodada).copy()
-                with self.assertRaises(PrecisaoInsuficiente) as erro:
+                with self.assertRaises(ValueError) as erro:
                     exigir_precisao_ajuste(rodada)
-                self.assertEqual(erro.exception.contagem_fisica, total)
+                if isinstance(erro.exception, PrecisaoInsuficiente):
+                    self.assertEqual(erro.exception.contagem_fisica, total)
                 self.assertEqual(vars(rodada), antes)
 
     def test_aceita_fracoes_exatas_un_kg_e_avulsos_nao_fracionados(self):

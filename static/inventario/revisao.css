@@ -165,3 +165,42 @@ main:has(.painel-inventario){max-width:1360px}
  .tabela-resumo .resumo-linha>td:last-child{border-inline-end:1px solid #879da3}
 }
 @media(max-width:1100px){.tabela-resumo .resumo-linha{border-block:2px solid #879da3}}
+
+/* Comparação física: composição inteira e detalhes técnicos sem alargar o card. */
+.contado-coluna .contado-principal,.comparacao-fisica{white-space:normal;overflow-wrap:anywhere;min-width:0}
+.representacao-fisica{font-size:.85rem;text-align:left;white-space:normal;overflow-wrap:anywhere}
+.representacao-fisica summary{padding:6px 0}
+
+/* Tabela compacta: formatação apenas; detalhes fora do fluxo da linha. */
+.tabela-resumo th,.tabela-resumo td{padding:12px 8px;overflow-wrap:normal}
+.tabela-resumo .quantidade-principal{font-size:.95rem;line-height:1.4;white-space:nowrap}
+.parcela-quantidade{display:inline-block;white-space:nowrap}
+.tabela-resumo .quantidade-total{font-size:.78rem;margin:3px 0 0;color:#52696f}
+.tabela-resumo .diferenca>strong{font-size:.9rem;line-height:1.4;display:block}
+.tabela-resumo .diferenca>small{font-size:.78rem;margin-top:4px}
+.tabela-resumo .estado-atualizacao{font-size:.8rem;padding:5px 7px;line-height:1.4}
+.tabela-resumo .situacao-atualizacao{min-width:0;vertical-align:middle}
+.ver-detalhes-conferencia{display:block;margin:5px auto 0;padding:5px 8px;min-height:34px;background:transparent;color:#155c50;border:1px solid #9dbdb5;border-radius:6px;font-size:.8rem;line-height:1.4}
+.ver-detalhes-conferencia:hover{background:#e4efeb}
+.ver-detalhes-conferencia:focus-visible{outline:3px solid #2b7b9a;outline-offset:3px}
+.detalhes-conferencia{width:min(560px,calc(100vw - 32px));max-height:min(75vh,650px);overflow:auto;padding:18px;border:1px solid #819d98;border-radius:12px;background:#fff;color:#182f39;box-shadow:0 12px 45px #173c3b33;text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:.95rem;line-height:1.55}
+.detalhes-conferencia::backdrop{background:#173c3b22}
+.detalhes-conferencia>header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 0 10px;border-bottom:1px solid #d8e2e5;background:transparent}
+.detalhes-conferencia h3{font-size:1rem;margin:0}
+.detalhes-conferencia header button{font-size:.85rem;padding:8px 12px;min-height:44px}
+.detalhes-conferencia .representacao-fisica{font-size:.9rem;margin:12px 0}
+@media(min-width:1101px){
+ .tabela-resumo th:nth-child(1){width:18%}
+ .tabela-resumo th:nth-child(2){width:9%}
+ .tabela-resumo th:nth-child(3){width:13%}
+ .tabela-resumo th:nth-child(4){width:15%}
+ .tabela-resumo th:nth-child(5){width:15%}
+ .tabela-resumo th:nth-child(6){width:9%}
+ .tabela-resumo th:nth-child(7){width:8%}
+ .tabela-resumo th:nth-child(8){width:13%}
+}
+@media(max-width:1100px){
+ .tabela-resumo .quantidade-principal{font-size:.88rem;white-space:normal}
+ .tabela-resumo .quantidade-total{font-size:.76rem}
+ .ver-detalhes-conferencia{min-height:44px}
+}

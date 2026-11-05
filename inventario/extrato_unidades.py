@@ -65,7 +65,7 @@ def apresentar_unidades(pagina, produto_id):
         'venda_id', 'produto_id', 'produto_nome_snapshot')[:LIMITE + 1])
     referencias = {f'Venda #{i}': i for i in ids}
     observados = list(MovimentoObservado.objects.filter(produto_id=produto_id,
-        referencia__in=referencias, origem__in=('venda', 'devolucao_venda')).order_by('pk').values(
+        referencia__in=referencias, origem__in=('venda', 'consumo_proprio', 'devolucao_venda')).order_by('pk').values(
             'pk', 'referencia', 'antes', 'depois', 'origem')[:LIMITE + 1])
     truncado = any(len(lista) > LIMITE for lista in (itens, eventos, removidos, observados))
     por_venda, por_evento, por_movimento = defaultdict(list), defaultdict(list), defaultdict(list)
@@ -116,7 +116,7 @@ def apresentar_unidades(pagina, produto_id):
             aceitar_nota_impressa=True)
         seguro = not (conflito or item['venda__cancelada'] or
             item['venda__estoque_devolvido_cancelamento'] or len(movimentos) > 1)
-        correspondente = bool(len(movimentos) == 1 and movimentos[0]['origem'] == 'venda'
+        correspondente = bool(len(movimentos) == 1 and movimentos[0]['origem'] in ('venda', 'consumo_proprio')
             and movimentos[0]['antes'] == item['estoque_antes']
             and movimentos[0]['depois'] == item['estoque_depois'])
         if r['fonte'] == 'digital' and not correspondente:
@@ -140,3 +140,9 @@ def apresentar_unidades(pagina, produto_id):
             motivo=motivo or 'O snapshot registra a baixa na unidade-base, mas não grava o fator histórico.',
             variacao=bruto(r)['variacao'])
         r['unidades_evidencia'] = evidencia
+
+    # The bounded documentary projection has the final word on safe attribution.
+    for r in pagina:
+        if r.get('saldo_base_avulso') and not r.get('unidades_evidencia', {}).get('baixa'):
+            r.update(saldo=None, saldo_antes=None, saldo_pontual=True,
+                     saldo_aviso='Vínculo histórico incompleto ou ambíguo; saldo não disponível.')

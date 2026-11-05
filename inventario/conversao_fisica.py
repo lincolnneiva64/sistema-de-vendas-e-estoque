@@ -1,9 +1,9 @@
 """Conference-only physical relation. No commercial product writes."""
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from .conversao import decimal_entrada, avulsos_fisicos, cadastro_compativel
+from .conversao import decimal_entrada, avulsos_fisicos, cadastro_compativel, converter
 from .models import Inventario, ItemInventario, RodadaContagem, EventoInventario, DecisaoAjuste
 
 ACAO = 'conversao_fisica_confirmada'
@@ -41,11 +41,60 @@ def auditoria(item, principal, avulsos):
         'embalagens': str(principal), 'avulsos': str(avulsos or 0), 'total_unidades': format(total.normalize(), 'f')}
 
 
+def representacao_fisica(rodada):
+    """Exact frozen count + deterministic stock projection, never a tolerance.
+
+    Expected stock is evidence of a physical integer only when it is that
+    integer's canonical projection. Otherwise its equivalence stays approximate.
+    All returned numbers are strings so the existing signed JSON audit can freeze them.
+    """
+    cadastro = cadastro_contagem(rodada.item)
+    if not (cadastro.get('fracionado') or avulsos_fisicos(cadastro)) or cadastro.get('secundaria') != 'UN':
+        return {}
+    try:
+        fator = Decimal(str(cadastro.get('fator', '0')))
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValueError('Conversão congelada inválida. Revise a conferência.') from None
+    if not fator.is_finite() or fator <= 0 or fator != fator.to_integral_value():
+        raise ValueError('Conversão congelada inválida. Revise a conferência.')
+    if rodada.embalagens is None or rodada.avulsos is None or rodada.contado_base is None:
+        raise ValueError('Contagem física incompleta. Revise a conferência.')
+    principal, avulsos, exato, projecao = converter(cadastro, rodada.embalagens, rodada.avulsos)
+    total = principal * fator + avulsos
+    if total != total.to_integral_value() or total < 0:
+        raise ValueError('A contagem física deve representar unidades inteiras.')
+    if rodada.contado_base != projecao or (getattr(rodada, 'contado', None) is not None and rodada.contado != exato):
+        raise ValueError('Projeção decimal incompatível com a contagem original. Solicite revisão.')
+    # Preserve exact legacy counts at large factors; reject ambiguous projections.
+    if fator * Decimal('.001') > 1 and projecao * fator != total:
+        raise ValueError('Precisão do estoque insuficiente para distinguir unidades desta embalagem.')
+    dados = dict(regra='projecao_fisica_v1', base=cadastro['base'], secundaria='UN',
+        fator=str(fator), embalagens=str(principal), avulsos=str(avulsos),
+        total_unidades=str(total), contado=str(exato), projecao=str(projecao),
+        residuo_unidades=str(total-projecao*fator),
+        residuo_base_numerador=str(total-projecao*fator), residuo_base_denominador=str(fator))
+    esperado = getattr(rodada, 'esperado', None)
+    if esperado is not None:
+        bruto = esperado * fator
+        inteiro = bruto.quantize(Decimal(1), rounding=ROUND_HALF_UP)
+        canonico = esperado >= 0 and (inteiro/fator).quantize(Decimal('.001')) == esperado
+        if fator * Decimal('.001') > 1:
+            canonico = canonico and bruto == inteiro
+        diferenca = total-inteiro if canonico else None
+        dados.update(esperado_base=str(esperado), esperado_unidades_brutas=str(bruto),
+            esperado_unidades=str(inteiro), esperado_canonico=canonico,
+            diferenca_fisica=str(diferenca) if diferenca is not None else None,
+            diferenca_decimal=str(projecao-esperado),
+            referencia_residuo_unidades=str(bruto-inteiro),
+            natureza=('normalizacao_decimal' if inteiro == total and esperado != projecao
+                      else 'referencia_aproximada' if not canonico else 'diferenca_fisica'))
+    return dados
+
+
 def exigir_representavel(rodada):
     fisico = auditoria(rodada.item, rodada.embalagens, rodada.avulsos)
-    if fisico and rodada.contado_base is not None:
-        if rodada.contado_base * Decimal(fisico['unidades_por_embalagem']) != Decimal(fisico['total_unidades']):
-            raise ValueError('Contagem física exata preservada em UN. Ajuste automático indisponível: o saldo em embalagens não representa essas unidades sem arredondamento.')
+    if fisico:
+        exigir_precisao_ajuste(rodada)
 
 
 class PrecisaoInsuficiente(ValueError):
@@ -57,7 +106,9 @@ class PrecisaoInsuficiente(ValueError):
 
 
 def exigir_precisao_ajuste(rodada):
-    """Compare by multiplication: never round a physical count to authorize a write."""
+    """Validate canonical projection for discrete UN; keep continuous-unit safeguards."""
+    if representacao_fisica(rodada):
+        return
     cadastro = rodada.item.cadastro
     if not cadastro['fracionado'] and not avulsos_fisicos(cadastro):
         if rodada.avulsos in (None, Decimal(0)):

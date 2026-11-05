@@ -53,7 +53,7 @@ class SelecaoConversaoTests(TestCase):
     def test_vazio_zero_e_entradas_invalidas(self):
         cadastro = snapshot(self.produto)
         self.assertEqual(converter(cadastro, "0", "0")[3], 0)
-        for principal, avulso in [("", "0"), ("0", ""), ("1.5", "0"), ("0", "0.5"), ("NaN", "0"), ("-1", "0"), ("1.0001", "0")]:
+        for principal, avulso in [("", "0"), ("0", ""), ("1.001", "0"), ("0", "0.5"), ("NaN", "0"), ("-1", "0"), ("1.0001", "0")]:
             with self.subTest(principal=principal, avulso=avulso), self.assertRaises(ValueError):
                 converter(cadastro, principal, avulso)
 

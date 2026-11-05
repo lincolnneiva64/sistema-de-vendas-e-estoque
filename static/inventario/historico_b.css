@@ -67,3 +67,6 @@
 .visual-b .tabela-extrato .equivalencia-un,.visual-b .tabela-extrato .comparacao dd .equivalencia-un{display:block;font-size:13px;font-weight:650;color:#294b5c;line-height:1.4;margin-top:3px}
 .visual-b .composicao-un{font-size:12px;font-weight:500}
 .visual-b .saldo-contagem-antes{font-size:13px;font-weight:500;margin:5px 0;overflow-wrap:anywhere}
+
+/* Composição física usa o fluxo responsivo existente, sem largura fixa. */
+.comparacao-fisica,.representacao-fisica{white-space:normal;overflow-wrap:anywhere;min-width:0;max-width:100%}

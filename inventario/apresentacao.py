@@ -22,3 +22,28 @@ def quantidade(valor, cadastro, *, diferenca=False):
         secundarias = (valor * Decimal(cadastro["fator"])).quantize(Decimal("0.001"))
         return numero(secundarias) + " " + cadastro["secundaria"]
     return numero(valor) + " " + cadastro["base"]
+
+
+def comparacao_fisica(dados):
+    """Format only frozen evidence. Decimal residuals never become physical units."""
+    if not dados:
+        return {}
+    fator = Decimal(dados['fator'])
+
+    def composicao(total, aproximada=False):
+        pacotes, unidades = divmod(Decimal(total), fator)
+        return ('≈ ' if aproximada else '') + numero(pacotes) + ' ' + dados['base'] + ' + ' + numero(unidades) + ' UN = ' + numero(Decimal(total)) + ' UN'
+
+    esperado = dados.get('esperado_unidades')
+    diferenca = dados.get('diferenca_fisica')
+    natureza = dados.get('natureza')
+    if natureza == 'normalizacao_decimal':
+        texto = 'Equivalência aproximada — resíduo decimal; sem falta física comprovada'
+    elif diferenca is None:
+        texto = 'Diferença física não comprovada — referência aproximada'
+    else:
+        d = Decimal(diferenca)
+        texto = 'Equivalência física' if d == 0 else ('Falta ' if d < 0 else 'Sobra ') + numero(abs(d)) + ' UN'
+    return dict(esperado=composicao(esperado, not dados.get('esperado_canonico')) if esperado is not None else '',
+        encontrado=composicao(dados['total_unidades']), diferenca=texto,
+        dados=dados, normalizacao=natureza == 'normalizacao_decimal')

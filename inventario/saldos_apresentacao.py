@@ -99,11 +99,19 @@ def cadeia_registrada(aplicacao, rodada):
 def apresentar(pagina, rodada):
     """Attach display-only fields, leaving original snapshots untouched."""
     cadastro = rodada.item.cadastro
+    from .conversao_fisica import representacao_fisica
+    from .apresentacao import comparacao_fisica
+    try:
+        pagina.comparacao_fisica = comparacao_fisica(representacao_fisica(rodada)) if rodada.ok_em else {}
+    except ValueError:
+        pagina.comparacao_fisica = {}
     pagina.ok_equivalencias = dict(
         esperado=equivalencia(rodada.esperado, cadastro.get('base'), cadastro),
         contado=equivalencia(rodada.contado_base if rodada.ok_em else None, cadastro.get('base'), cadastro),
         diferenca=equivalencia(rodada.contado_base-rodada.esperado, cadastro.get('base'), cadastro)
             if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None else None)
+    eq = pagina.ok_equivalencias['diferenca']
+    pagina.diferenca_subunidade = bool(eq and eq['unidades'] == 0 and rodada.contado_base != rodada.esperado)
     aplicada = AplicacaoAjuste.objects.filter(proposta__rodada=rodada).select_related('proposta__confirmacao').first()
     cadeia = cadeia_registrada(aplicada, rodada) if aplicada else {}
     for linha in pagina:

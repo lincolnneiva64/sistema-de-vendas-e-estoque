@@ -90,7 +90,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     regularizacoes_q = None
     if timeline:
         tecnicos = identificar_vendas(movimentos, vendas)
-        movimentos = tecnicos.exclude(origem='venda', outro_movimento=False,
+        movimentos = tecnicos.exclude(origem__in=('venda', 'consumo_proprio'), outro_movimento=False,
             venda_com_edicao=False, item_venda_documentado__isnull=False)
         # Only a persisted application with the actual manual-movement FK proves
         # an applied regularization. Neither a title nor an observation is proof.

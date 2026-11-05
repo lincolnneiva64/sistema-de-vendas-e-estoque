@@ -22,7 +22,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
 
 from estoque.models import Produto, Fornecedor, Funcionario
-from .conversao import avulsos_fisicos, converter
+from .conversao import fracao_fisica, avulsos_fisicos, converter
 from .conversao_fisica import cadastro_contagem, carregar as carregar_relacoes, BASES
 from . import services, sessoes, ajustes
 from . import acesso_ajustes
@@ -160,17 +160,23 @@ def linhas_revisao(inventario):
                     "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
                     "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
                 "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
-    from .conversao_fisica import auditoria as auditoria_fisica
+    from .conversao_fisica import representacao_fisica
+    from .apresentacao import comparacao_fisica
     for linha in linhas:
         r = linha['rodada']
-        fisico = auditoria_fisica(linha['item'], r.embalagens, r.avulsos) if r.ok_em else {}
-        if fisico:
-            linha['contado_texto'] = format(Decimal(fisico['embalagens']).normalize(), 'f') + ' ' + fisico['base'] + ' + ' + format(Decimal(fisico['avulsos']).normalize(), 'f') + ' UN (' + fisico['total_unidades'] + ' UN)'
-            linha['contado_principal'] = linha['contado_texto'].rsplit(' (', 1)[0]
-            linha['contado_total_fisico'] = fisico['total_unidades'] + ' UN'
-            if r.esperado is not None:
-                diferenca_un = Decimal(fisico['total_unidades']) - r.esperado * Decimal(fisico['unidades_por_embalagem'])
-                linha['diferenca_texto'] = format(diferenca_un.normalize(), 'f').replace('.', ',') + ' UN'
+        if not r.ok_em:
+            continue
+        try:
+            comparacao = comparacao_fisica(representacao_fisica(r))
+        except ValueError:
+            comparacao = {}
+        if comparacao:
+            linha['comparacao_fisica'] = comparacao
+            linha['contado_texto'] = comparacao['encontrado'].replace(' = ', ' (') + ')'
+            linha['diferenca_texto'] = comparacao['diferenca']
+            if comparacao['dados'].get('diferenca_fisica') is None and linha['situacao'] != 'Revisão necessária':
+                linha['situacao'] = 'Resíduo decimal — revisão administrativa' if comparacao['normalizacao'] else 'Referência física aproximada — revisão administrativa'
+                linha['destaque'] = 'neutro'
     return sorted(linhas, key=lambda linha: chave_produto(linha["item"]))
 
 
@@ -301,6 +307,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
             if e.acao == contagem_admin.ACAO and rodada.ok_em and e.dados.get('versao_saida') == rodada.versao), None)
         linha['ok_admin_nome'] = registro_admin.dados.get('usuario_nome') if registro_admin else ''
         linha['cadastro_contagem'] = cadastro_contagem(linha['item'])
+        linha['passo_embalagens_admin'] = '0.001' if linha['cadastro_contagem']['continua'] or fracao_fisica(linha['cadastro_contagem']) else '1'
         linha['solicitar_relacao'] = not linha['item'].cadastro['fracionado'] and linha['item'].cadastro['base'] in BASES and not avulsos_fisicos(linha['cadastro_contagem'])
         linha['edicao_admin'] = pode_editar_contagem and not linha['decisao'] and not rodada.encerrada_em
         if linha['edicao_admin']:
@@ -444,7 +451,7 @@ def payload_cego(rodada):
         "secundaria": cadastro["secundaria"], "fracionado": cadastro["fracionado"],
         "avulsos_fisicos": avulsos_fisicos(cadastro), "fator": cadastro["fator"],
         "solicitar_relacao": not cadastro["fracionado"] and cadastro["base"] in BASES and not avulsos_fisicos(cadastro),
-        "passo": "0.001" if cadastro["continua"] else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
+        "passo": "0.001" if cadastro["continua"] or fracao_fisica(cadastro) else "1", "passo_avulsos": "0.001" if cadastro["secundaria_continua"] else "1",
         "embalagens": entrada(rodada.embalagens, cadastro["continua"]),
         "avulsos": ("0" if avulsos_fisicos(cadastro) and rodada.avulsos is None else entrada(rodada.avulsos, cadastro["secundaria_continua"])), "versao": rodada.versao,
         "guardado": rodada.versao > 0,
@@ -546,7 +553,7 @@ def previa_conversao(request, rodada_id):
         pk=rodada_id, atribuicao__acesso=acesso, encerrada_em__isnull=True,
         item__inventario__ciclo=acesso.ciclo)
     try:
-        total = converter(rodada.item.cadastro, request.GET.get("embalagens"), request.GET.get("avulsos"))[3]
+        total = converter(cadastro_contagem(rodada.item), request.GET.get("embalagens"), request.GET.get("avulsos"))[3]
         return JsonResponse({"total": format(total, ".3f").replace(".", ",")})
     except ValueError as exc:
         return JsonResponse({"erro": str(exc)}, status=400)

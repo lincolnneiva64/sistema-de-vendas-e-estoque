@@ -74,34 +74,34 @@ class PrecisaoModalTests(Fixture, TestCase):
                 self.precisao.append((p.pk, r.pk))
         self.finalizar()
 
-    def test_cinco_aptos_tres_pendentes_confirmacao_e_reenvio_sem_perdas(self):
+    def test_sete_aptos_um_continuo_pendente_confirmacao_e_reenvio_sem_perdas(self):
         self.preparar_oito()
         contagens = list(RodadaContagem.objects.order_by('pk').values())
         oks = list(ConfirmacaoContagem.objects.order_by('pk').values())
         saldos = dict(Produto.objects.values_list('pk', 'quantidade'))
         payload, dados = self.prever()
-        self.assertEqual(payload['resumo']['aptos'], 5)
-        self.assertEqual(len(payload['resumo']['bloqueados']), 3)
-        self.assertIn('5 produtos que serão atualizados', payload['html'])
-        self.assertIn('3 produtos pendentes por precisão', payload['html'])
+        self.assertEqual(payload['resumo']['aptos'], 7)
+        self.assertEqual(len(payload['resumo']['bloqueados']), 1)
+        self.assertIn('7 produtos que serão atualizados', payload['html'])
+        self.assertIn('1 produto pendente por precisão', payload['html'])
         for total in ['30 UN', '17 UN', '148 KG']:
             self.assertIn(total, payload['html'])
         entradas = ajustes.ler_token(dados['previa'])['rodadas']
-        self.assertEqual(len(entradas), 5)
-        self.assertTrue({r for _, r in self.precisao}.isdisjoint(e['rodada'] for e in entradas))
+        self.assertEqual(len(entradas), 7)
+        self.assertEqual(len({r for _, r in self.precisao}.intersection(e['rodada'] for e in entradas)), 2)
         self.assertEqual(saldos, dict(Produto.objects.values_list('pk', 'quantidade')))
         self.assertFalse(AplicacaoAjuste.objects.exists())
         self.assertNotContains(self.client.post(self.modal, {**dados, 'confirmacao': ''}), '"ok": true', status_code=400)
         resposta = self.client.post(self.modal, dados)
         self.assertEqual(resposta.status_code, 200, resposta.content)
-        self.assertEqual(resposta.json()['quantidade'], 5)
-        self.assertEqual(resposta.json()['resumo']['pendentes'], 3)
-        self.assertEqual(AplicacaoAjuste.objects.count(), 5)
+        self.assertEqual(resposta.json()['quantidade'], 7)
+        self.assertEqual(resposta.json()['resumo']['pendentes'], 1)
+        self.assertEqual(AplicacaoAjuste.objects.count(), 7)
         repetida = self.client.post(self.modal, dados)
         self.assertEqual(repetida.status_code, 200, repetida.content)
         self.assertEqual(repetida.json()['aplicacoes'], resposta.json()['aplicacoes'])
-        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 5)
-        for produto_id, _ in self.precisao:
+        self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 7)
+        for produto_id, _ in self.precisao[-1:]:
             self.assertEqual(Produto.objects.get(pk=produto_id).quantidade, saldos[produto_id])
         self.assertEqual(list(RodadaContagem.objects.order_by('pk').values()), contagens)
         self.assertEqual(list(ConfirmacaoContagem.objects.order_by('pk').values()), oks)
@@ -135,12 +135,12 @@ class PrecisaoModalTests(Fixture, TestCase):
         from inventario.views import linhas_revisao
         self.preparar_oito(saldo_probak='1.071')
         resultado = ajustes.projetar_resultado(linhas_revisao(self.inv))
-        self.assertEqual(sum(l.get('bloqueio_codigo') == 'precisao' for l in resultado['linhas']), 2)
+        self.assertEqual(sum(l.get('bloqueio_codigo') == 'precisao' for l in resultado['linhas']), 1)
         sem_diferenca = next(l for l in resultado['linhas'] if l['rodada'].pk == self.precisao[0][1])
         self.assertEqual(sem_diferenca['estado'], 'Sem diferença')
         payload, _ = self.prever()
-        self.assertEqual(payload['resumo']['aptos'], 5)
-        self.assertEqual(len(payload['resumo']['bloqueados']), 2)
+        self.assertEqual(payload['resumo']['aptos'], 6)
+        self.assertEqual(len(payload['resumo']['bloqueados']), 1)
 
 
 @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)

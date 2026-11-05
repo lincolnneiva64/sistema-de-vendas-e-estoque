@@ -29,6 +29,21 @@ class SnapshotBaseTests(SimpleTestCase):
         self.assertEqual(base, dict(quantidade=D('.250'), unidade='CX'))
         self.assertNotIn('fator', base)
 
+    def test_consulta_nao_afrouxa_conciliacao_e_preserva_arredondamento(self):
+        from .evidencia_saldos import snapshot
+        from .saldos_historicos import snapshot_consulta
+        r = dict(antes=D('8'), movimentado=D('.333'), depois=D('7.667'),
+                 quantidade=D('4'), unidade='UN', base='PCT')
+        self.assertIsNone(snapshot(r)[0])
+        self.assertEqual(snapshot_consulta(r)[0]['depois'], D('7.667'))
+        self.assertIsNone(snapshot_consulta(dict(r, cancelada=True))[0])
+        self.assertIsNone(snapshot_consulta(dict(r, depois=D('7.666')))[0])
+        self.assertIsNone(snapshot_consulta(r, 'Edição ambígua')[0])
+        saldo = D('8')-D('.333')-D('.333')-D('.250')
+        contado = (D('7')+D(1)/D(12)).quantize(D('.001'))
+        self.assertEqual(saldo, D('7.084'))
+        self.assertEqual(contado-saldo, D('-.001'))
+
     def test_nao_finitos_incompletos_inconsistentes_ou_negativos(self):
         bom = dict(estoque_antes=D('1'), estoque_movimentado=D('.250'),
             estoque_depois=D('.750'), estoque_unidade_snapshot='CX')
@@ -69,8 +84,8 @@ class UnidadesTests(UnidadesFixture, TestCase):
         self.assertEqual(evidencia['tipo'], 'snapshot_base')
         self.assertEqual(evidencia['baixa']['quantidade'], self.baixa)
         self.assertFalse(evidencia['conversao_comprovada'])
-        self.assertIsNone(linha['saldo'])
-        self.assertContains(r, 'Baixa registrada:')
+        self.assertEqual(linha['saldo'], D('10')-self.baixa)
+        self.assertContains(r, 'Baixa registrada no estoque: −')
         self.assertContains(r, 'Conversão histórica não comprovada')
         self.assertEqual(r.context['esperado'], 15)
         self.assertEqual(r.context['fisica'], 10)
@@ -80,11 +95,63 @@ class UnidadesTests(UnidadesFixture, TestCase):
         self.preparar_unidades('UN', 'PCT', '6', '.5')
         self.verificar_snapshot()
 
+    def test_consumo_quatro_un_sem_duplicar_observador(self):
+        self.preparar_unidades('UN', 'PCT', '4', '.333')
+        venda = self.posterior.venda
+        venda.tipo_pagamento = 'consumo_proprio'
+        venda.save(update_fields=['tipo_pagamento'])
+        MovimentoObservado.objects.filter(pk=self.observador.pk).update(origem='consumo_proprio')
+        r = self.verificar_snapshot()
+        linha = self.linha(r)
+        self.assertEqual(linha['saldo'], D('9.667'))
+        self.assertContains(r, 'Saída −4 UN')
+        self.assertContains(r, 'Baixa registrada no estoque: −0,333 PCT')
+        self.assertEqual(len(linha['registros_tecnicos']), 1)
+        self.assertFalse(any(l['fonte'] == 'digital' and l['referencia'] == self.observador.referencia
+                             for l in r.context['extrato']))
+        self.assertTrue(linha['saldo_pontual'])
+
+    def test_venda_tres_un_saldo_base_sem_certificar_conversao(self):
+        self.preparar_unidades('UN', 'PCT', '3', '.250')
+        r = self.verificar_snapshot()
+        self.assertContains(r, 'Saída −3 UN')
+        self.assertEqual(self.linha(r)['saldo'], D('9.750'))
+        self.assertTrue(self.linha(r)['saldo_pontual'])
+
+    def test_consumo_ambiguo_nao_oculta_eventos_nem_certifica_saldo(self):
+        self.preparar_unidades('UN', 'PCT', '4', '.333')
+        venda = self.posterior.venda
+        venda.tipo_pagamento = 'consumo_proprio'
+        venda.save(update_fields=['tipo_pagamento'])
+        MovimentoObservado.objects.filter(pk=self.observador.pk).update(origem='consumo_proprio')
+        MovimentoObservado.objects.create(produto=self.produto, sequencia=2,
+            antes=D('9.667'), depois=D('9.334'), origem='consumo_proprio',
+            referencia=self.observador.referencia, registrado_em=self.observador.registrado_em)
+        r = self.resposta_unidades()
+        self.assertIsNone(self.linha(r)['saldo'])
+        self.assertEqual(len([l for l in r.context['extrato'] if l['fonte']=='digital']), 2)
+        self.assertNotContains(r, 'Baixa registrada no estoque:')
+
+    def test_diferenca_decimal_preservada_com_explicacao(self):
+        self.preparar_unidades('UN', 'PCT', '3', '.250')
+        self.item.cadastro = dict(self.item.cadastro, base='PCT', secundaria='UN',
+                                 fator='12', fracionado=True)
+        self.item.save(update_fields=['cadastro'])
+        self.rodada.esperado = D('7.084')
+        self.rodada.contado_base = D('7.083')
+        self.rodada.save(update_fields=['esperado', 'contado_base'])
+        r = self.resposta_unidades()
+        self.assertEqual(r.context['diferenca'], D('-.001'))
+        self.assertContains(r, 'Diferença decimal inferior à equivalência de uma unidade inteira')
+        self.rodada.refresh_from_db()
+        self.assertEqual(self.rodada.esperado, D('7.084'))
+        self.assertEqual(self.rodada.contado_base, D('7.083'))
+
     def test_cb_cx(self):
         self.preparar_unidades()
         r = self.verificar_snapshot()
-        self.assertContains(r, 'Nota: 3 CB')
-        self.assertContains(r, 'Baixa registrada: 0,250 CX')
+        self.assertContains(r, 'Saída −3 CB')
+        self.assertContains(r, 'Baixa registrada no estoque: −0,250 CX')
 
     def test_kg_sc(self):
         self.preparar_unidades('KG', 'SC', '5', '.1')
@@ -143,15 +210,15 @@ class UnidadesTests(UnidadesFixture, TestCase):
         linha = self.linha(r)
         self.assertEqual(linha['unidades_evidencia']['baixa']['quantidade'], D('1.175'))
         self.assertIsNone(linha['saldo'])
-        self.assertContains(r, 'Nota: 1,180 KG')
-        self.assertContains(r, 'Baixa registrada: 1,175 KG')
+        self.assertContains(r, 'Saída −1,180 KG')
+        self.assertContains(r, 'Baixa registrada no estoque: −1,175 KG')
         self.posterior.refresh_from_db()
         self.assertEqual(self.posterior.quantidade, D('1.18'))
 
     def test_arredondamento_preserva_baixa_gravada_sem_reconverter(self):
         self.preparar_unidades('UN', 'PCT', '1', '.333')
         r = self.verificar_snapshot()
-        self.assertContains(r, 'Baixa registrada: 0,333 PCT')
+        self.assertContains(r, 'Baixa registrada no estoque: −0,333 PCT')
         self.assertNotContains(r, '≈')
 
     def test_snapshot_incompleto_nao_certifica(self):
@@ -159,7 +226,7 @@ class UnidadesTests(UnidadesFixture, TestCase):
         ItemVenda.objects.filter(pk=self.posterior.pk).update(estoque_movimentado=None)
         r = self.resposta_unidades()
         self.assertIsNone(self.linha(r)['saldo'])
-        self.assertNotContains(r, 'Baixa registrada:')
+        self.assertNotContains(r, 'Baixa registrada no estoque: −')
 
     def test_movimento_bruto_sem_referencia_mostra_variacao_sem_unidade(self):
         self.preparar_unidades()
@@ -174,7 +241,7 @@ class UnidadesTests(UnidadesFixture, TestCase):
     def test_evento_desconhecido_impede_atribuicao_do_snapshot(self):
         self.preparar_unidades()
         EventoVenda.objects.create(venda=self.posterior.venda, tipo_evento='desconhecido')
-        self.assertNotContains(self.resposta_unidades(), 'Baixa registrada:')
+        self.assertNotContains(self.resposta_unidades(), 'Baixa registrada no estoque: −')
 
     def test_impressao_preserva_a_classificacao_sem_mudar_a_fase_a(self):
         self.preparar_unidades()
@@ -203,7 +270,7 @@ class UnidadesTests(UnidadesFixture, TestCase):
         with patch('inventario.extrato_unidades.LIMITE', 1):
             r = self.resposta_unidades()
         self.assertIsNone(self.linha(r)['saldo'])
-        self.assertNotContains(r, 'Baixa registrada:')
+        self.assertNotContains(r, 'Baixa registrada no estoque: −')
         self.assertContains(r, 'Evidência incompleta, limitada ou ambígua')
 
     def test_venda_editada_e_devolucao_nao_herdam_snapshot_atual(self):
@@ -216,7 +283,7 @@ class UnidadesTests(UnidadesFixture, TestCase):
         digitais = [l for l in r.context['extrato'] if l['fonte']=='digital']
         self.assertEqual(len(digitais), 2)
         self.assertTrue(all(l['unidades_evidencia']['tipo']=='bruto' for l in digitais))
-        self.assertNotContains(r, 'Baixa registrada:')
+        self.assertNotContains(r, 'Baixa registrada no estoque: −')
         self.assertContains(r, 'snapshot atual não aplicado aos movimentos anteriores')
 
     movimento = edicoes.EdicoesTests.movimento
@@ -240,8 +307,8 @@ class UnidadesBrowserTests(UnidadesFixture, StaticLiveServerTestCase):
                     tab.wait("document.readyState === 'complete' && !!document.querySelector('[data-registro^=registro-venda-]')")
                     seletor = f'[data-registro="registro-venda-{self.posterior.pk}"]'
                     texto = tab.evaluate(f'document.querySelector({seletor!r}).innerText')
-                    self.assertIn('Nota: 3 CB', texto)
-                    self.assertIn('Baixa registrada: 0,250 CX', texto)
+                    self.assertIn('Saída −3 CB', texto)
+                    self.assertIn('Baixa registrada no estoque: −0,250 CX', texto)
                     self.assertIn('Conversão histórica não comprovada', texto)
                     self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
                     tab.evaluate(f'document.querySelector({(seletor+" details")!r}).open=true; true')
@@ -268,7 +335,7 @@ class UnidadesBrowserTests(UnidadesFixture, StaticLiveServerTestCase):
                     texto = tab.evaluate(f'document.querySelector({seletor!r}).innerText')
                     self.assertIn('Quantidade atual da nota: 2 CB', texto)
                     self.assertIn('Conversão histórica não comprovada', texto)
-                    self.assertNotIn('Baixa registrada:', texto)
+                    self.assertNotIn('Baixa registrada no estoque: −', texto)
                     self.assertEqual(tab.evaluate("document.querySelectorAll('[data-registro^=registro-digital-]').length"), 2)
                     self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
                     browser.capturar(tab, f'extrato-unidades-editadas-{largura}.png')

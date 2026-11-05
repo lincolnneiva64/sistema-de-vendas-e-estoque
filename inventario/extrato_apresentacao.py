@@ -1,5 +1,5 @@
 """Read-only associations for option B. No reconciliation or stock validation."""
-from django.db.models import CharField, Exists, OuterRef, Subquery, Value, Q
+from django.db.models import Case, When, CharField, Exists, OuterRef, Subquery, Value, Q
 from django.db.models.functions import Cast, Concat
 
 from estoque.models import EventoVenda, ItemVenda
@@ -17,9 +17,12 @@ def identificar_vendas(movimentos, vendas):
             ref_documento=OuterRef('referencia'), estoque_antes=OuterRef('antes'),
             estoque_depois=OuterRef('depois'), estoque_movimentado__isnull=False,
             estoque_unidade_snapshot__gt='', venda__cancelada=False,
-            venda__estoque_devolvido_cancelamento=False).exclude(venda__tipo_pagamento='consumo_proprio')
+            venda__estoque_devolvido_cancelamento=False).annotate(
+                origem_documento=Case(When(venda__tipo_pagamento='consumo_proprio',
+                    then=Value('consumo_proprio')), default=Value('venda'), output_field=CharField())
+            ).filter(origem_documento=OuterRef('origem'))
     outros_movimentos = MovimentoObservado.objects.filter(produto_id=OuterRef('produto_id'),
-        origem='venda', referencia=OuterRef('referencia')).exclude(pk=OuterRef('pk'))
+        origem__in=('venda', 'consumo_proprio', 'devolucao_venda'), referencia=OuterRef('referencia')).exclude(pk=OuterRef('pk'))
     # Edits prevent folding a mutable document into an original stock movement.
     # Attribution/quantity checks are performed in bulk by extrato_edicoes.
     edicoes = EventoVenda.objects.filter(venda__itens__produto_id=OuterRef('produto_id')).annotate(
@@ -41,7 +44,7 @@ def tecnicos_das_vendas(movimentos, pagina):
     if not ids:
         return {}
     por_item = {}
-    for m in movimentos.filter(origem='venda', outro_movimento=False, venda_com_edicao=False,
+    for m in movimentos.filter(origem__in=('venda', 'consumo_proprio'), outro_movimento=False, venda_com_edicao=False,
             item_venda_documentado__in=ids).order_by('registrado_em', 'sequencia', 'pk'):
         por_item.setdefault(m.item_venda_documentado, []).append(m)
     return por_item

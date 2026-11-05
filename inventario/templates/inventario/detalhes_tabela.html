@@ -1,0 +1,13 @@
+{% with a=linha.atualizacao %}<div id="detalhes-conferencia-{{ linha.item.pk }}" class="detalhes-conferencia" popover role="dialog" aria-labelledby="titulo-detalhes-{{ linha.item.pk }}" tabindex="-1">
+<header><h3 id="titulo-detalhes-{{ linha.item.pk }}">{{ linha.item.cadastro.nome }}</h3><button type="button" class="secondary" popovertarget="detalhes-conferencia-{{ linha.item.pk }}" popovertargetaction="hide" aria-label="Fechar detalhes de {{ linha.item.cadastro.nome }}">Fechar</button></header>
+{% if linha.comparacao_fisica %}{% include 'inventario/representacao_detalhes.html' with comparacao=linha.comparacao_fisica expandido=True %}{% endif %}
+<p>Diferença registrada: {{ linha.diferenca|floatformat:'-3' }} {{ linha.item.cadastro.base }}.</p>
+{% if linha.percentual_quantidade is not None %}<p>Percentual: {{ linha.percentual_quantidade|floatformat:2 }}% · base {{ linha.base_percentual }}.</p>{% else %}<p>{{ linha.percentual_motivo }}</p>{% endif %}
+{% if a.estado == 'Aplicado' %}{% if a.saldo_aplicado is not None %}<p>Contagem bloqueada: ajuste aplicado.</p><p>Saldo registrado após o ajuste: {{ a.saldo_aplicado|floatformat:'-3' }} {{ a.unidade_aplicada }}.</p>{% else %}<p>Saldo histórico indisponível; consulte a auditoria.</p>{% endif %}
+{% elif a.estado == 'Sem ajuste' or a.estado == 'Sem diferença' %}<p>Não há diferença registrada que exija ajuste.</p>
+{% else %}<p>A aplicação não está comprovada nesta conferência. Isso não comprova uma tentativa recusada.</p>{% endif %}
+{% if a.bloqueio %}<p>{{ a.bloqueio }}</p>{% endif %}
+{% if a.estado == 'Rejeitado' %}<p>Uma nova proposta exige nova confirmação física.</p>{% endif %}
+{% if a.preliminar %}<p>A conferência dos documentos e saldos será feita ao revisar a atualização.</p>{% endif %}
+<a href="#detalhe-{{ linha.item.pk }}" data-detalhe="detalhe-{{ linha.item.pk }}">Consultar histórico e auditoria</a>
+</div>{% endwith %}

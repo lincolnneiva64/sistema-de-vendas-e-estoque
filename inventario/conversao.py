@@ -30,6 +30,18 @@ def avulsos_fisicos(cadastro):
         return False
 
 
+def fracao_fisica(cadastro):
+    """Conference packaging only; no commercial permission or current-product lookup."""
+    try:
+        fator = Decimal(str(cadastro.get('fator', '0')))
+        return (cadastro.get('base') in {'PCT', 'CX', 'FD', 'DZ'}
+                and cadastro.get('secundaria') == 'UN'
+                and (cadastro.get('fracionado') or avulsos_fisicos(cadastro))
+                and fator.is_finite() and fator > 0 and fator == fator.to_integral_value())
+    except (InvalidOperation, ValueError, TypeError):
+        return False
+
+
 def cadastro_compativel(produto, cadastro):
     atual = snapshot(produto)
     # Old frozen snapshots did not retain UN for package-only products.
@@ -66,7 +78,12 @@ def converter(cadastro, embalagens, avulsos):
     if principal is None:
         raise ValueError("Preencha a quantidade principal, inclusive quando for zero.")
     if not cadastro["continua"] and principal != principal.to_integral_value():
-        raise ValueError("Informe embalagens ou unidades completas em números inteiros.")
+        if not fracao_fisica(cadastro):
+            raise ValueError("Informe embalagens ou unidades completas em números inteiros.")
+        unidades_principal = principal * Decimal(cadastro['fator'])
+        if unidades_principal != unidades_principal.to_integral_value():
+            raise ValueError('A fração de pacote deve corresponder a unidades físicas inteiras. '
+                             'Pacotes e unidades avulsas são somados; não repita a mesma quantidade nos dois campos.')
     fisicos = avulsos_fisicos(cadastro)
     if fisicos and avulso is None:
         avulso = Decimal(0)

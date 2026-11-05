@@ -61,17 +61,18 @@ class RelacaoTests(Fixture,TestCase):
         outra=services.criar_inventario(self.usuario,'Outra','manual',[self.produto.pk])
         self.assertFalse(conversao_fisica.cadastro_contagem(outra.itens.get()).get('avulsos_fisicos'))
 
-    def test_17_un_exatas_persistidas_ajuste_arredondado_bloqueado(self):
+    def test_17_un_exatas_persistidas_projecao_validada_sem_alterar_estoque(self):
         antes=Produto.objects.values().get(pk=self.produto.pk)
         self.confirmar()
         r=services.salvar_contagem(self.acesso.pk,self.rodada.pk,0,'1','5',True)
         c=r.confirmacoes.get();self.assertEqual((c.embalagens,c.avulsos),(1,5))
         e=self.inv.eventos.get(acao='produto_ok')
         self.assertEqual(Decimal(e.dados['contagem_fisica']['total_unidades']),17)
-        with self.assertRaisesMessage(ValueError,'Ajuste automático indisponível'):conversao_fisica.exigir_representavel(r)
+        conversao_fisica.exigir_representavel(r)
+        self.assertEqual(Decimal(conversao_fisica.representacao_fisica(r)['total_unidades']), 17)
         resposta=self.client.get(reverse('inventario:detalhe',args=[self.inv.pk]))
         self.assertEqual(resposta.status_code,200);self.assertEqual(resposta.context['linhas'][0]['contado_texto'],'1 PCT + 5 UN (17 UN)')
-        self.assertContains(resposta,'Ajuste automático indisponível')
+        self.assertNotContains(resposta,'Ajuste automático indisponível')
         self.assertEqual(antes,Produto.objects.values().get(pk=self.produto.pk))
 
     def test_equivalencia_exata_e_recontagem_reutilizam_relacao(self):

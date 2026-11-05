@@ -93,9 +93,10 @@ class SaldosHistoricosTests(HistoricoFixture, TestCase):
     def test_conversao_atual_nao_completa_conversao_historica(self):
         ItemVenda.objects.filter(pk=self.posterior.pk).update(unidade='UN', quantidade=84)
         vendas, compras, _ = self.linhas()
-        self.assertIsNone(vendas[self.posterior.pk]['saldo'])
+        self.assertEqual(vendas[self.posterior.pk]['saldo'], 51)
+        self.assertTrue(vendas[self.posterior.pk]['saldo_pontual'])
         self.assertIsNone(compras[0]['saldo'])
-        self.assertIn('conversão histórica', vendas[self.posterior.pk]['saldo_aviso'])
+        self.assertIn('conversão histórica', vendas[self.posterior.pk]['saldo_aviso'].lower())
 
     def test_mudanca_de_unidade_quebra_continuidade_sem_converter_saldo(self):
         ItemVenda.objects.filter(pk=self.ultima.pk).update(unidade='UN', estoque_unidade_snapshot='UN')

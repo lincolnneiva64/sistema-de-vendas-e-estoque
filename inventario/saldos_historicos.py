@@ -12,6 +12,22 @@ from .evidencia_saldos import conflito_eventos, ponte, snapshot
 LIMITE_EVIDENCIAS = 500
 
 
+def snapshot_consulta(registro, conflito=''):
+    """Accept a recorded base balance without certifying documentary conversion.
+
+    The reconciliation validator stays unchanged. All its other safeguards apply.
+    """
+    validado, motivo = snapshot(registro, conflito)
+    if validado or conflito or registro.get('unidade', '').strip().upper() == registro.get('base', '').strip().upper():
+        return validado, motivo
+    base = registro.get('base')
+    candidato = dict(registro, unidade=base, quantidade=registro.get('movimentado'))
+    validado, erro = snapshot(candidato, conflito)
+    if validado:
+        validado['conversao_nao_comprovada'] = True
+    return validado, erro
+
+
 def analisar(produto_id, pagina, referencia):
     linhas = list(pagina)
     for linha in linhas:
@@ -91,10 +107,26 @@ def analisar(produto_id, pagina, referencia):
         if (excedeu or quantidade_alvo[r['documento']] != 1 or r['documento'] in removidas_alvo
                 or r['documento'] in ajustes or r['instante'] >= referencia or r['instante'] in ambiguos):
             conflito = 'Evidência incompleta, ajuste ou referência temporal incompatível; sequência interrompida.'
-        validado, motivo = snapshot(r, conflito)
+        validado, motivo = snapshot_consulta(r, conflito)
         if validado:
             validados[pk] = dict(validado, instante=r['instante'], documento=r['documento'])
         motivos[pk] = motivo
+
+    # A mutable/current snapshot cannot certify a different or repeated observer.
+    convertidos = {pk: r for pk, r in registros.items()
+                   if pk in validados and validados[pk].get('conversao_nao_comprovada')}
+    observados = defaultdict(list)
+    refs = {f"Venda #{r['documento']}" for r in convertidos.values()}
+    if refs:
+        for m in limitado(MovimentoObservado.objects.filter(produto_id=produto_id,
+                referencia__in=refs).order_by('pk').values('referencia', 'antes', 'depois', 'origem')):
+            observados[m['referencia']].append(m)
+    for pk, r in convertidos.items():
+        ms = observados[f"Venda #{r['documento']}"]
+        if excedeu or (ms and (len(ms) != 1 or ms[0]['origem'] not in ('venda', 'consumo_proprio')
+                or ms[0]['antes'] != r['antes'] or ms[0]['depois'] != r['depois'])):
+            validados.pop(pk)
+            motivos[pk] = 'Snapshot sem vínculo histórico inequívoco; saldo não disponível.'
 
     compras = limitado(ItemCompra.objects.filter(produto_id=produto_id,
         compra__estoque_entrada_realizada=True,
@@ -128,7 +160,7 @@ def analisar(produto_id, pagina, referencia):
             **{campo + '__gte': minimo, campo + '__lte': maximo}).order_by(campo).values_list(campo, flat=True)))
 
     def intervalo(anterior, posterior):
-        if not anterior or not posterior:
+        if not anterior or not posterior or anterior.get('conversao_nao_comprovada') or posterior.get('conversao_nao_comprovada'):
             return [], True
         a, b = anterior['instante'], posterior['instante']
         trecho = [c for c in compras if a < c['instante'] < b]
@@ -158,15 +190,17 @@ def analisar(produto_id, pagina, referencia):
                 continue
             anterior = validados.get(anteriores.get(linha['pk']))
             trecho, inseguro = intervalo(anterior, e)
-            continua = bool(anterior and not inseguro and not trecho
+            continua = bool(anterior and not e.get('conversao_nao_comprovada')
+                and not anterior.get('conversao_nao_comprovada') and not inseguro and not trecho
                 and anterior['base'] == e['base'] and anterior['depois'] == e['antes'])
-            corroborada = ponte(anterior, e, trecho, inseguro)
+            corroborada = ponte(anterior, e, trecho, inseguro) if not e.get('conversao_nao_comprovada') else None
             linha.update(saldo=e['depois'], saldo_antes=e['antes'], saldo_unidade=e['base'],
                 saldo_tipo='Snapshot registrado',
+                saldo_base_avulso=bool(e.get('conversao_nao_comprovada')),
                 saldo_continuidade=('Compatível com anterior' if continua else 'Trecho corroborado' if corroborada
                                     else 'Referência pontual · sequência interrompida'),
                 saldo_pontual=not (continua or corroborada),
                 saldo_evidencia=f"Item de venda #{linha['pk']}: saldo antes, movimento e saldo depois gravados em {e['base']}.",
                 saldo_aviso=('Compatível com o snapshot anterior; não certifica movimentos não registrados.' if continua
                     else 'Trecho corroborado por compra e snapshots independentes.' if corroborada
-                    else 'Referência pontual; continuidade anterior não comprovada. Nenhum saldo foi propagado através da lacuna.'))
+                    else 'Referência pontual; continuidade anterior não comprovada. Nenhum saldo foi propagado através da lacuna.' + (' Conversão histórica não comprovada.' if e.get('conversao_nao_comprovada') else '')))

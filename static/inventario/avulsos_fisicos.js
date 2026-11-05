@@ -5,12 +5,19 @@ document.querySelectorAll('form[data-avulsos-fisicos]').forEach(form => {
     const aviso = document.createElement('small');aviso.setAttribute('role','status');output.after(aviso);
     const fator = /^(\d+)(?:\.0+)?$/.exec(form.dataset.fator || '');
     const atualizar = () => {
-        const valido = fator && /^\d+$/.test(principal.value) && /^\d+$/.test(avulsos.value)
-            && principal.validity.valid && avulsos.validity.valid;
-        aviso.textContent = valido && ((BigInt(principal.value)*BigInt(fator[1])+BigInt(avulsos.value))*1000n)%BigInt(fator[1]) !== 0n
-            ? 'Contagem exata preservada em UN. Ajuste automático indisponível: a equivalência em embalagens exige arredondamento.' : '';
+        // Parse decimal packages exactly; never truncate a fraction or use float tolerance.
+        const partes = /^(\d*)(?:\.(\d{1,3}))?$/.exec(principal.value);
+        const milesimos = partes ? BigInt(partes[1] || '0') * 1000n + BigInt((partes[2] || '').padEnd(3, '0')) : 0n;
+        const numerador = fator ? milesimos * BigInt(fator[1]) : 0n;
+        const partesAvulsos = /^(\d+)(?:\.0+)?$/.exec(avulsos.value);
+        const unidadesAvulsas = partesAvulsos ? BigInt(partesAvulsos[1]) : 0n;
+        const valido = fator && partes && principal.value !== '' && partesAvulsos
+            && numerador % 1000n === 0n && principal.validity.valid && avulsos.validity.valid;
+        const unidadesPrincipal = numerador / 1000n;
+        aviso.textContent = valido && (((unidadesPrincipal+unidadesAvulsas)*1000n)%BigInt(fator[1])) !== 0n
+            ? 'Contagem exata preservada em UN. A equivalência em embalagens exige arredondamento.' : '';
         output.textContent = valido
-            ? BigInt(principal.value).toLocaleString('pt-BR') + ' ' + (form.dataset.base || principal.dataset.unidade) + ' + ' + BigInt(avulsos.value).toLocaleString('pt-BR') + ' UN — Total físico: ' + (BigInt(principal.value) * BigInt(fator[1]) + BigInt(avulsos.value)).toLocaleString('pt-BR') + ' UN'
+            ? BigInt(partes[1] || '0').toLocaleString('pt-BR') + (partes[2] ? ',' + partes[2] : '') + ' ' + (form.dataset.base || principal.dataset.unidade) + ' + ' + unidadesAvulsas.toLocaleString('pt-BR') + ' UN — Total físico: ' + (unidadesPrincipal + unidadesAvulsas).toLocaleString('pt-BR') + ' UN'
             : 'Total físico: —';
     };
     form.addEventListener('input', atualizar);
