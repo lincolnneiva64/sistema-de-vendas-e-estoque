@@ -169,6 +169,7 @@
     {% endif %}
 
     <section class="doc-card">
+      {% if aviso_correcao %}<p class="nota" role="status">{{ aviso_correcao }}</p>{% endif %}
       <div class="doc-head">
         <h2 class="doc-title">Recibo de locacao</h2>
       </div>

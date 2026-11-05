@@ -20484,7 +20484,19 @@ def receber_cliente_corrigir_recebimento(request, operacao_id):
 
 
 @ensure_csrf_cookie
+@transaction.atomic
 def conferencia_recebimentos_rota(request):
+    # Serialize the POST's summary read with audited rental-payment corrections.
+    # Locking only the eventual INSERT would allow a stale summary to be closed.
+    from django.db import connection, DatabaseError
+    if request.method == 'POST' and connection.vendor == 'postgresql':
+        try:
+            with transaction.atomic(), connection.cursor() as cursor:
+                cursor.execute("SET LOCAL lock_timeout = '5s'")
+                cursor.execute('LOCK TABLE estoque_fechamentorotarecebimento IN ROW EXCLUSIVE MODE')
+        except DatabaseError:
+            messages.warning(request, 'Há uma correção financeira em andamento. Aguarde e confira novamente antes de finalizar.')
+            return redirect(request.get_full_path())
     rota_filtro = request.GET.get("rota", "").strip()
     data_referencia, _data_invalida = _data_rota_recebimentos_request(request)
     voltar_url = _url_retorno_segura(request) or (

@@ -8,6 +8,7 @@
   let origin;
   let requestId = 0;
   let modalRequest = 0;
+  let newReceiptDraft = null;
   const headers = {'X-Requested-With': 'XMLHttpRequest'};
   function url(fragment, category, page) {
     const target = new URL(location.href);
@@ -34,6 +35,7 @@
     const data = await response.json();
     if (id !== requestId) return;
     replace('#saldos-consulta', full ? data.saldos : data.html);
+    document.querySelector('#saldos-consulta h2').insertAdjacentElement('afterend', status);
     if (full) replace('#resumo-valores', data.periodo);
     status.textContent = '';
   }
@@ -59,6 +61,55 @@
       if (details.isConnected) container.textContent = error.message + ' Feche e abra o histórico para tentar novamente.';
     } finally { details.dataset.loading = 'false'; }
   }
+  function showMode(mode) {
+    const selecting = mode === 'corrigir';
+    const form = content.querySelector('#form-recebimento-resumo');
+    const selection = content.querySelector('[data-selecao-pagamentos]');
+    if (!form || !selection) return;
+    form.hidden = selecting;
+    selection.hidden = !selecting;
+    const back = content.querySelector('[data-voltar-formulario]');
+    if (back) back.hidden = selecting;
+    content.querySelector('#titulo-recebimento').textContent = selecting ? 'Corrigir pagamento' : 'Receber / Quitar';
+    modalStatus.textContent = '';
+    dialog.scrollTop = 0;
+    if (selecting && selection.dataset.loaded !== 'true') history(selection);
+  }
+  async function loadForm(target, button, editing = false) {
+    const id = ++modalRequest;
+    const alreadyOpen = dialog.open;
+    if (!alreadyOpen) {
+      origin = button;
+      newReceiptDraft = null;
+      status.textContent = '';
+      dialog.showModal();
+      content.textContent = 'Carregando recebimento…';
+    }
+    modalStatus.textContent = alreadyOpen ? 'Carregando recebimento…' : '';
+    try {
+      const response = await read(await fetch(target, {headers, cache: 'no-store'}));
+      const html = await response.text();
+      if (id !== modalRequest || !dialog.open) return;
+      const currentForm = content.querySelector('#form-recebimento-resumo');
+      if (editing && currentForm && !currentForm.hasAttribute('data-correcao-pagamento') && !newReceiptDraft) {
+        // Preserve typed values and the original operation token only in memory,
+        // until this modal closes. Switching mode must not create a new receipt.
+        newReceiptDraft = document.createDocumentFragment();
+        while (content.firstChild) newReceiptDraft.appendChild(content.firstChild);
+      }
+      content.innerHTML = html;
+      modalStatus.textContent = '';
+      dialog.scrollTop = 0;
+      content.querySelector('[name=valor]')?.focus({preventScroll: true});
+      content.querySelector('[name=valor]')?.select();
+      if (button.hasAttribute('data-abrir-historico')) showMode('corrigir');
+    } catch (error) {
+      if (id === modalRequest && dialog.open) {
+        if (alreadyOpen) modalStatus.textContent = error.message;
+        else content.textContent = error.message;
+      }
+    }
+  }
   document.addEventListener('toggle', event => {
     const details = event.target;
     if (details.matches?.('details[data-historico-url]') && details.open && details.dataset.loaded !== 'true') history(details);
@@ -67,8 +118,20 @@
     const button = event.target.closest('button');
     if (!button) return;
     const panel = document.getElementById('saldos-consulta');
-    if (button.hasAttribute('data-historico-pagina')) {
-      history(button.closest('details'), button.dataset.historicoPagina);
+    if (button.hasAttribute('data-modo-recebimento')) {
+      if (paying) return;
+      ++modalRequest;
+      if (button.dataset.modoRecebimento === 'novo') {
+        if (newReceiptDraft) {
+          content.replaceChildren(newReceiptDraft);
+          newReceiptDraft = null;
+        } else if (content.querySelector('[data-correcao-pagamento]')) {
+          await loadForm(button.dataset.novoRecebimentoUrl, button);
+        }
+      }
+      showMode(button.dataset.modoRecebimento);
+    } else if (button.hasAttribute('data-historico-pagina')) {
+      history(button.closest('[data-historico-url]'), button.dataset.historicoPagina);
     } else if (button.hasAttribute('data-fechar-recebimento')) {
       if (!paying) dialog.close();
     } else if (button.hasAttribute('data-saldo-categoria') || button.hasAttribute('data-saldo-pagina') || button.hasAttribute('data-atualizar-financeiro')) {
@@ -78,31 +141,22 @@
         await refresh(category, page, button.hasAttribute('data-atualizar-financeiro'));
         document.querySelector('[data-saldo-categoria="' + category + '"]')?.focus({preventScroll: true});
       } catch (error) { refreshError(error.message); }
-    } else if (button.dataset.receberLocacao) {
-      const id = ++modalRequest;
-      origin = button;
-      status.textContent = '';
-      dialog.showModal();
-      content.textContent = 'Carregando recebimento…'; modalStatus.textContent = '';
-      try {
-        const response = await read(await fetch(button.dataset.receberLocacao, {headers, cache: 'no-store'}));
-        if (id !== modalRequest || !dialog.open) return;
-        content.innerHTML = await response.text();
-        content.querySelector('[name=valor]')?.focus();
-        content.querySelector('[name=valor]')?.select();
-      } catch (error) { if (id === modalRequest && dialog.open) content.textContent = error.message; }
+    } else if (button.dataset.receberLocacao || button.dataset.editarPagamento) {
+      if (paying) return;
+      await loadForm(button.dataset.editarPagamento || button.dataset.receberLocacao, button, !!button.dataset.editarPagamento);
     }
   });
   dialog.addEventListener('cancel', event => { if (paying) event.preventDefault(); });
-  dialog.addEventListener('close', () => { ++modalRequest; origin?.focus({preventScroll: true}); });
+  dialog.addEventListener('close', () => { ++modalRequest; newReceiptDraft = null; origin?.focus({preventScroll: true}); });
   document.addEventListener('submit', async function (event) {
     const form = event.target;
     if (form.id !== 'form-recebimento-resumo') return;
     event.preventDefault();
     if (paying) return;
     paying = true;
+    const correcting = form.hasAttribute('data-correcao-pagamento');
     const submit = form.querySelector('[type=submit]');
-    submit.disabled = true; modalStatus.textContent = 'Confirmando recebimento…';
+    submit.disabled = true; modalStatus.textContent = correcting ? 'Salvando correção…' : 'Confirmando recebimento…';
     try {
       // Keep this form's operation token for retries, including lost responses.
       const csrfName = (form.dataset.csrfCookie || 'csrftoken') + '=';
@@ -112,7 +166,7 @@
         credentials: 'same-origin', body: new FormData(form)});
       if (response.status === 422) {
         content.innerHTML = await response.text();
-        modalStatus.textContent = 'Revise o pagamento antes de confirmar.';
+        modalStatus.textContent = correcting ? 'Revise a correção antes de salvar.' : 'Revise o pagamento antes de confirmar.';
         const invalid = content.querySelector('[aria-invalid="true"]') || content.querySelector('[name=valor]');
         invalid?.parentElement.scrollIntoView({block: 'center'});
         invalid?.focus({preventScroll: true});
@@ -125,12 +179,18 @@
       const panel = document.getElementById('saldos-consulta');
       try {
         await refresh(panel.dataset.categoria, panel.dataset.pagina, true);
-        status.textContent = 'Recebimento confirmado. Saldos atualizados. ';
+        status.textContent = correcting ? 'Correção confirmada. Saldos atualizados. ' : 'Recebimento confirmado. Saldos atualizados. ';
         const receipt = document.createElement('a');
         receipt.href = result.recibo_url; receipt.target = '_blank'; receipt.rel = 'noopener'; receipt.textContent = 'Ver recibo';
         status.appendChild(receipt);
-        document.querySelector('[data-saldo-categoria="' + panel.dataset.categoria + '"]')?.focus({preventScroll: true});
-      } catch (error) { refreshError('Recebimento confirmado. Não foi possível atualizar a consulta; não repita o pagamento.'); }
+        const currentPanel = document.getElementById('saldos-consulta');
+        document.querySelector('[data-saldo-categoria="' + currentPanel.dataset.categoria + '"]')?.focus({preventScroll: true});
+      } catch (error) { refreshError(correcting ? 'Correção confirmada. Não foi possível atualizar a consulta; atualize os saldos.' : 'Recebimento confirmado. Não foi possível atualizar a consulta; não repita o pagamento.'); }
+      if (correcting) {
+        const currentPanel = document.getElementById('saldos-consulta');
+        currentPanel.querySelector('h2').insertAdjacentElement('afterend', status);
+        currentPanel.scrollIntoView({block: 'start', behavior: 'auto'});
+      }
     } catch (error) {
       modalStatus.textContent = error.message + ' Se necessário, tente novamente neste mesmo formulário para evitar duplicidade.';
     } finally {

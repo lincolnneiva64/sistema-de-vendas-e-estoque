@@ -28,6 +28,19 @@
 #modal-recebimento::backdrop{background:rgba(15,23,42,.55)}
 #modal-recebimento>button{float:right;min-width:40px;min-height:40px;background:white;border:1px solid #cbd5e1;border-radius:6px;font-size:1.3rem}
 #modal-recebimento h2{font-size:1.25rem;color:#7c2d12}
+#modal-recebimento .acoes-recebimento{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+#modal-recebimento .acoes-confirmacao{display:flex;justify-content:flex-end;gap:4px;min-width:min-content;margin-left:auto}
+#modal-recebimento .acoes-recebimento button{white-space:normal;min-width:0;padding:6px 4px;font-size:.85rem;line-height:1.3}
+#modal-recebimento .acoes-confirmacao button{min-width:min-content}
+#modal-recebimento .acoes-recebimento>.editar-pagamento{flex:0 1 auto;max-width:8rem;min-width:min-content}
+#modal-recebimento .voltar-recebimento{min-height:44px;border:0;background:transparent;color:#7c2d12;text-decoration:underline;text-align:left;padding:4px 0}
+#modal-recebimento .editar-pagamento:focus-visible,#modal-recebimento .voltar-recebimento:focus-visible{outline:3px solid #172033;outline-offset:2px}
+#modal-recebimento [data-selecao-pagamentos] h3{font-size:1rem;color:#7c2d12}
+#modal-recebimento .pagamento-selecao{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center}
+#modal-recebimento .pagamento-selecao>p,#modal-recebimento .pagamento-selecao>a{grid-column:1/-1}
+#modal-recebimento .pagamento-selecao>button{min-height:44px;grid-column:2;grid-row:1}
+.saldos-consulta{scroll-margin-top:12px}
+#saldos-consulta #status-saldos:not(:empty){padding:10px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;border-radius:6px}
 #modal-recebimento .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 #modal-recebimento .grid>div{min-width:0}
 #modal-recebimento .form-control,#modal-recebimento .form-select{width:100%;min-height:42px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box}

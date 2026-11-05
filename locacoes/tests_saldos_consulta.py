@@ -98,7 +98,7 @@ class SaldosConsultaTests(DadosSaldos, TestCase):
         self.assertEqual(len(response.context['pagina_pagamentos']), 10)
         self.assertContains(response, 'Registro do pagamento no servidor')
         self.assertContains(response, 'Pagamento — horário informado')
-        self.assertContains(response, 'correção de pagamentos ainda não está disponível')
+        self.assertContains(response, 'data-editar-pagamento=')
         self.assertNotContains(response, f'data-historico-pagamento="{other_payment.pk}"')
         self.assertNotContains(response, 'operacao_token')
         self.assertEqual(len(self.client.get(history_url + '&pagina=2').context['pagina_pagamentos']), 2)
@@ -312,7 +312,7 @@ class CorrecaoExistenteTests(DadosSaldos, TestCase):
         self.assertIsNone(payment.operacao_recebimento_cliente_id)
         response = self.client.get(self.payment_url(rental) + '&historico=1')
         self.assertNotContains(response, 'corrigir-recebimento')
-        self.assertContains(response, 'correção de pagamentos ainda não está disponível')
+        self.assertContains(response, 'data-editar-pagamento=')
 
     def test_correction_permission_is_still_restricted(self):
         _, _, url, data = self.unified()

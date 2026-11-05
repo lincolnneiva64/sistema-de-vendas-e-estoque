@@ -409,6 +409,18 @@ class PagamentoLocacaoForm(forms.Form):
         return funcionario.nome if funcionario else ""
 
 
+class CorrecaoPagamentoLocacaoForm(PagamentoLocacaoForm):
+    motivo = forms.CharField(required=True, label='Motivo da correção',
+        error_messages={'required': 'Informe o motivo da correção.'},
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 2}))
+    data_hora = forms.DateTimeField(required=True,
+        widget=forms.DateTimeInput(attrs={'class': 'form-control', 'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+        input_formats=['%Y-%m-%dT%H:%M'])
+
+    def clean_responsavel(self):
+        return self.cleaned_data['responsavel']
+
+
 class VencimentoSaldoLocacaoForm(forms.Form):
     data_vencimento_saldo = forms.DateField(
         widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),

@@ -2822,6 +2822,38 @@ class EventoLocacao(models.Model):
         return f"{self.tipo} - Locacao #{self.locacao_id}"
 
 
+class CorrecaoPagamentoLocacao(models.Model):
+    """Immutable evidence; PagamentoLocacao remains the current financial projection."""
+    pagamento = models.ForeignKey('PagamentoLocacao', on_delete=models.PROTECT, related_name='correcoes')
+    operacao_uuid = models.UUIDField(unique=True, editable=False)
+    versao_anterior = models.CharField(max_length=64, editable=False)
+    requisicao_hash = models.CharField(max_length=64, editable=False)
+    antes = models.JSONField(editable=False)
+    depois = models.JSONField(editable=False)
+    motivo = models.TextField()
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    usuario_nome = models.CharField(max_length=150, editable=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    movimento_original = models.ForeignKey(MovimentoFinanceiro, on_delete=models.PROTECT, related_name='+')
+    estorno = models.OneToOneField(MovimentoFinanceiro, on_delete=models.PROTECT, related_name='+')
+    movimento_novo = models.OneToOneField(MovimentoFinanceiro, on_delete=models.PROTECT, related_name='+')
+    recibo_anterior_html = models.TextField(editable=False)
+    recibo_corrigido_html = models.TextField(editable=False)
+
+    class Meta:
+        ordering = ['criado_em', 'pk']
+        constraints = [models.UniqueConstraint(fields=['pagamento', 'versao_anterior'],
+                                               name='locacao_correcao_versao_unica')]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError('Uma correção auditada não pode ser alterada.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Uma correção auditada não pode ser excluída.')
+
+
 class PagamentoLocacao(models.Model):
     FORMA_DINHEIRO = "dinheiro"
     FORMA_PIX = "pix"
@@ -2896,7 +2928,7 @@ class PagamentoLocacao(models.Model):
         super().save(*args, **kwargs)
 
     @staticmethod
-    def conta_financeira_para_forma(forma_pagamento):
+    def conta_financeira_para_forma(forma_pagamento, criar=True):
         if forma_pagamento == PagamentoLocacao.FORMA_DINHEIRO:
             nome = "Caixa em especie"
             tipo = ContaFinanceira.TIPO_CAIXA
@@ -2918,6 +2950,8 @@ class PagamentoLocacao(models.Model):
         )
         if conta:
             return conta
+        if not criar:
+            return None
         return ContaFinanceira.objects.create(
             nome=nome,
             tipo=tipo,
@@ -2925,10 +2959,10 @@ class PagamentoLocacao(models.Model):
             ativo=True,
         )
 
-    def criar_movimento_financeiro(self):
+    def criar_movimento_financeiro(self, *, conta_verificada=None):
         if self.movimento_financeiro_id:
             return self.movimento_financeiro
-        conta = self.conta_financeira_para_forma(self.forma_pagamento)
+        conta = conta_verificada or self.conta_financeira_para_forma(self.forma_pagamento)
         if not conta:
             return None
         movimento = MovimentoFinanceiro.objects.create(

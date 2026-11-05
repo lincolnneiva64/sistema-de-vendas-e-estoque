@@ -1,12 +1,34 @@
+{% load horarios_documentos %}
 <div class="historico-pagamentos">
   <p>{{ pagina_pagamentos.paginator.count }} pagamento{{ pagina_pagamentos.paginator.count|pluralize:"s" }} · Horário de Belém (PA).</p>
   {% for pagamento in pagina_pagamentos %}
-  <article class="historico-pagamento" data-historico-pagamento="{{ pagamento.pk }}">
+  <article class="historico-pagamento{% if lista_correcao %} pagamento-selecao{% endif %}" {% if lista_correcao %}data-pagamento-opcao="{{ pagamento.pk }}"{% else %}data-historico-pagamento="{{ pagamento.pk }}"{% endif %}>
     <strong>R$ {{ pagamento.valor|floatformat:"2g" }} · {{ pagamento.get_forma_pagamento_display }}</strong>
+    {% if lista_correcao %}
+      {% if pode_corrigir_pagamentos and not pagamento.operacao_recebimento_cliente_id %}<button type="button" class="btn btn-outline-secondary" data-editar-pagamento="{% url 'locacoes:corrigir_pagamento_direto' locacao.pk pagamento.pk %}">Editar</button>{% endif %}
+      <p>Data do pagamento: {% instante_registro pagamento.data_hora %}</p>
+    {% else %}
     {% include 'locacoes/includes/horarios_pagamento.html' %}
+    {% endif %}
     <p>Responsável: {{ pagamento.responsavel|default:'Não informado' }}{% if pagamento.operacao_recebimento_cliente_id %} · Recebimento unificado #{{ pagamento.operacao_recebimento_cliente_id }}{% endif %}</p>
-    {% if pagamento.observacao %}<p>{{ pagamento.observacao|linebreaksbr }}</p>{% endif %}
+    {% if not lista_correcao and pagamento.observacao %}<p>{{ pagamento.observacao|linebreaksbr }}</p>{% endif %}
     <a href="{% url 'locacoes:recibo_pagamento' pagamento.pk %}" target="_blank" rel="noopener">Ver recibo #{{ pagamento.pk }}</a>
+    {% if pagamento.operacao_recebimento_cliente_id %}
+      <p class="historico-aviso">Recebimento unificado: a correção deve ser feita na operação completa. Não é permitida edição individual.</p>
+    {% elif pode_corrigir_pagamentos and not lista_correcao %}
+      <button type="button" class="btn btn-outline-secondary" data-editar-pagamento="{% url 'locacoes:corrigir_pagamento_direto' locacao.pk pagamento.pk %}">Editar</button>
+    {% endif %}
+    {% if not lista_correcao %}{% for correcao in pagamento.correcoes.all %}
+      <details><summary>Correção registrada — {{ correcao.criado_em|date:"d/m/Y H:i" }}</summary>
+        <p>Por {{ correcao.usuario_nome }}. Motivo: {{ correcao.motivo }}</p>
+        <p>Valor: R$ {{ correcao.antes.pagamento.valor }} → R$ {{ correcao.depois.pagamento.valor }}.</p>
+        <p>Forma: {{ correcao.antes.pagamento.forma_pagamento }} → {{ correcao.depois.pagamento.forma_pagamento }}.</p>
+        <p>Data/hora informada: {{ correcao.antes.pagamento.data_hora }} → {{ correcao.depois.pagamento.data_hora }}.</p>
+        <p>Responsável: {{ correcao.antes.pagamento.responsavel }} → {{ correcao.depois.pagamento.responsavel }}.</p>
+        <p>As confirmações de envio anteriores pertencem ao recibo original.</p>
+        <a href="{% url 'locacoes:recibo_pagamento' pagamento.pk %}?versao={{ correcao.operacao_uuid }}" target="_blank" rel="noopener">Ver recibo corrigido</a>
+      </details>
+    {% endfor %}{% endif %}
   </article>
   {% empty %}<p>Nenhum pagamento registrado nesta locação.</p>{% endfor %}
   {% if pagina_pagamentos.has_other_pages %}<nav class="saldos-paginacao" aria-label="Páginas dos pagamentos">
@@ -14,5 +36,4 @@
     <span>{{ pagina_pagamentos.number }} / {{ pagina_pagamentos.paginator.num_pages }}</span>
     {% if pagina_pagamentos.has_next %}<button type="button" data-historico-pagina="{{ pagina_pagamentos.next_page_number }}">Próxima</button>{% endif %}
   </nav>{% endif %}
-  {% if pagina_pagamentos.paginator.count %}<p class="historico-aviso">A correção de pagamentos ainda não está disponível neste modal. Os pagamentos e os recibos permanecem preservados.</p>{% endif %}
 </div>

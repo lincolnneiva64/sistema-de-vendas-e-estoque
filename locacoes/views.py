@@ -11,7 +11,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import prefetch_related_objects
 from django.forms import modelformset_factory
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -2556,9 +2556,16 @@ def _registrar_pagamento(request, pk):
     locacao = get_object_or_404(Locacao.objects.prefetch_related("itens").select_related("cliente"), pk=pk)
     modo_consulta = request.GET.get('consulta') == '1'
     if modo_consulta and request.method == 'GET' and request.GET.get('historico') == '1':
-        pagina = Paginator(locacao.pagamentos.order_by('-criado_em', '-id'), 10).get_page(request.GET.get('pagina'))
+        from .payment_corrections import authorized
+        selecao = request.GET.get('selecao') == '1'
+        ordem = '-data_hora' if selecao else '-criado_em'
+        pagamentos = locacao.pagamentos.order_by(ordem, '-id')
+        if not selecao:
+            pagamentos = pagamentos.prefetch_related('correcoes')
+        pagina = Paginator(pagamentos, 10).get_page(request.GET.get('pagina'))
         return render(request, 'locacoes/includes/historico_pagamentos_resumo.html',
-                      {'locacao': locacao, 'pagina_pagamentos': pagina})
+                      {'locacao': locacao, 'pagina_pagamentos': pagina, 'pode_corrigir_pagamentos': authorized(request.user),
+                       'lista_correcao': selecao})
     if modo_consulta and locacao.status == Locacao.STATUS_CANCELADA:
         return JsonResponse({'erro': 'Locação cancelada. Nenhum recebimento foi registrado.'}, status=403)
     if request.method == "POST":
@@ -2634,6 +2641,21 @@ def recibo_pagamento(request, pk):
         pk=pk,
     )
     locacao = pagamento.locacao
+    versao = request.GET.get('versao')
+    if versao:
+        try:
+            identificacao = UUID(versao)
+        except (ValueError, TypeError):
+            return HttpResponse('Versão do recibo inválida.', status=404)
+        correcao = get_object_or_404(pagamento.correcoes, operacao_uuid=identificacao)
+        resposta = HttpResponse(correcao.recibo_corrigido_html)
+        resposta['Cache-Control'] = 'private, no-store'
+        return resposta
+    primeira_correcao = pagamento.correcoes.order_by('pk').first()
+    if primeira_correcao:
+        resposta = HttpResponse(primeira_correcao.recibo_anterior_html)
+        resposta['Cache-Control'] = 'private, no-store'
+        return resposta
     tarefa_entrega_url = ""
     if locacao.status in {
         Locacao.STATUS_RESERVADA,
