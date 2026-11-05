@@ -1,4 +1,4 @@
-{% if pode_aprovar %}<div class="ajustes-diretos" data-ajustes-diretos data-url="{% url 'inventario:ajustes_modal' inventario.pk %}" data-detalhe="{% url 'inventario:detalhe' inventario.pk %}">
+{% load conferencia_visual %}{% if pode_aprovar %}<div class="ajustes-diretos" data-ajustes-diretos data-conferencia-titulo="{{ inventario.titulo|titulo_conferencia:inventario.pk }}" data-url="{% url 'inventario:ajustes_modal' inventario.pk %}" data-detalhe="{% url 'inventario:detalhe' inventario.pk %}">
 <button type="button" data-revisar-estoque id="revisar-atualizacao" class="revisar-estoque-principal" disabled>Revisar ajustes de estoque</button><p role="status" data-estado-ajustes>Verificando ajustes disponíveis…</p>{% csrf_token %}
 </div>
 <dialog id="modal-previa-estoque" class="modal-ajustes-estoque" aria-labelledby="titulo-previa-estoque"><h2 id="titulo-previa-estoque">Revisar atualização do estoque</h2><div data-conteudo-previa></div></dialog>

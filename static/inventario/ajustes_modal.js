@@ -37,7 +37,7 @@
             throw new Error('Resultado sem comprovação integral da aplicação. Consulte o histórico.');
         }
         atualizarEstado(payload.resumo);
-        sucesso.querySelector('[data-conferencia-sucesso]').textContent = 'Conferência nº ' + payload.conferencia_id + ' — ' + payload.conferencia_nome;
+        sucesso.querySelector('[data-conferencia-sucesso]').textContent = root.dataset.conferenciaTitulo;
         sucesso.querySelector('[data-quantidade-sucesso]').textContent = payload.quantidade + ' produto(s) tiveram seus saldos atualizados nesta operação.';
         sucesso.querySelector('[data-pendencias-sucesso]').textContent = payload.resumo.pendentes + ' ajuste(s) pendente(s); ' + payload.resumo.bloqueados.length + ' produto(s) bloqueado(s).';
         if (previa.open) previa.close();

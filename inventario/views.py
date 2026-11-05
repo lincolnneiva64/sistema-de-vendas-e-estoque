@@ -120,6 +120,9 @@ def linhas_revisao(inventario):
     com_evidencias = [r for r in atuais if r.ok_em or r.confirmacoes.all()]
     prefetch_related_objects(com_evidencias, "conciliacoes__responsavel")
     with carregar(com_evidencias) if com_evidencias else nullcontext(None) as lote:
+        from . import revisao_historico
+        if lote is not None:
+            revisao_historico.carregar(lote)
         for item in itens:
             rodada = item.rodadas_revisao[-1]
             conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.all() if c.conciliado_em >= rodada.ok_em} if rodada.ok_em else {}
@@ -128,13 +131,19 @@ def linhas_revisao(inventario):
             diferenca = rodada.contado_base - rodada.esperado if rodada.ok_em else None
             valor = (diferenca * item.custo_base).quantize(Decimal("0.01")) if diferenca is not None and item.custo_base is not None else None
             inseguro = False
+            movimentos_comprovados = set()
             try:
                 # There is no chain to review before an OK. Keep all validation
                 # for confirmed rounds, including observer and stock checks.
                 if not rodada.ok_em:
                     raise ValueError("Confirme uma rodada ativa antes da revisão.")
-                services.validar_cadeia(rodada, item.produto, _lote=lote)
-                bloqueio = "Revisão física necessária" if rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0) else "Revisão registrada"
+                _, movimentos_comprovados = revisao_historico.validar(rodada, item.produto, lote)
+                if rodada.revisao_sequencia is None:
+                    bloqueio = "Histórico validado. Revisão administrativa não registrada."
+                elif rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0):
+                    bloqueio = "Histórico validado. Revisão administrativa desatualizada."
+                else:
+                    bloqueio = "Histórico validado. Revisão administrativa registrada."
             except ValueError as exc:
                 bloqueio = str(exc)
                 inseguro = rodada.ok_em is not None
@@ -158,6 +167,7 @@ def linhas_revisao(inventario):
                 "movimentos": [{"registro": m, "origem": ORIGENS.get(m.origem, ORIGENS["nao_identificada"]),
                     "quantidade": quantidade(m.depois - m.antes, item.cadastro, diferenca=True) if m.antes is not None and m.depois is not None else "Saldo desconhecido",
                     "conciliacao": conciliacoes.get(m.pk), "conciliado": m.pk in conciliacoes,
+                    "comprovado_documentalmente": m.pk in movimentos_comprovados,
                     "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
                 "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
     from .conversao_fisica import representacao_fisica

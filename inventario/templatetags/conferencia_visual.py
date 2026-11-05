@@ -7,7 +7,8 @@ register = template.Library()
 
 @register.filter
 def composicao_curta(texto):
-    return str(texto or '').partition(' = ')[0]
+    composicao = str(texto or '').partition(' = ')[0]
+    return composicao.removesuffix(' + 0 UN')
 
 
 @register.filter
@@ -30,3 +31,28 @@ def rotulo_simples(texto):
         'Resíduo decimal': 'Conferir',
         'Referência aproximada': 'Conferir',
     }.get(str(texto), texto)
+
+
+@register.filter
+def diferenca_resumo(linha):
+    """Format existing evidence without changing the adjustment or its authorization."""
+    comparacao = linha.get('comparacao_fisica')
+    if comparacao:
+        if comparacao.get('normalizacao') or comparacao['dados'].get('diferenca_fisica') == '0':
+            return 'Sem diferença física'
+        return rotulo_simples(comparacao['diferenca'])
+    from inventario.apresentacao import quantidade
+    diferenca = linha['diferenca']
+    if not diferenca:
+        return 'Sem diferença física'
+    return ('Falta ' if diferenca < 0 else 'Sobra ') + quantidade(
+        abs(diferenca), linha['rodada'].item.cadastro, diferenca=True)
+
+
+@register.filter
+def titulo_conferencia(titulo, identificador):
+    prefixo = f'Conferência nº {identificador}'
+    titulo = str(titulo or '').strip()
+    if titulo == prefixo or titulo.startswith(prefixo + ' — '):
+        return titulo
+    return prefixo + (' — ' + titulo if titulo else '')

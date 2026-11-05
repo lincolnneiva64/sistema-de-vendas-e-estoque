@@ -16,8 +16,16 @@ def resumo_painel(linhas):
                       and diferenca is not None)
         resultado = "pendente" if not confirmado else "falta" if diferenca < 0 else "sobra" if diferenca > 0 else "correto"
         fisico = linha.get('comparacao_fisica', {})
-        if confirmado and fisico and fisico['dados'].get('diferenca_fisica') is None:
-            resultado = 'pendente'
+        if confirmado and fisico:
+            # Physical classification only. Keep decimal balances, costs and the
+            # independent administrative/review states untouched.
+            d = fisico['dados'].get('diferenca_fisica')
+            if fisico.get('normalizacao'):
+                resultado = 'correto'
+            elif d is None:
+                resultado = 'pendente'
+            else:
+                resultado = 'correto' if Decimal(d) == 0 else 'falta' if Decimal(d) < 0 else 'sobra'
         linha.update(resultado=resultado, resultado_label={"pendente": "Aguardando OK", "falta": "Falta",
                      "sobra": "Sobra", "correto": "Correto"}[resultado], percentual_quantidade=None,
                      base_percentual=None, percentual_motivo="Aguardando OK", estimativa=None,
@@ -34,6 +42,8 @@ def resumo_painel(linhas):
         resumo["conferidos"] += 1
         resumo[{"falta": "faltas", "sobra": "sobras", "correto": "corretos", "pendente": "pendentes"}[resultado]] += 1
         linha["diferenca_texto"] = fisico["diferenca"] if fisico else quantidade(diferenca, item.cadastro, diferenca=True)
+        if fisico and resultado == 'correto':
+            linha['diferenca_texto'] = 'Sem diferença'
         base = abs(rodada.esperado)
         linha["base_percentual"] = quantidade(base, item.cadastro, diferenca=True)
         if base:

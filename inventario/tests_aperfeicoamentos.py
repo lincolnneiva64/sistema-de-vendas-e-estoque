@@ -91,7 +91,7 @@ class AperfeicoamentosTests(TestCase):
     def test_resumo_com_unidades_valor_status_e_formulario_unico(self):
         self.ok()
         linha = views.linhas_revisao(self.inventario)[0]
-        self.assertEqual((linha["diferenca_texto"], linha["valor"], linha["situacao"]), ("-6 UN", Decimal("-5.00"), "Falta"))
+        self.assertEqual((linha["diferenca_texto"], linha["valor"], linha["situacao"]), ("Falta 6 UN", Decimal("-5.00"), "Falta"))
         self.client.force_login(self.usuario)
         pagina = self.client.get(reverse("inventario:detalhe", args=[self.inventario.pk]))
         self.assertContains(pagina, 'class="resumo-linha falta"')

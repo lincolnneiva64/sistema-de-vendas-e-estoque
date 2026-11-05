@@ -7,6 +7,7 @@
 {% elif a.estado == 'Sem ajuste' or a.estado == 'Sem diferença' %}<p>Não há diferença registrada que exija ajuste.</p>
 {% else %}<p>A aplicação não está comprovada nesta conferência. Isso não comprova uma tentativa recusada.</p>{% endif %}
 {% if a.bloqueio %}<p>{{ a.bloqueio }}</p>{% endif %}
+{% if linha.bloqueio %}<p>{{ linha.bloqueio }}</p>{% endif %}
 {% if a.estado == 'Rejeitado' %}<p>Uma nova proposta exige nova confirmação física.</p>{% endif %}
 {% if a.preliminar %}<p>A conferência dos documentos e saldos será feita ao revisar a atualização.</p>{% endif %}
 <a href="#detalhe-{{ linha.item.pk }}" data-detalhe="detalhe-{{ linha.item.pk }}">Consultar histórico e auditoria</a>

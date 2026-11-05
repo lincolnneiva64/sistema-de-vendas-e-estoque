@@ -170,8 +170,8 @@ class AplicacaoProjecaoTests(AjustesFixture, TestCase):
         linhas = linhas_revisao(self.inv)
         resumo_painel(linhas)
         linha = next(l for l in linhas if l['rodada'].pk == r.pk)
-        self.assertEqual(linha['resultado_label'], 'Resíduo decimal')
-        self.assertIn('sem falta física comprovada', linha['diferenca_texto'])
+        self.assertEqual(linha['resultado_label'], 'Correto')
+        self.assertEqual(linha['diferenca_texto'], 'Sem diferença')
         self.assertIsNone(linha['percentual_quantidade'])
 
 
