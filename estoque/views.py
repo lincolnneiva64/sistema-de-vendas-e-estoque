@@ -8650,8 +8650,6 @@ def sugestao_compra_fornecedor(request):
         produto_ids = [vinculo.produto_id for vinculo in vinculos]
 
         produtos_manual_qs = Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id")
-        if request.GET.get("consulta_manual") == "1":
-            produtos_manual_qs = produtos_manual_qs.filter(pk__in=produto_ids)
         produtos_manual = list(produtos_manual_qs) if periodo_valido_para_calculo else []
         produto_ids_consulta = [produto.id for produto in produtos_manual]
         produtos_vinculados_ids = set(produto_ids)

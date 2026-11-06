@@ -69,7 +69,8 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(self.total(tab),'R$ 0,00')
                 self.add(tab,0);self.assertEqual(self.total(tab),'R$ 189,60')
                 self.add(tab,1);self.assertEqual(self.total(tab),'R$ 331,20')
-                self.assertEqual(tab.evaluate('document.querySelector("[data-itens-lista-mobile-total]").textContent'),'2')
+                self.assertEqual(tab.evaluate('document.querySelector("[data-itens-lista-mobile-total]").textContent'),'4')
+                self.assertEqual(tab.evaluate('document.querySelector("#itensListaMobile [data-produtos-confirmados]").textContent'),'2')
                 self.assertEqual(tab.evaluate('document.querySelector(".sugestao-conferencia-item.total .sugestao-conferencia-valor.total").textContent'),original)
                 # Capture the actual serializer without submitting the form.
                 tab.evaluate('window.fetch=function(url,options){window.captured=JSON.parse(options.body.get("lista_payload"));return new Promise(()=>{})};document.getElementById("btnGravarListaFornecedor").click();true')
@@ -135,6 +136,9 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
             finally:chrome.stop()
 
     def test_restored_saved_list_and_direct_edit(self):
+        # A legacy saved list starts pending. The overall summary includes it;
+        # the confirmed total remains zero until the existing Peguei action.
+        total_selecionado = lambda tab: tab.evaluate('document.querySelector("[data-total-lista-selecionada]").textContent.replace(/\u00a0/g," ")')
         saved=ListaCompraFornecedor.objects.create(fornecedor=self.supplier,data_lista=timezone.localdate(),
             data_inicio_periodo=timezone.localdate(),data_fim_periodo=timezone.localdate(),total_lista=Decimal('331.20'),total_sugerido_original=Decimal('176.94'))
         for product,price in zip(self.products,['47.40','35.40']):
@@ -144,11 +148,12 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
             chrome=Chrome(CHROME,profile).start()
             try:
                 tab=self.open_page(chrome,path=path)
-                self.assertEqual(self.total(tab),'R$ 331,20')
+                self.assertEqual(total_selecionado(tab),'R$ 331,20')
+                self.assertEqual(self.total(tab),'R$ 0,00')
                 tab.evaluate('document.querySelector("#mobileSugestaoProdutos .sugestao-qtd-input").value="5";document.querySelector("#mobileSugestaoProdutos .sugestao-qtd-input").dispatchEvent(new Event("input",{bubbles:true}));true')
-                self.assertEqual(self.total(tab),'R$ 378,60')
+                self.assertEqual(total_selecionado(tab),'R$ 378,60')
                 tab.call('Page.reload');tab.wait('typeof atualizarTotalListaPedidoMobile==="function"')
-                self.assertEqual(self.total(tab),'R$ 331,20')
+                self.assertEqual(total_selecionado(tab),'R$ 331,20')
                 saved.refresh_from_db();self.assertEqual(saved.total_lista,Decimal('331.20'))
             finally:chrome.stop()
 
@@ -201,6 +206,11 @@ class CompraMobileTotalBrowserTests(StaticLiveServerTestCase):
                                     {"lista_payload": json.dumps(payload)})
         self.assertEqual(response.status_code, 302)
         saved = ListaCompraFornecedor.objects.get()
+        # This scenario edits confirmed items; declare that fixture state
+        # explicitly instead of expecting a legacy list to confirm itself.
+        saved.coleta_mobile = dict(iniciada=True, versao=1,
+                                   itens={str(p.pk): 'pego' for p in self.products[:2]})
+        saved.save(update_fields=['coleta_mobile'])
         path = reverse("estoque:compras_lista_fornecedor_editar", args=[saved.pk])
         before = self.effects()
         with TemporaryDirectory(prefix="saved-list-mobile-edit-") as profile:

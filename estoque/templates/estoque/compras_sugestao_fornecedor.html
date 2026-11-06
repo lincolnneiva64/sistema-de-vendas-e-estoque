@@ -1262,6 +1262,7 @@
   .sugestao-salvar-mobile-rodape {
     display: none;
   }
+  .sugestao-rotulo-selecionados-mobile { display: none; }
 
   .sugestao-rascunho-mobile-only {
     display: none;
@@ -1388,6 +1389,9 @@
     .sugestao-nova-manual-mobile .sugestao-manual { order: 4; }
     .sugestao-resumo-final { order: 9; }
     #itensListaMobile { order: 10; }
+    #acoesRodapeNovaLista { order: 11; }
+    .sugestao-rotulo-selecionados-mobile { display: inline; }
+    .sugestao-rotulo-adicionados-desktop { display: none; }
 
     .sugestao-header {
       align-items: stretch;
@@ -1954,7 +1958,8 @@
       display: none;
     }
 
-    .sugestao-salvar-mobile-rodape.sugestao-salvar-edicao-mobile {
+    .sugestao-salvar-mobile-rodape.sugestao-salvar-edicao-mobile,
+    #acoesRodapeNovaLista {
       display: grid;
       gap: 10px;
       margin-top: 12px;
@@ -2363,7 +2368,7 @@
         </div>
         {% endif %}
       </section>
-      <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}">
+      <div class="sugestao-salvar-mobile-rodape{% if modo_edicao_lista %} sugestao-salvar-edicao-mobile{% endif %}"{% if not modo_edicao_lista %} id="acoesRodapeNovaLista"{% endif %}>
         <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-salvar-lista-extra" id="{% if modo_edicao_lista %}btnSalvarAlteracoesListaMobile{% else %}btnGravarListaMobile{% endif %}">{% if modo_edicao_lista %}Salvar alterações{% else %}Gravar lista{% endif %}</button>
         {% if not modo_edicao_lista or can_gerar_compra_lista %}
           <button type="button" class="sugestao-btn sugestao-btn-primary sugestao-gravar-gerar-extra" id="btnGravarGerarCompraMobile">{% if modo_edicao_lista %}Salvar alterações e Gerar Compra{% else %}Gravar e Gerar Compra{% endif %}</button>
@@ -2417,7 +2422,7 @@
     aria-expanded="false"
     aria-controls="areaAdicionarProdutosManual"
   >
-    + Adicionar produto
+    + Escolher produto
   </button>
 
   <section
@@ -2459,7 +2464,7 @@
           <tr id="linhaProdutoManualSugestao">
             <td class="sugestao-col-produto" data-label="Produto">
               <div class="sugestao-autocomplete">
-                <input type="text" id="produtoManualBuscaSugestao" class="sugestao-manual-produto-input" autocomplete="off" placeholder="Adicionar produto" aria-label="Adicionar produto">
+                <input type="text" id="produtoManualBuscaSugestao" class="sugestao-manual-produto-input" autocomplete="off" placeholder="Pesquisar produto pelo nome" aria-label="Pesquisar produto pelo nome">
                 <input type="hidden" id="produtoManualSugestao">
                 <div class="sugestao-autocomplete-lista" id="produtoManualSugestoes"></div>
               </div>
@@ -2479,7 +2484,7 @@
                 class="produto-manual-historico-mobile"
                 hidden
               ></div>
-              <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar produto</button>
+              <button type="button" class="sugestao-btn sugestao-btn-primary" id="btnAdicionarProdutoSugestao">Adicionar à lista</button>
             </td>
           </tr>
 
@@ -2564,13 +2569,13 @@
     function recolher() {
       area.classList.add("sugestao-manual-recolhida-mobile");
       botao.setAttribute("aria-expanded", "false");
-      botao.textContent = "+ Adicionar produto";
+      botao.textContent = "+ Escolher produto";
     }
 
     function expandir(focar = true) {
       area.classList.remove("sugestao-manual-recolhida-mobile");
       botao.setAttribute("aria-expanded", "true");
-      botao.textContent = "Cancelar";
+      botao.textContent = matchMedia('(max-width:860px)').matches ? "+ Escolher produto" : "Cancelar";
       if (!focar) return;
       window.requestAnimationFrame(function () {
         posicionarElementoComContexto(area, {
@@ -2587,7 +2592,7 @@
 
     botao.addEventListener("click", function () {
       const vaiExpandir = area.classList.contains("sugestao-manual-recolhida-mobile");
-      if (vaiExpandir) {
+      if (vaiExpandir || matchMedia('(max-width:860px)').matches) {
         expandir();
       } else {
         recolher();
@@ -2614,7 +2619,7 @@
   <section class="sugestao-resumo-final" aria-label="Resumo final da lista por fornecedor">
     <div class="sugestao-contador-itens-mobile" id="contadorItensListaMobile" data-itens-lista-mobile-contador data-count="0">
       <span>Produtos vinculados ao fornecedor: {{ total_produtos_vinculados }}</span>
-      <span>Itens adicionados na lista: <strong data-itens-lista-mobile-total>0</strong></span>
+      <span><span class="sugestao-rotulo-adicionados-desktop">Itens adicionados na lista:</span><span class="sugestao-rotulo-selecionados-mobile">Produtos selecionados:</span> <strong data-itens-lista-mobile-total>0</strong></span>
     </div>
     <div class="sugestao-resumo-final-item">
       <span class="sugestao-resumo-final-label">Total sugerido original</span>
@@ -2622,7 +2627,7 @@
     </div>
     <div class="sugestao-resumo-final-item">
       <span class="sugestao-resumo-final-label">Total da lista/pedido</span>
-      <span class="sugestao-resumo-final-valor" data-total-lista-pedido>R$ {{ total_sugerido|floatformat:2 }}</span>
+      <span class="sugestao-resumo-final-valor" data-total-lista-selecionada>R$ {{ total_sugerido|floatformat:2 }}</span>
     </div>
   </section>
 </div>
@@ -3067,6 +3072,9 @@
     document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
       el.textContent = "R$ " + centavosTexto(total);
     });
+    document.querySelectorAll("[data-total-lista-selecionada]").forEach((el) => {
+      el.textContent = "R$ " + centavosTexto(pendente + total);
+    });
     return true;
   };
 
@@ -3149,6 +3157,7 @@
     document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
       el.textContent = moeda(total);
     });
+    document.querySelectorAll("[data-total-lista-selecionada]").forEach(el => { el.textContent = moeda(total); });
   }
 
   function atualizarContagemProdutos() {
@@ -3296,48 +3305,96 @@
 
   const produtos = JSON.parse(dadosEl.textContent || "[]");
   const produtosPorId = new Map(produtos.map((produto) => [String(produto.id), produto]));
+  let avisoCatalogo = '';
+  let aberturaManualSolicitada = false;
   // Refresh only the existing manual catalog; never generate or insert cards.
   {% if not modo_edicao_lista %}
-  let consultaManual = 0, consultaTimer;
+  let consultaManual = 0, consultaTimer, controleManual;
+  function parametrosCatalogo() {
+    const params = new URLSearchParams(new FormData(document.getElementById('periodo').form));
+    params.set('consulta_manual', '1');
+    return params;
+  }
+  let filtrosCarregados = produtos.length ? parametrosCatalogo().toString() : null;
   async function atualizarCatalogoManual() {
     if (!matchMedia('(max-width:860px)').matches) return;
+    clearTimeout(consultaTimer);
+    controleManual?.abort();
     const versao = ++consultaManual;
-    const fornecedor = document.getElementById('fornecedor').value;
-    const produtoAnterior = selecionado.value;
+    const params = parametrosCatalogo();
+    const filtros = params.toString();
+    filtrosCarregados = null;
     limparLinhaManual(false);
-    produtos.splice(0); produtosPorId.clear(); fecharSugestoes();
-    if (!fornecedor) { mostrarMsg('Selecione o fornecedor e o período para pesquisar produtos.'); return; }
+    produtos.splice(0); produtosPorId.clear(); fecharSugestoes(false);
+    busca.removeAttribute('aria-busy');
+    avisoCatalogo = !params.get('fornecedor') ? 'Selecione o fornecedor e o período para pesquisar produtos.' :
+      !(Number(params.get('periodo')) > 0 || (params.get('data_inicio') && params.get('data_fim'))) ?
+      'Informe o período para consultar as vendas e os produtos.' : '';
+    if (avisoCatalogo) { mostrarMsg(avisoCatalogo); return; }
+    const controle = controleManual = new AbortController();
     busca.setAttribute('aria-busy', 'true');
-    mostrarMsg('Atualizando produtos e vendas do período...');
+    avisoCatalogo = 'Atualizando produtos e vendas do período...';
+    mostrarMsg(avisoCatalogo);
+    let tempoEsgotado = false;
+    const limiteEspera = setTimeout(() => {
+      tempoEsgotado = true;
+      controle.abort();
+    }, 15000);
     try {
-      const params = new URLSearchParams(new FormData(document.getElementById('periodo').form));
-      params.set('consulta_manual', '1');
-      const resposta = await fetch(location.pathname + '?' + params, {headers:{Accept:'application/json'}});
+      const resposta = await fetch(location.pathname + '?' + params,
+        {headers:{Accept:'application/json'}, cache:'no-store', signal:controle.signal});
       if (!resposta.ok) throw new Error('Não foi possível consultar os produtos.');
       const resultado = await resposta.json();
       if (versao !== consultaManual) return;
+      if (filtros !== parametrosCatalogo().toString()) { agendarCatalogoManual(); return; }
+      if (!Array.isArray(resultado.produtos) || typeof resultado.periodo_valido !== 'boolean')
+        throw new Error('Resposta de produtos inválida.');
       produtos.push(...resultado.produtos);
       produtos.forEach(p => produtosPorId.set(String(p.id), p));
-      if (produtosPorId.has(produtoAnterior)) preencherLinhaManual(produtosPorId.get(produtoAnterior));
+      filtrosCarregados = filtros;
       busca.removeAttribute('aria-busy');
-      if (!resultado.periodo_valido) mostrarMsg('Informe o período para consultar as vendas e os produtos.');
-      else if (document.activeElement === busca) renderizarSugestoes(false);
-      else mostrarMsg('');
+      avisoCatalogo = !resultado.periodo_valido ? 'Informe o período para consultar as vendas e os produtos.' :
+        !produtos.length ? 'Nenhum produto ativo está disponível para inclusão.' : '';
+      const produtoAtual = produtoDigitadoExato();
+      if (produtoAtual) {
+        preencherLinhaManual(produtoAtual, false);
+        selecionado.value = String(produtoAtual.id);
+      }
+      // A typed query still needs its results if focus moved during the request.
+      if (aberturaManualSolicitada || busca.value.trim()) renderizarSugestoes(false);
+      else mostrarMsg(avisoCatalogo);
     } catch (erro) {
-      if (versao === consultaManual) mostrarMsg('Não foi possível atualizar os produtos. Toque na busca para tentar novamente.');
+      if (versao === consultaManual) {
+        avisoCatalogo = tempoEsgotado ? 'A consulta demorou demais. Toque na busca para tentar novamente.' :
+          'Não foi possível atualizar os produtos. Toque na busca para tentar novamente.';
+        mostrarMsg(avisoCatalogo);
+      }
     } finally {
+      clearTimeout(limiteEspera);
       if (versao === consultaManual) busca.removeAttribute('aria-busy');
     }
   }
+  function agendarCatalogoManual() {
+    if (!matchMedia('(max-width:860px)').matches) return;
+    ++consultaManual;
+    controleManual?.abort();
+    clearTimeout(consultaTimer);
+    filtrosCarregados = null;
+    limparLinhaManual(false);
+    produtos.splice(0); produtosPorId.clear();
+    fecharSugestoes(false);
+    busca.setAttribute('aria-busy', 'true');
+    avisoCatalogo = 'Atualizando produtos e vendas do período...';
+    mostrarMsg(avisoCatalogo);
+    consultaTimer = setTimeout(atualizarCatalogoManual, 150);
+  }
   ['fornecedor', 'periodo', 'data_inicio', 'data_fim'].forEach(id => {
-    document.getElementById(id)?.addEventListener('change', () => {
-      clearTimeout(consultaTimer);
-      consultaTimer = setTimeout(atualizarCatalogoManual, 150);
-    });
+    ['input', 'change'].forEach(evento => document.getElementById(id)?.addEventListener(evento, agendarCatalogoManual));
   });
-  ['focus', 'click'].forEach(evento => busca.addEventListener(evento, () => {
-    if (!produtos.length && busca.getAttribute('aria-busy') !== 'true') atualizarCatalogoManual();
-  }));
+  document.getElementById('fornecedorBuscaSugestao')?.addEventListener('input', agendarCatalogoManual);
+  addEventListener('pageshow', event => {
+    if (event.persisted || filtrosCarregados !== parametrosCatalogo().toString()) agendarCatalogoManual();
+  });
   {% endif %}
 
   let indiceAtivo = -1;
@@ -3394,7 +3451,7 @@
     botao.disabled = jaNaLista;
     botao.textContent = jaNaLista
       ? "J\u00e1 est\u00e1 na lista"
-      : "Adicionar produto";
+      : "Adicionar à lista";
     botao.setAttribute(
       "aria-disabled",
       jaNaLista ? "true" : "false"
@@ -3528,7 +3585,8 @@
       (card.dataset.naLista === "1" || !card.classList.contains("sugestao-tratada-mobile")));
   }
 
-  function fecharSugestoes() {
+  function fecharSugestoes(cancelarAbertura = true) {
+    if (cancelarAbertura) aberturaManualSolicitada = false;
     lista.classList.remove("aberta");
     manualWrap?.classList.remove("autocomplete-aberto");
     lista.innerHTML = "";
@@ -3600,6 +3658,7 @@
         "Produto j\u00e1 est\u00e1 na lista. Dados e \u00faltimas compras dispon\u00edveis para consulta."
       );
       busca.focus();
+      fecharSugestoes();
       return;
     }
 
@@ -3617,6 +3676,7 @@
 
   function renderizarSugestoes(selecionarPrimeira) {
     if (busca.getAttribute('aria-busy') === 'true') return;
+    if (avisoCatalogo) { mostrarMsg(avisoCatalogo); return; }
     if (!produtos.length && !document.getElementById('fornecedor').value) {
       mostrarMsg('Selecione o fornecedor e o período para pesquisar produtos.');
       return;
@@ -3830,7 +3890,7 @@
       }, 0);
 
     if (!totalMobileAtualizado) {
-      document.querySelectorAll("[data-total-lista-pedido]").forEach((el) => {
+      document.querySelectorAll("[data-total-lista-pedido], [data-total-lista-selecionada]").forEach((el) => {
         el.textContent = "R$ " + total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       });
     }
@@ -3894,6 +3954,12 @@
       return;
     }
 
+    if (!(numero(manualQtd.value) > 0)) {
+      mostrarMsg("Informe uma quantidade de compra maior que zero.");
+      manualQtd.focus();
+      return;
+    }
+
     if (existeNaLista(produtoId)) {
       mostrarMsg(
         "Produto j\u00e1 est\u00e1 na lista. Dados e \u00faltimas compras dispon\u00edveis para consulta."
@@ -3952,14 +4018,22 @@
     }, 0);
   }
 
+  function abrirSugestoesManuais() {
+    aberturaManualSolicitada = true;
+    {% if not modo_edicao_lista %}
+    if (filtrosCarregados !== parametrosCatalogo().toString() && busca.getAttribute('aria-busy') !== 'true')
+      atualizarCatalogoManual();
+    {% endif %}
+    renderizarSugestoes(false);
+  }
+
   busca.addEventListener("focus", function() {
     selecionarTextoBusca();
-    renderizarSugestoes(false);
+    abrirSugestoesManuais();
   });
-  busca.addEventListener("click", function() {
-    renderizarSugestoes(false);
-  });
+  busca.addEventListener("click", abrirSugestoesManuais);
   busca.addEventListener("input", function() {
+    aberturaManualSolicitada = true;
     renderizarSugestoes(false);
   });
   busca.addEventListener("keydown", function(event) {
@@ -4166,6 +4240,9 @@
   if (!mobile || !lista) return;
   const secaoConfirmada = document.getElementById("itensListaMobile");
   const resumoFinal = document.querySelector(".sugestao-resumo-final");
+  const acoesNovaLista = document.getElementById("acoesRodapeNovaLista");
+  const posicaoOriginalAcoes = document.createComment("Posicao desktop das acoes da lista nova");
+  if (acoesNovaLista) acoesNovaLista.before(posicaoOriginalAcoes);
   const posicaoOriginalConfirmados = document.createComment("Posicao desktop da lista confirmada");
   secaoConfirmada.before(posicaoOriginalConfirmados);
   const mediaListaMobile = window.matchMedia("(max-width: 860px)");
@@ -4181,8 +4258,10 @@
       secaoConfirmada.style.width = width + "px";
       secaoConfirmada.style.alignSelf = "center";
       if (secaoConfirmada.previousElementSibling !== resumoFinal) resumoFinal.after(secaoConfirmada);
+      if (acoesNovaLista && acoesNovaLista.previousElementSibling !== secaoConfirmada) secaoConfirmada.after(acoesNovaLista);
     } else {
       posicaoOriginalConfirmados.after(secaoConfirmada);
+      if (acoesNovaLista) posicaoOriginalAcoes.after(acoesNovaLista);
       secaoConfirmada.style.removeProperty("width");
       secaoConfirmada.style.removeProperty("align-self");
     }
@@ -4361,10 +4440,11 @@
     mobile.querySelector("[data-produtos-pendentes]").textContent = String(pendentes);
     document.querySelectorAll("[data-produtos-confirmados]").forEach(el => { el.textContent = String(total); });
     if (!contador) return;
-    contador.dataset.count = String(total);
+    const selecionados = ehMobileLista() ? total + pendentes : total;
+    contador.dataset.count = String(selecionados);
     const totalEl = contador.querySelector("[data-itens-lista-mobile-total]");
     if (totalEl) {
-      totalEl.textContent = String(total);
+      totalEl.textContent = String(selecionados);
     }
   }
 

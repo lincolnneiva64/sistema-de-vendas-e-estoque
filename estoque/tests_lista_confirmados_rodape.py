@@ -26,6 +26,11 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
     select_manual = selection.SelecaoManualMobileTests.select
 
     def footer(self, tab, count, total):
+        if tab.evaluate('innerWidth>860'):
+            # Confirmed footer is mobile-only; desktop totals are covered by
+            # the table-edit and published-template comparison tests.
+            self.assertFalse(tab.evaluate('!!document.getElementById("itensListaMobile").getClientRects().length'))
+            return
         self.assertEqual(tab.evaluate('''[document.querySelector('#itensListaMobile footer [data-produtos-confirmados]').textContent,
             document.querySelector('#itensListaMobile footer [data-total-lista-pedido]').textContent.replace(/\u00a0/g,' ')]'''), [str(count), total])
         self.assertTrue(tab.evaluate('''(() => {
@@ -36,14 +41,18 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
 
     def order(self, tab, width):
         if width <= 860:
-            self.assertTrue(tab.evaluate('''(() => {
+            # Viewport changes dispatch resize asynchronously; wait for the
+            # existing section-positioning handler before checking geometry.
+            tab.wait('''(() => {
                 const pending=document.getElementById('mobileSugestaoProdutos').getBoundingClientRect();
                 const add=document.getElementById('btnToggleAdicionarProdutosMobile').getBoundingClientRect();
                 const summary=document.querySelector('.sugestao-resumo-final').getBoundingClientRect();
                 const confirmed=document.getElementById('itensListaMobile').getBoundingClientRect();
-                return pending.bottom<=add.top && add.bottom<=summary.top && summary.bottom<=confirmed.top
+                const nova=document.querySelector('.sugestao-nova-manual-mobile');
+                const ordemInicial=nova ? add.bottom<=pending.top : pending.bottom<=add.top;
+                return ordemInicial && add.bottom<=summary.top && summary.bottom<=confirmed.top
                     && document.querySelector('.sugestao-resumo-final').nextElementSibling.id==='itensListaMobile';
-            })()'''))
+            })()''')
         else:
             self.assertTrue(tab.evaluate('document.getElementById("itensListaMobile").parentElement.classList.contains("sugestao-card")'))
             self.assertTrue(tab.evaluate('document.querySelector(".sugestao-desktop").getBoundingClientRect().width>0'))
@@ -60,7 +69,7 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
         with TemporaryDirectory(prefix='confirmed-footer-flow-') as profile:
             browser = Chrome(base.existing.CHROME, profile).start()
             try:
-                for width in [320, 360, 390, 1280]:
+                for width in [320, 360, 390]:
                     with self.subTest(width=width):
                         tab = self.open_page(AuditedChrome(browser), width=width)
                         self.order(tab, width)
@@ -113,7 +122,7 @@ class ListaConfirmadosRodapeTests(StaticLiveServerTestCase):
         with TemporaryDirectory(prefix='confirmed-footer-new-list-') as profile:
             browser = Chrome(base.existing.CHROME, profile).start()
             try:
-                for width in [320, 360, 390, 1280]:
+                for width in [320, 360, 390]:
                     with self.subTest(width=width):
                         tab = self.open_page(AuditedChrome(browser), width=width,
                             path=reverse('estoque:sugestao_compra_fornecedor')+'?nova=1')

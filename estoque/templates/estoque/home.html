@@ -1653,6 +1653,34 @@
 }
 </style>
 
+<style>
+/* Same pressed feedback as the mobile lists, scoped to dashboard navigation. */
+.produtos-nav-grupos a[href] {
+  position: relative;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(159, 18, 57, .18);
+}
+.produtos-nav-grupos .produtos-topo-acoes a:active,
+.produtos-nav-grupos .produtos-topo-acoes a.is-pressed,
+.produtos-nav-grupos .produtos-topo-acoes a.is-loading {
+  transform: translateY(1px) scale(.985);
+  filter: brightness(.94);
+  box-shadow: inset 0 2px 6px rgba(15, 23, 42, .16);
+  transition: none;
+}
+.produtos-nav-grupos a.is-loading { cursor: progress; }
+.produtos-nav-grupos a.is-loading::after {
+  content: 'Abrindo...';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: inherit;
+  border-radius: inherit;
+}
+</style>
+
 <div class="container mt-4 produtos-mobile-page">
   {% if messages %}
   <div style="max-width: 720px; margin: 20px auto 18px auto; position: relative; z-index: 20;">
@@ -2469,4 +2497,44 @@ if (e.key === "Escape") {
 </script>
 
 
+<script>
+(() => {
+  const painel = document.querySelector('.produtos-nav-grupos');
+  if (!painel) return;
+  let abrindo = null, recuperacao;
+  function soltar() {
+    painel.querySelectorAll('a.is-pressed').forEach(link => {
+      if (link !== abrindo) link.classList.remove('is-pressed');
+    });
+  }
+  function restaurar() {
+    clearTimeout(recuperacao);
+    if (abrindo) {
+      abrindo.classList.remove('is-pressed', 'is-loading');
+      abrindo.removeAttribute('aria-busy');
+    }
+    abrindo = null;
+    soltar();
+  }
+  painel.addEventListener('pointerdown', event => {
+    const link = event.target.closest('a[href]');
+    if (link && event.button === 0 && event.isPrimary !== false) link.classList.add('is-pressed');
+  }, {passive:true});
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(tipo => painel.addEventListener(tipo, soltar, {passive:true}));
+  painel.addEventListener('click', event => {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey ||
+        event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
+    if (abrindo === link) { event.preventDefault(); return; }
+    restaurar();
+    abrindo = link;
+    link.classList.add('is-pressed', 'is-loading');
+    link.setAttribute('aria-busy', 'true');
+    // A cancelled/failed native navigation must never leave a shortcut locked.
+    recuperacao = setTimeout(restaurar, 12000);
+  });
+  addEventListener('pageshow', restaurar);
+  addEventListener('blur', soltar);
+})();
+</script>
 {% endblock %}
