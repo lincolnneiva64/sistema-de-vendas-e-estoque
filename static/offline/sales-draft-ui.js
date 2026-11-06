@@ -64,6 +64,7 @@ let replaceConfirmed = false;
 let preparedSubmission = false;
 let localCompletion = null, finalizing = null;
 let completionView = null;
+let completionOperation = null, sendingOnline = false;
 let completionGeneration = 0;
 let recoveringOnline = false;
 let automaticRecoveryRunning = false;
@@ -261,10 +262,24 @@ recoveryButton.addEventListener('click', async () => {
 });
 function offlineActions() {
     if (!nextSale.hidden) nextSale.disabled = startingNext || !!finalizing;
-    if (!window.salesOffline.active && !localCompletion) return;
     const button = document.getElementById('btnGravarVenda');
-    const label = localCompletion ? completionView?.recordId ? 'Venda sincronizada'
-        : completionView?.status === 'conflito' ? 'Venda offline em revisão' : 'Venda offline pendente' : 'Salvar venda offline';
+    const confirmed = completionOperation?.status === 'confirmada'
+        && validReceipt(completionOperation.server_result, completionOperation);
+    if (!window.salesOffline.active && !localCompletion && !finalizing) {
+        if (confirmed && !bridge.capture().itens.length) {
+            if (button.textContent !== 'Venda gravada!') button.textContent = 'Venda gravada!';
+        }
+        else if (button.textContent === 'Venda gravada!') button.textContent = 'Gravar Venda';
+        return;
+    }
+    const offlinePending = localCompletion?.conclusion_mode === 'offline'
+        && completionOperation?.transport === 'offline' && completionOperation.status === 'pendente'
+        && completionOperation.attempts === 0 && !completionOperation.server_result;
+    const label = !localCompletion && finalizing ? 'Gravando venda...' : confirmed ? 'Venda gravada!'
+        : localCompletion ? completionOperation?.status === 'enviando' ? 'Aguardando confirmação...'
+            : offlinePending ? 'Venda offline pendente'
+            : sendingOnline && (!completionOperation || completionOperation.status === 'pendente') ? 'Gravando venda...' : 'Verificar gravação'
+        : finalizing ? 'Gravando venda...' : 'Gravar Venda';
     const disabled = !!localCompletion || !!finalizing || blocked || !scope || !bridge.eligible;
     if (button.textContent !== label) button.textContent = label;
     if (button.disabled !== disabled) button.disabled = disabled;
@@ -273,6 +288,7 @@ function offlineActions() {
 }
 function completed(marker) {
     localCompletion = marker;
+    completionOperation = null;
     window.salesOffline.completed = true;
     blocked = true; ignoreReset = true; clearTimeout(timer);
     revision = marker.revision;
@@ -321,6 +337,7 @@ async function refreshCompletion() {
     if (operation && (operation.type !== 'criar_venda' || operation.actor_id !== scope.actor_id
         || operation.environment_id !== scope.environment_id || operation.device_id !== scope.device_id))
         throw new Error('Identidade da operação local incompatível. Dados preservados.');
+    completionOperation = operation;
     completionView = saleOperationState(operation);
     const closure=nextStock.closures?.find(row=>row.key===closureKey(operation))?.receipt;
     const closed=closedLocally(nextStock.closures,operation);
@@ -667,53 +684,56 @@ window.salesDraftUI = {
             throw new Error('Gravacao protegida indisponivel. Reabra a tela em navegador compativel; montagem preservada.');
         return navigator.locks.request('offline-pilot-sync', {ifAvailable:true}, async lock => {
             if (!lock) throw new Error('Outra aba esta enviando. Aguarde e consulte o resultado.');
-            await flush();
-            if (!await checkIdentity() || blocked) throw new Error('Identidade ou montagem mudou. Dados preservados.');
-            const current = await loadDraft(repo, scope);
-            if (!current.draft || current.revision !== revision
-                || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
-                throw new Error('Montagem nao persistida ou atualizada em outra aba. Reabra a tela.');
-            const result = await finalizeDraftOffline(repo, scope, {revision, draft_id:current.draft.draft_id,
-                origem_recebimento:origin, reference_snapshot:window.salesOffline.referenceSnapshot, transport:'online'});
-            completed(result.finalization);
-            submitted = null;
-            activeDraftId = result.finalization.draft_id;
-            announce('draft-finalized-offline',result.finalization.operation_id);
-            if (result.alreadyFinalized) return null;
-            const operation = await repo.updateAttempt(result.operation, {status:'enviando', attempts:1, transport:'online'});
-            if (!operation) return null;
-            await refreshCompletion();
-            let persisted = false, officialData = null;
+            sendingOnline = true;
             try {
-                const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
-                let response, data;
-                try { response = await fetch('/api/vendas/online/', {method:'POST', credentials:'same-origin', cache:'no-store',
-                    signal:controller.signal, headers:{'Content-Type':'application/json', 'X-CSRFToken':csrf},
-                    body:JSON.stringify({...commandOf(operation), payload_hash:operation.payload_hash})});
-                    data = await response.json(); }
-                finally { clearTimeout(timer); }
-                if (!validReceipt(data.receipt, operation, response.status)) throw new Error('Resposta do envio indisponivel ou invalida.');
-                await repo.record(operation, data.receipt); persisted = true; officialData = data;
+                await flush();
+                if (!await checkIdentity() || blocked) throw new Error('Identidade ou montagem mudou. Dados preservados.');
+                const current = await loadDraft(repo, scope);
+                if (!current.draft || current.revision !== revision
+                    || JSON.stringify(projectAssembly(bridge.capture())) !== JSON.stringify(projectAssembly(current.draft)))
+                    throw new Error('Montagem nao persistida ou atualizada em outra aba. Reabra a tela.');
+                const result = await finalizeDraftOffline(repo, scope, {revision, draft_id:current.draft.draft_id,
+                    origem_recebimento:origin, reference_snapshot:window.salesOffline.referenceSnapshot, transport:'online'});
+                completed(result.finalization);
+                submitted = null;
+                activeDraftId = result.finalization.draft_id;
+                announce('draft-finalized-offline',result.finalization.operation_id);
+                if (result.alreadyFinalized) return null;
+                const operation = await repo.updateAttempt(result.operation, {status:'enviando', attempts:1, transport:'online'});
+                if (!operation) return null;
                 await refreshCompletion();
-                document.dispatchEvent(new Event('offline-operations-changed'));
-                operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
-                // A query may already have released this assembly while the POST
-                // response was in flight. Do not clear a newly edited assembly.
-                if (queriedConfirmationId === operation.operation_id) return null;
-                return data.sucesso && data.receipt.status === 'confirmada' ? data : null;
-            } catch (error) {
-                if (persisted) {
-                    message.textContent = officialData.receipt.status === 'confirmada'
-                        ? `Venda #${officialData.receipt.record_id} confirmada oficialmente. Falha ao liberar a montagem local; reabra a tela. Nao repita a venda.`
-                        : 'Conflito oficial preservado. Reabra a tela para revisar a venda.';
-                    return officialData.sucesso ? officialData : null;
+                let persisted = false, officialData = null;
+                try {
+                    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
+                    let response, data;
+                    try { response = await fetch('/api/vendas/online/', {method:'POST', credentials:'same-origin', cache:'no-store',
+                        signal:controller.signal, headers:{'Content-Type':'application/json', 'X-CSRFToken':csrf},
+                        body:JSON.stringify({...commandOf(operation), payload_hash:operation.payload_hash})});
+                        data = await response.json(); }
+                    finally { clearTimeout(timer); }
+                    if (!validReceipt(data.receipt, operation, response.status)) throw new Error('Resposta do envio indisponivel ou invalida.');
+                    await repo.record(operation, data.receipt); persisted = true; officialData = data;
+                    await refreshCompletion();
+                    document.dispatchEvent(new Event('offline-operations-changed'));
+                    operationChannel?.postMessage({type:'changed', actor:scope.actor_id, environment:scope.environment_id});
+                    // A query may already have released this assembly while the POST
+                    // response was in flight. Do not clear a newly edited assembly.
+                    if (queriedConfirmationId === operation.operation_id) return null;
+                    return data.sucesso && data.receipt.status === 'confirmada' ? data : null;
+                } catch (error) {
+                    if (persisted) {
+                        message.textContent = officialData.receipt.status === 'confirmada'
+                            ? `Venda #${officialData.receipt.record_id} confirmada oficialmente. Falha ao liberar a montagem local; reabra a tela. Nao repita a venda.`
+                            : 'Conflito oficial preservado. Reabra a tela para revisar a venda.';
+                        return officialData.sucesso ? officialData : null;
+                    }
+                    if (!persisted) await repo.diagnose(operation, 'Resultado online desconhecido. ' + error.message);
+                    await refreshCompletion();
+                    if (saleOperationState(await repo.get('operations', operation.operation_id)).recordId) return null;
+                    if (!persisted) message.textContent = 'Resultado da venda desconhecido. Nao repita a venda. Use Consultar resultado da venda; reenvio somente por Status → Sincronizar agora quando permitido.';
+                    return null;
                 }
-                if (!persisted) await repo.diagnose(operation, 'Resultado online desconhecido. ' + error.message);
-                await refreshCompletion();
-                if (saleOperationState(await repo.get('operations', operation.operation_id)).recordId) return null;
-                if (!persisted) message.textContent = 'Resultado da venda desconhecido. Nao repita a venda. Use Consultar resultado da venda; reenvio somente por Status → Sincronizar agora quando permitido.';
-                return null;
-            }
+            } finally { sendingOnline = false; offlineActions(); }
         });
     },
     async canRecoverOnline() {

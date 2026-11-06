@@ -35,7 +35,7 @@ def check_loss(test, reopen=False, payment='A prazo'):
             # Invoke the same public submission method used by the sale button;
             # cash origin is explicit rather than faking an official receipt.
             tab.evaluate('window.realFetch=fetch;window.onlinePosts=0;window.fetch=async(url,options)=>{const response=await realFetch(url,options);if(String(url)==="/api/vendas/online/"){onlinePosts++;throw new TypeError("Resposta perdida depois do commit")};return response};window.done=salesDraftUI.submitOnline('+('{caixa:"10",banco:"14"}' if payment == 'À vista' else 'undefined')+',decodeURIComponent(document.cookie.split("; ").find(c=>c.startsWith("csrftoken=")).split("=")[1]));true')
-            tab.wait('document.querySelector("#sales-draft-status [role=alert]")?.textContent.includes("desconhecido")')
+            tab.wait('(await repo.all("operations"))[0]?.status==="resultado_desconhecido"')
             operation = tab.evaluate('(await repo.all("operations"))[0]')
             test.assertEqual(operation['status'], 'resultado_desconhecido')
             test.assertEqual(Venda.objects.count(), 1)

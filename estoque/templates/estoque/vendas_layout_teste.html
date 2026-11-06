@@ -5681,6 +5681,7 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
         vendaConfirmadaNestaMontagem = false;
         novaMontagemAposConfirmacao = false;
         btnGravarVenda.disabled = window.salesOffline.active;
+        btnGravarVenda.textContent = "Gravar Venda";
     }
 
     linhas.forEach((tr) => {
@@ -5773,7 +5774,7 @@ function limparVendaAposGravacao() {
     if (btnGravarVenda) {
         novaMontagemAposConfirmacao = vendaConfirmadaNestaMontagem;
         btnGravarVenda.disabled = vendaConfirmadaNestaMontagem || window.salesOffline.active;
-        btnGravarVenda.textContent = "Gravar Venda";
+        btnGravarVenda.textContent = "Venda gravada!";
     }
 }
 
@@ -7169,7 +7170,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
     if (vendaGravacaoEmAndamento || vendaConfirmadaNestaMontagem) return;
     vendaGravacaoEmAndamento = true;
     btnGravarVenda.disabled = true;
-    btnGravarVenda.textContent = "Gravando...";
+    btnGravarVenda.textContent = "Gravando venda...";
 
     const envioProtegido = window.salesDraftBridge?.eligible === true;
     try {
@@ -9720,10 +9721,10 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="/offline/assets/local-controlled-v1/app.js"></script>
 {% if local_sales_context %}
-<script type="module" src="/offline/assets/local-controlled-v1/local-sales.js"></script>
+<script type="module" src="/offline/assets/sale-button-feedback-v1/local-sales.js"></script>
 {% else %}
 <script type="module" src="/offline/assets/connection-recovery-v1/sales.js?pickup-send=1"></script>
-<script type="module" src="/offline/assets/sack-conversion-v1/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/sale-button-feedback-v1/sales-draft-ui.js"></script>
 {% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>

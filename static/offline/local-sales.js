@@ -13,7 +13,7 @@ const newAssembly=new URL(location.href);newAssembly.searchParams.set('nova_loca
 const link = document.createElement('a'); link.textContent='Ver venda'; link.hidden=true;
 box.append(status, query, replay, link, next); document.getElementById('layout-vendas').prepend(box);
 const channel = new BroadcastChannel('local-normal-sales');
-let blocked=false, busy=false, restoring=false, savePending=Promise.resolve();
+let blocked=false, busy=false, awaitingReceipt=false, restoring=false, savePending=Promise.resolve();
 let tab = sessionStorage.getItem('local-normal-sales-tab') || crypto.randomUUID();
 // Browser duplicate-tab copies sessionStorage. A held Web Lock prevents sharing a draft.
 await new Promise(resolve => {
@@ -73,6 +73,14 @@ function render() {
         : 'Resultado ainda nao confirmado. Consulte ou reenvie o mesmo comando. Nao repita a venda.';
     else status.textContent=record.result ? 'Venda confirmada. Recibo preservado.' : record.assembly && savedVersion===draftVersion ? 'Rascunho local salvo neste navegador.' : 'Salvando rascunho local...';
     freeze(blocked || pending());
+    const button = document.getElementById('btnGravarVenda');
+    const confirmed = result?.sucesso === true && result.receipt?.status === 'confirmada'
+        && (!!record.result || !bridge.capture().itens.length);
+    const label = confirmed ? 'Venda gravada!'
+        : busy ? awaitingReceipt ? 'Aguardando confirmação...' : 'Gravando venda...'
+        : pending() ? 'Verificar gravação' : null;
+    if (label && button.textContent !== label) button.textContent = label;
+    else if (!label && button.textContent === 'Venda gravada!') button.textContent = 'Gravar Venda';
 }
 async function persist() { await repo.put('metadata',record); }
 async function flush() {
@@ -104,11 +112,12 @@ async function verifyOwner() {
 async function send() {
     await verifyOwner();
     const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),15000);
+    awaitingReceipt=true; render();
     try {
         const response=await fetch('/api/vendas/online/',{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,
             headers:{'Content-Type':'application/json','X-CSRFToken':context.csrf,'X-Local-Sales':'1'},body:JSON.stringify(record.command)});
         return await consume(await response.json(),response.status);
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer); awaitingReceipt=false; render(); }
 }
 async function exclusive(work) {
     return navigator.locks.request('normal-sale-send:'+context.owner,{ifAvailable:true},async lock=>{
