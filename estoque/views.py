@@ -8649,11 +8649,10 @@ def sugestao_compra_fornecedor(request):
         )
         produto_ids = [vinculo.produto_id for vinculo in vinculos]
 
-        produtos_manual = (
-            list(Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id"))
-            if periodo_valido_para_calculo
-            else []
-        )
+        produtos_manual_qs = Produto.objects.filter(excluido=False, ativo=True).order_by("nome", "id")
+        if request.GET.get("consulta_manual") == "1":
+            produtos_manual_qs = produtos_manual_qs.filter(pk__in=produto_ids)
+        produtos_manual = list(produtos_manual_qs) if periodo_valido_para_calculo else []
         produto_ids_consulta = [produto.id for produto in produtos_manual]
         produtos_vinculados_ids = set(produto_ids)
         if periodo_valido_para_calculo:
@@ -8673,7 +8672,7 @@ def sugestao_compra_fornecedor(request):
             vendidos_por_produto = {}
             pedidos_abertos_por_produto = {}
 
-        for vinculo in vinculos:
+        for vinculo in ([] if request.GET.get("consulta_manual") == "1" else vinculos):
             produto = vinculo.produto
             estoque_atual = Decimal(produto.quantidade or 0)
             estoque_minimo = Decimal(produto.estoque_minimo or 0)
@@ -8767,6 +8766,10 @@ def sugestao_compra_fornecedor(request):
                     historico_produtos_manuais.get(produto_payload["id"], [])
                 )
             )
+
+    if request.GET.get("consulta_manual") == "1":
+        return JsonResponse({"produtos": produtos_manual_payload,
+                             "periodo_valido": bool(data_inicial and data_final)})
 
     historico_compras_produtos = _ultimas_compras_produtos_para_lista_fornecedor(
         [linha["produto_id"] for linha in linhas]
@@ -10334,7 +10337,10 @@ def compras_lista_fornecedor_gravar(request):
             total_sugerido_original=total_original,
             total_lista=total_lista,
             status=ListaCompraFornecedor.STATUS_ABERTA,
-            coleta_mobile=(dict(iniciada=True, versao=0, itens={str(i["produto"].pk): "pego" for i in itens_validos})
+            coleta_mobile=(dict(iniciada=True, versao=0, itens={str(i["produto"].pk):
+                "pendente" if isinstance(payload.get("coletaMobilePendentes"), list)
+                and str(i["produto"].pk) in payload["coletaMobilePendentes"] else "pego"
+                for i in itens_validos})
                 if payload.get("coletaMobileNova") is True else {}),
         )
         ItemListaCompraFornecedor.objects.bulk_create([

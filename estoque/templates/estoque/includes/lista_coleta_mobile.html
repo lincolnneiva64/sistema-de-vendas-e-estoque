@@ -101,7 +101,8 @@
     mover:(produto, estado, botao) => enviar('mover', produto, estado, botao)};
   window.prepararColetaPayload = payload => {
     if (!mobile()) return payload;
-    if (!dados) return {...payload, coletaMobileNova:true};
+    if (!dados) return {...payload, coletaMobileNova:true,
+      coletaMobilePendentes:cards().filter(c => c.dataset.inclusaoManual === '1' && c.dataset.naLista !== '1').map(c => c.dataset.produtoId)};
     const porId = new Map(cards().map(c => [c.dataset.produtoId, c]));
     payload.coletaMobile = {versao:dados.estado.versao || 0, atualizada:dados.atualizada,
       itens:Object.fromEntries(payload.linhas.map(l => [String(l.produtoId),

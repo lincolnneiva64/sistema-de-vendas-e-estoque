@@ -21,9 +21,96 @@ class SelecaoManualMobileTests(StaticLiveServerTestCase):
     effects = existing.ListaCardsResponsivosTests.effects
     clean_console = existing.ListaCardsResponsivosTests.clean_console
 
+    def test_catalogo_manual_fornecedor_ativo_fora_sugestao_mesmos_calculos(self):
+        from estoque.models import ProdutoFornecedor
+        product=self.products[0]
+        product.quantidade=1000
+        product.save(update_fields=['quantidade'])
+        ProdutoFornecedor.objects.filter(produto=self.products[1]).update(ativo=False)
+        self.products[2].ativo=False
+        self.products[2].save(update_fields=['ativo'])
+        url=reverse('estoque:sugestao_compra_fornecedor')
+        params={'fornecedor':self.supplier.pk,'periodo':'7'}
+        automatic=self.client.get(url, params)
+        self.assertNotIn(product.pk, [row['produto_id'] for row in automatic.context['linhas']])
+        before=self.effects()
+        response=self.client.get(url,{**params,'consulta_manual':'1'})
+        self.assertEqual(response.status_code,200)
+        payload=response.json()
+        self.assertEqual([p['id'] for p in payload['produtos']], [product.pk])
+        manual=payload['produtos'][0]
+        original=next(p for p in automatic.context['produtos_manual_payload'] if p['id']==product.pk)
+        self.assertEqual(manual,original)
+        self.assertTrue(payload['periodo_valido'])
+        self.assertEqual(self.effects(),before)
+
+    def test_fluxo_real_nova_lista_dois_produtos_sem_gerar(self):
+        import json
+        from estoque.models import ProdutoFornecedor, Compra
+        from estoque.tests_coleta_lista_browser import ColetaBrowserTests
+        tocar = lambda tab, selector: ColetaBrowserTests.tocar(self, tab, selector)
+        self.manual.quantidade = 1000
+        self.manual.save(update_fields=['quantidade'])
+        ProdutoFornecedor.objects.get_or_create(produto=self.manual, fornecedor=self.supplier)
+        with TemporaryDirectory(prefix='manual-interface-real-', ignore_cleanup_errors=True) as profile:
+            chrome = Chrome(existing.existing.CHROME, profile).start()
+            try:
+                tab = self.open_page(AuditedChrome(chrome), width=1440,
+                    path=reverse('estoque:sugestao_compra_fornecedor'))
+                # Same sequence as opening F12 and then enabling the mobile viewport.
+                tab.call('Emulation.setDeviceMetricsOverride',dict(width=390,height=844,deviceScaleFactor=1,mobile=True))
+                tab.call('Emulation.setTouchEmulationEnabled', dict(enabled=True, maxTouchPoints=1))
+                tab.wait("innerWidth===390 && !!document.getElementById('produtoManualBuscaSugestao').getClientRects().length")
+                tocar(tab, '#fornecedorBuscaSugestao')
+                tab.call('Input.insertText', dict(text=self.supplier.nome))
+                tab.wait('!!document.querySelector('+json.dumps(f'#fornecedorSugestoes [data-fornecedor-id="{self.supplier.pk}"]')+')')
+                tocar(tab, f'#fornecedorSugestoes [data-fornecedor-id="{self.supplier.pk}"]')
+                tocar(tab, '#periodo')
+                tab.call('Input.insertText', dict(text='7'))
+                tab.call('Input.dispatchKeyEvent', dict(type='keyDown', key='Tab', code='Tab', windowsVirtualKeyCode=9))
+                tab.call('Input.dispatchKeyEvent', dict(type='keyUp', key='Tab', code='Tab', windowsVirtualKeyCode=9))
+                tab.wait("!document.getElementById('produtoManualBuscaSugestao').disabled && document.getElementById('msgAdicionarProdutoSugestao').textContent===''")
+                self.assertTrue(tab.evaluate("!!document.getElementById('produtoManualBuscaSugestao').getClientRects().length"))
+                for product in [self.manual, self.products[0]]:
+                    if tab.evaluate("document.getElementById('areaAdicionarProdutosManual').classList.contains('sugestao-manual-recolhida-mobile')"):
+                        tocar(tab, '#btnToggleAdicionarProdutosMobile')
+                        tab.wait("document.getElementById('btnToggleAdicionarProdutosMobile').getAttribute('aria-expanded')==='true' && document.activeElement.id==='produtoManualBuscaSugestao'")
+                    tocar(tab, '#produtoManualBuscaSugestao')
+                    tab.call('Input.insertText', dict(text=product.nome))
+                    selector=f'#produtoManualSugestoes [data-produto-id="{product.pk}"]'
+                    try:
+                        tab.wait('!!document.querySelector('+json.dumps(selector)+')')
+                    except AssertionError:
+                        print('Diagnostico busca:', tab.evaluate("({fornecedor:document.getElementById('fornecedor').value,periodo:document.getElementById('periodo').value,inicio:document.getElementById('data_inicio').value,fim:document.getElementById('data_fim').value,busca:document.getElementById('produtoManualBuscaSugestao').value,msg:document.getElementById('msgAdicionarProdutoSugestao').textContent,opcoes:document.getElementById('produtoManualSugestoes').innerText,erros:purchaseConsoleErrors})"))
+                        self.screenshot(tab, 'manual-fluxo-real-falha')
+                        raise
+                    tocar(tab, selector)
+                    self.assertEqual(tab.evaluate("document.getElementById('produtoManualVendido').textContent"), '1.000')
+                    tocar(tab, '#produtoManualQtd')
+                    tab.call('Input.insertText', dict(text='2'))
+                    self.screenshot(tab, 'manual-fluxo-real-'+str(product.pk))
+                    tocar(tab, '#btnAdicionarProdutoSugestao')
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card').length"), 2)
+                tocar(tab, '#btnGravarListaFornecedor')
+                tab.wait('location.pathname==="/compras/listas-fornecedor/"')
+                saved=ListaCompraFornecedor.objects.latest('pk')
+                self.assertEqual(set(saved.itens.values_list('produto_id', flat=True)), {self.manual.pk,self.products[0].pk})
+                tab=self.open_page(AuditedChrome(chrome), width=390,
+                    path=reverse('estoque:compras_lista_fornecedor_editar',args=[saved.pk]))
+                for product in [self.manual,self.products[0]]:
+                    tocar(tab,f'#mobileSugestaoProdutos [data-produto-id="{product.pk}"] .sugestao-adicionar-lista-mobile')
+                    tab.wait('!coletaLista.ocupado')
+                tocar(tab,'#btnSalvarGerarCompraConfirmados')
+                tab.wait("location.search.includes('continuar_itens=1')")
+                self.assertEqual(Compra.objects.filter(lista_fornecedor=saved).get().itens.count(),2)
+                self.clean_console(tab)
+            finally:
+                chrome.stop()
+
     def select(self, tab, product):
-        tab.evaluate('''if (document.getElementById('areaAdicionarProdutosManual').classList.contains('sugestao-manual-recolhida-mobile'))
-            document.getElementById('btnToggleAdicionarProdutosMobile').click();true''')
+        if tab.evaluate("document.getElementById('areaAdicionarProdutosManual').classList.contains('sugestao-manual-recolhida-mobile')"):
+            tab.evaluate("document.getElementById('btnToggleAdicionarProdutosMobile').click();true")
+            tab.wait("document.activeElement.id==='produtoManualBuscaSugestao'")
         tab.wait('document.getElementById("btnToggleAdicionarProdutosMobile").getAttribute("aria-expanded")==="true"')
         import json
         tab.evaluate('window.search=document.getElementById("produtoManualBuscaSugestao");search.value=' + json.dumps(product.nome) + ';search.dispatchEvent(new Event("input",{bubbles:true}));true')
@@ -132,5 +219,43 @@ class SelecaoManualMobileTests(StaticLiveServerTestCase):
                         self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
                         self.clean_console(tab)
                         self.assertEqual(self.effects(), before)
+            finally:
+                chrome.stop()
+
+    def test_nova_manual_sem_gerar_consulta_periodo_e_salva(self):
+        import json
+        from estoque.models import ProdutoFornecedor
+        self.manual.quantidade = 1000
+        self.manual.save(update_fields=["quantidade"])
+        ProdutoFornecedor.objects.get_or_create(produto=self.manual, fornecedor=self.supplier)
+        with TemporaryDirectory(prefix='manual-sem-gerar-') as profile:
+            chrome = Chrome(existing.existing.CHROME, profile).start()
+            try:
+                tab = self.open_page(AuditedChrome(chrome), width=390,
+                    path=reverse('estoque:sugestao_compra_fornecedor')+'?nova=1')
+                tab.evaluate('window.purchaseConsoleErrors=[];window.alertasManual=[];window.alert=m=>alertasManual.push(m);window.consultasManuais=0;window.fetchManualOriginal=fetch;window.fetch=async(...a)=>{const r=await fetchManualOriginal(...a);if(String(a[0]).includes("consulta_manual"))consultasManuais++;return r};true')
+                tab.evaluate("document.getElementById('fornecedor').value="+json.dumps(str(self.supplier.pk))+";document.getElementById('periodo').value='7';document.getElementById('periodo').dispatchEvent(new Event('change',{bubbles:true}));true")
+                tab.wait("consultasManuais>0 && !document.getElementById('produtoManualBuscaSugestao').disabled && document.getElementById('msgAdicionarProdutoSugestao').textContent===''")
+                self.select(tab, self.manual)
+                self.assertEqual(tab.evaluate("document.getElementById('produtoManualVendido').textContent"), '1.000')
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card').length"), 0)
+                tab.evaluate("document.getElementById('data_inicio').value='2020-01-01';document.getElementById('data_fim').value='2020-01-02';document.getElementById('data_fim').dispatchEvent(new Event('change',{bubbles:true}));true")
+                tab.wait("document.getElementById('produtoManualVendido').textContent==='0.000'")
+                tab.evaluate("document.getElementById('periodo').value='14';document.getElementById('periodo').dispatchEvent(new Event('change',{bubbles:true}));true")
+                tab.wait("document.getElementById('produtoManualVendido').textContent==='1.000'")
+                tab.evaluate("document.getElementById('produtoManualQtd').value='2';document.getElementById('produtoManualQtd').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('btnAdicionarProdutoSugestao').click();document.getElementById('btnAdicionarProdutoSugestao').click();true")
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card').length"), 1)
+                tab.evaluate("document.getElementById('btnGravarListaFornecedor').click();true")
+                self.assertEqual(tab.evaluate('alertasManual'), [])
+                tab.wait('location.pathname==="/compras/listas-fornecedor/"')
+                saved = ListaCompraFornecedor.objects.latest('pk')
+                self.assertEqual(saved.itens.count(), 1)
+                self.assertEqual(saved.itens.get().produto_id, self.manual.pk)
+                tab = self.open_page(AuditedChrome(chrome), width=390,
+                    path=reverse('estoque:compras_lista_fornecedor_editar', args=[saved.pk]))
+                self.assertEqual(tab.evaluate("document.querySelectorAll('#mobileSugestaoProdutos .sugestao-mobile-card').length"), 1)
+                self.assertEqual(saved.itens.get().quantidade_final, Decimal('2'))
+                self.assertEqual(tab.evaluate("document.querySelector('#mobileSugestaoProdutos .sugestao-mobile-card').dataset.naLista==='1'"), False)
+                self.clean_console(tab)
             finally:
                 chrome.stop()
