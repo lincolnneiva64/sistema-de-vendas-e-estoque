@@ -4571,7 +4571,7 @@
   async function adicionarCardNaLista(card, confirmarFluxo = true) {
     if (!card || card.dataset.naLista === "1") return;
     if (card.dataset.editando === "1") { confirmarCardEdicaoDireta(card); if (card.dataset.editando === "1") return; }
-    if (confirmarFluxo && window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pego")) return;
+    if (confirmarFluxo && window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pego", card.querySelector(".sugestao-adicionar-lista-mobile"))) return;
     marcarBotao(card, true);
     renderItem(card);
     if (confirmarFluxo) confirmarAdicaoMobile(card);
@@ -4586,7 +4586,7 @@
     if (item.dataset.editando === "1" && !salvarEdicao(item)) return;
     const card = cardPorId(item.dataset.produtoId);
     if (!card) return;
-    if (window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pendente")) return;
+    if (window.coletaLista && !await window.coletaLista.mover(card.dataset.produtoId, "pendente", item.querySelector(".sugestao-devolver-lista-mobile"))) return;
     marcarBotao(card, false);
     produtosTratadosMobile.delete(String(card.dataset.produtoId));
     card.classList.remove("sugestao-tratada-mobile");
@@ -4685,7 +4685,7 @@
 
     if (btnConfirmarRemover) btnConfirmarRemover.disabled = true;
     const produtoRemovido = (item || card)?.dataset.produtoId;
-    if (window.coletaLista && !await window.coletaLista.mover(produtoRemovido, 'removido')) {
+    if (window.coletaLista && !await window.coletaLista.mover(produtoRemovido, 'removido', btnConfirmarRemover)) {
       remocaoEmAndamento = false;
       if (btnConfirmarRemover) btnConfirmarRemover.disabled = false;
       return;
@@ -5918,7 +5918,7 @@
       credentials: "same-origin",
       headers: {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
     }).then(async function(resposta) {
-      if (!resposta.ok) throw new Error((await resposta.json()).erro || "Falha ao salvar rascunho.");
+      if (!resposta.ok) throw Object.assign(new Error((await resposta.json()).erro || "Falha ao salvar rascunho."), {retentavel:[400,403,422].includes(resposta.status)});
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo) throw new Error("Salvamento nao confirmado.");
@@ -5951,7 +5951,7 @@
       method: "POST", body: new FormData(formGravarListaFornecedor), credentials: "same-origin",
       headers: {"Accept": "application/json"}
     }).then(async function(resposta) {
-      if (!resposta.ok) throw new Error((await resposta.json()).erro || "Falha ao salvar.");
+      if (!resposta.ok) throw Object.assign(new Error((await resposta.json()).erro || "Falha ao salvar."), {retentavel:[400,403,422].includes(resposta.status)});
       return resposta.json();
     }).then(function(resultado) {
       if (!resultado.salvo || !resultado.redirect_url) throw new Error("Salvamento nao confirmado.");

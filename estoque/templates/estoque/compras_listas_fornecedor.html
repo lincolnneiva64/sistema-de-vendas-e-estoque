@@ -3076,6 +3076,8 @@ td.listas-fornecedor-total {
   document.addEventListener("click", function(event) {
     const link = event.target.closest("a[data-mobile-action-feedback]");
     if (!link || event.defaultPrevented) return;
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || link.target) return;
+    if (link.dataset.loadingApplied === "1") { event.preventDefault(); return; }
     link.classList.add("is-loading");
     textoCarregando(link);
   });
@@ -3085,8 +3087,20 @@ td.listas-fornecedor-total {
     if (!form || event.defaultPrevented) return;
     const botao = form.querySelector("[data-mobile-action-feedback]");
     if (!botao) return;
+    if (form.dataset.enviando === "1") { event.preventDefault(); return; }
+    form.dataset.enviando = "1";
+    botao.dataset.originalText = botao.textContent;
+    botao.disabled = true;
     botao.classList.add("is-loading");
     botao.textContent = "Cancelando...";
+  });
+  addEventListener('pageshow', () => {
+    document.querySelectorAll('[data-mobile-action-feedback]').forEach(botao => {
+      botao.classList.remove('is-loading', 'is-pressed');
+      if (botao.dataset.originalText) botao.textContent = botao.dataset.originalText;
+      delete botao.dataset.loadingApplied;
+      if (botao.form?.dataset.enviando) { delete botao.form.dataset.enviando; botao.disabled = false; }
+    });
   });
 })();
 </script>

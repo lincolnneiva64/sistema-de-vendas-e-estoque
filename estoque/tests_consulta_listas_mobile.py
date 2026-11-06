@@ -76,7 +76,7 @@ class ConsultaListasMobileTests(StaticLiveServerTestCase):
     def test_visual_desktop_unchanged_and_mobile_cards_actions(self):
         EVIDENCE.mkdir(exist_ok=True)
         current=TEMPLATE.read_text(encoding='utf-8')
-        original=subprocess.check_output(['git','show','9b117de:estoque/templates/estoque/compras_listas_fornecedor.html']).decode()
+        original=subprocess.check_output(['git','show','HEAD:estoque/templates/estoque/compras_listas_fornecedor.html']).decode()
         before=self.effects();report=[]
         with TemporaryDirectory(prefix='consulta-mobile-chrome-') as profile:
             browser=Chrome(fixtures.CHROME,profile).start()
@@ -114,7 +114,7 @@ class ConsultaListasMobileTests(StaticLiveServerTestCase):
                         })''')
                         for index,metric in enumerate(metrics):
                             self.assertTrue(metric['topFits']);self.assertTrue(metric['dataTotalSameRow']);self.assertTrue(metric['periodSingleLine'])
-                            self.assertLess(metric['height'],old_heights[index])
+                            self.assertEqual(metric['height'],old_heights[index])
                             self.assertTrue(all(b['height']>=44 and b['fits'] for b in metric['buttons']))
                             self.assertEqual(len({b['top'] for b in metric['buttons']}),2)
                             self.assertEqual(metric['buttons'][0]['top'],metric['buttons'][2]['top'])

@@ -46,6 +46,7 @@
   }
   function falhar(erro) {
     if (!mobile() && !ocupado) return;
+    if (erro.retentavel) { mensagem(erro.message + ' Tente novamente.'); return; }
     bloqueado = true;
     mensagem((erro instanceof TypeError ? 'Sem confirmação do servidor.' : erro.message) +
       ' Reabra a lista para consultar o estado salvo antes de continuar.');
@@ -59,7 +60,7 @@
     dados.estado = resultado.coleta;
     dados.atualizada = resultado.atualizada;
   }
-  async function enviar(acao, produto, estado) {
+  async function enviar(acao, produto, estado, botao) {
     if (!dados || !mobile()) return true;
     if (ocupado || bloqueado) return false;
     if (acao === 'mover' && !pronto()) return false;
@@ -67,6 +68,8 @@
     if (acao === 'mover' && !idsSalvos.has(String(produto))) return true;
     if (!iniciar(acao !== 'mover')) return false;
     mensagem('Salvando coleta…');
+    const rotulo = botao?.textContent;
+    if (botao) { botao.textContent = 'Salvando...'; botao.setAttribute('aria-busy', 'true'); }
     try {
       const body = new FormData();
       body.set('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
@@ -77,18 +80,25 @@
       if (!resposta.headers.get('content-type')?.includes('application/json'))
         throw new Error('Não foi possível confirmar o salvamento da coleta.');
       const resultado = await resposta.json();
-      if (!resposta.ok || !resultado.coleta) throw new Error(resultado.erro || 'Não foi possível salvar a coleta.');
+      if (!resposta.ok || !resultado.coleta) {
+        const erro = new Error(resultado.erro || 'Falha ao salvar a coleta.');
+        erro.retentavel = [400, 403, 422].includes(resposta.status);
+        throw erro;
+      }
       receber(resultado);
       mensagem('Coleta salva.');
       return true;
     } catch (erro) {
       falhar(erro);
       return false;
-    } finally { finalizar(); }
+    } finally {
+      finalizar();
+      if (botao) { botao.textContent = rotulo; botao.removeAttribute('aria-busy'); }
+    }
   }
   window.coletaLista = {pronto, receber, iniciar:() => iniciar(), finalizar, falhar,
     navegar:() => { navegando = true; }, get ocupado() { return ocupado; }, get dados() { return dados; },
-    mover:(produto, estado) => enviar('mover', produto, estado)};
+    mover:(produto, estado, botao) => enviar('mover', produto, estado, botao)};
   window.prepararColetaPayload = payload => {
     if (!mobile()) return payload;
     if (!dados) return {...payload, coletaMobileNova:true};
@@ -126,7 +136,7 @@
       // A direct product action starts with the saved items still pending.
       // Replay only after the server acknowledges initialization and its version.
       event.preventDefault(); event.stopImmediatePropagation();
-      if (await enviar('iniciar_pendente')) {
+      if (await enviar('iniciar_pendente', null, null, acaoProduto)) {
         aviso.hidden = true;
         acaoProduto.click();
       }

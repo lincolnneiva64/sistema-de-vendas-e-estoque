@@ -22,6 +22,23 @@ class ColetaOperacoesBrowserTests(ColetaFixture, StaticLiveServerTestCase):
     pegar = ColetaBrowserTests.pegar
     resumo = ColetaBrowserTests.resumo
 
+    def test_primeiro_toque_feedback_repeticao_e_rejeicao_recuperavel(self):
+        t = self.navegador(); self.abrir(t)
+        selector = '#mobileSugestaoProdutos .sugestao-confirmar-card-mobile'
+        t.evaluate("window.fetchOriginal=fetch;window.envios=0;window.fetch=async(...a)=>{if(!(a[1]?.body instanceof FormData)||!a[1].body.has('acao_coleta_mobile'))return fetchOriginal(...a);envios++;await new Promise(r=>window.liberarRejeicao=r);return new Response(JSON.stringify({erro:'Rejeicao ficticia'}),{status:400,headers:{'Content-Type':'application/json'}})};true")
+        self.tocar(t, selector)
+        t.wait("!!window.liberarRejeicao")
+        self.assertEqual(t.evaluate('document.querySelector('+json.dumps(selector)+').textContent'), 'Salvando...')
+        t.evaluate('document.querySelector('+json.dumps(selector)+").dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));true")
+        self.assertEqual(t.evaluate('envios'), 1)
+        t.evaluate('liberarRejeicao();true')
+        t.wait('!coletaLista.ocupado')
+        self.assertFalse(t.evaluate('document.querySelector('+json.dumps(selector)+').disabled'))
+        t.evaluate('window.fetch=fetchOriginal;true')
+        self.tocar(t, selector)
+        t.wait("coletaLista.dados.estado.iniciada && !coletaLista.ocupado")
+        self.assertEqual(t.evaluate('document.querySelector('+json.dumps(selector)+').textContent'), 'Confirmar')
+
     def preparar(self):
         t = self.navegador(); self.abrir(t); self.iniciar(t)
         t.evaluate("window.alertasTeste=[];window.alert=m=>alertasTeste.push(m);true")
