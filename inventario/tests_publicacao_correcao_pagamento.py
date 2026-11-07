@@ -16,6 +16,7 @@ from django.test.utils import CaptureQueriesContext
 
 from inventario.management.commands.publicar_cancelamento import (
     AUTHORIZED, CORRECAO, COMPROVANTE, RECOLHIMENTO, TARGET, COMPRA, PRECISAO, COLETA, LOCK, Command,
+    CANCELAMENTO, RASTREABILIDADE,
 )
 from locacoes.tests_saldos_consulta import DadosSaldos
 
@@ -24,7 +25,7 @@ TABLE = 'locacoes_correcaopagamentolocacao'
 
 class CorrecaoDefinitionTests(SimpleTestCase):
     def test_only_0019_is_added_to_existing_authorizations(self):
-        self.assertEqual(AUTHORIZED, {CORRECAO, COMPROVANTE, RECOLHIMENTO, TARGET, COMPRA, PRECISAO, COLETA})
+        self.assertEqual(AUTHORIZED, {CORRECAO, COMPROVANTE, RECOLHIMENTO, CANCELAMENTO, *RASTREABILIDADE, COMPRA, PRECISAO, COLETA})
         Command.validate_definitions(MigrationLoader(None))
 
     def test_changed_dependencies_metadata_and_extra_operations_are_rejected(self):

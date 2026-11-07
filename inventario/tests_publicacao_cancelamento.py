@@ -13,7 +13,9 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import SimpleTestCase, TransactionTestCase
 
-from inventario.management.commands.publicar_cancelamento import Command, TARGET, RECOLHIMENTO, COMPROVANTE, LOCK
+from inventario.management.commands.publicar_cancelamento import (
+    Command, TARGET, RECOLHIMENTO, COMPROVANTE, LOCK, CANCELAMENTO, RASTREABILIDADE,
+)
 from inventario.tests_cancelamento import Fixture
 
 
@@ -45,7 +47,8 @@ class PublicacaoCancelamentoTests(Fixture, TransactionTestCase):
             for table in connection.introspection.table_names(cursor):
                 if business and not table.startswith(('estoque_', 'inventario_', 'offline_', 'locacoes_')):
                     continue
-                if business and table in {'locacoes_autorizacaorecolhimento', 'locacoes_correcaopagamentolocacao'}:
+                if business and table in {'locacoes_autorizacaorecolhimento', 'locacoes_correcaopagamentolocacao',
+                                          'inventario_detalhemovimentoestoque'}:
                     continue
                 columns = [c.name for c in connection.introspection.get_table_description(cursor, table)]
                 if business and table == 'inventario_inventario':
@@ -249,8 +252,10 @@ class PublicacaoCancelamentoTests(Fixture, TransactionTestCase):
 
     def test_noop_detecta_recorder_com_colunas_ausentes(self):
         self.previous()
-        self.recorder.record_applied(*TARGET)
-        self.addCleanup(self.recorder.record_unapplied, *TARGET)
+        # Reproduce a consistent but false recorder all the way to the new leaf.
+        for key in (CANCELAMENTO, *RASTREABILIDADE):
+            self.recorder.record_applied(*key)
+            self.addCleanup(self.recorder.record_unapplied, *key)
         with self.assertRaisesMessage(CommandError, 'estrutura de cancelamento'):
             self.run_gate()
 

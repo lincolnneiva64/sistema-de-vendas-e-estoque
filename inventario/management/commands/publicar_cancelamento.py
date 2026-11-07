@@ -16,17 +16,24 @@ from locacoes.management.commands.publicar_recolhimento import (
 )
 
 
-TARGET = ('inventario', '0008_inventario_cancelamento')
+CANCELAMENTO = ('inventario', '0008_inventario_cancelamento')
+RASTREABILIDADE = (
+    ('inventario', '0009_detalhe_movimento_estoque'),
+    ('inventario', '0010_acao_regularizacao_conferencia'),
+    ('inventario', '0011_capacidade_unidades_detalhe_movimento'),
+    ('inventario', '0012_evidencia_complementar_movimento'),
+)
+TARGET = RASTREABILIDADE[-1]
 COMPRA = ('estoque', '0135_conciliacao_compra')
 PRECISAO = ('estoque', '0136_itemvenda_quantidade_precisao')
 COLETA = ('estoque', '0137_lista_coleta_mobile')
 COMPROVANTE = ('locacoes', '0018_comprovante_cliente')
 CORRECAO = ('locacoes', '0019_correcao_pagamento_direto')
-AUTHORIZED = frozenset((RECOLHIMENTO, COMPROVANTE, CORRECAO, TARGET, COMPRA, PRECISAO, COLETA))
+AUTHORIZED = frozenset((RECOLHIMENTO, COMPROVANTE, CORRECAO, CANCELAMENTO, COMPRA, PRECISAO, COLETA, *RASTREABILIDADE))
 
 
 class Command(BaseCommand):
-    help = 'Valida todas as pendências e aplica somente inventario.0008, locacoes.0017–0019 e estoque.0135–0137 autorizadas.'
+    help = 'Valida todas as pendências e aplica somente inventario.0008–0012, locacoes.0017–0019 e estoque.0135–0137 autorizadas.'
     requires_system_checks = []
 
     def add_arguments(self, parser):
@@ -113,7 +120,8 @@ class Command(BaseCommand):
                     or operation.field.deconstruct()[1:] != field.deconstruct()[1:]):
                 raise CommandError('Publicação recusada: locacoes.0018 deve adicionar somente os três campos opcionais autorizados.')
         Command.validate_correction_definition(loader)
-        current = loader.disk_migrations.get(TARGET)
+        Command.validate_traceability_definitions(loader)
+        current = loader.disk_migrations.get(CANCELAMENTO)
         expected = [
             ('cancelada_em', models.DateTimeField(blank=True, null=True)),
             ('cancelada_por', models.ForeignKey(blank=True, null=True,
@@ -294,6 +302,83 @@ class Command(BaseCommand):
             raise CommandError('Publicação recusada: chaves/unicidade/FKs de locacoes.0019 ausentes.')
 
     @staticmethod
+    def validate_traceability_definitions(loader):
+        # Pin the complete serialized operations, including fields, constraints and
+        # RunPython arguments. Pin callable bodies separately: serialization only
+        # records their import paths. No hash is derived from the candidate itself.
+        digests = (
+            '827b58e3d12c5ec60ba552ba2ab2231c110b94c4a18abb9fab3f3b2cd597eaa6',
+            '8b58e661acfeabce62d24ff7810fece67bbab6fed9bf855defd6fdc0394a6bc3',
+            '160d076afabadb090c013c940aeecf28bc8a1dcd76beba36b1fce692ca63a83d',
+            '4df2105d48d179d5ad0c618988a456acd6c567f1d3dced69d44c476b04966685',
+        )
+        previous = CANCELAMENTO
+        for index, (key, digest) in enumerate(zip(RASTREABILIDADE, digests)):
+            migration = loader.disk_migrations.get(key)
+            dependencies = [previous]
+            if index < 3:
+                dependencies = [COLETA, previous, migrations.swappable_dependency(settings.AUTH_USER_MODEL)]
+            if (migration is None or migration.atomic is not True or migration.initial is not None
+                    or migration.replaces or migration.run_before or migration.dependencies != dependencies
+                    or any(operation.elidable for operation in migration.operations)
+                    or hashlib.sha256(MigrationWriter.serialize(migration.operations)[0].encode()).hexdigest() != digest):
+                raise CommandError(f'Publicação recusada: {key[0]}.{key[1]} diverge da migration autorizada.')
+            previous = key
+        operation = loader.disk_migrations[RASTREABILIDADE[0]].operations[-1]
+        for function, digest in zip((operation.code, operation.reverse_code), (
+                '74a906727d486cf2099a83eeafe49bf1ed979c7597655980247883f23601a61b',
+                '0732604d3cf7acb835dca1a3971b25cd7c1490b2d401417a6b59900326c9f746')):
+            try:
+                actual = hashlib.sha256(inspect.getsource(function).replace('\r\n', '\n').strip().encode()).hexdigest()
+            except (OSError, TypeError) as exc:
+                raise CommandError('Publicação recusada: função de inventario.0009 não verificável.') from exc
+            if actual != digest:
+                raise CommandError('Publicação recusada: função de inventario.0009 não autorizada.')
+
+    @staticmethod
+    def verify_traceability_schema(cursor):
+        # Use the pinned historical schema, not potentially newer application models.
+        model = MigrationExecutor(connection).loader.project_state([TARGET]).apps.get_model(
+            'inventario', 'DetalheMovimentoEstoque')
+        table = model._meta.db_table
+        cursor.execute('''SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
+                pg_get_expr(d.adbin, d.adrelid)
+            FROM pg_attribute a LEFT JOIN pg_attrdef d
+              ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+            WHERE a.attrelid = to_regclass(%s) AND a.attnum > 0 AND NOT a.attisdropped''', [table])
+        actual = {name: (kind, required, default) for name, kind, required, default in cursor.fetchall()}
+        expected = {field.column: (field.db_type(connection).replace('varchar(', 'character varying(').replace(', ', ','), not field.null,
+                    "'{}'::jsonb" if field.name == 'evidencia' else None)
+                    for field in model._meta.local_fields}
+        if actual != expected:
+            raise CommandError('Publicação recusada: colunas/default da rastreabilidade incompatíveis.')
+        constraints = connection.introspection.get_constraints(cursor, table)
+        for constraint in model._meta.constraints:
+            found = constraints.get(constraint.name)
+            if (not found or isinstance(constraint, models.CheckConstraint) and not found['check']
+                    or isinstance(constraint, models.UniqueConstraint) and
+                    (not found['unique'] or found['columns'] != list(constraint.fields))):
+                raise CommandError('Publicação recusada: restrições da rastreabilidade ausentes.')
+        for field in model._meta.local_fields:
+            if field.primary_key or field.unique:
+                if not any(c['columns'] == [field.column] and
+                           c['primary_key' if field.primary_key else 'unique'] for c in constraints.values()):
+                    raise CommandError('Publicação recusada: unicidade da rastreabilidade ausente.')
+            if field.is_relation:
+                target = (field.remote_field.model._meta.db_table, field.target_field.column)
+                if not any(c['columns'] == [field.column] and c['foreign_key'] == target for c in constraints.values()):
+                    raise CommandError('Publicação recusada: FK da rastreabilidade ausente.')
+        cursor.execute('''SELECT t.tgenabled, t.tgtype, p.prosrc, p.proconfig
+            FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+            WHERE t.tgrelid = to_regclass(%s) AND t.tgname = 'inventario_detalhe_imutavel'
+              AND NOT t.tgisinternal AND p.proname = 'inventario_detalhe_imutavel_fn' ''', [table])
+        trigger = cursor.fetchone()
+        if (not trigger or trigger[0] not in ('O', 'A') or trigger[1] != 27
+                or ' '.join(trigger[2].split()) != "BEGIN RAISE EXCEPTION 'Detalhe de movimento imutavel'; END;"
+                or trigger[3] != ['search_path=pg_catalog']):
+            raise CommandError('Publicação recusada: imutabilidade da rastreabilidade incompatível.')
+
+    @staticmethod
     def verify_schema():
         with connection.cursor() as cursor:
             columns = {c.name: c for c in connection.introspection.get_table_description(cursor, 'inventario_inventario')}
@@ -354,3 +439,4 @@ class Command(BaseCommand):
             if not any(c['columns'] == ['id'] and c['primary_key'] for c in constraints.values()):
                 raise CommandError('Publicação recusada: chave de estoque.0135 ausente ou incompatível.')
             Command.verify_correction_schema(cursor)
+            Command.verify_traceability_schema(cursor)

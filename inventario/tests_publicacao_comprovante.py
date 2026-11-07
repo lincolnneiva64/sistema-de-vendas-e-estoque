@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from inventario.management.commands.publicar_cancelamento import (
     AUTHORIZED, COLETA, COMPRA, COMPROVANTE, CORRECAO, LOCK, PRECISAO, RECOLHIMENTO, TARGET, Command,
+    CANCELAMENTO, RASTREABILIDADE,
 )
 from offline import test_pickup_checklist as pickup_tests
 
@@ -27,7 +28,7 @@ FIELDS = ('comprovante_token_hash', 'comprovante_expira_em', 'comprovante_revoga
 
 class ComprovanteDefinitionTests(SimpleTestCase):
     def test_allowlist_adds_only_0018_and_exact_definition_is_accepted(self):
-        self.assertEqual(AUTHORIZED, {RECOLHIMENTO, COMPROVANTE, CORRECAO, TARGET, COMPRA, PRECISAO, COLETA})
+        self.assertEqual(AUTHORIZED, {RECOLHIMENTO, COMPROVANTE, CORRECAO, CANCELAMENTO, *RASTREABILIDADE, COMPRA, PRECISAO, COLETA})
         Command.validate_definitions(MigrationLoader(None))
 
     def test_all_definition_changes_are_refused(self):
