@@ -44,6 +44,9 @@ def resumo_painel(linhas):
         linha["diferenca_texto"] = fisico["diferenca"] if fisico else quantidade(diferenca, item.cadastro, diferenca=True)
         if fisico and resultado == 'correto':
             linha['diferenca_texto'] = 'Sem diferença'
+        if fisico.get('normalizacao'):
+            linha['resultado_label'] = 'Ajuste de precisão'
+            linha['diferenca_texto'] = 'Ajuste de precisão'
         base = abs(rodada.esperado)
         linha["base_percentual"] = quantidade(base, item.cadastro, diferenca=True)
         if base:

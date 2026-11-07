@@ -133,7 +133,7 @@ class TabelaVisualTests(unittest.TestCase):
         linha['comparacao_fisica'].update(esperado='4 PCT + 0 UN = 24 UN',
                                         encontrado='3 PCT + 5 UN = 23 UN')
         html, texto = self.renderizar(linha)
-        self.assertIn('24 UN no total', texto)
+        self.assertNotIn('24 UN no total', texto)
         self.assertIn('23 UN no total', texto)
         self.assertNotIn(' = ', texto)
         self.assertIn('Falta 1 UN', texto)
@@ -158,6 +158,42 @@ class TabelaVisualTests(unittest.TestCase):
         self.assertIn('max-height:min(75vh,650px)', css)
         self.assertIn('@media(max-width:1100px)', css)
         self.assertIn('white-space:nowrap', css)
+
+    def test_colunas_alinhadas_sem_esperado_e_sem_banco(self):
+        class Celulas(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.celulas = []
+            def handle_starttag(self, tag, attrs):
+                if tag in ('th', 'td'):
+                    self.celulas.append((tag, dict(attrs)))
+
+        for fisica in (True, False):
+            linha = self.linha()
+            if not fisica:
+                linha.pop('comparacao_fisica')
+            html, _ = self.renderizar(linha)
+            parser = Celulas()
+            parser.feed(html)
+            self.assertEqual(len(parser.celulas), 7)
+            self.assertEqual([a.get('data-label') for t, a in parser.celulas[1:]], [
+                'Estoque atual', 'Contado', 'Diferença / %', 'Estimativa ao custo',
+                'Situação', 'Atualização do estoque'])
+            self.assertNotIn('data-label="Esperado no OK"', html)
+
+        # Render the actual table fragment, including its empty state, without
+        # loading the page's unrelated forms or executing any endpoint.
+        fonte = (self.root/'inventario/templates/inventario/detalhe.html').read_text(encoding='utf-8')
+        inicio = fonte.index('<div class="scroll tabela-resumo">')
+        fim = fonte.index('</tbody></table></div>', inicio) + len('</tbody></table></div>')
+        template = self.engine.from_string(fonte[inicio:fim])
+        for linhas in ([], [self.linha()]):
+            html = template.render(Context({'linhas': linhas, 'inventario': {'pk': 3}}))
+            cabecalho = html.split('<thead>')[1].split('</thead>')[0]
+            self.assertEqual(cabecalho.count('scope="col"'), 7)
+            self.assertNotIn('Esperado no OK', cabecalho)
+            if not linhas:
+                self.assertIn('colspan="7"', html)
 
     def test_formatacao_escapa_html(self):
         from .templatetags.conferencia_visual import parcelas_quantidade

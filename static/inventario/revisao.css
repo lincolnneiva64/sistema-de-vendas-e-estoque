@@ -190,14 +190,13 @@ main:has(.painel-inventario){max-width:1360px}
 .detalhes-conferencia header button{font-size:.85rem;padding:8px 12px;min-height:44px}
 .detalhes-conferencia .representacao-fisica{font-size:.9rem;margin:12px 0}
 @media(min-width:1101px){
- .tabela-resumo th:nth-child(1){width:18%}
- .tabela-resumo th:nth-child(2){width:9%}
- .tabela-resumo th:nth-child(3){width:13%}
- .tabela-resumo th:nth-child(4){width:15%}
- .tabela-resumo th:nth-child(5){width:15%}
+ .tabela-resumo th:nth-child(1){width:23%}
+ .tabela-resumo th:nth-child(2){width:11%}
+ .tabela-resumo th:nth-child(3){width:17%}
+ .tabela-resumo th:nth-child(4){width:17%}
+ .tabela-resumo th:nth-child(5){width:10%}
  .tabela-resumo th:nth-child(6){width:9%}
- .tabela-resumo th:nth-child(7){width:8%}
- .tabela-resumo th:nth-child(8){width:13%}
+ .tabela-resumo th:nth-child(7){width:13%}
 }
 @media(max-width:1100px){
  .tabela-resumo .quantidade-principal{font-size:.88rem;white-space:normal}
