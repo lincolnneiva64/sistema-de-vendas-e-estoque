@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from uuid import uuid4
+from django.core.validators import RegexValidator
 
 
 class Inventario(models.Model):
@@ -204,3 +205,73 @@ class EventoAjuste(RegistroImutavel):
     acao = models.CharField(max_length=20)
     dados = models.JSONField(default=dict)
     criado_em = models.DateTimeField(auto_now_add=True)
+
+
+class DetalheMovimentoEstoque(RegistroImutavel):
+    """Optional, immutable attribution of one actual observer event.
+
+    Writers opt in explicitly; no signal makes attribution globally mandatory.
+    Balances and event time belong to MovimentoObservado; NULL is never zero.
+    quantidade_entrada is the operand used by the operation, not a second balance.
+    """
+    movimento = models.OneToOneField(MovimentoObservado, on_delete=models.PROTECT,
+                                     related_name='detalhe')
+    operacao_id = models.UUIDField()
+    ordem = models.PositiveIntegerField()
+    acao = models.CharField(max_length=32, choices=[(v, v) for v in (
+        'entrada', 'saida', 'edicao', 'cancelamento', 'devolucao', 'ajuste',
+        'regularizacao', 'regularizacao_conferencia', 'sincronizacao', 'cadastro')])
+    documento_tipo = models.CharField(max_length=40)
+    documento_id = models.CharField(max_length=160)
+    item_referencia = models.CharField(max_length=160, blank=True)
+    executor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.PROTECT, related_name='detalhes_movimentos_estoque')
+    executor_nome = models.CharField(max_length=150, blank=True)
+    operador = models.ForeignKey('estoque.Funcionario', null=True, blank=True,
+        on_delete=models.PROTECT, related_name='detalhes_movimentos_estoque')
+    operador_nome = models.CharField(max_length=150, blank=True)
+    contexto = models.CharField(max_length=16, choices=[(v, v) for v in (
+        'autenticado', 'local', 'sistema')])
+    unidade_base = models.CharField(max_length=20, validators=[RegexValidator(r'\S')])
+    quantidade_entrada = models.DecimalField(max_digits=27, decimal_places=9)
+    unidade_entrada = models.CharField(max_length=20, validators=[RegexValidator(r'\S')])
+    conversao = models.CharField(max_length=16, choices=[(v, v) for v in (
+        'nenhuma', 'divisao', 'multiplicacao')])
+    fator = models.DecimalField(max_digits=18, decimal_places=9, null=True, blank=True)
+    evidencia = models.JSONField(default=dict, db_default={}, blank=True)
+
+    @property
+    def quantidade_movimentada(self):
+        movimento = self.movimento
+        if movimento.antes is None or movimento.depois is None:
+            return None
+        return movimento.depois - movimento.antes
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['operacao_id', 'ordem'], name='det_mov_operacao_ordem_unica'),
+            models.CheckConstraint(condition=models.Q(ordem__gt=0), name='det_mov_ordem_positiva'),
+            models.CheckConstraint(condition=models.Q(acao__in=[
+                'entrada', 'saida', 'edicao', 'cancelamento', 'devolucao', 'ajuste',
+                'regularizacao', 'regularizacao_conferencia', 'sincronizacao', 'cadastro']), name='det_mov_acao_valida'),
+            models.CheckConstraint(condition=(
+                models.Q(contexto='autenticado', executor__isnull=False) & ~models.Q(executor_nome='')
+                | models.Q(contexto='local') & ~models.Q(operador_nome='')
+                | models.Q(contexto='sistema') & ~models.Q(executor_nome='')
+            ), name='det_mov_autoria_valida'),
+            models.CheckConstraint(condition=(~models.Q(documento_tipo='') & ~models.Q(documento_id='')),
+                                   name='det_mov_documento_presente'),
+            models.CheckConstraint(condition=(models.Q(operador__isnull=True) | ~models.Q(operador_nome='')),
+                                   name='det_mov_operador_nome'),
+            models.CheckConstraint(condition=(
+                models.Q(unidade_base__regex=r'\S') &
+                models.Q(unidade_entrada__regex=r'\S')
+            ), name='det_mov_unidades_validas'),
+            models.CheckConstraint(condition=models.Q(quantidade_entrada__gt=-1000000000000000000,
+                quantidade_entrada__lt=1000000000000000000), name='det_mov_quantidade_finita'),
+            models.CheckConstraint(condition=(
+                models.Q(conversao='nenhuma', fator__isnull=True, unidade_entrada=models.F('unidade_base'))
+                | models.Q(conversao__in=['divisao', 'multiplicacao'], fator__isnull=False,
+                           fator__gt=0, fator__lt=1000000000)
+            ), name='det_mov_conversao_valida'),
+        ]

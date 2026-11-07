@@ -33,6 +33,8 @@ def conferir_ou_ajustar_estoque(
     motivo="",
     observacao="",
     usuario=None,
+    *,
+    auditoria=None,
 ):
     if tipo not in {
         MovimentacaoEstoqueManual.TIPO_CONFERENCIA,
@@ -51,6 +53,7 @@ def conferir_ou_ajustar_estoque(
     if produto is None:
         raise ValueError("Produto inexistente, inativo ou excluido.")
 
+    saldo_original = produto.quantidade
     estoque_antes = _quantidade_estoque(produto.quantidade, "Estoque atual")
     if tipo == MovimentacaoEstoqueManual.TIPO_CONFERENCIA:
         estoque_depois = estoque_antes
@@ -90,10 +93,15 @@ def conferir_ou_ajustar_estoque(
     )
     from inventario.rastreabilidade import identificar
     identificar(produto.pk, estoque_antes, estoque_depois, "ajuste_manual", f"Movimentação manual #{historico.pk}")
-    return {
+    resultado = {
         "produto": produto,
         "historico": historico,
         "estoque_antes": estoque_antes,
         "estoque_depois": estoque_depois,
         "diferenca": diferenca,
     }
+    # Only the Sales correction endpoint opts in. Conference regularizations and
+    # direct/manual callers retain their own existing attribution paths.
+    if auditoria is not None and tipo == MovimentacaoEstoqueManual.TIPO_AJUSTE:
+        auditoria(resultado, saldo_original)
+    return resultado

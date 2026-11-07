@@ -15,6 +15,7 @@ from .tests import produto
 class VendasInventarioTests(TestCase):
     def setUp(self):
         self.usuario = get_user_model().objects.create_superuser("gestor-integracao", "", "teste")
+        self.client.force_login(self.usuario)
         self.produto = produto(unidade_compra="UN", vende_fracionado=False, codigo_legado="INV-FICTICIO")
         self.cliente = Cliente.objects.create(nome="Cliente fictício inventário")
         self.funcionario = Funcionario.objects.create(nome="Contador integração")

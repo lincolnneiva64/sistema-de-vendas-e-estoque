@@ -67,7 +67,10 @@ def gravar(usuario, entradas):
     identificados = []
     for entrada, resultado in zip(entradas, resultados):
         movimento = por_chave.get((resultado['produto'].pk, entrada['sequencia']+1))
-        identificados.append(conferir_movimento(entrada, resultado, movimento))
+        identificado = conferir_movimento(entrada, resultado, movimento)
+        identificados.append(identificado)
+        # Reuse the exact verified observer; callers need no per-product SELECT.
+        resultado['movimento'] = identificado
     if MovimentoObservado.objects.bulk_update(identificados, ['origem', 'referencia']) != len(ids):
         raise ValueError('Identificação incompleta dos movimentos.')
     return resultados

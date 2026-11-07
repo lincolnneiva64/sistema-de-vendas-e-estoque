@@ -260,10 +260,11 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
         resultado = conferir_ou_ajustar_estoque(produto.pk, MovimentacaoEstoqueManual.TIPO_AJUSTE,
             novo_estoque=atual['resultante'], motivo=proposta.justificativa,
             observacao=descricao_representacao(atual) + f'Conferência {inventario_id}; proposta {proposta.pk}; lote {lote}', usuario=usuario)
-        if not MovimentoObservado.objects.filter(produto=produto,
+        movimento = MovimentoObservado.objects.filter(produto=produto,
                 sequencia=atual['evidencia']['sequencia'] + 1,
                 antes=resultado['estoque_antes'], depois=resultado['estoque_depois'],
-                origem='ajuste_manual', referencia=f"Movimentação manual #{resultado['historico'].pk}").exists():
+                origem='ajuste_manual', referencia=f"Movimentação manual #{resultado['historico'].pk}").first()
+        if movimento is None:
             raise ValueError('Movimento do observador não confirmado. Operação integralmente revertida.')
         decisao = DecisaoAjuste.objects.create(item=rodada.item, rodada=rodada,
             movimentacao=resultado['historico'], diferenca=atual['diferenca'],
@@ -273,6 +274,8 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
             depois=resultado['estoque_depois'], unidade=atual['unidade'],
             evidencia=dict(preparacao=proposta.evidencia, autorizado_por=proposta.autorizado_por_id,
                            justificativa=proposta.justificativa))
+        from .rastreabilidade_regularizacao import registrar
+        registrar(usuario, rodada, registro, movimento, resultado['historico'])
         proposta.estado = 'aplicado'
         proposta.save(update_fields=['estado'])
         EventoAjuste.objects.create(proposta=proposta, usuario=usuario, acao='aplicado',
@@ -302,6 +305,9 @@ def _gravar_lote(usuario, inventario_id, avaliacoes):
         autorizado_por=pr.autorizado_por_id, justificativa=pr.justificativa))
         for (pr, r, p, a), m, d in zip(avaliacoes, movimentos, decisoes)]
     AplicacaoAjuste.objects.bulk_create(registros)
+    from .rastreabilidade_regularizacao import registrar_lote
+    registrar_lote(usuario, [(r, registro, m['movimento'], m['historico'])
+        for (_, r, _, _), registro, m in zip(avaliacoes, registros, movimentos)])
     ids = [pr.pk for pr, r, p, a in avaliacoes]
     if PropostaAjuste.objects.filter(pk__in=ids, estado='aprovado').update(estado='aplicado') != len(ids):
         raise ValueError('Transição incompleta das propostas.')

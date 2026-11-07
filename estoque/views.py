@@ -7577,6 +7577,11 @@ def conferencia_estoque_corrigir(request, produto_id):
         return resposta_operador
     try:
         dados = _json_request_data(request)
+        from .services.rastreabilidade_manual import registrar
+
+        def auditar(resultado, saldo_original):
+            registrar(resultado, saldo_original, usuario=usuario,
+                operador_declarado=request.headers.get('X-Operador-Venda') or dados.get('operador', ''))
 
         resultado = conferir_ou_ajustar_estoque(
             produto_id,
@@ -7585,6 +7590,7 @@ def conferencia_estoque_corrigir(request, produto_id):
             motivo=dados.get("motivo"),
             observacao=dados.get("observacao", ""),
             usuario=usuario,
+            auditoria=auditar,
         )
     except ValueError as exc:
         return JsonResponse(

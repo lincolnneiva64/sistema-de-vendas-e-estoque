@@ -183,7 +183,16 @@ class EstoqueManualServiceTests(TestCase):
 
         from . import views
 
-        views._finalizar_compra_com_financeiro(compra)
+        from types import SimpleNamespace
+        from .services.decisoes_precos_compra import preparar
+
+        previa = preparar(compra, self.usuario)
+        decisao_request = SimpleNamespace(user=self.usuario, POST={
+            'previa_decisao_precos': previa['previa'],
+            'decisao_precos_compra': 'revisado',
+            'decisoes_precos_itens': json.dumps({linha['chave']: 'manter' for linha in previa['itens']}),
+        })
+        views._finalizar_compra_com_financeiro(compra, decisao_request=decisao_request)
 
         self.assertEqual(MovimentacaoEstoqueManual.objects.count(), 0)
         self.produto.refresh_from_db()
