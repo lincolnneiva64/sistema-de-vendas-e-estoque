@@ -200,5 +200,175 @@ class TabelaVisualTests(unittest.TestCase):
         self.assertNotIn('<script>', str(parcelas_quantidade('<script>alert(1)</script>')))
 
 
+    def linha_peso(self, avulsos='14', fator_atual='30'):
+        from types import SimpleNamespace as Objeto
+        from .painel import resumo_painel
+        cadastro = dict(nome='Açúcar Itamarati 30/1Kg', base='FD', secundaria='KG',
+                        fator='30', fracionado=True, continua=False, secundaria_continua=True)
+        produto = Objeto(nome=cadastro['nome'], quantidade=Decimal('1.335'),
+            unidade_compra='FD', unidade_venda_1='FD', unidade_venda_2='KG',
+            fator_conversao=Decimal(fator_atual))
+        item = Objeto(pk=1, cadastro=cadastro, produto=produto, custo_base=Decimal(10))
+        rodada = Objeto(pk=2, numero=1, ok_em=True, encerrada_em=None,
+            esperado=Decimal('1.335'), contado_base=Decimal('1.467'), avulsos=Decimal(avulsos))
+        linha = self.linha(base='FD', nome=cadastro['nome'], estado='Bloqueado')
+        linha.update(item=item, rodada=rodada, comparacao_fisica={},
+            situacao='Revisão necessária', diferenca=Decimal('.132'),
+            contado_texto='1,467 FD', esperado_texto='1,335 FD')
+        resumo_painel([linha])
+        return linha
+
+    def test_equivalencias_kg_inteiros_so_na_apresentacao(self):
+        linha = self.linha_peso()
+        html, texto = self.renderizar(linha)
+        for valor in ('1,335 FD', '1,467 FD', '≈ 40 KG', '≈ 44 KG', 'Editar contagem'):
+            self.assertIn(valor, texto)
+        self.assertIn('Equivalência exata: 40,05 KG', html)
+        self.assertIn('Equivalência exata: 44,01 KG', html)
+        self.assertEqual(linha['item'].produto.quantidade, Decimal('1.335'))
+        self.assertEqual(linha['rodada'].contado_base, Decimal('1.467'))
+        self.assertEqual(linha['diferenca'], Decimal('.132'))
+        self.assertEqual(linha['estimativa'], Decimal('1.32'))
+        self.assertEqual(linha['item'].cadastro['fator'], '30')
+        self.assertEqual(linha['item'].produto.fator_conversao, Decimal(30))
+
+    def test_avulsos_em_peso_fracionado_nao_sao_arredondados(self):
+        linha = self.linha_peso(avulsos='0.250')
+        _, texto = self.renderizar(linha)
+        self.assertIn('40,05 KG', texto)
+        self.assertIn('44,01 KG', texto)
+        self.assertNotIn('≈ 40 KG', texto)
+        self.assertNotIn('≈ 44 KG', texto)
+
+    def test_composicao_fator_e_unidades_devem_corresponder(self):
+        from .apresentacao import equivalencia_visual, quantidade
+        cadastro = dict(nome='Produto 30/1Kg', base='FD', secundaria='KG', fator='30')
+        self.assertEqual(equivalencia_visual(Decimal('1.350'), cadastro)['texto'], '≈ 41 KG')
+        self.assertEqual(equivalencia_visual(Decimal('1.335'), dict(cadastro, fator='10'))['texto'], '13,35 KG')
+        self.assertEqual(equivalencia_visual(Decimal('0.1'), dict(cadastro, nome='Produto 30/1,5Kg', fator='45'))['texto'], '4,5 KG')
+        self.assertEqual(equivalencia_visual(Decimal('0.2'), dict(cadastro, nome='Produto 30/0,250Kg', fator='7.5'))['texto'], '1,5 KG')
+        self.assertEqual(equivalencia_visual(Decimal('1.335'), dict(cadastro, nome='Produto a granel'))['texto'], '40,05 KG')
+        self.assertEqual(quantidade(Decimal('1.5'), dict(base='KG', continua=True)), '1,500 KG')
+        self.assertEqual(quantidade(Decimal('0.250'), dict(base='KG', continua=True)), '0,250 KG')
+
+    def test_conversao_invalida_ou_unidade_igual_nao_cria_equivalencia(self):
+        from .apresentacao import equivalencia_visual
+        cadastro = dict(nome='Produto 30/1Kg', base='FD', secundaria='KG', fator='30')
+        for fator in ('0', '-1', 'NaN', 'Infinity', 'incorreto', None):
+            self.assertEqual(equivalencia_visual(Decimal(1), dict(cadastro, fator=fator)), {})
+        self.assertEqual(equivalencia_visual(Decimal(1), dict(cadastro, base='KG')), {})
+        self.assertEqual(equivalencia_visual(None, cadastro), {})
+
+    def test_estoque_atual_e_contado_usam_seus_proprios_fatores(self):
+        linha = self.linha_peso(fator_atual='10')
+        _, texto = self.renderizar(linha)
+        self.assertIn('13,35 KG', texto)
+        self.assertIn('≈ 44 KG', texto)
+        self.assertNotIn('≈ 40 KG', texto)
+
+    def test_composicao_un_existente_nao_duplica_equivalencia_contada(self):
+        from .painel import resumo_painel
+        linha = self.linha_peso()
+        linha['comparacao_fisica'] = self.linha()['comparacao_fisica']
+        # Pending state avoids changing classifications unrelated to this test.
+        linha['rodada'].ok_em = None
+        resumo_painel([linha])
+        self.assertEqual(linha['contado_equivalencia'], {})
+
+    def test_saldo_visivel_apenas_aplicado_com_valor_e_unidade(self):
+        for estado in ('Aplicado', 'Bloqueado', 'Requer prévia', 'Pendente de revisão', 'Sem diferença'):
+            linha = self.linha(estado=estado)
+            linha['atualizacao'].update(saldo_aplicado=Decimal(0), unidade_aplicada='UN')
+            _, texto = self.renderizar(linha)
+            if estado == 'Aplicado':
+                self.assertIn('Saldo aplicado: 0 UN', texto)
+            else:
+                self.assertNotIn('Saldo aplicado:', texto)
+        for saldo, unidade in ((None, 'UN'), (Decimal(1), '')):
+            linha = self.linha(estado='Aplicado')
+            linha['atualizacao'].update(saldo_aplicado=saldo, unidade_aplicada=unidade)
+            _, texto = self.renderizar(linha)
+            self.assertNotIn('Saldo aplicado:', texto)
+
+
+    def coluna_atualizacao(self, linha):
+        import re
+        html, _ = self.renderizar(linha)
+        coluna = re.search(r'<td[^>]*class="situacao-atualizacao"[^>]*>(.*?)</td>', html, re.S).group(1)
+        principal = TextoPrincipal()
+        principal.feed(coluna)
+        return coluna, ' '.join(principal.texto)
+
+    def test_bloqueado_e_pendente_mostram_contagem_e_equivalencia(self):
+        for estado in ('Bloqueado', 'Requer prévia', 'Pendente de revisão', 'Rejeitado'):
+            linha = self.linha_peso()
+            linha['atualizacao'].update(estado=estado, saldo_aplicado=Decimal(9),
+                                       unidade_aplicada='FD', bloqueio='Motivo preservado')
+            html, texto = self.coluna_atualizacao(linha)
+            self.assertIn('1,467 FD', texto)
+            self.assertNotIn('Contagem encontrada:', texto)
+            self.assertIn('≈ 44 KG', texto)
+            self.assertNotIn('Saldo aplicado:', texto)
+            self.assertIn('Ver detalhes', texto)
+            self.assertIn('Motivo preservado', html)
+            self.assertIn('Ajuste bloqueado' if estado == 'Bloqueado' else 'Ajuste pendente', texto)
+
+    def test_aplicado_usa_saldo_efetivo_e_nao_equivalencia_da_contagem(self):
+        linha = self.linha_peso()
+        linha['atualizacao'].update(estado='Aplicado', saldo_aplicado=Decimal('1.400'),
+                                   unidade_aplicada='FD')
+        _, texto = self.coluna_atualizacao(linha)
+        self.assertRegex(texto, r'Saldo aplicado: 1[.,]400 FD')
+        self.assertIn('42 KG', texto)
+        self.assertNotIn('44 KG', texto)
+        self.assertNotIn('Contagem encontrada:', texto)
+        linha['atualizacao'].update(saldo_aplicado=Decimal(44), unidade_aplicada='KG')
+        _, texto = self.coluna_atualizacao(linha)
+        self.assertIn('Saldo aplicado: 44 KG', texto)
+        self.assertEqual(texto.count('KG'), 1)
+
+    def test_sem_contagem_nao_inventa_e_contagem_zero_e_preservada(self):
+        for ausente in (None, '', '—'):
+            linha = self.linha(estado='Bloqueado')
+            linha['contado_texto'] = ausente
+            _, texto = self.coluna_atualizacao(linha)
+            self.assertNotIn('Contagem encontrada:', texto)
+            self.assertNotIn('Saldo aplicado:', texto)
+        linha = self.linha_peso()
+        linha.update(contado_texto='0 FD', contado_equivalencia=dict(texto='0 KG', exato='0 KG'))
+        _, texto = self.coluna_atualizacao(linha)
+        self.assertIn('0 FD', texto)
+        self.assertNotIn('Contagem encontrada:', texto)
+        self.assertIn('0 KG', texto)
+
+    def test_contagem_composta_preserva_total_e_nao_depende_de_nome_ou_id(self):
+        for nome, pk in [('Nome livre', 123), ('Outro nome', 987)]:
+            linha = self.linha(nome=nome, estado='Bloqueado')
+            linha['item']['pk'] = pk
+            html, texto = self.coluna_atualizacao(linha)
+            self.assertIn('3 PCT + 2 UN', texto)
+            self.assertNotIn('Contagem encontrada:', texto)
+            self.assertEqual(texto.count('20 UN'), 1)
+            self.assertIn(f'popovertarget="detalhes-conferencia-{pk}"', html)
+            self.assertNotIn('Saldo aplicado:', texto)
+
+
+    def test_todos_estados_compartilham_container_e_popover_fora_do_fluxo(self):
+        import re
+        for estado, classe in [('Aplicado', 'saldo-aplicado'), ('Bloqueado', 'contagem-encontrada'),
+                               ('Requer prévia', 'contagem-encontrada')]:
+            linha = self.linha_peso()
+            linha['atualizacao'].update(estado=estado, saldo_aplicado=Decimal(2), unidade_aplicada='UN')
+            html, _ = self.coluna_atualizacao(linha)
+            conteudo = re.search(r'<div class="conteudo-atualizacao">(.*?)</div>', html, re.S).group(1)
+            self.assertIn('estado-atualizacao', conteudo)
+            self.assertIn(f'class="{classe}"', conteudo)
+            self.assertIn('class="ver-detalhes-conferencia"', conteudo)
+            self.assertNotIn('popover role="dialog"', conteudo)
+            if estado != 'Aplicado':
+                self.assertIn('class="quantidade-total"', conteudo)
+            self.assertIn('popover role="dialog"', html)
+
+
 if __name__ == '__main__':
     unittest.main()

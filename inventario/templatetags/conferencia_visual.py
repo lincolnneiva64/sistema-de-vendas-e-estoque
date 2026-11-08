@@ -1,4 +1,4 @@
-"""Text formatting only: never calculate quantities or authorize adjustments."""
+"""Conference display only: never change counts or authorize adjustments."""
 from django import template
 from django.utils.html import format_html_join
 
@@ -56,3 +56,20 @@ def titulo_conferencia(titulo, identificador):
     if titulo == prefixo or titulo.startswith(prefixo + ' — '):
         return titulo
     return prefixo + (' — ' + titulo if titulo else '')
+
+
+@register.filter
+def equivalencia_aplicada(linha):
+    """Reuse the visual conversion only for the recorded applied balance/unit."""
+    atualizacao = linha.get('atualizacao') or {}
+    if (atualizacao.get('estado') != 'Aplicado'
+            or atualizacao.get('saldo_aplicado') is None):
+        return {}
+    item, rodada = linha['item'], linha['rodada']
+    cadastro = item.get('cadastro', {}) if isinstance(item, dict) else item.cadastro
+    aplicada = str(atualizacao.get('unidade_aplicada') or '').strip().upper()
+    if not aplicada or aplicada != str(cadastro.get('base') or '').strip().upper():
+        return {}
+    avulsos = rodada.get('avulsos') if isinstance(rodada, dict) else getattr(rodada, 'avulsos', None)
+    from inventario.apresentacao import equivalencia_visual
+    return equivalencia_visual(atualizacao['saldo_aplicado'], cadastro, avulsos=avulsos)

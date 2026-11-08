@@ -87,3 +87,36 @@
 
 /* Nome completo no título, preservando o contador. */
 .extrato-titulo h2{min-width:0;overflow-wrap:anywhere}.extrato-titulo>span{flex-shrink:0}
+
+/* Cabecalho acompanha as mesmas colunas e recuos dos cartoes. */
+.tabela-extrato.movimentos-periodo thead th{font-size:16px;font-weight:700;color:#203344;letter-spacing:0;text-transform:none;white-space:normal;overflow-wrap:anywhere;background:transparent}
+.visual-b .tabela-extrato.movimentos-periodo thead{display:block;padding:0 20px 0 30px;background:transparent}
+.visual-b .tabela-extrato.movimentos-periodo thead tr{grid-template-columns:135px minmax(0,1fr) minmax(180px,.8fr) 180px;gap:2px 10px;margin:0;padding:8px 12px 4px;border:1px solid transparent;border-radius:0;box-shadow:none;background:transparent}
+.visual-b .tabela-extrato.movimentos-periodo thead tr:before{content:none}
+.visual-b .tabela-extrato.movimentos-periodo thead th{grid-row:1;min-width:0;width:auto;padding:0;text-align:left}
+.visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(1){grid-column:1;padding-right:12px}
+.visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(2){grid-column:2}
+.visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(3){grid-column:3;text-align:right}
+.visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(4){grid-column:4;text-align:right;padding:0 8px}
+.tabela-extrato .entrada-compra .fluxo .entrada{color:#167446}
+@media(max-width:700px){
+ .tabela-extrato.movimentos-periodo thead{display:block}
+ .tabela-extrato.movimentos-periodo thead tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 6px;padding:8px 12px 4px;border:0}
+ .tabela-extrato.movimentos-periodo thead th{min-width:0;width:auto;padding:0}
+ .tabela-extrato.movimentos-periodo thead th:nth-child(1){grid-column:1/-1;grid-row:1;text-align:left}
+ .tabela-extrato.movimentos-periodo thead th:nth-child(2){grid-column:1/-1;grid-row:2;text-align:left;padding-left:9px}
+ .tabela-extrato.movimentos-periodo thead th:nth-child(3){grid-column:1;grid-row:3;text-align:left;padding:0 5px}
+ .tabela-extrato.movimentos-periodo thead th:nth-child(4){grid-column:2;grid-row:3;text-align:right;padding:0 5px}
+ .visual-b .tabela-extrato.movimentos-periodo thead{padding:0 10px 0 22px}
+ .visual-b .tabela-extrato.movimentos-periodo thead tr{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px;padding:8px 10px 4px;border:1px solid transparent}
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(1){grid-column:1/-1;grid-row:1;padding:0}
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(2){grid-column:1/-1;grid-row:2;padding:0}
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(3){grid-column:1;grid-row:3;text-align:left;padding:0}
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(4){grid-column:2;grid-row:3;padding:0 4px}
+}
+
+/* Titulos numericos no eixo central das respectivas areas no desktop. */
+@media(min-width:701px){
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(3),
+ .visual-b .tabela-extrato.movimentos-periodo thead th:nth-child(4){text-align:center}
+}

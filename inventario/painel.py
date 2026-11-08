@@ -1,7 +1,7 @@
 """Read-only management projection. Never used by blind counting endpoints."""
 from decimal import Decimal
 
-from .apresentacao import quantidade
+from .apresentacao import equivalencia_visual, quantidade
 
 
 def resumo_painel(linhas):
@@ -11,6 +11,18 @@ def resumo_painel(linhas):
     for linha in linhas:
         item, rodada = linha["item"], linha["rodada"]
         unidade_atual = (item.produto.unidade_venda_1 or item.produto.unidade_compra or "").strip().upper()
+        # Read-only equivalences: live stock uses its current registered units;
+        # the count uses only the conference's frozen conversion.
+        cadastro_atual = dict(base=unidade_atual,
+            secundaria=getattr(item.produto, 'unidade_venda_2', '') or '',
+            fator=getattr(item.produto, 'fator_conversao', None),
+            nome=getattr(item.produto, 'nome', item.cadastro.get('nome', '')))
+        parcela = getattr(rodada, 'avulsos', None)
+        linha['estoque_atual_equivalencia'] = equivalencia_visual(
+            item.produto.quantidade, cadastro_atual, avulsos=parcela)
+        linha['contado_equivalencia'] = ({} if linha.get('comparacao_fisica') else
+            equivalencia_visual(rodada.contado_base if rodada.ok_em else None,
+                                item.cadastro, avulsos=parcela))
         diferenca = linha["diferenca"]
         confirmado = (rodada.ok_em is not None and rodada.encerrada_em is None
                       and diferenca is not None)

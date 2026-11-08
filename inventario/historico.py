@@ -38,6 +38,7 @@ def investigar(rodada, params):
     inicio, fim = periodo['inicio'], periodo['fim']
     params = params.copy()
     params['periodo'] = periodo['periodo']
+    consulta_evidencias = params.get('consulta') == 'evidencias'
     movimentos = MovimentoObservado.objects.filter(produto_id=item.produto_id)
     vendas = ItemVenda.objects.filter(produto_id=item.produto_id).select_related('venda')
     removidos = ItemVendaRemovido.objects.filter(produto_id=item.produto_id).select_related('venda')
@@ -55,7 +56,8 @@ def investigar(rodada, params):
     for movimento in pagina_movimentos:
         movimento.rotulo = ORIGENS.get(movimento.origem, ORIGENS['nao_identificada'])
     contexto = dict(rodada=rodada, item=item, referencia=referencia, inicio=inicio, fim=fim,
-                extrato=cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim,
+                consulta_evidencias=consulta_evidencias,
+                extrato=None if consulta_evidencias else cronologia(compras, vendas, removidos, movimentos, params, selecionada, inicio, fim,
                                    produto_id=item.produto_id, rodada=rodada),
                 compra=selecionada, compras=opcoes,
                 itens_compra=(compras.filter(compra_id=selecionada.compra_id).order_by().values('unidade')
@@ -67,6 +69,15 @@ def investigar(rodada, params):
                 diferenca=(rodada.contado_base - rodada.esperado) if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None else None,
                 fisica=rodada.contado_base if rodada.ok_em else None,
                 esperado=rodada.esperado if rodada.ok_em else None)
+    for chave, consulta in (('operacoes_url', ''), ('evidencias_url', 'evidencias')):
+        destino = params.copy()
+        destino.pop('extrato_pagina', None)
+        destino.pop('movimentos_pagina', None)
+        if consulta:
+            destino['consulta'] = consulta
+        else:
+            destino.pop('consulta', None)
+        contexto[chave] = '?' + destino.urlencode()
     contexto.update(periodo)
     completo = params.copy()
     completo['periodo'] = 'completo'

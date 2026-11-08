@@ -80,3 +80,41 @@ conferência na porta 8000, sem confirmar contagens ou ajustes, e conferir:
 A nova biblioteca de tags requer recarga do Django; se o servidor ainda não a
 reconhecer, recarregar o servidor habitual somente após confirmar seu banco local.
 Sem migrations, commit, push ou deploy. Aprovação visual permanece pendente.
+
+
+## Equivalências visuais e saldo aplicado — 08/11/2026
+
+Abaixo de Estoque atual e Contado, a tabela apresenta a equivalência quando há
+unidades diferentes e fator positivo finito. Estoque atual usa o cadastro atual;
+Contado usa a conversão congelada na conferência. O total em UN já mostrado
+pela composição física não é repetido. Não há novas consultas por linha.
+
+O arredondamento visual em KG exige embalagem FD/CX/PCT/DZ, destino KG e
+composição explícita N/1Kg cujo número corresponda ao fator cadastrado.
+Avulsos registrados com peso fracionado impedem esse arredondamento. Nome sem
+fator/unidades compatíveis, granel e composições de 1,5Kg/0,250Kg preservam
+as casas decimais. Usa-se o inteiro mais próximo (meio para cima), somente no
+texto secundário, com sinal de aproximação e equivalência exata no atributo title.
+Valores principais, fatores, contagens, diferenças e estimativas permanecem intactos.
+
+Saldo aplicado aparece na coluna de atualização apenas com estado Aplicado,
+saldo_aplicado disponível e unidade_aplicada. Nunca usa a contagem como fallback.
+
+Validação desta etapa: 16 testes locais sem banco e medição do HTML renderizado
+no Chrome em 320/390/1366px, com estados aplicado/bloqueado, equivalências abaixo
+dos valores principais e Editar contagem preservado, sem rolagem horizontal.
+Nenhum acesso a banco operacional, migration, commit, push ou deploy.
+
+
+### Coluna Atualização do estoque
+
+Aplicado mostra apenas o saldo e a unidade registrados pela aplicação; bloqueado
+ou pendente destaca diretamente a quantidade física já existente, sem o prefixo
+Contagem encontrada. Quantidades aplicadas e contadas compartilham a mesma
+tipografia, cor e alinhamento; a equivalência permanece menor abaixo.
+Sem contagem disponível, nenhum número é acrescentado. A equivalência abaixo usa
+o valor que está sendo mostrado: saldo aplicado ou contagem, nunca um pelo outro.
+Conversão congelada e regras visuais anteriores são reutilizadas; se o saldo já
+estiver na unidade de destino, não se repete a unidade nem se aplica fator novamente.
+Status, Ver detalhes e motivos preservados, sem consultas adicionais ou mudança
+de regras. Validação: 20 testes de apresentação, sem banco.

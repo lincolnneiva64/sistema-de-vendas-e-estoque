@@ -106,12 +106,12 @@ main:has(.painel-inventario){max-width:1360px}
 .estado-aplicado{background:#dff3e8;color:#145b3e}
 .estado-bloqueado{background:#fff0cc;color:#795200}
 .estado-apto{background:#e8f1f5;color:#264f62}
-.situacao-atualizacao .saldo-aplicado{font-size:1rem;font-weight:700;color:#145b3e}
+.situacao-atualizacao .saldo-aplicado,.situacao-atualizacao .contagem-encontrada{font-size:1rem;font-weight:700;color:#145b3e}
 .situacao-atualizacao .aplicacao-nao-comprovada{font-size:1rem;line-height:1.6;font-weight:500;color:#263f49}
 .estimativa-recolhida{border:1px solid #d8e2e5;border-radius:10px;background:white;margin:16px 0}
 .estimativa-recolhida>summary{padding:14px 18px;color:#3d585e}
 .estimativa-recolhida .financeiro-painel{margin:0;border-radius:0 0 10px 10px}
-@media(max-width:1100px){.tabela-resumo .resumo-linha>td{padding:16px 10px;min-height:88px}.situacao-atualizacao .saldo-aplicado{font-size:1.05rem}}
+@media(max-width:1100px){.tabela-resumo .resumo-linha>td{padding:16px 10px;min-height:88px}.situacao-atualizacao .saldo-aplicado,.situacao-atualizacao .contagem-encontrada{font-size:1.05rem}}
 
 .participante-selecao{border-top:1px solid #d8e2e5;padding:12px 0;overflow-wrap:anywhere}.participante-selecao select{width:100%;min-height:44px}#total-participantes,#progresso-participantes{font-weight:650}
 .participante-selecao .participante-nome{display:flex;align-items:flex-start;gap:10px;font-size:clamp(1.05rem,1rem + .3vw,1.2rem);font-weight:750;line-height:1.4;color:#182f39}
@@ -203,3 +203,7 @@ main:has(.painel-inventario){max-width:1360px}
  .tabela-resumo .quantidade-total{font-size:.76rem}
  .ver-detalhes-conferencia{min-height:44px}
 }
+
+/* Um unico eixo para status, valor, equivalencia e acao, em todos os estados. */
+.situacao-atualizacao>.conteudo-atualizacao{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%;min-width:0;text-align:center}
+.situacao-atualizacao>.conteudo-atualizacao>*{margin:0;max-width:100%}
