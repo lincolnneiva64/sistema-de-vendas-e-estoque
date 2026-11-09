@@ -292,11 +292,15 @@ def _salvar_boletos_sem_alterar_itens(request, compra):
     mesmos_itens = len(antigos) == len(dados["itens"]) and {l["item_id"] for l in dados["itens"]} == set(antigos)
     if mesmos_itens:
         mesmos_itens = all(antigos[l["item_id"]].produto_id == l["produto"].pk and all(
-            getattr(antigos[l["item_id"]], c) == l[c]
+            (
+                (getattr(antigos[l["item_id"]], c) or "") == (l[c] or "")
+                if c == "observacao"
+                else getattr(antigos[l["item_id"]], c) == l[c]
+            )
             for c in ("quantidade", "unidade", "preco_unitario", "valor_total", "observacao")
         ) for l in dados["itens"])
     mesma_base = mesmos_itens and all(getattr(compra, c) == dados[c] for c in (
-        "data_compra", "total", "total_produtos", "ajuste_total"
+        "data_compra", "total_produtos"
     )) and compra.fornecedor_id == dados["fornecedor"].pk and _tipo_formulario(compra.tipo_pagamento) == _tipo_formulario(dados["tipo_pagamento"])
     if not mesma_base:
         if mudou_plano:

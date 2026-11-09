@@ -3006,6 +3006,15 @@
                 </div>
               {% endif %}
             </div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;margin-top:10px;">
+              <button type="button" id="redistribuirBoletosCompra"
+                class="compras-btn compras-btn-secondary" hidden>Redistribuir igualmente</button>
+              <label id="opcaoSaldoAutomaticoUltimoBoletoCompra"
+                style="display:inline-flex;align-items:center;gap:8px;" hidden>
+                <input type="checkbox" id="saldoAutomaticoUltimoBoletoCompra" checked>
+                &Uacute;ltimo boleto: saldo autom&aacute;tico
+              </label>
+            </div>
             <div class="compras-field" style="margin-top:8px;">
               <label>Observacao do pagamento</label>
               <textarea name="compra_observacao_pagamento_nota" id="compraObservacaoPagamentoNota" placeholder="Opcional">{{ pagamento_nota_compra.observacao|default:"" }}</textarea>
@@ -3199,7 +3208,7 @@
         <span class="compras-total-valor">Total dos produtos: <span id="totalCompra">R$ 0,00</span></span>
         <label class="compras-total-cobrado">
           <span>Valor cobrado</span>
-          <input type="text" name="valor_cobrado" id="valorCobradoCompra" {% if edicao_finalizada %}readonly aria-label="Total calculado automaticamente"{% endif %} inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
+          <input type="text" name="valor_cobrado" id="valorCobradoCompra" {% if edicao_finalizada %}aria-label="Valor cobrado da compra"{% endif %} inputmode="decimal" autocomplete="off" value="{% if compra %}{{ compra.total|floatformat:2 }}{% endif %}">
         </label>
         <span class="compras-total-diferenca" id="diferencaCompra">Diferen&ccedil;a: R$ 0,00</span>
       </div>
@@ -4315,7 +4324,9 @@
     totalCompra.textContent = moeda(total);
     const totalCentavos = Math.round(total * 100);
     {% if edicao_finalizada %}
-    definirValorCobradoCentavos(totalCentavos + Math.round(numero("{{ compra.ajuste_total|floatformat:2 }}") * 100));
+    if (valorCobradoCompra && valorCobradoCompra.dataset.valorAlteradoNestaEdicao !== "1") {
+      definirValorCobradoCentavos(totalCentavos + Math.round(numero("{{ compra.ajuste_total|floatformat:2 }}") * 100));
+    }
     {% else %}
     if (valorCobradoCompra && !valorCobradoCompra.dataset.valorEditado) {
       definirValorCobradoCentavos(totalCentavos);
@@ -4357,6 +4368,7 @@
     {% endif %}
     valorCobradoCompra.addEventListener("input", function() {
       valorCobradoCompra.dataset.valorEditado = "1";
+      valorCobradoCompra.dataset.valorAlteradoNestaEdicao = "1";
       recalcular();
     });
     valorCobradoCompra.addEventListener("blur", function() {
@@ -7030,8 +7042,8 @@
     }
     if (valorCentavos === null) return;
     compraValorNotaBoleto.value = valorCampoCompraBoletos(valorCentavos);
-    if (boletosCompraValoresAutomaticos) {
-      const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+    const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+    if (quantidade === 1 || boletosCompraValoresAutomaticos) {
       redistribuirValoresBoletosCompra(quantidade);
     }
     atualizarResumoBoletosCompra();
@@ -7050,6 +7062,7 @@
 
   function campoEditavelVisivelCompra(campo) {
     if (!campo || campo.disabled) return false;
+    if (campo.matches('[name^="compra_parcela_valor_"]') && campo.readOnly) return false;
     if (campo.type === "hidden" || campo.getAttribute("aria-hidden") === "true") return false;
     if (campo.closest("[hidden], .oculto, .compra-bloco-recolhido")) return false;
     const estilo = window.getComputedStyle(campo);
@@ -7109,18 +7122,19 @@
     const alvo = event && event.target ? event.target : null;
     if (!alvo || !alvo.matches('[name^="compra_parcela_valor_"]')) return;
     const linhas = compraListaBoletos ? Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]")) : [];
-    if (linhas.length > 1 && linhas[linhas.length - 1].contains(alvo) && boletosCompraSaldoFinalAtivo) return;
     boletosCompraValoresAutomaticos = false;
     alvo.dataset.valorAutomatico = "0";
-    if (linhas.length > 1 && !linhas[linhas.length - 1].contains(alvo)) {
-      boletosCompraSaldoFinalAtivo = true;
+    if (linhas.length > 1 && linhas[linhas.length - 1].contains(alvo)) {
+      boletosCompraSaldoFinalAtivo = false;
+      const opcao = document.getElementById("saldoAutomaticoUltimoBoletoCompra");
+      if (opcao) opcao.checked = false;
+    } else if (boletosCompraSaldoFinalAtivo) {
       atualizarUltimoBoletoRestante();
     }
-    atualizarUltimoBoletoRestante();
   }
 
   function atualizarUltimoBoletoRestante() {
-    if (!compraListaBoletos) return;
+    if (!compraListaBoletos || !boletosCompraSaldoFinalAtivo) return;
     const linhas = Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]"));
     if (linhas.length < 2) return;
     const total = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
@@ -7132,7 +7146,7 @@
     if (!campoFinal) return;
     campoFinal.value = valorCampoCompraBoletos(Math.max(0, total - somaAnteriores));
     campoFinal.dataset.valorAutomatico = "1";
-    campoFinal.readOnly = boletosCompraSaldoFinalAtivo;
+    campoFinal.readOnly = true;
   }
 
   function renderizarBoletosCompra(quantidade, opcoes) {
@@ -7182,12 +7196,43 @@
       valor.value = valorCampoCompraBoletos(valoresSugeridos[indice] || 0);
       valor.dataset.valorAutomatico = "1";
     });
-    atualizarUltimoBoletoRestante();
+    boletosCompraSaldoFinalAtivo = true;
     boletosCompraValoresAutomaticos = true;
+    const opcao = document.getElementById("saldoAutomaticoUltimoBoletoCompra");
+    if (opcao) opcao.checked = true;
+    linhas.forEach(function(linha, indice) {
+      const campo = linha.querySelector('[name^="compra_parcela_valor_"]');
+      if (campo) campo.readOnly = indice === linhas.length - 1 && linhas.length > 1;
+    });
+  }
+
+  function atualizarFocoBoletoAutomatico() {
+    if (!compraListaBoletos) return;
+    const linhas = Array.from(
+      compraListaBoletos.querySelectorAll("[data-boleto-linha]")
+    );
+    linhas.forEach(function(linha, indice) {
+      const campo = linha.querySelector('[name^="compra_parcela_valor_"]');
+      if (!campo) return;
+
+      const automatico = boletosCompraSaldoFinalAtivo &&
+        linhas.length > 1 && indice === linhas.length - 1;
+
+      campo.readOnly = automatico;
+      campo.tabIndex = automatico ? -1 : 0;
+      campo.style.pointerEvents = automatico ? "none" : "";
+      campo.style.backgroundColor = automatico ? "#f3f6fa" : "";
+      campo.title = automatico ? "Valor calculado automaticamente" : "";
+
+      if (automatico && document.activeElement === campo) {
+        campo.blur();
+      }
+    });
   }
 
   function atualizarResumoBoletosCompra() {
     if (!painelBoletosCompra) return;
+    atualizarFocoBoletoAutomatico();
     const valorNota = centavosCompraBoletos(compraValorNotaBoleto ? compraValorNotaBoleto.value : "");
     const soma = boletosAtuaisCompra().reduce(function(total, parcela) {
       return total + centavosCompraBoletos(parcela.valor);
@@ -7214,6 +7259,12 @@
     const varios = compraFormaCobrancaNota && compraFormaCobrancaNota.value === "varios_boletos";
     let quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
     quantidade = varios ? Math.min(12, Math.max(2, quantidade)) : 1;
+    const botaoRedistribuir = document.getElementById("redistribuirBoletosCompra");
+    if (botaoRedistribuir) botaoRedistribuir.hidden = !varios;
+    const opcaoSaldo = document.getElementById("opcaoSaldoAutomaticoUltimoBoletoCompra");
+    const marcarSaldo = document.getElementById("saldoAutomaticoUltimoBoletoCompra");
+    if (opcaoSaldo) opcaoSaldo.hidden = !varios;
+    if (marcarSaldo) marcarSaldo.checked = boletosCompraSaldoFinalAtivo;
     if (compraQuantidadeBoletos) {
       compraQuantidadeBoletos.value = String(quantidade);
       compraQuantidadeBoletos.min = varios ? "2" : "1";
@@ -7518,20 +7569,44 @@
   if (compraFormaCobrancaNota) {
     compraFormaCobrancaNota.addEventListener("change", function() {
       boletosCompraValoresAutomaticos = true;
+      boletosCompraSaldoFinalAtivo = true;
       atualizarBoletosCompra();
     });
   }
   if (compraQuantidadeBoletos) {
     compraQuantidadeBoletos.addEventListener("change", function() {
       boletosCompraValoresAutomaticos = true;
+      boletosCompraSaldoFinalAtivo = true;
       renderizarBoletosCompra(parseInt(compraQuantidadeBoletos.value || "1", 10) || 1, { redistribuir: true });
       atualizarBoletosCompra();
     });
   }
+  const redistribuirBoletos = document.getElementById("redistribuirBoletosCompra");
+  redistribuirBoletos?.addEventListener("click", function() {
+    const quantidade = parseInt(compraQuantidadeBoletos.value || "1", 10) || 1;
+    redistribuirValoresBoletosCompra(quantidade);
+    atualizarResumoBoletosCompra();
+  });
+  const opcaoSaldoUltimo = document.getElementById("saldoAutomaticoUltimoBoletoCompra");
+  opcaoSaldoUltimo?.addEventListener("change", function() {
+    boletosCompraSaldoFinalAtivo = opcaoSaldoUltimo.checked;
+    const linhas = Array.from(compraListaBoletos.querySelectorAll("[data-boleto-linha]"));
+    const ultima = linhas[linhas.length - 1];
+    const campoFinal = ultima ? ultima.querySelector('[name^="compra_parcela_valor_"]') : null;
+    if (campoFinal) campoFinal.readOnly = boletosCompraSaldoFinalAtivo && linhas.length > 1;
+    if (boletosCompraSaldoFinalAtivo) atualizarUltimoBoletoRestante();
+    atualizarResumoBoletosCompra();
+  });
+
   if (compraValorNotaBoleto) {
     compraValorNotaBoleto.addEventListener("input", function() {
       valorNotaBoletoEditadoManualmente = true;
-      if (boletosCompraValoresAutomaticos) {
+      if (valorCobradoCompraBoletos) {
+        valorCobradoCompraBoletos.value = compraValorNotaBoleto.value;
+        valorCobradoCompraBoletos.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      const quantidadeBoletos = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
+      if (quantidadeBoletos === 1 || boletosCompraValoresAutomaticos) {
         const quantidade = parseInt(compraQuantidadeBoletos ? compraQuantidadeBoletos.value : "1", 10) || 1;
         redistribuirValoresBoletosCompra(quantidade);
       } else if (boletosCompraSaldoFinalAtivo) {
@@ -7554,6 +7629,10 @@
     painelBoletosCompra.addEventListener("keydown", avancarEnterCampoFinanceiroCompra);
   }
   document.addEventListener("valorCobradoCompraAtualizado", function(event) {
+    if (document.activeElement === valorCobradoCompraBoletos &&
+        valorCobradoCompraBoletos.dataset.valorAlteradoNestaEdicao === "1") {
+      valorNotaBoletoEditadoManualmente = false;
+    }
     sincronizarValorFinanceiroComValorCobrado(event.detail ? event.detail.centavos : null);
   });
 
