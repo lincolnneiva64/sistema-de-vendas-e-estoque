@@ -31,6 +31,7 @@ function aplicarEstadoConferencia(estado) {
             mensagem.textContent = 'Contagem enviada. Correções exigem recontagem autorizada.';
         });
         if (finalizar) finalizar.querySelector('button').disabled = true;
+        document.querySelector('#estado-conferencia').hidden = false;
         document.querySelector('#estado-conferencia').textContent = estado.finalizada
             ? 'Conferência finalizada e enviada. Alterações somente após reabertura autorizada.'
             : estado.enviada ? 'Sua atribuição foi enviada. A conferência geral aguarda as demais atribuições.'

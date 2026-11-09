@@ -262,9 +262,9 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
                 sucesso = "Participantes salvos. Atribuição concluída. Entregue cada link somente ao funcionário indicado."
                 if gerados:
                     acesso, token = gerados[0]
-                    link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
+                    link = "https://sistema-de-vendas-e-estoque.onrender.com" + reverse("inventario:convite", args=[token])
                     links_adicionais = [{"nome": a.funcionario_nome,
-                        "link": request.build_absolute_uri(reverse("inventario:convite", args=[t]))}
+                        "link": "https://sistema-de-vendas-e-estoque.onrender.com" + reverse("inventario:convite", args=[t])}
                         for a, t in gerados[1:]]
             elif acao == "reabrir_conferencia":
                 services.reabrir_conferencia(request.user, inventario.pk, request.POST.get("motivo", ""))
@@ -274,7 +274,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
                     services.revogar_acesso(request.user, acesso.pk)
                 else:
                     acesso, token = services.renovar_acesso(request.user, acesso.pk)
-                    link = request.build_absolute_uri(reverse("inventario:convite", args=[token]))
+                    link = "https://sistema-de-vendas-e-estoque.onrender.com" + reverse("inventario:convite", args=[token])
                     sucesso = "Acesso renovado. O link anterior foi invalidado; copie o novo link abaixo."
             elif acao == "recontar":
                 services.recontar(request.user, rodada_id, request.POST.get("motivo", ""))
@@ -431,10 +431,8 @@ def relatorio(request, inventario_id):
 @require_http_methods(["GET", "POST"])
 def convite(request, token):
     acesso = services.acesso_token(token)
-    if request.method == "POST":
-        sessoes.estabelecer(request, acesso)
-        return redirect("inventario:mobile")
-    return render(request, "inventario/convite.html", {"funcionario": acesso.funcionario_nome})
+    sessoes.estabelecer(request, acesso)
+    return redirect("inventario:mobile")
 
 
 def acesso_sessao(request):

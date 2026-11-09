@@ -10,6 +10,24 @@
 {% if erro %}<p class="erro" role="alert" id="erro-acao" tabindex="-1">{{ erro }}</p>{% endif %}
 {% if link %}<section class="card" id="compartilhar-acesso" tabindex="-1" aria-labelledby="titulo-link"><p class="status" role="status">{{ sucesso }}</p><h2 id="titulo-link">Link individual: {{ destinatario }}</h2><p>Entregue somente ao funcionário indicado. Copie agora: o link completo aparece apenas nesta resposta. Ao atualizar ou sair, use a renovação para gerar outro link.</p><label>Link de acesso<input id="link-funcionario" value="{{ link }}" readonly></label><div class="acoes"><button type="button" id="copiar-link">Copiar link</button>{% if whatsapp_url %}<a id="enviar-whatsapp" href="{{ whatsapp_url }}" target="_blank" rel="noopener noreferrer">Enviar pelo WhatsApp</a>{% else %}<span>Enviar pelo WhatsApp indispon&#237;vel: cadastre o telefone no cadastro de funcion&#225;rios.</span>{% endif %}</div><p id="feedback-link" aria-live="polite"></p></section>{% endif %}
 {% for adicional in links_adicionais %}<section class="card"><h2>Link individual: {{ adicional.nome }}</h2><label>Link de acesso<input value="{{ adicional.link }}" readonly data-link-adicional></label><button type="button" data-copiar-adicional>Copiar link</button><p data-feedback-copia role="status"></p></section>{% endfor %}
+
+{% if pode_gerenciar and acessos and not inventario.cancelada_em and not inventario.finalizada_em %}
+<section class="card" id="acessos-funcionarios">
+<h2>Acessos dos funcion&#225;rios</h2>
+<p>Gere outro link quando precisar reenviar o acesso. O link anterior ser&#225; invalidado.</p>
+{% for acesso in acessos %}
+<div class="participante-selecao">
+<p><strong>{{ acesso.funcionario_nome }}</strong> &middot; {{ acesso.total_ok }} de {{ acesso.total_produtos }} produtos com OK</p>
+<form method="post" data-processamento>
+{% csrf_token %}
+<input type="hidden" name="acao" value="renovar">
+<input type="hidden" name="acesso" value="{{ acesso.pk|unlocalize }}">
+<button type="submit" class="secondary">Gerar novo link</button>
+</form>
+</div>
+{% endfor %}
+</section>
+{% endif %}
 {% if not inventario.cancelada_em %}{% include "inventario/selecao.html" %}{% endif %}
 {% if not acessos and not inventario.finalizada_em %}{% if not inventario.cancelada_em %}{% include "inventario/participantes_distribuicao.html" %}{% endif %}{% endif %}
 {% if pode_gerenciar and not inventario.finalizada_em %}<details class="card"><summary class="button secondary">Cancelar conferência</summary><h2>Cancelar esta conferência?</h2><p>A conferência será encerrada como cancelada. Seus registros históricos serão preservados, os links dos funcionários serão revogados e nenhuma quantidade de estoque será alterada.</p><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}">Voltar</a><form method="post" action="{% url 'inventario:cancelar' inventario.pk %}">{% csrf_token %}<button name="confirmacao" value="sim">Confirmar cancelamento</button></form></details>{% endif %}
