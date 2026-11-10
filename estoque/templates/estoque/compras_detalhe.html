@@ -1,4 +1,4 @@
-﻿{% extends 'estoque/base.html' %}
+{% extends 'estoque/base.html' %}
 {% load horarios_documentos %}
 {% block title %}Compra #{{ compra.id }}{% endblock %}
 
@@ -1027,4 +1027,8 @@
   }
 })();
 </script>
+
+{% if request.GET.revisar_precos == "1" %}
+  {% include "estoque/includes/revisao_precos_posterior.html" %}
+{% endif %}
 {% endblock %}

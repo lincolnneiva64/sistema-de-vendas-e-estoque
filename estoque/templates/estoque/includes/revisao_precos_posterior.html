@@ -702,6 +702,14 @@
     fechar(); clearTimeout(timer);
     try { await consultar(); abrirAlerta(); } catch(e) { abrirAlerta(); mostrarErro(e.message); }
   });
-  abrirAlerta();
+  if (new URLSearchParams(window.location.search).get("revisar_precos") === "1") {
+    consultar().then(function() {
+      abrirAlerta();
+    }).catch(function(erroConsulta) {
+      mostrarErro(erroConsulta.message);
+    });
+  } else {
+    abrirAlerta();
+  }
 })();
 </script>

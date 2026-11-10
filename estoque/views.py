@@ -12511,9 +12511,12 @@ def compra_editar(request, pk):
             if posteriores:
                 resultado += ' Custos do cadastro preservados por compras posteriores: #' + ', #'.join(posteriores) + '.'
             messages.success(request, resultado if alterou else "Esta correcao ja foi aplicada; nenhum lancamento foi repetido.")
+            destino = reverse("estoque:compras_detalhe", kwargs={"pk": pk})
+            if alterou and any(e.get("revisao_criada") for e in catalogo):
+                destino += "?revisar_precos=1"
             if resposta_json:
-                return JsonResponse({"sucesso": True, "redirect_url": reverse("estoque:compras_detalhe", kwargs={"pk": pk})})
-            return redirect("estoque:compras_detalhe", pk=pk)
+                return JsonResponse({"sucesso": True, "redirect_url": destino})
+            return redirect(destino)
         contexto = _contexto_form_compra(compra)
         contexto.update(contexto_edicao(compra, request.user))
         contexto["fornecedores"] = list(Fornecedor.objects.filter(Q(ativo=True) | Q(pk=compra.fornecedor_id)).order_by("nome", "pk"))

@@ -302,10 +302,44 @@ def _salvar_boletos_sem_alterar_itens(request, compra):
     mesma_base = mesmos_itens and all(getattr(compra, c) == dados[c] for c in (
         "data_compra", "total_produtos"
     )) and compra.fornecedor_id == dados["fornecedor"].pk and _tipo_formulario(compra.tipo_pagamento) == _tipo_formulario(dados["tipo_pagamento"])
+    # Corrigir preco e boleto juntos somente quando os itens
+    # continuam com os mesmos IDs, produtos, quantidades e unidades.
+    somente_precos = (
+        len(antigos) == len(dados["itens"])
+        and {l["item_id"] for l in dados["itens"]} == set(antigos)
+        and all(
+            antigos[l["item_id"]].produto_id == l["produto"].pk
+            and antigos[l["item_id"]].quantidade == l["quantidade"]
+            and antigos[l["item_id"]].unidade == l["unidade"]
+            and (antigos[l["item_id"]].observacao or "") == (l["observacao"] or "")
+            and l["valor_total"] == (
+                l["quantidade"] * l["preco_unitario"]
+            ).quantize(Decimal("0.01"))
+            for l in dados["itens"]
+        )
+        and any(
+            antigos[l["item_id"]].preco_unitario != l["preco_unitario"]
+            for l in dados["itens"]
+        )
+        and compra.data_compra == dados["data_compra"]
+        and compra.fornecedor_id == dados["fornecedor"].pk
+        and _tipo_formulario(compra.tipo_pagamento) == _tipo_formulario(dados["tipo_pagamento"])
+        and dados["total_produtos"] == sum(
+            (l["valor_total"] for l in dados["itens"]), Decimal("0.00")
+        )
+        and dados["total"] == valor
+    )
+
     if not mesma_base:
         if mudou_plano:
-            raise ValueError("Alterar itens e boletos juntos exige conciliação específica. Nenhuma alteração foi salva.")
+            if not somente_precos:
+                raise ValueError("Alterar itens e boletos juntos exige concilia??o espec?fica. Nenhuma altera??o foi salva.")
+            bloqueio = bloqueio_financeiro(compra, estado_compra(compra))
+            if bloqueio:
+                raise ValueError(bloqueio)
+            return salvar_edicao(request, compra.pk)
         return None
+
     bloqueio = bloqueio_financeiro(compra, estado_compra(compra))
     if mudou_plano and bloqueio:
         raise ValueError(bloqueio)
