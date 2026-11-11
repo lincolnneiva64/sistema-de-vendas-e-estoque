@@ -1,3 +1,4 @@
+{% if encerramento_erro %}<section class="card aviso" id="encerramento-impedido" role="status"><h2>Conferência ainda não pode ser finalizada</h2><p>{{ encerramento_erro }}</p><p>Revise o produto indicado em Produtos e divergências, corrija a contagem ou confirme a rodada atual e tente finalizar novamente. Os OKs e o estoque foram preservados.</p></section>{% endif %}
 {% if encerramento_previa %}<section class="card" id="encerramento-administrativo">
 <h2>Finalizar conferência com ajuste pendente</h2>
 <p>{{ encerramento_previa.total }} produtos com OK válido. {{ encerramento_previa.aplicados }} produtos com ajuste já aplicado. {{ encerramento_previa.sem_ajuste }} produtos permanecerão sem ajuste aplicado, sendo {{ encerramento_previa.diferencas_pendentes }} com diferença registrada.</p>

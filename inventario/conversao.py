@@ -50,7 +50,10 @@ def cadastro_compativel(produto, cadastro):
         atual.pop("avulsos_fisicos", None)
         if not cadastro["fracionado"]:
             atual["secundaria"] = ""
-    return atual == cadastro
+    # Descriptive changes do not change the physical meaning of the frozen OK.
+    descritivos = {'nome', 'codigo', 'categoria'}
+    return ({k: v for k, v in atual.items() if k not in descritivos}
+            == {k: v for k, v in cadastro.items() if k not in descritivos})
 
 
 def snapshot(produto):

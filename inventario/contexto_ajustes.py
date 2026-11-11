@@ -7,9 +7,11 @@ from django.db import DatabaseError, connection, transaction
 from django.db.models import Count, F, Q, Window
 from django.db.models.functions import RowNumber
 
-from estoque.models import Venda, ItemVenda, EventoVenda, ItemVendaRemovido, AjusteItemVendaQuitada
+from estoque.models import (Venda, ItemVenda, EventoVenda, ItemVendaRemovido, AjusteItemVendaQuitada,
+                            Compra, ItemCompra, EdicaoCompra)
 from .models import (ConfirmacaoContagem, MovimentoObservado, RodadaContagem,
-                     DecisaoAjuste, PropostaAjuste, ConciliacaoMovimento, SequenciaEstoque)
+                     DecisaoAjuste, PropostaAjuste, ConciliacaoMovimento, SequenciaEstoque,
+                     DetalheMovimentoEstoque)
 from .selecao import itens_incluidos
 from .evidencia_remocoes import CAMPOS
 
@@ -78,11 +80,15 @@ class _Lote:
     def _documentos(self, produtos):
         referencias = set()
         vendas_ids = set()
+        compras_ids = set()
         for ms in self.movimentos.values():
             for m in ms:
                 match = re.fullmatch(r'Venda #(\d+)', m.referencia or '')
                 if m.origem == 'venda' and match:
                     vendas_ids.add(int(match[1])); referencias.add(m.referencia)
+                compra = re.fullmatch(r'Compra #(\d+)', m.referencia or '')
+                if m.origem == 'compra' and compra:
+                    compras_ids.add(int(compra[1])); referencias.add(m.referencia)
         vendas = Venda.objects.filter(pk__in=vendas_ids).order_by('pk')
         itens = ItemVenda.objects.filter(venda_id__in=vendas_ids).select_related('produto').order_by('pk')
         if self.travar:
@@ -91,10 +97,26 @@ class _Lote:
         self.itens = defaultdict(list)
         self.registros_removidos = defaultdict(list)
         self.erro_documentos = ''
+        self.compras, self.itens_compra, self.detalhes_compra = {}, defaultdict(list), {}
+        self.compras_editadas = set()
         try:
             # Keep the savepoint so a NOWAIT error cannot poison the caller's transaction.
             with transaction.atomic() if self.travar else nullcontext():
                 self.vendas = {v.pk: v for v in vendas}
+                if compras_ids:
+                    compras = Compra.objects.filter(pk__in=compras_ids).order_by('pk')
+                    recebidos = ItemCompra.objects.filter(compra_id__in=compras_ids).order_by('pk')
+                    if self.travar:
+                        compras = compras.select_for_update(nowait=True)
+                        recebidos = recebidos.select_for_update(nowait=True)
+                    self.compras = {c.pk: c for c in compras}
+                    for recebido in recebidos:
+                        self.itens_compra[recebido.compra_id].append(recebido)
+                    self.compras_editadas = set(EdicaoCompra.objects.filter(
+                        compra_id__in=compras_ids).values_list('compra_id', flat=True))
+                    self.detalhes_compra = {d.movimento_id: d for d in DetalheMovimentoEstoque.objects.filter(
+                        movimento__produto_id__in=produtos, movimento__origem='compra',
+                        movimento__referencia__in=referencias)}
                 for item in itens:
                     self.itens[item.venda_id].append(item)
                 removidos = ItemVendaRemovido.objects.filter(venda_id__in=vendas_ids).order_by('pk')
@@ -110,7 +132,7 @@ class _Lote:
         self.ajustes = set(AjusteItemVendaQuitada.objects.filter(venda_id__in=vendas_ids,
             produto_id__in=produtos).values_list('venda_id','produto_id'))
         self.contagens = {(r['produto_id'],r['referencia']):r['total'] for r in MovimentoObservado.objects.filter(
-            produto_id__in=produtos, origem='venda', referencia__in=referencias).values('produto_id','referencia').annotate(total=Count('pk'))}
+            produto_id__in=produtos, origem__in=('venda', 'compra'), referencia__in=referencias).values('produto_id','referencia').annotate(total=Count('pk'))}
         self.eventos = defaultdict(list)
         # Same 501-row cutoff PER sale as the individual validator, not a global limit.
         eventos = EventoVenda.objects.filter(venda_id__in=vendas_ids).annotate(

@@ -1,5 +1,23 @@
 # Alertas de revisão — correção local
 
+## Compatibilidade do fluxo compartilhado
+
+Encerramento usa a mesma relação física confirmada da contagem. Impedimentos
+da prévia aparecem na página, com produto e orientação; revisão ou ajuste não
+finalizam a conferência automaticamente.
+
+Consulta, revisão e aplicação reconhecem recebimentos de compra posteriores ao
+OK, além das vendas. Exigem recebimento efetivo, documento não cancelado/editado,
+item e observação únicos, quantidade compatível e continuidade da cadeia.
+Conversões de compra exigem atribuição histórica persistida; o cadastro atual
+não fornece fatores para movimentos antigos. Documentos e itens são carregados
+em lote e bloqueados na validação de escrita. Conciliação textual não substitui
+prova documental. Aplicações próprias continuam exigindo sua auditoria completa.
+
+Nome, código e categoria não participam da compatibilidade física; unidade,
+fator e permissões de fracionamento continuam protegidos. Nenhum OK anterior é
+reescrito e o ajuste mantém a fórmula estoque atual + diferença no OK.
+
 ## Comportamento
 
 A classificação física (Correto, Falta, Sobra) e a atualização administrativa

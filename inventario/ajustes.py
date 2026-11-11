@@ -72,11 +72,10 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
             raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
         if resultado['diferenca'] != 0:
             exigir_precisao_ajuste(rodada)
-        from .conciliacao_documental import conciliar
-        documentos = conciliar(rodada, movimentos, travar=travar_documentos, _lote=_lote)
+        from .conciliacao_documental import comprovar_cadeia
+        sequencia, documentos = comprovar_cadeia(rodada, produto, movimentos,
+            travar=travar_documentos, _lote=_lote)
         resultado['documentos'] = documentos
-        sequencia = services.validar_cadeia(rodada, produto,
-            documentos={d['observador'] for d in documentos}, _lote=_lote)
         diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal('.001'))
         resultante = produto.quantidade + diferenca
         resultado.update(diferenca=diferenca, resultante=resultante)
@@ -106,10 +105,10 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
         if proposta:
             resultado['estado'] = proposta.get_estado_display()
     except PrecisaoInsuficiente as exc:
-        resultado.update(estado='Bloqueado', bloqueio=str(exc), bloqueio_codigo='precisao',
+        resultado.update(estado='Bloqueado', bloqueio=f'{item.cadastro["nome"]} (produto #{produto.pk}): {exc}', bloqueio_codigo='precisao',
                          contagem_fisica=exc.contagem_fisica)
     except ValueError as exc:
-        resultado.update(estado='Bloqueado', bloqueio=str(exc))
+        resultado.update(estado='Bloqueado', bloqueio=f'{item.cadastro["nome"]} (produto #{produto.pk}): {exc}')
     return resultado
 
 
@@ -234,7 +233,7 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
 
 def _validar_proposta(proposta, atual):
     if atual['bloqueio'] or atual.get('assinatura') != proposta.assinatura or assinatura(proposta.evidencia) != proposta.assinatura:
-        raise ValueError(atual['bloqueio'] or 'Estoque, OK ou evidência alterados após aprovação. Nenhum ajuste do lote aplicado.')
+        raise ValueError(atual['bloqueio'] or f'{atual["produto"].nome} (produto #{atual["produto"].pk}): Estoque, OK ou evidência alterados após aprovação. Prepare nova prévia. Nenhum ajuste do lote aplicado.')
 
 
 def descricao_representacao(atual):
@@ -363,7 +362,7 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
             atual = avaliar(rodada, produto, travar_documentos=True, _lote=lote)
             if (atual['bloqueio'] or atual['estado'] not in ('Pendente de revisão', 'Aprovado')
                     or atual.get('assinatura') != assinaturas[rodada.pk]):
-                raise ValueError(atual['bloqueio'] or 'Dados alterados. Confira os saldos e confirme novamente.')
+                raise ValueError(atual['bloqueio'] or f'{produto.nome} (produto #{produto.pk}): Dados alterados. Confira os saldos e confirme novamente.')
             avaliacoes.append((rodada, produto, atual))
     # Every product and document is checked before the first write. The same
     # locks remain held through approval, stock movement, audit and commit.

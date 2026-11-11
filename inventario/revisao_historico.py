@@ -80,16 +80,20 @@ def validar_aplicacao(rodada, movimento, aplicacao, lote):
 def validar(rodada, produto, lote):
     lote.conferir(rodada)
     movimentos = lote.movimentos[rodada.item.produto_id]
-    vendas = [m for m in movimentos if m.origem == 'venda']
-    documentos = conciliar(rodada, vendas, travar=lote.travar, _lote=lote) if vendas else []
+    comerciais = [m for m in movimentos if m.origem in ('venda', 'compra')]
+    documentos = conciliar(rodada, comerciais, travar=lote.travar, _lote=lote) if comerciais else []
     comprovados = {d['observador'] for d in documentos}
     # An audit record alone never skips subsequent movements or chain checks.
     for m in movimentos:
-        if m.origem != 'ajuste_manual':
+        if m.origem in ('venda', 'compra'):
             continue
-        aplicacao = lote.aplicacoes_revisao.get(m.referencia)
+        aplicacao = lote.aplicacoes_revisao.get(m.referencia) if m.origem == 'ajuste_manual' else None
         if aplicacao:
             validar_aplicacao(rodada, m, aplicacao, lote)
             comprovados.add(m.pk)
+        else:
+            # Same safeguards as application: a textual conciliation cannot
+            # replace a historical document or a verified application receipt.
+            conciliar(rodada, [m], travar=lote.travar, _lote=lote)
     sequencia = services.validar_cadeia(rodada, produto, documentos=comprovados, _lote=lote)
     return sequencia, comprovados

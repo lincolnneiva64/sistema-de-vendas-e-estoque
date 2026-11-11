@@ -8,6 +8,7 @@ from django.db.models import Prefetch
 from django.utils import timezone
 from . import services
 from .conversao import converter
+from .conversao_fisica import cadastro_contagem, carregar
 from .models import Inventario, RodadaContagem
 from .selecao import itens_incluidos
 
@@ -25,13 +26,18 @@ def resumo(inventario):
         to_attr='rodadas_encerramento')).order_by('pk'))
     if not itens:
         raise ValueError('A conferencia nao possui produtos participantes.')
+    carregar(itens)
     evidencias=[]; aplicados=0; pendentes=0
     for item in itens:
         rodadas=item.rodadas_encerramento
         r=rodadas[-1] if rodadas else None
         if not r or r.encerrada_em or sum(x.encerrada_em is None for x in rodadas)!=1 or not r.ok_em:
             raise ValueError(f'{item.cadastro["nome"]}: falta OK valido na rodada atual. O encerramento foi recusado.')
-        valores=converter(item.cadastro,r.embalagens,r.avulsos)
+        try:
+            valores=converter(cadastro_contagem(item),r.embalagens,r.avulsos)
+        except ValueError as exc:
+            raise ValueError(f'{item.cadastro["nome"]} (produto #{item.produto_id}): {exc} '
+                             'Revise a contagem e a relação física antes de finalizar.') from exc
         if valores[2]!=r.contado or valores[3]!=r.contado_base or r.esperado is None or r.sequencia_ok is None:
             raise ValueError(f'{item.cadastro["nome"]}: contagem inconsistente. O encerramento foi recusado.')
         confirmacoes=list(r.confirmacoes.all())

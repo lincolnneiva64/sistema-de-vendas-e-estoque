@@ -566,12 +566,15 @@ def validar_cadeia(rodada, produto, documentos=(), *, _lote=None):
     saldos = {primeira.sequencia_ok: primeira.esperado}
     conciliados = _lote.conciliados[rodada.pk] if _lote is not None else set(rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).values_list("movimento_id", flat=True))
     for movimento in movimentos:
+        identificacao = (f'{rodada.item.cadastro["nome"]} (produto #{produto.pk}), '
+                         f'movimento #{movimento.pk}, sequência {movimento.sequencia}, '
+                         f'{movimento.referencia or movimento.origem}: ')
         if movimento.sequencia != proxima or movimento.antes != saldo or movimento.depois is None:
-            raise ValueError("Histórico descontínuo. Revisão técnica e recontagem necessárias.")
+            raise ValueError(identificacao + "Histórico descontínuo. Revisão técnica e recontagem necessárias.")
         if movimento.origem not in ORIGENS or movimento.origem == "nao_identificada":
-            raise ValueError("Movimento digital sem origem rastreável. Exige revisão técnica e recontagem; aprovação bloqueada.")
+            raise ValueError(identificacao + "Movimento digital sem origem rastreável. Exige revisão técnica e recontagem; aprovação bloqueada.")
         if movimento.pk not in conciliados and movimento.pk not in documentos:
-            raise ValueError("Há movimento entre confirmações ou após o último OK sem conciliação física comprovada.")
+            raise ValueError(identificacao + "Há movimento entre confirmações ou após o último OK sem conciliação física comprovada. Confira o documento ou solicite recontagem.")
         saldo, proxima = movimento.depois, proxima + 1
         saldos[movimento.sequencia] = movimento.depois
     for confirmacao in confirmacoes:
@@ -648,7 +651,11 @@ def revisar(usuario, rodada_id, motivo):
     if DecisaoAjuste.objects.filter(item=rodada.item).exists():
         raise ValueError("Ajuste já aplicado.")
     produto = Produto.objects.select_for_update().get(pk=rodada.item.produto_id)
-    rodada.revisao_sequencia = validar_cadeia(rodada, produto)
+    from .contexto_ajustes import carregar
+    from .conciliacao_documental import comprovar_cadeia
+    with carregar([rodada], travar=True) as lote:
+        rodada.revisao_sequencia, _ = comprovar_cadeia(rodada, produto,
+            lote.movimentos[produto.pk], travar=True, _lote=lote)
     rodada.revisao_por = usuario
     rodada.revisao_motivo = motivo
     rodada.revisada_em = timezone.now()
