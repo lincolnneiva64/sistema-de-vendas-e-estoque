@@ -92,10 +92,8 @@
   .rcp-item.destaque .rcp-value { color: #14532d; }
   .rcp-actions-panel {
     order: 3;
-    transition: opacity .24s ease, max-height .24s ease, margin .24s ease;
-    max-height: 260px;
   }
-  .rcp-actions-panel.ocultando {
+  .rcp-receipt-actions.ocultando {
     opacity: 0;
     max-height: 0;
     margin: 0;
@@ -110,7 +108,7 @@
     gap: 7px;
   }
   .rcp-btn {
-    min-height: 38px;
+    min-height: 44px;
     border: 1px solid #cbd5e1;
     border-radius: 8px;
     background: #fff;
@@ -127,10 +125,16 @@
     text-align: center;
   }
   .rcp-btn.whatsapp { border-color: #15803d; background: #15803d; color: #fff; }
-  #btn-ver-comprovante-visual { flex: 0 1 230px; max-width: 230px; }
-  #btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }
-  #btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }
-  #btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }
+  .rcp-actions > a { flex: 1 1 0; min-width: 0; }
+  .rcp-navigation {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+  .rcp-btn:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
   #btn-confirmar-recibo-enviado {
     flex: 1 1 100%;
     width: 100%;
@@ -147,14 +151,16 @@
   }
   .rcp-btn.success { border-color: #16a34a; background: #16a34a; color: #fff; }
   .rcp-btn.secondary { background: #f8fafc; }
-  .rcp-btn.back {
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding-inline: 8px;
-    color: #475569;
-    font-size: 0.78rem;
-    font-weight: 820;
-  }
+  #btn-ver-comprovante-visual { background: #B8D0FA; border-color: #2563EB; color: #123A86; }
+  #btn-ver-comprovante-visual:hover,
+  #btn-ver-comprovante-visual:focus-visible { background: #9EBFF4; border-color: #1D4ED8; color: #123A86; }
+  #btn-ver-comprovante-visual:active { background: #85ADEB; border-color: #1E40AF; color: #123A86; }
+  .rcp-navigation .rcp-btn.secondary { background: #B8C8DC; border-color: #526B8C; color: #102A43; }
+  .rcp-navigation .rcp-btn.secondary:hover,
+  .rcp-navigation .rcp-btn.secondary:focus-visible { background: #A3B7D0; border-color: #405878; color: #102A43; }
+  .rcp-navigation .rcp-btn.secondary:active { background: #8FA7C4; border-color: #334B6B; color: #102A43; }
+  #btn-ver-comprovante-visual:focus-visible,
+  .rcp-navigation .rcp-btn.secondary:focus-visible { outline-color: #1d4ed8; }
   .rcp-btn:disabled { opacity: 0.92; cursor: default; }
   .rcp-btn.pulsando { animation: rcp-confirmar-pulse 1.2s ease-in-out infinite; }
   .rcp-btn.recibo-confirmado-pulso {
@@ -497,16 +503,8 @@
     .rcp-btn { width: 100%; }
     .rcp-route-panel { border-left-width: 5px; }
     .rcp-route-actions .rcp-btn.primary { min-height: 50px; font-size: 1rem; }
-    #btn-ver-comprovante-visual,
-    #btn-compartilhar-recibo-card,
-    #btn-ver-recibo-card,
-    #btn-enviar-confirmacao-whatsapp,
-    #btn-confirmar-recibo-enviado,
-    .rcp-btn.back {
-      flex-basis: 100%;
-      max-width: none;
-    }
-    .rcp-btn.back { min-height: 32px; }
+    .rcp-actions > a { font-size: 0.8rem; }
+
   }
 </style>
 
@@ -563,21 +561,14 @@
       </div>
     </section>
 
-    {% if operacao.status_recibo == "pendente" %}
     <section class="rcp-panel rcp-actions-panel" id="acoes-recibo-recebimento">
       <div class="rcp-panel-body">
-        <h2 class="rcp-section-title">Acoes do recibo</h2>
+        {% if operacao.status_recibo == "pendente" %}
+        <div class="rcp-receipt-actions" id="acoes-envio-recibo">
+        <h2 class="rcp-section-title">Ações do recibo</h2>
         <div class="rcp-actions">
-          <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.</p>
+          <p class="rcp-recibo-orientacao" id="recibo-orientacao-envio">Confira o comprovante, envie ao cliente e confirme quando o envio estiver concluído.</p>
           <a class="rcp-btn secondary" id="btn-ver-comprovante-visual" href="{{ comprovante_imagem_url }}" target="_blank" rel="noopener">Ver comprovante detalhado</a>
-          <button
-            type="button"
-            class="rcp-btn primary"
-            id="btn-compartilhar-recibo-card"
-            data-card-url="{{ recibo_card_imagem_url }}"
-            data-share-text="{{ whatsapp_confirmacao.mensagem }}"
-          >Compartilhar card</button>
-          <a class="rcp-btn secondary" id="btn-ver-recibo-card" href="{{ recibo_card_imagem_url }}" target="_blank" rel="noopener">Abrir card para enviar</a>
           {% if whatsapp_confirmacao.tem_whatsapp %}
             <a class="rcp-btn whatsapp" id="btn-enviar-confirmacao-whatsapp" href="{{ whatsapp_confirmacao.url }}" target="_blank" rel="noopener">Abrir WhatsApp com mensagem</a>
           {% else %}
@@ -591,11 +582,17 @@
             data-operacao-id="{{ operacao.id }}"
           >{% if whatsapp_confirmacao.tem_whatsapp %}Confirmar recibo enviado{% else %}Confirmar recibo enviado por outro meio{% endif %}</button>
           <p class="rcp-recibo-status" id="confirmar-recibo-status" aria-live="polite" hidden>Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.</p>
-          <a class="rcp-btn secondary back" href="{{ voltar_receber_url }}">Voltar</a>
+
         </div>
+        </div>
+        {% endif %}
+        <nav class="rcp-navigation" aria-label="Navegação após recebimento">
+          <a class="rcp-btn secondary" id="btn-voltar-recebimento" href="{% url 'estoque:receber_cliente_escolher' %}">Voltar</a>
+          <a class="rcp-btn secondary" href="{% url 'estoque:vendas' %}">Vendas</a>
+          <a class="rcp-btn secondary" href="{% url 'estoque:home' %}">Painel</a>
+        </nav>
       </div>
     </section>
-    {% endif %}
 
     <section class="rcp-panel rcp-route-panel {% if operacao.status_recibo != 'pendente' %}destacado{% endif %}" id="continuidade-rota-recebimento">
       <div class="rcp-panel-body">
@@ -758,11 +755,10 @@
 (function () {
   const page = document.querySelector(".rcp-page");
   const btnWhatsapp = document.getElementById("btn-enviar-confirmacao-whatsapp");
-  const btnCompartilharCard = document.getElementById("btn-compartilhar-recibo-card");
   const btnConfirmar = document.getElementById("btn-confirmar-recibo-enviado");
   const statusMensagem = document.getElementById("confirmar-recibo-status");
   const statusLabel = document.getElementById("statusReciboLabel");
-  const painelAcoesRecibo = document.getElementById("acoes-recibo-recebimento");
+  const painelAcoesRecibo = document.getElementById("acoes-envio-recibo");
   const continuidadeRota = document.getElementById("continuidade-rota-recebimento");
   const textoOriginalBotaoConfirmar = btnConfirmar?.textContent || "Confirmar recibo enviado";
 
@@ -806,54 +802,9 @@
   function esconderAcoesReciboAposConfirmacao() {
     setTimeout(function () {
       painelAcoesRecibo?.classList.add("ocultando");
+      if (painelAcoesRecibo) painelAcoesRecibo.inert = true;
       destacarContinuidadeRota();
     }, 3000);
-  }
-
-  async function compartilharCard() {
-    const cardUrl = btnCompartilharCard?.dataset.cardUrl;
-    const texto = btnCompartilharCard?.dataset.shareText || "Segue seu comprovante de pagamento.";
-    if (!cardUrl || page?.dataset.statusRecibo !== "pendente") return;
-
-    if (!navigator.share || !navigator.canShare) {
-      atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
-      destacarBotaoConfirmacao();
-      return;
-    }
-
-    btnCompartilharCard.disabled = true;
-    btnCompartilharCard.textContent = "Preparando...";
-    try {
-      const resposta = await fetch(cardUrl, { credentials: "same-origin" });
-      if (!resposta.ok) {
-        throw new Error("Nao foi possivel carregar o card do recibo.");
-      }
-      const blob = await resposta.blob();
-      const arquivo = new File([blob], "recibo-pagamento.png", { type: "image/png" });
-      const payload = {
-        files: [arquivo],
-        title: "Comprovante de pagamento",
-        text: texto
-      };
-      if (!navigator.canShare(payload)) {
-        atualizarMensagem("Este navegador nao conseguiu compartilhar a imagem automaticamente. Abra o card, salve ou compartilhe a imagem manualmente e depois abra o WhatsApp com a mensagem.", true);
-        destacarBotaoConfirmacao();
-        return;
-      }
-      await navigator.share(payload);
-      destacarBotaoConfirmacao();
-      atualizarMensagem("Depois de enviar o card no WhatsApp, confirme o envio.", false);
-    } catch (erro) {
-      if (erro && erro.name === "AbortError") {
-        atualizarMensagem("Compartilhamento cancelado.", false);
-      } else {
-        atualizarMensagem(erro.message || "Nao foi possivel compartilhar o card automaticamente. Abra o card e envie a imagem manualmente.", true);
-      }
-      destacarBotaoConfirmacao();
-    } finally {
-      btnCompartilharCard.disabled = false;
-      btnCompartilharCard.textContent = "Compartilhar card";
-    }
   }
 
   async function confirmarRecibo() {
@@ -910,7 +861,6 @@
   }
 
   btnWhatsapp?.addEventListener("click", revelarConfirmacao);
-  btnCompartilharCard?.addEventListener("click", compartilharCard);
   btnConfirmar?.addEventListener("click", confirmarRecibo);
 })();
 </script>

@@ -24766,41 +24766,13 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, "Contas ainda abertas")
         self.assertContains(resposta, "<details", html=False)
         self.assertContains(resposta, "Ver comprovante detalhado")
-        self.assertContains(resposta, "Abrir card para enviar")
-        self.assertContains(
-            resposta,
-            reverse(
-                "estoque:receber_cliente_operacao_recibo_card_imagem",
-                kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
-            ),
-        )
         self.assertContains(resposta, "Abrir WhatsApp com mensagem")
-        self.assertContains(resposta, "Compartilhar card")
-        self.assertContains(resposta, 'id="btn-compartilhar-recibo-card"')
-        self.assertContains(
-            resposta,
-            'data-card-url="{}"'.format(
-                reverse(
-                    "estoque:receber_cliente_operacao_recibo_card_imagem",
-                    kwargs={"cliente_id": cliente.id, "operacao_id": operacao.id},
-                )
-            ),
-        )
-        self.assertContains(resposta, "Segue seu comprovante de pagamento.")
-        self.assertContains(resposta, "navigator.share")
-        self.assertContains(resposta, "navigator.canShare")
-        self.assertContains(resposta, 'new File([blob], "recibo-pagamento.png", { type: "image/png" })')
-        self.assertContains(resposta, "await fetch(cardUrl")
-        self.assertContains(resposta, "await navigator.share(payload);")
+        for obsoleto in ("Compartilhar card", "Abrir card para enviar", "compartilharCard", "navigator.share", "data-card-url", "btn-ver-recibo-card", "btn-compartilhar-recibo-card"):
+            self.assertNotContains(resposta, obsoleto)
         self.assertContains(resposta, "destacarBotaoConfirmacao")
         self.assertContains(resposta, 'btnConfirmar.scrollIntoView({ behavior: "smooth", block: "center" });')
         self.assertContains(resposta, "btnConfirmar.focus({ preventScroll: true });")
-        self.assertContains(resposta, "Compartilhamento cancelado.")
-        self.assertContains(resposta, "Este navegador nao conseguiu compartilhar a imagem automaticamente.")
-        self.assertContains(
-            resposta,
-            "Para enviar o recibo: abra o card, anexe a imagem no WhatsApp e depois confirme o envio.",
-        )
+        self.assertContains(resposta, "Confira o comprovante, envie ao cliente e confirme quando o envio estiver concluído.")
         self.assertContains(resposta, "Depois de anexar e enviar a imagem no WhatsApp, confirme o envio aqui.")
         self.assertNotContains(resposta, "Enviar recibo pelo WhatsApp")
         self.assertNotContains(resposta, "envia o card automaticamente")
@@ -24824,16 +24796,13 @@ class PixRecebidoTests(TestCase):
         self.assertContains(resposta, 'painelAcoesRecibo?.classList.add("ocultando");')
         self.assertContains(resposta, 'continuidadeRota?.classList.add("destacado");')
         self.assertContains(resposta, "@media (prefers-reduced-motion: reduce)")
-        self.assertContains(resposta, "#btn-enviar-confirmacao-whatsapp { flex: 0 1 300px; max-width: 300px; }")
         self.assertContains(resposta, "flex: 1 1 100%;")
         self.assertContains(resposta, "width: 100%;")
         self.assertContains(resposta, "max-width: none;")
         self.assertNotContains(resposta, "#btn-confirmar-recibo-enviado { flex: 0 1 250px; max-width: 250px; }")
-        self.assertContains(resposta, "#btn-ver-recibo-card { flex: 0 1 210px; max-width: 210px; }")
-        self.assertContains(resposta, "#btn-compartilhar-recibo-card { flex: 0 1 210px; max-width: 210px; }")
         self.assertNotContains(resposta, "grid-template-columns: 1fr 1.35fr auto")
         conteudo = resposta.content.decode()
-        self.assertLess(conteudo.find("Acoes do recibo"), conteudo.find("Contas abatidas"))
+        self.assertLess(conteudo.find("Ações do recibo"), conteudo.find("Contas abatidas"))
         self.assertLess(
             conteudo.find('btnConfirmar.textContent = "Recibo enviado com sucesso.";'),
             conteudo.find("esconderAcoesReciboAposConfirmacao();"),
@@ -24844,6 +24813,49 @@ class PixRecebidoTests(TestCase):
         )
         self.assertNotContains(resposta, 'id="formReceberCliente"')
         self.assertNotContains(resposta, 'id="clienteBuscaReceberDireto"')
+
+    def test_confirmacao_navegacao_disponivel_sem_alterar_estados(self):
+        self.client.force_login(get_user_model().objects.create_superuser(username="navegacao-recibo", password="teste"))
+        cliente = Cliente.objects.create(nome="Cliente Navegação Recibo", ativo=True)
+        for status in ("pendente", "enviado", "dispensado"):
+            with self.subTest(status=status):
+                operacao = self._criar_operacao_recebimento_cliente(cliente, status=status)
+                resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+                conteudo = resposta.content.decode()
+                nav = re.search(r'<nav class="rcp-navigation".*?</nav>', conteudo, re.S).group()
+                for nome, rota in (("Voltar", "receber_cliente_escolher"), ("Vendas", "vendas"), ("Painel", "home")):
+                    self.assertIn(f'href="{reverse("estoque:" + rota)}">{nome}</a>', nav)
+                self.assertNotIn("data-confirmar", nav)
+                self.assertNotIn("onclick", nav)
+                if status == "pendente":
+                    self.assertContains(resposta, 'document.getElementById("acoes-envio-recibo")')
+                    self.assertLess(conteudo.index('id="acoes-envio-recibo"'), conteudo.index('<nav class="rcp-navigation"'))
+                else:
+                    self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+                operacao.refresh_from_db()
+                self.assertEqual(operacao.status_recibo, status)
+                self.assertIsNone(operacao.recibo_confirmado_em)
+
+    def test_navegacao_preservada_apos_confirmar_envio(self):
+        self.client.force_login(get_user_model().objects.create_superuser(username="envio-recibo", password="teste"))
+        cliente = Cliente.objects.create(nome="Cliente Envio", ativo=True)
+        operacao = self._criar_operacao_recebimento_cliente(cliente)
+        resposta = self.client.post(self._url_confirmar_recibo(cliente, operacao), secure=True, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(resposta.status_code, 200)
+        operacao.refresh_from_db()
+        self.assertEqual(operacao.status_recibo, "enviado")
+        resposta = self.client.get(self._url_recebimento_confirmado(cliente, operacao), secure=True)
+        self.assertContains(resposta, 'id="btn-voltar-recebimento"')
+        self.assertContains(resposta, '<nav class="rcp-navigation"')
+        self.assertNotContains(resposta, 'id="btn-confirmar-recibo-enviado"')
+
+    def test_voltar_confirmacao_abre_busca_existente_sem_cliente_selecionado(self):
+        self.client.force_login(get_user_model().objects.create_superuser(username="navegacao-recibo", password="teste"))
+        resposta = self.client.get(reverse("estoque:receber_cliente_escolher"), secure=True)
+        self.assertTemplateUsed(resposta, "estoque/receber_cliente.html")
+        self.assertContains(resposta, 'id="clienteBuscaReceberDireto"', count=1)
+        self.assertContains(resposta, 'if (document.activeElement !== input)')
+        self.assertContains(resposta, 'input.focus({ preventScroll: true });')
 
     def test_receber_cliente_confirmado_sem_whatsapp_mostra_confirmacao_por_outro_meio(self):
         cliente = Cliente.objects.create(nome="Cliente Sem WhatsApp Confirmacao", ativo=True)

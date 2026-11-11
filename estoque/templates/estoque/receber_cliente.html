@@ -2480,7 +2480,9 @@
       input.value = textoInicialBusca;
       textoInicialSelecionado = true;
     }
-    input.focus({ preventScroll: true });
+    if (document.activeElement !== input) {
+      input.focus({ preventScroll: true });
+    }
     input.select();
   });
 
