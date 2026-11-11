@@ -486,9 +486,12 @@
         agendar();
         return true;
       }
-      revisaoPrecosItens = atuais;
-      let indice = atuais.findIndex(item => String(item.item_id) === String(itemId));
-      if (indice < 0) indice = atuais.findIndex(item => !concluidos.has(item.item_id));
+      // Preserve a consulta dos itens ja salvos ao voltar. Pendentes sempre
+      // recebem os dados e assinaturas atuais do servidor.
+      const historico = revisaoPrecosItens.filter(item => concluidos.has(item.item_id));
+      revisaoPrecosItens = [...historico, ...atuais];
+      let indice = revisaoPrecosItens.findIndex(item => String(item.item_id) === String(itemId));
+      if (indice < 0) indice = revisaoPrecosItens.findIndex(item => !concluidos.has(item.item_id));
       if (indice < 0) {
         proximaRevisaoDesatualizada = false;
         fechar();
@@ -634,6 +637,7 @@
         await finalizarItemConfirmado(item);
         return;
       }
+      await finalizarItemConfirmado(item);
     } catch(e) { mostrarErro(e.message); }
     finally {
       ocupado = false; manter.disabled = false; depois.disabled = false;

@@ -403,6 +403,15 @@ class ProdutoForm(forms.ModelForm):
 
         return cleaned_data
 
+    def _post_clean(self):
+        super()._post_clean()
+        if not self.errors and not self.grupo_precos:
+            from .services.precos_vinculados import validar_precos_individuais
+            try:
+                validar_precos_individuais(self.instance)
+            except ValidationError as exc:
+                self._update_errors(exc)
+
     def salvar_fornecedores(self, produto):
         fornecedores_marcados = list(self.cleaned_data.get("fornecedores") or [])
         ids_marcados = {fornecedor.pk for fornecedor in fornecedores_marcados}

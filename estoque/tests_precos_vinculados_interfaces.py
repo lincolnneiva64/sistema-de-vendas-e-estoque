@@ -156,6 +156,20 @@ class InterfacesPrecosVinculadosTests(TestCase):
         self.assertEqual(self.client.post(url, payload).status_code, 200)
         self.assertEqual(self.snapshot(), before)
 
+    def test_editor_can_repair_legacy_invalid_linked_product(self):
+        self.ativar()
+        p=self.produtos[0]
+        url=reverse('estoque:produto_editar',args=[p.pk])
+        for changes in ({'preco_compra':'10'}, {'preco_vista':'45','preco_prazo':'46'}):
+            with self.subTest(changes=changes):
+                Produto.objects.filter(pk=p.pk).update(preco_compra=Decimal('40'))
+                payload=self.editor()
+                payload.update(changes)
+                response=self.client.post(url,payload)
+                self.assertEqual(response.status_code,302,
+                    response.context['form'].errors if response.status_code==200 else response.content)
+                Produto.objects.get(pk=p.pk).full_clean()
+
     def test_purchase_pending_json_supplies_version_and_revision_uses_it(self):
         self.ativar(); compra, item = self.compra()
         compra.revisao_precos_pendente = True; compra.save(update_fields=['revisao_precos_pendente'])
@@ -166,6 +180,7 @@ class InterfacesPrecosVinculadosTests(TestCase):
             'atualizar_preco_venda_produto_ids[]': [item.produto_id],
             'atualizar_preco_venda_nomes[]': ['preco_vista'], 'atualizar_preco_venda_valores[]': ['40']}
         payload.update(payload_todos_fixture(item.produto_id))
+        payload.update(previa_decisao_precos=d['previa_decisao_precos'], decisao_precos='alterar')
         response = self.client.post(reverse('estoque:revisao_precos_posterior_salvar'), payload)
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(set(Produto.objects.values_list('preco_vista', flat=True)), {Decimal(40)})

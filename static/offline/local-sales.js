@@ -1,6 +1,7 @@
 // Local transport adapter. Same UUID/command/hash/receipt as operation services.
 // Existing authenticated drafts, operations, snapshots and owner metadata are untouched.
 import {Repository, openDB, hash, validReceipt} from '/offline/assets/local-controlled-v1/core.js';
+import {ensureSaleCosts} from '/offline/assets/sale-cost-check-v1/sales-costs.js';
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 const bridge = window.salesDraftBridge, context = window.localSalesContext;
 const repo = new Repository(await openDB());
@@ -149,6 +150,8 @@ window.localSales={
                 return send();
             }
             await verifyOwner();
+            await ensureSaleCosts(data.itens);
+            if (JSON.stringify(bridge.getData()) !== JSON.stringify(data)) throw Error('A montagem mudou durante a conferência. Confira a venda antes de gravar.');
             const id=crypto.randomUUID();
             const command={operation_id:id,aggregate_id:id,device_id:tab,actor_id:context.actor_id,
                 environment_id:context.environment_id,type:'venda_local',schema_version:1,sequence:1,

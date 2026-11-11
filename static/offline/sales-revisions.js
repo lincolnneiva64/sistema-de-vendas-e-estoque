@@ -1,5 +1,6 @@
 import {hash, commandOf, canonical, validReceipt, reserveSequence} from '/offline/assets/2-8f/core.js';
 import {closureKey,intentKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
+import {ensureSaleCosts} from '/offline/assets/sale-cost-check-v1/sales-costs.js';
 
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export function commercialConflict(operation) {
@@ -204,6 +205,7 @@ export async function finalizeRevision(repo, scope, originalId, expectedRevision
             return {record,sequence:device.sequence,payload:validatePayload(record.payload,original)};
         },false);
         if (prepared.completed) return prepared.completed;
+        await ensureSaleCosts(prepared.payload.itens);
         const createdAt = new Date().toISOString();
         const command = {operation_id:prepared.record.draft_id, aggregate_id:prepared.record.draft_id,
             ...scope,type:'criar_venda',schema_version:1,created_at:createdAt,sequence:prepared.sequence+1,

@@ -1,5 +1,5 @@
 // Refresh modules inherited from upstream, including independent sales drafts.
-const CACHE = 'offline-pilot-shell-v48-sale-button-feedback';
+const CACHE = 'offline-pilot-shell-v49-sale-cost-check';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/assets/2-8h-pickup/checklist.js');
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
@@ -19,6 +19,7 @@ ASSETS.push('/offline/assets/2-8h-inventario/sales.js');
 ASSETS.push('/offline/assets/connection-recovery-v1/sales.js', '/offline/assets/connection-recovery-v1/sales-draft-ui.js');
 ASSETS.push(...['sales-draft-ui.js', 'sales-drafts.js', 'sales-stock.js'].map(file => '/offline/assets/sack-conversion-v1/' + file));
 ASSETS.push(...['sales-draft-ui.js', 'local-sales.js'].map(file => '/offline/assets/sale-button-feedback-v1/' + file));
+ASSETS.push(...['sales-costs.js', 'sales-drafts.js', 'sales-draft-ui.js', 'local-sales.js', 'sales-revisions.js', 'sales-revision-ui.js'].map(file => '/offline/assets/sale-cost-check-v1/' + file));
 self.addEventListener('install', event => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);

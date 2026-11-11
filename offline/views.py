@@ -26,7 +26,7 @@ def versioned_asset(request, filename):
     allowed = {"local-sales.js", "app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
-               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js"}
+               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js", "sales-costs.js"}
     if filename not in allowed:
         return HttpResponse(status=404)
     return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),
@@ -193,6 +193,24 @@ def online_sale_result(request, operation_id):
     if request.GET.get("type") != "criar_venda":
         return JsonResponse({"erro": "Consulta exclusiva de vendas."}, status=400)
     return _operation_result(request, operation_id)
+
+
+@require_POST
+@never_cache
+def sale_cost_preflight(request):
+    from .sale_costs import inspect_costs
+    if not getattr(request, 'local_sales_owner', None):
+        if not request.user.is_authenticated:
+            return JsonResponse({'erro': 'Entre no sistema para conferir os custos.'}, status=401)
+        if not request.user.has_perm('estoque.view_produto'):
+            return JsonResponse({'erro': 'Sem permissão para consultar produtos.'}, status=403)
+    if len(request.body) > 100000:
+        return JsonResponse({'erro': 'Confira os produtos da venda.'}, status=413)
+    try:
+        items = inspect_costs(json.loads(request.body).get('itens'))
+    except (ValueError, TypeError, AttributeError, ValidationError):
+        return JsonResponse({'erro': 'Não foi possível conferir os custos. Revise os produtos e preços.'}, status=400)
+    return JsonResponse({'itens': items, 'referencia': 'atual'})
 
 
 @require_POST

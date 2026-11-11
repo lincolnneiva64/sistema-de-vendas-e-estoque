@@ -3,7 +3,7 @@ import {formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/
 import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
-import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales, listRecoverableDrafts, recoverDraft} from '/offline/assets/sack-conversion-v1/sales-drafts.js';
+import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales, listRecoverableDrafts, recoverDraft} from '/offline/assets/sale-cost-check-v1/sales-drafts.js';
 import {readStock,validateStock} from '/offline/assets/sack-conversion-v1/sales-stock.js';
 import {closedLocally,closureKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
@@ -733,6 +733,9 @@ window.salesDraftUI = {
                     if (!persisted) message.textContent = 'Resultado da venda desconhecido. Nao repita a venda. Use Consultar resultado da venda; reenvio somente por Status → Sincronizar agora quando permitido.';
                     return null;
                 }
+            } catch (error) {
+                if (error.costPreflight) submitted = null;
+                throw error;
             } finally { sendingOnline = false; offlineActions(); }
         });
     },
@@ -779,7 +782,7 @@ window.salesDraftUI = {
                 document.dispatchEvent(new Event('offline-operations-changed'));
                 await refreshCompletion();
                 return result;
-            } catch (error) { showError(error); bridge.error(error.message); window.salesDraftUI.lastError = error.message; }
+            } catch (error) { showError(error); if (!error.costPreflight) bridge.error(error.message); window.salesDraftUI.lastError = error.message; }
             finally {
                 finalizing = null;
                 if (!localCompletion) for (const [field, disabled] of editingControls) field.disabled = disabled;

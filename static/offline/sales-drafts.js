@@ -2,6 +2,7 @@ import {hash, reserveSequence, saleOperationState, canonical, commandOf} from '/
 import {prepareRevisionResolution, resolutionFromSnapshot, resolutionObservationKey} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {readStock,validateStock,stockSignature,stockBaselineKey} from '/offline/assets/sack-conversion-v1/sales-stock.js';
 import {chaveSnapshotComercial} from '/offline/assets/2-8f-fix/commercial.js';
+import {ensureSaleCosts} from '/offline/assets/sale-cost-check-v1/sales-costs.js';
 // Draft editing stays local; explicit finalization atomically creates one command.
 export const DRAFT_SCHEMA = 1;
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -422,6 +423,7 @@ export async function finalizeDraftOffline(repo, scope, {revision:expectedRevisi
                     produtos:draft.itens.map(item => ({id:item.produto_id, nome:item.produto_nome}))}};
         });
         if (prepared.finalization) return {finalization:prepared.finalization, alreadyFinalized:true};
+        await ensureSaleCosts(prepared.payload.itens, {offline:transport === 'offline', snapshot:stock?.snapshot});
         const command = {operation_id:operationId, device_id:scope.device_id, actor_id:scope.actor_id,
             environment_id:scope.environment_id, type:'criar_venda', schema_version:1,
             aggregate_id:operationId, payload:prepared.payload, created_at:new Date().toISOString(), sequence:prepared.sequence + 1};

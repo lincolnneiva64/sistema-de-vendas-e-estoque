@@ -234,6 +234,7 @@ class PrecosSeletivosTests(SeletivosFixture, TestCase):
         self.assertEqual(len(itens_json),1)
         self.assertEqual(set(itens_json[0]['grupo_precos']['comprados']),{p.pk for p in self.produtos[:2]})
         dados=self.payload(compra,itens[0],[p.pk for p in self.produtos[:2]])
+        dados.update(previa_decisao_precos=itens_json[0]['previa_decisao_precos'], decisao_precos='alterar')
         resposta=self.client.post(reverse('estoque:revisao_precos_posterior_salvar'),dados)
         self.assertEqual(resposta.status_code,200,resposta.content)
         self.assertFalse(compra.itens.filter(revisao_preco_concluida=False).exists())

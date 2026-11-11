@@ -6,6 +6,7 @@ from unittest import skipUnless
 from uuid import uuid4
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.contrib.auth.models import Permission
 from django.utils import timezone
 from estoque.models import Venda, ItemVenda, ContaReceber, MovimentoFinanceiro
 from .models import OperacaoSincronizacao, RevisaoVendaOffline
@@ -17,7 +18,9 @@ from . import tests_sale_sync_browser as sync
 @skipUnless(Path(sync.CHROME).is_file(), 'Chrome indisponível')
 class SaleRevisionBrowserTests(StaticLiveServerTestCase):
     reset_sequences=True
-    setUp=sync.SaleSyncBrowserTests.setUp
+    def setUp(self):
+        sync.SaleSyncBrowserTests.setUp(self)
+        self.user.user_permissions.add(Permission.objects.get(content_type__app_label='estoque', codename='view_venda'))
     open_sales=sync.SaleSyncBrowserTests.open_sales
     repository=sync.SaleSyncBrowserTests.repository
     select_customer=sync.SaleSyncBrowserTests.select_customer
@@ -81,7 +84,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
                 tab=self.revision_tab(chrome)
                 self.assertEqual(tab.evaluate('salesRevisionUI.record.payload'),self.command['payload'])
                 self.assertGreaterEqual(tab.evaluate('requests.filter(r=>r.url.includes("/api/offline/operations/")).length'),1)
-                self.assertEqual(tab.evaluate('requests.filter(r=>r.method!=="GET").length'),0)
+                self.assertEqual(tab.evaluate('requests.filter(r=>r.method!=="GET" && !r.url.endsWith("/api/vendas/online/custos/")).length'),0)
                 self.assertEqual(tab.evaluate('document.querySelector("[data-item-field=preco_unitario]").value'),'24.00')
                 self.assertEqual(tab.evaluate('document.querySelector("[data-item-field=unidade]").value'),'CX')
                 self.assertEqual(tab.evaluate('document.getElementById("revision-due").value'),self.command['payload']['data_vencimento'])
@@ -96,7 +99,7 @@ class SaleRevisionBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(operation['sequence'],2)
                 self.assertEqual(operation['payload']['revisao']['original_operation_id'],self.command['operation_id'])
                 self.assertEqual(operation['payload']['revisao']['original_hash'],self.original['payload_hash'])
-                self.assertEqual(tab.evaluate('requests.filter(r=>r.method!=="GET").length'),0)
+                self.assertEqual(tab.evaluate('requests.filter(r=>r.method!=="GET" && !r.url.endsWith("/api/vendas/online/custos/")).length'),0)
                 self.assertEqual(Venda.objects.count(),0);self.assertEqual(ItemVenda.objects.count(),0);self.assertEqual(ContaReceber.objects.count(),0);self.assertEqual(MovimentoFinanceiro.objects.count(),0)
                 self.assertTrue(tab.evaluate('document.getElementById("offline-global-sync").disabled'))
                 self.stable(tab);self.manual(tab)

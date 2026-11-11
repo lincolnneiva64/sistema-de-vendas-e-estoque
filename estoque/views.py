@@ -12277,7 +12277,10 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
                 item.save(update_fields=["preco_compra_anterior"])
 
             produto.quantidade = Decimal(str(produto.quantidade or "0")) + item.quantidade
-            produto.save(update_fields=["quantidade", "atualizado_em"])
+            # A entrada fisica nao aprova os precos legados. A linha ja esta
+            # bloqueada; valide os precos somente na conclusao da revisao.
+            Produto.objects.filter(pk=produto.pk).update(
+                quantidade=produto.quantidade, atualizado_em=timezone.now())
             identificar(produto.pk, produto.quantidade - item.quantidade, produto.quantidade, "compra", f"Compra #{compra.pk}")
             if produto.pk in atualizar_custo_produto_ids and produto.preco_compra != item.preco_unitario:
                 custos.append({"produto": produto, "preco_unitario": item.preco_unitario})
@@ -12301,7 +12304,18 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             )
 
         etapa_finalizacao_compra('precos_venda')
-        _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
+        try:
+            _atualizar_precos_venda_produtos_compra(atualizar_preco_venda_produtos, compra=compra)
+            if not revisao_precos_pendente and (custos or atualizar_preco_venda_produtos):
+                from .services.precos_vinculados import validar_precos_individuais
+                for produto in Produto.objects.filter(pk__in={i.produto_id for i in itens}).order_by('pk'):
+                    validar_precos_individuais(produto)
+        except ValidationError as exc:
+            raise decisoes_compra.DecisaoPrecosInvalida(
+                'Confira os preços de venda antes de concluir a revisão. '
+                + ' '.join(exc.messages)
+                + ' Seus dados foram preservados; nenhum estoque ou financeiro foi alterado.'
+            ) from exc
 
         compra.revisao_precos_pendente = bool(revisao_precos_pendente)
         compra.estoque_entrada_realizada = True
@@ -16476,7 +16490,14 @@ def revisao_precos_posterior_salvar(request):
                 raise ValueError("Preco invalido.")
             decisoes_compra.validar_posterior(compra, item, request.user, request.POST, precos)
             _atualizar_precos_venda_produtos_compra(precos, compra=compra)
+            from .services.precos_vinculados import validar_precos_individuais
             vinculo=getattr(produto,'vinculo_grupo',None)
+            ids_revisados = {produto_id}
+            if vinculo:
+                ids_revisados.update(compra.itens.filter(
+                    produto__vinculo_grupo__grupo_id=vinculo.grupo_id).values_list('produto_id', flat=True))
+            for revisado in Produto.objects.filter(pk__in=ids_revisados).order_by('pk'):
+                validar_precos_individuais(revisado)
             if vinculo:
                 compra.itens.filter(produto__vinculo_grupo__grupo_id=vinculo.grupo_id).update(revisao_preco_concluida=True)
             item.revisao_preco_concluida = True
@@ -22291,7 +22312,6 @@ def _custo_produto_para_unidade_venda(produto, unidade=None):
     custo_base = Decimal(produto.preco_compra or 0).quantize(Decimal("0.01"))
     unidade_recebida = _normalizar_unidade_estoque(unidade)
     unidade_fracionada_norm = _normalizar_unidade_estoque(produto.unidade_venda_2)
-    fator = Decimal(produto.fator_conversao or 0)
 
     if (
         unidade_recebida
@@ -22299,12 +22319,8 @@ def _custo_produto_para_unidade_venda(produto, unidade=None):
         and unidade_fracionada_norm
         and unidade_recebida == unidade_fracionada_norm
     ):
-        custo_fracionado = Decimal(produto.preco_compra_fracionado or 0).quantize(Decimal("0.01"))
-        if custo_fracionado > 0:
-            return custo_fracionado
-        if custo_base > 0 and fator > 0:
-            return (custo_base / fator).quantize(Decimal("0.01"))
-        return Decimal("0.00")
+        from .services.precos_vinculados import custo_fracionado_produto
+        return custo_fracionado_produto(produto)
 
     return custo_base
 

@@ -173,7 +173,7 @@ class RevisaoPrecosPosteriorNavegacaoBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(posts[0]["status"], 200)
         antes_atualizar = len(self.trace(tab))
         tab.evaluate("document.getElementById('rpAtualizar').click(); true")
-        tab.wait("document.querySelector('.rp-compras-preco-progresso')?.textContent.includes('Produto 1 de 1')")
+        tab.wait("document.querySelector('.rp-compras-preco-progresso')?.textContent.includes('Produto 2 de 2')")
         self.assertIn(self.produtos[1].nome, tab.evaluate("document.querySelector('.rp-compras-preco-produto').textContent"))
         novas_consultas = self.trace(tab)[antes_atualizar:]
         self.assertEqual([row["method"] for row in novas_consultas], ["GET"])
@@ -189,6 +189,45 @@ class RevisaoPrecosPosteriorNavegacaoBrowserTests(StaticLiveServerTestCase):
         posts = [row for row in self.trace(tab) if row["method"] == "POST"]
         self.assertEqual(len(posts), 1)
         self.assertEqual(posts[0]["status"], 200)
+
+    def test_voltar_ao_concluido_e_avancar_nao_reenvia_nem_trava(self):
+        _, tab = self.navegador()
+        self.iniciar_revisao(tab)
+        tab.evaluate("document.getElementById('rpManter').click(); true")
+        self.aguardar_produto_seguinte(tab)
+        tab.wait("!document.getElementById('rpDepois').disabled")
+        tab.wait("!document.getElementById('rpVoltar').disabled")
+        tab.evaluate("document.getElementById('rpVoltar').click(); true")
+        tab.wait("document.getElementById('rpSalvar').textContent === 'Próximo'")
+        self.assertTrue(tab.evaluate("Array.from(document.querySelectorAll('#rpLista input')).every(el=>el.disabled)"))
+        tab.evaluate("document.getElementById('rpSalvar').click(); true")
+        self.aguardar_produto_seguinte(tab)
+        self.assertEqual(len([r for r in self.trace(tab) if r['method']=='POST']),1)
+        tab.wait("!document.getElementById('rpDepois').disabled")
+        tab.evaluate("document.getElementById('rpDepois').click(); true")
+        tab.wait("!document.querySelector('#revisaoPrecosPosterior.visivel')")
+        self.itens[1].refresh_from_db()
+        self.assertFalse(self.itens[1].revisao_preco_concluida)
+
+    def test_voltar_e_avancar_com_produto_vinculado(self):
+        from .models import GrupoProdutoVinculado, MembroGrupoProduto
+        grupo=GrupoProdutoVinculado.objects.create(nome='Grupo de teste de navegacao')
+        MembroGrupoProduto.objects.create(grupo=grupo,produto=self.produtos[0])
+        self.test_voltar_ao_concluido_e_avancar_nao_reenvia_nem_trava()
+
+    def test_adiar_apos_recusa_de_manter_preco_invalido_preserva_pendencia(self):
+        Produto.objects.filter(pk=self.produtos[0].pk).update(preco_compra=Decimal('20'))
+        _, tab = self.navegador()
+        self.iniciar_revisao(tab)
+        tab.evaluate("document.getElementById('rpManter').click(); true")
+        tab.wait("!document.getElementById('rpErro').hidden && !document.getElementById('rpDepois').disabled")
+        self.assertEqual([r['status'] for r in self.trace(tab) if r['method']=='POST'],[400])
+        tab.evaluate("document.getElementById('rpDepois').click(); true")
+        tab.wait("!document.querySelector('#revisaoPrecosPosterior.visivel')")
+        self.compra.refresh_from_db();self.itens[0].refresh_from_db()
+        self.assertTrue(self.compra.revisao_precos_pendente)
+        self.assertFalse(self.itens[0].revisao_preco_concluida)
+        self.assertEqual(len([r for r in self.trace(tab) if r['method']=='POST']),1)
 
     def test_fila_esvaziada_antes_do_get_fecha_sem_erro_de_interface(self):
         _, tab = self.navegador()

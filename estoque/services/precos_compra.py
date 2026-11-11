@@ -1,5 +1,6 @@
 """Snapshots exatos de precos alterados por compras; sem inferencia de legado."""
 from decimal import Decimal, InvalidOperation
+import copy
 from uuid import uuid4
 
 from django.db import models, transaction
@@ -85,6 +86,14 @@ def _aplicar_precos_compra_bloqueada(compra, item, produto, atualizacoes, operad
     compartilhados={campo:value for campo,value in atualizacoes.items() if campo in PRECOS_VINCULADOS}
     if vinculo:
         compartilhados={campo:value for campo,value in compartilhados.items() if getattr(produto,campo)!=value}
+    elif compartilhados:
+        # Reuse the existing group validator also for independent products.
+        # Cost-only writes may remain pending; approving sale prices may not.
+        from .precos_vinculados import validar_precos_individuais
+        candidato = copy.copy(produto)
+        for campo, valor in atualizacoes.items():
+            setattr(candidato, campo, valor)
+        validar_precos_individuais(candidato)
     if vinculo and compartilhados:
         # Purchase callers must provide a version from the operator's review,
         # never silently use the latest version after a competing update.

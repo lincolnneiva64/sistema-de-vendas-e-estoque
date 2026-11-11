@@ -136,20 +136,35 @@ def _detalhar_precos_fracionados_abaixo_do_custo(produto, custo):
     )
 
 
+def custo_fracionado_produto(produto):
+    custo = Decimal(produto.preco_compra_fracionado or 0).quantize(Decimal('0.01'))
+    if custo > 0:
+        return custo
+    base = Decimal(produto.preco_compra or 0).quantize(Decimal('0.01'))
+    fator = Decimal(produto.fator_conversao or 0)
+    return (base / fator).quantize(Decimal('0.01')) if base > 0 and fator > 0 else Decimal('0.00')
+
+
+def validar_precos_individuais(produto):
+    campos = PRECOS_VINCULADOS if produto.vende_fracionado else PRECOS_VINCULADOS[:2]
+    for campo in campos:
+        valor = getattr(produto, campo)
+        if valor is None or not valor.is_finite() or valor < 0 or valor > Decimal('99999999.99') or valor != valor.quantize(Decimal('0.01')):
+            raise ValidationError(f'Produto {produto.pk}: preco monetario invalido.')
+    if produto.preco_compra is None:
+        raise ValidationError('Custo individual ausente; conferir cadastro.')
+    if produto.vende_fracionado:
+        custo = custo_fracionado_produto(produto)
+        if custo > 0 and any(getattr(produto, campo) < custo for campo in PRECOS_VINCULADOS[2:]):
+            detalhes = _detalhar_precos_fracionados_abaixo_do_custo(produto, custo)
+            raise ValidationError(f'Produto {produto.pk}: preco fracionado abaixo do custo individual, conforme protecao de vendas: {detalhes}.')
+    produto.clean()
+
+
 def _validar(produtos):
-    from estoque.views import _custo_produto_para_unidade_venda
     for p in produtos:
-        campos=PRECOS_VINCULADOS if p.vende_fracionado else PRECOS_VINCULADOS[:2]
-        for campo in campos:
-            valor=getattr(p,campo)
-            if valor is None or not valor.is_finite() or valor<0 or valor>Decimal('99999999.99') or valor!=valor.quantize(Decimal('0.01')):
-                raise ValidationError(f'Produto {p.pk}: preco monetario invalido.')
-        if p.vende_fracionado:
-            custo=_custo_produto_para_unidade_venda(p,p.unidade_venda_2)
-            if custo>0 and any(getattr(p,campo)<custo for campo in PRECOS_VINCULADOS[2:]):
-                detalhes=_detalhar_precos_fracionados_abaixo_do_custo(p,custo)
-                raise ValidationError(f'Produto {p.pk}: preco fracionado abaixo do custo individual, conforme protecao de vendas: {detalhes}.')
-    diagnostico=diagnosticar_grupo(produtos)
+        validar_precos_individuais(p)
+    diagnostico=diagnosticar_grupo(produtos, validar_precos=False)
     if diagnostico['bloqueios']:
         raise ValidationError([f"Produto {b['produto_id']}: {b['motivo']}" for b in diagnostico['bloqueios']])
 
@@ -471,18 +486,7 @@ def diagnosticar_grupo(produtos, referencia_id=None, *, validar_precos=True):
             candidato.preco_venda = candidato.preco_vista
             try:
                 if not validar_precos:continue
-                if candidato.preco_compra is None:
-                    raise ValidationError('Custo individual ausente; conferir cadastro.')
-                if any(value is None or not value.is_finite() or value < 0 for value in novos.values()):
-                    raise ValidationError('Preco ausente ou invalido.')
-                # Reuse the existing main-price/loss protection, no new margin.
-                candidato.clean()
-                if candidato.vende_fracionado:
-                    from estoque.views import _custo_produto_para_unidade_venda
-                    custo = _custo_produto_para_unidade_venda(candidato, candidato.unidade_venda_2)
-                    if custo > 0 and any(getattr(candidato, c) < custo for c in PRECOS_VINCULADOS[2:]):
-                        detalhes=_detalhar_precos_fracionados_abaixo_do_custo(candidato,custo)
-                        raise ValidationError(f'Preço fracionado abaixo do custo individual, conforme proteção de vendas: {detalhes}.')
+                validar_precos_individuais(candidato)
             except ValidationError as exc:
                 bloqueios.append({'produto_id': p.pk, 'motivo': ' '.join(exc.messages)})
             if referencia is None:

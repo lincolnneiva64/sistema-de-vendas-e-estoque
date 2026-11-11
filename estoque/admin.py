@@ -17,6 +17,15 @@ class ProdutoAdminForm(forms.ModelForm):
             except ValidationError as exc:raise forms.ValidationError(exc.messages) from exc
         return values
 
+    def _post_clean(self):
+        super()._post_clean()
+        if not self.errors and not getattr(self.instance, 'vinculo_grupo', None):
+            from .services.precos_vinculados import validar_precos_individuais
+            try:
+                validar_precos_individuais(self.instance)
+            except ValidationError as exc:
+                self._update_errors(exc)
+
 
 @admin.register(Produto)
 class ProdutoAdmin(admin.ModelAdmin):

@@ -11,7 +11,7 @@ from .models import OperacaoSincronizacao
 from .browser_support import Chrome
 from . import tests_sales_drafts_browser as draft_tests
 CHROME = draft_tests.CHROME
-REQUEST_TRACKER = """if(location.origin!=='null'){const originalFetch=window.fetch.bind(window);window.fetch=(url,options={})=>{if(String(url).startsWith('/api/vendas/online/')){const method=(options.method||'GET').toUpperCase();const key=method==='POST'?'sale-test-posts':'sale-test-gets';localStorage.setItem(key,String(Number(localStorage.getItem(key)||'0')+1));if(method==='GET')localStorage.setItem('sale-test-get-path',new URL(url,location.href).pathname)}return originalFetch(url,options)}}"""
+REQUEST_TRACKER = """if(location.origin!=='null'){const originalFetch=window.fetch.bind(window);window.fetch=(url,options={})=>{if(String(url).startsWith('/api/vendas/online/') && !String(url).endsWith('/custos/')){const method=(options.method||'GET').toUpperCase();const key=method==='POST'?'sale-test-posts':'sale-test-gets';localStorage.setItem(key,String(Number(localStorage.getItem(key)||'0')+1));if(method==='GET')localStorage.setItem('sale-test-get-path',new URL(url,location.href).pathname)}return originalFetch(url,options)}}"""
 
 
 def prepare(test, chrome, payment='A prazo', init_script=None):
@@ -137,7 +137,7 @@ class OnlineSaleBrowserTests(StaticLiveServerTestCase):
             chrome = Chrome(CHROME, profile).start()
             try:
                 tab = prepare(self, chrome)
-                tab.evaluate('window.realFetch=fetch;window.reads=0;window.posts=0;window.fetch=async(url,options={})=>{if(String(url).startsWith("/api/vendas/online/")){if((options.method||"GET")==="POST"){posts++;throw TypeError("request did not arrive")}reads++;return new Response(JSON.stringify({lookup:"indeterminada"}),{status:503})}return realFetch(url,options)};btnGravarVenda.click();true')
+                tab.evaluate('window.realFetch=fetch;window.reads=0;window.posts=0;window.fetch=async(url,options={})=>{if(String(url).startsWith("/api/vendas/online/") && !String(url).endsWith("/custos/")){if((options.method||"GET")==="POST"){posts++;throw TypeError("request did not arrive")}reads++;return new Response(JSON.stringify({lookup:"indeterminada"}),{status:503})}return realFetch(url,options)};btnGravarVenda.click();true')
                 tab.wait('(await repo.all("operations"))[0]?.status==="resultado_desconhecido"')
                 tab.evaluate('document.dispatchEvent(new CustomEvent("offline-connectivity",{detail:"offline"}));document.dispatchEvent(new CustomEvent("offline-connectivity",{detail:"online"}));true')
                 tab.wait('reads===1')

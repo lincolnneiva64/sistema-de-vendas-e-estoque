@@ -162,16 +162,22 @@ class Produto(models.Model):
 
     def clean(self):
 
-        if self.preco_vista <= 0:
+        if self.preco_vista is None or self.preco_vista <= 0:
          raise ValidationError("O preço à vista deve ser maior que zero.")
 
-        if self.preco_prazo <= 0:
+        if self.preco_prazo is None or self.preco_prazo <= 0:
          raise ValidationError("O preço a prazo deve ser maior que zero.")
 
-        if not self.permitir_prejuizo and self.preco_vista <= self.preco_compra:
+        if self.preco_compra is not None and (
+            self.preco_vista < self.preco_compra
+            or (not self.permitir_prejuizo and self.preco_vista == self.preco_compra)
+        ):
          raise ValidationError("O preço à vista deve ser MAIOR que o preço de compra.")
 
-        if not self.permitir_prejuizo and self.preco_prazo <= self.preco_compra:
+        if self.preco_compra is not None and (
+            self.preco_prazo < self.preco_compra
+            or (not self.permitir_prejuizo and self.preco_prazo == self.preco_compra)
+        ):
          raise ValidationError("O preço a prazo deve ser MAIOR que o preço de compra.")
 
         if self.permitir_prejuizo and not self.motivo_prejuizo:

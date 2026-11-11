@@ -2,7 +2,7 @@ import {catalogTimes, timeText} from '/offline/assets/2-8f/presentation.js';
 import {openDB, Repository, validReceipt} from '/offline/assets/2-8f/core.js';
 import {draftScope} from '/offline/assets/2-8g-close/sales-drafts.js';
 import {carregarSnapshotComercial} from '/offline/assets/2-8f/commercial.js';
-import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/2-8g-close/sales-revisions.js';
+import {beginRevision,loadRevision,saveRevision,discardRevision,finalizeRevision,revisionPresentation,lookupOriginal,commercialConflict} from '/offline/assets/sale-cost-check-v1/sales-revisions.js';
 import {closureKey,validClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 
 const element = id => document.getElementById(id);

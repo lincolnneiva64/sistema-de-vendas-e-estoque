@@ -6494,17 +6494,6 @@ function atualizarCustoMargemVenda() {
     precoMargemCusto.textContent = `Margem: ${sinal}${percentual.toFixed(0)}%`;
 }
 
-function validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto) {
-    if (window.salesOffline.active) return true;
-    const custo = custoProdutoVendaParaUnidade(produtoOption, unidadeTexto);
-    if (custo > 0 && precoNumero < custo) {
-        mostrarToastVenda(`Preço de venda abaixo do custo. Custo: ${formatarMoedaVenda(custo)}.`);
-        focarProximoCampo(preco);
-        return false;
-    }
-    return true;
-}
-
 function formatarNumeroEstoqueVenda(valor) {
     const numero = Number(valor || 0);
     if (!Number.isFinite(numero)) return "0";
@@ -7023,10 +7012,6 @@ function adicionarItemVendaAtual() {
         return false;
     }
 
-    if (!validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto)) {
-        return false;
-    }
-
     if (!validarEstoqueItemVendaAtual(true)) {
         return false;
     }
@@ -7182,6 +7167,10 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             retorno = await window.salesDraftUI.submitOnline(dadosVenda.origem_recebimento, obterCookie("csrftoken"));
             if (!retorno) return;
         } else {
+            const montagemConferida = JSON.stringify(coletarDadosVenda());
+            const {ensureSaleCosts} = await import('/offline/assets/sale-cost-check-v1/sales-costs.js');
+            await ensureSaleCosts(dadosVenda.itens);
+            if (JSON.stringify(coletarDadosVenda()) !== montagemConferida) throw new Error('A montagem mudou durante a conferência. Confira a venda antes de gravar.');
             window.salesDraftUI?.prepareSubmission();
             const resposta = await fetch(gravarVendaUrl, {
                 method: "POST",
@@ -7240,7 +7229,7 @@ async function gravarVendaAtual(dadosVendaConfirmados) {
             if (!envioProtegido) {
                 try { window.salesDraftUI?.failedSubmission(); } catch (_) { /* Keep the safety marker if local storage fails. */ }
             }
-            mostrarErroGravacaoVenda(erro?.message || "Falha de comunicação ao gravar a venda.");
+            if (!erro?.costPreflight) mostrarErroGravacaoVenda(erro?.message || "Falha de comunicação ao gravar a venda.");
         }
     } finally {
         vendaGravacaoEmAndamento = false;
@@ -8856,6 +8845,10 @@ atualizarTotalGeral();
 // A narrow bridge reuses the existing renderer without persisting HTML or finance.
 window.salesDraftBridge = {
     getData: coletarDadosVenda,
+    costsUpdated() {
+        atualizarCustoMargemVenda();
+        mostrarToastVenda('Custos conferidos. Você já pode gravar a mesma venda.');
+    },
     ensureNewDate() {
         if (dataVendaEscolhidaExplicitamente || dataVenda.value === dataLocalHojeInput()) return;
         const vencimentoAutomatico = vencimentoVenda.value === calcularVencimentoCliente();
@@ -9721,10 +9714,10 @@ const operador = buscarCampoOperadorVenda();
 {% include "estoque/includes/revisao_precos_posterior.html" %}
 <script type="module" src="/offline/assets/local-controlled-v1/app.js"></script>
 {% if local_sales_context %}
-<script type="module" src="/offline/assets/sale-button-feedback-v1/local-sales.js"></script>
+<script type="module" src="/offline/assets/sale-cost-check-v1/local-sales.js"></script>
 {% else %}
 <script type="module" src="/offline/assets/connection-recovery-v1/sales.js?pickup-send=1"></script>
-<script type="module" src="/offline/assets/sale-button-feedback-v1/sales-draft-ui.js"></script>
+<script type="module" src="/offline/assets/sale-cost-check-v1/sales-draft-ui.js"></script>
 {% endif %}
 {% if perms.offline.registrar_observacao and perms.estoque.view_cliente and perms.estoque.view_produto %}
 <style>

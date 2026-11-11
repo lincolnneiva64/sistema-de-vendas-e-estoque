@@ -147,6 +147,8 @@ class ServicoPrecosVinculadosTests(TestCase):
             'atualizar_preco_venda_produto_ids[]':[str(item.produto_id)],'atualizar_preco_venda_nomes[]':['preco_vista'],
             'atualizar_preco_venda_valores[]':['37.00'],'versao_grupo_produto_'+str(item.produto_id):str(self.grupo.versao_precos)}
         payload.update(payload_todos_fixture(item.produto_id))
+        from .services.decisoes_precos_compra import preparar_posterior
+        payload.update(previa_decisao_precos=preparar_posterior(compra,self.operador)[f'g:{self.grupo.pk}'], decisao_precos='alterar')
         response=self.client.post(reverse('estoque:revisao_precos_posterior_salvar'),payload)
         self.assertEqual(response.status_code,200,response.content)
         self.assertEqual(set(Produto.objects.values_list('preco_vista',flat=True)),{Decimal(37)})
