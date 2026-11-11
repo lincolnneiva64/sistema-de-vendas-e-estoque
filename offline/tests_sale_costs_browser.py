@@ -124,12 +124,99 @@ class SaleCostBrowserTests(StaticLiveServerTestCase):
         self.assert_preserved(t)
         self.assertIn('conexão',t.evaluate('document.getElementById("sale-cost-dialog").textContent'))
 
-    def test_below_cost_line_can_be_edited_and_is_blocked_only_at_finalization(self):
+    def test_update_button_blocks_below_cost_without_changing_assembly(self):
         t=self.prepare()
-        t.evaluate('document.querySelector("#tabelaProdutos tr").click();preco.value="5";preco.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("btnAdicionarItemVenda").click();await salesDraftUI.flush();window.initialAssembly=JSON.stringify(salesDraftBridge.capture());btnGravarVenda.click();true')
-        t.wait('document.getElementById("sale-cost-dialog")?.open && !btnGravarVenda.disabled')
-        self.assertEqual(t.evaluate('salesDraftBridge.capture().itens[0].preco_unitario'),'5.00')
+        t.evaluate('document.querySelector("#tabelaProdutos tr").click();preco.value="5";preco.dispatchEvent(new Event("input",{bubbles:true}));window.initialAssembly=JSON.stringify(salesDraftBridge.capture());document.getElementById("btnAdicionarItemVenda").click();true')
+        t.wait('!!document.getElementById("aviso-validacao")')
+        self.assertIn('Preço de venda abaixo do custo!',t.evaluate('document.getElementById("aviso-validacao-texto").textContent'))
+        self.assertEqual(t.evaluate('salesDraftBridge.capture().itens[0].preco_unitario'),'24.00')
         self.assert_preserved(t)
+        t.evaluate('document.querySelector("#aviso-validacao button").click();true')
+        self.assertTrue(t.evaluate('document.activeElement===preco && preco.selectionStart===0 && preco.selectionEnd===preco.value.length'))
+        self.assertIn('Atualizar',t.evaluate('document.getElementById("btnAdicionarItemVenda").textContent'))
+
+    @staticmethod
+    def price_enter(t):
+        t.evaluate('await new Promise(resolve=>setTimeout(resolve,220));preco.focus();true')
+        t.call('Input.dispatchKeyEvent',{'type':'keyDown','key':'Enter','code':'Enter','windowsVirtualKeyCode':13})
+        t.call('Input.dispatchKeyEvent',{'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13})
+
+    def pending_second(self,t):
+        t.evaluate('produtoBusca.value="Segundo Produto";produtoBusca.dispatchEvent(new Event("input",{bubbles:true}));true')
+        t.wait('!!document.querySelector(".produto-sugestao-item")')
+        t.evaluate('document.querySelector(".produto-sugestao-item").click();quantidade.value="1";preco.value="0,99";preco.dispatchEvent(new Event("input",{bubbles:true}));window.initialAssembly=JSON.stringify(salesDraftBridge.capture());true')
+
+    def assert_compact_notice(self,t):
+        layout=t.evaluate('''(()=>{const a=document.getElementById('aviso-validacao'),r=a.getBoundingClientRect(),s=getComputedStyle(a),b=a.querySelector('button').getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right,viewport:innerWidth,overflow:a.scrollWidth>a.clientWidth,buttonInside:b.left>=r.left&&b.right<=r.right,background:s.backgroundColor,border:s.borderTopColor,title:a.querySelector('strong').textContent}})()''')
+        self.assertLess(layout['width'],420)
+        self.assertLessEqual(layout['height'],130)
+        self.assertGreaterEqual(layout['left'],12)
+        self.assertLessEqual(layout['right'],layout['viewport']-12)
+        self.assertFalse(layout['overflow'])
+        self.assertTrue(layout['buttonInside'])
+        self.assertTrue(t.evaluate('''(()=>{const a=document.getElementById('aviso-validacao');return [...a.querySelectorAll('strong, #aviso-validacao-texto > span, button')].every(el=>{const r=el.getBoundingClientRect();return a.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2))})})()'''))
+        self.assertEqual(layout['background'],'rgb(255, 247, 230)')
+        self.assertEqual(layout['border'],'rgb(244, 211, 138)')
+        self.assertEqual(layout['title'],'Preço de venda abaixo do custo!')
+
+    def test_price_enter_shows_one_notice_and_valid_enter_adds_once(self):
+        t=self.prepare()
+        t.call('Emulation.setDeviceMetricsOverride',dict(width=1280,height=900,deviceScaleFactor=1,mobile=False))
+        self.pending_second(t)
+        t.evaluate('window.priceNotices=0;new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)if(n.id==="aviso-validacao")priceNotices++}).observe(document.body,{childList:true});window.pendingBefore=[produtoBusca.value,produto.value,quantidade.value,unidade.value,preco.value];true')
+        self.price_enter(t)
+        self.assertEqual(t.evaluate('priceNotices'),1)
+        self.assertEqual(t.evaluate('document.querySelectorAll("#aviso-validacao button").length'),1)
+        self.assertEqual(t.evaluate('document.querySelector("#aviso-validacao button").textContent'),'OK')
+        self.assertEqual(
+            [value.replace('\xa0',' ') for value in t.evaluate('Array.from(document.getElementById("aviso-validacao-texto").children).map(el=>el.textContent)')],
+            ['Preço de venda abaixo do custo!','Venda: R$ 0,99 | Custo: R$ 1,00'])
+        self.assert_compact_notice(t)
+        self.assertEqual(t.evaluate('[produtoBusca.value,produto.value,quantidade.value,unidade.value,preco.value]'),t.evaluate('pendingBefore'))
+        self.assert_preserved(t)
+        t.evaluate('document.querySelector("#aviso-validacao button").click();true')
+        self.assertTrue(t.evaluate('document.activeElement===preco && preco.selectionStart===0 && preco.selectionEnd===preco.value.length'))
+        t.evaluate('preco.value="1";true')
+        self.price_enter(t)
+        self.assertEqual(t.evaluate('document.querySelectorAll("#tabelaProdutos tr").length'),2)
+        self.assertFalse(t.evaluate('!!document.getElementById("aviso-validacao")'))
+        self.assertEqual(t.evaluate('priceNotices'),1)
+
+    def test_add_button_blocks_without_enter_on_mobile(self):
+        t=self.prepare()
+        t.call('Emulation.setDeviceMetricsOverride',dict(width=390,height=844,deviceScaleFactor=1,mobile=True))
+        self.pending_second(t)
+        t.evaluate('document.getElementById("btnAdicionarItemVenda").click();true')
+        self.assertTrue(t.evaluate('!!document.getElementById("aviso-validacao")'))
+        self.assert_preserved(t)
+        for width in (390,320):
+            t.call('Emulation.setDeviceMetricsOverride',dict(width=width,height=844,deviceScaleFactor=1,mobile=True))
+            self.assert_compact_notice(t)
+        t.evaluate('document.querySelector("#aviso-validacao button").click();true')
+        self.assertTrue(t.evaluate('document.activeElement===preco && preco.selectionStart===0 && preco.selectionEnd===preco.value.length'))
+
+    def test_fractional_enter_uses_explicit_cost_and_base_unit(self):
+        t=self.prepare()
+        t.evaluate('document.querySelector("#tabelaProdutos tr").click();unidade.value="UN";preco.value="0,99";window.initialAssembly=JSON.stringify(salesDraftBridge.capture());true')
+        self.price_enter(t)
+        self.assertIn('Custo: R$ 1,00',t.evaluate('document.getElementById("aviso-validacao-texto").textContent').replace('\xa0',' '))
+        self.assert_preserved(t)
+        t.evaluate('document.querySelector("#aviso-validacao button").click();preco.value="1";true')
+        self.price_enter(t)
+        self.assertEqual(t.evaluate('salesDraftBridge.capture().itens[0].unidade'),'UN')
+        self.assertEqual(t.evaluate('salesDraftBridge.capture().itens[0].preco_unitario'),'1.00')
+
+    def test_fractional_fallback_uses_final_validation_rounding(self):
+        Produto.objects.filter(pk=self.product.pk).update(preco_compra='10.05',preco_compra_fracionado=0,fator_conversao=2)
+        t=self.prepare()
+        t.evaluate('document.querySelector("#tabelaProdutos tr").click();unidade.value="UN";preco.value="5,01";window.initialAssembly=JSON.stringify(salesDraftBridge.capture());true')
+        self.price_enter(t)
+        self.assertTrue(t.evaluate('!!document.getElementById("aviso-validacao")'),t.evaluate('JSON.stringify({cost:custoVenda.value,unit:unidade.value,price:preco.value,options:Array.from(document.querySelectorAll("#produto option")).map(o=>({...o.dataset}))})'))
+        self.assertIn('Custo: R$ 5,02',t.evaluate('document.getElementById("aviso-validacao-texto").textContent').replace('\xa0',' '))
+        self.assert_preserved(t)
+        t.evaluate('document.querySelector("#aviso-validacao button").click();preco.value="5,02";true')
+        self.price_enter(t)
+        self.assertEqual(t.evaluate('salesDraftBridge.capture().itens[0].preco_unitario'),'5.02')
 
     @override_settings(LOCAL_SALES_LOOPBACK=True)
     def test_anonymous_local_sale_checks_cost_before_creating_command(self):

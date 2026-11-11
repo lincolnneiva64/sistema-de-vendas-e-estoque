@@ -6461,11 +6461,41 @@ function custoProdutoVendaParaUnidade(produtoOption, unidadeTexto) {
 
     if (fracionado && unidadeSelecionada && unidadeFracionada && unidadeSelecionada === unidadeFracionada) {
         if (custoFracionado > 0) return custoFracionado;
-        if (custoBase > 0 && fator > 0) return custoBase / fator;
+        if (custoBase > 0 && fator > 0) {
+            // Mesmos centavos e desempate para o par usados na conferência final.
+            const dividendo = Math.round(custoBase * 100) * 100;
+            const divisor = Math.round(fator * 100);
+            const centavos = Math.floor(dividendo / divisor);
+            const resto = dividendo % divisor;
+            return (centavos + (2 * resto > divisor || (2 * resto === divisor && centavos % 2) ? 1 : 0)) / 100;
+        }
         return 0;
     }
 
     return custoBase > 0 ? custoBase : 0;
+}
+
+function validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto) {
+    const custo = custoProdutoVendaParaUnidade(produtoOption, unidadeTexto);
+    if (custo > 0 && Number(precoNumero.toFixed(2)) < custo) {
+        mostrarAviso(
+            'Preço de venda abaixo do custo!', preco, true);
+        const aviso = document.getElementById('aviso-validacao');
+        Object.assign(aviso.style, {
+            minWidth: '0', width: 'max-content', maxWidth: 'calc(100vw - 24px)',
+            boxSizing: 'border-box', padding: '12px 14px', fontSize: '16px', zIndex: '10001',
+        });
+        const titulo = document.createElement('strong');
+        titulo.textContent = 'Preço de venda abaixo do custo!';
+        const valores = document.createElement('span');
+        valores.textContent = `Venda: ${formatarMoedaVenda(precoNumero)} | Custo: ${formatarMoedaVenda(custo)}`;
+        Object.assign(valores.style, {display: 'block', marginTop: '4px', fontSize: '14px'});
+        const texto = document.getElementById('aviso-validacao-texto');
+        texto.style.minWidth = '0';
+        texto.replaceChildren(titulo, valores);
+        return false;
+    }
+    return true;
 }
 
 function atualizarCustoMargemVenda() {
@@ -7012,6 +7042,10 @@ function adicionarItemVendaAtual() {
         return false;
     }
 
+    if (!validarPrecoAcimaDoCustoVenda(produtoOption, precoNumero, unidadeTexto)) {
+        return false;
+    }
+
     if (!validarEstoqueItemVendaAtual(true)) {
         return false;
     }
@@ -7094,6 +7128,9 @@ preco.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
         const adicionou = adicionarItemVendaAtual();
+        // O mesmo Enter não deve fechar o aviso recém-aberto nem chegar
+        // ao segundo lançador de itens registrado no documento.
+        if (document.getElementById('aviso-validacao')) e.stopPropagation();
 
         if (adicionou) {
             fecharTecladoVendaMobile();

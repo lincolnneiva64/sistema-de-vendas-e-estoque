@@ -11,8 +11,18 @@ reexecutados e aprovados; os 82 abaixo registram a rodada da entrega inicial.
 
 A conferência acontece antes de criar o comando de venda, reservar sua sequência
 ou inserir uma operação na fila. A montagem mantém sua identidade e seus campos.
-Um preço abaixo do custo pode ser digitado e editado; somente a conclusão é
-bloqueada. O modal lista os produtos envolvidos, unidade, custo e preço, abre o
+Ao pressionar Enter no campo Preço ou clicar em Adicionar/Atualizar Item,
+um valor abaixo do custo da unidade é recusado antes de alterar a linha.
+O aviso reutiliza as cores, borda e botão do padrão de “Informe a quantidade”,
+em formato compacto e limitado à largura da tela. Mostra somente o título
+“Preço de venda abaixo do custo!” e “Venda: R$ X,XX | Custo: R$ Y,YY”.
+Oferece somente OK, que devolve o foco ao preço com o valor selecionado.
+A montagem e a edição pendente permanecem preservadas. O Enter válido mantém
+o lançamento normal. O custo fracionado calculado usa os mesmos centavos e
+arredondamento half-even da conferência final.
+
+A conferência final em Gravar Venda continua ativa. Seu modal lista os
+produtos envolvidos, unidade, custo e preço, abre o
 editor existente em outra aba e permite consultar o cadastro novamente. Atualizar
 os dados não conclui nem envia a venda automaticamente.
 
@@ -52,6 +62,18 @@ automaticamente o cadastro com um valor informado pelo operador.
   uma reserva de preço/custo nem pode conhecer alterações feitas sem conexão.
 
 ## Verificação isolada
+
+No ajuste do Enter (11/11/2026), 19 testes direcionados passaram: sete de
+backend e 12 de navegador. Cobertura adicional: Enter sem aviso duplicado,
+texto e botão OK, foco/seleção do preço, inclusão e atualização bloqueadas,
+Enter válido, montagem preservada, custo principal/fracionado e igualdade
+após arredondamento. A rodada também revalidou a conferência final, offline
+e LOCAL, com SQLite descartável e perfis Chrome novos, sem migrations.
+O acabamento compacto passou novamente nos 19 testes e foi inspecionado em
+capturas Chrome de 1280, 390 e 320 pixels. O aviso mede aproximadamente
+345 × 70 pixels em desktop/390 e 296 × 91 em 320, sem transbordamento;
+título, valores e OK ficam acima de toasts existentes. Os testes conferem
+também cores/borda preservadas, botão único e foco/seleção após OK no mobile.
 
 82 testes distintos aprovados ao longo das rodadas, incluindo 15 novos testes.
 A reexecução direcionada após os ajustes dos fixtures/interceptadores passou
@@ -126,8 +148,9 @@ static/offline/service-worker.js
 
 Os testes antigos distinguem a consulta POST de custos de uma gravação comercial;
 o fixture de revisão recebe explicitamente a permissão de consultar Vendas.
-O namespace `sale-cost-check-v1` e o cache v49 atualizam somente os assets
-necessários. Uma futura publicação deve atualizar o Service Worker online, sem
+O namespace `sale-cost-check-v1` atualiza os módulos necessários; o cache v51
+atualiza também o shell com o aviso compacto na entrada do preço. Uma futura publicação
+deve atualizar o Service Worker online, sem
 limpar os dados do site.
 
 ## Preservação
