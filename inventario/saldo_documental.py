@@ -122,8 +122,11 @@ def movimento(linha):
 
 
 def estado_anterior(registros_invertidos):
-    """Use the latest valid reference; stop at gaps and incompatible units."""
+    """Recover the same documentary segment across pages, without resetting it
+    at each newer snapshot. A real gap or a manual correction ends the segment.
+    """
     acumulado, base = Decimal(0), ''
+    candidato = None
     for linha in registros_invertidos:
         fonte = linha['fonte']
         if sem_efeito(linha):
@@ -131,18 +134,18 @@ def estado_anterior(registros_invertidos):
         saldo = ancora(linha)
         if saldo:
             if base and base != saldo['unidade']:
-                return None
-            return dict(saldo, valor=saldo['valor'] + acumulado)
+                return candidato
+            candidato = dict(saldo, valor=saldo['valor'] + acumulado)
         if fonte in ('manual', 'regularizacao'):
-            return None
+            return candidato
         fluxo = movimento(linha)
         if fluxo is None:
-            return None
+            return candidato
         valor, atual = fluxo
         if base and base != atual:
-            return None
+            return candidato
         base, acumulado = atual, acumulado + valor
-    return None
+    return candidato
 
 
 def aplicar_saldos_documentais(pagina, cronologia, preparar_linhas=None, anteriores_intervalo=None,
@@ -175,23 +178,29 @@ def aplicar_saldos_documentais(pagina, cronologia, preparar_linhas=None, anterio
     for linha in (registros_pagina() if registros_pagina else pagina):
         linha['saldo_calculado'] = None
         linha['saldo_registrado_operacional'] = None
+        linha['saldo_divergente'] = False
         fonte = linha['fonte']
         if sem_efeito(linha):
             continue
         fixo = ancora(linha)
-        if fixo:
-            estado = fixo
-            if fonte not in ('manual', 'regularizacao'):
-                linha['saldo_registrado_operacional'] = fixo
-            continue
+        linha['saldo_registrado_operacional'] = linha.get('saldo_registrado_documento') or fixo
+        if fonte == 'venda' and not fixo:
+            # A documentary conflict disables an anchor, not the visibility of
+            # the original recorded snapshot. It never seeds the calculation.
+            linha['saldo_registrado_operacional'] = referencia(
+                linha, linha.get('referencia_depois'), linha.get('referencia_unidade'))
         if fonte in ('manual', 'regularizacao'):
-            estado = None
+            # An actual correction starts a new reference, not a sale/receipt.
+            estado = fixo
             continue
         fluxo = movimento(linha)
         if estado and fluxo and estado['unidade'] == fluxo[1]:
             anterior = estado['valor']
             estado = dict(estado, valor=anterior + fluxo[0])
             linha['saldo_calculado'] = dict(estado, anterior=anterior)
+            registrado = linha['saldo_registrado_operacional']
+            if registrado and registrado['unidade'] == estado['unidade']:
+                linha['saldo_divergente'] = registrado['valor'] != estado['valor']
         else:
             # A gap or an incompatible unit cannot inherit a previous balance.
             # A separately recorded reference may start a new segment afterwards.

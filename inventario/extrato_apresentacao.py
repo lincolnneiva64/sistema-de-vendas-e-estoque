@@ -60,13 +60,11 @@ def tecnicos_das_vendas(movimentos, pagina):
 
 
 def associar_documentos(movimentos, compras, vendas):
-    """Associate evidence with an exact sale/product document, not one stock write.
+    """Identify documents separately from the decision to fold their evidence.
 
-    Several observations can refer to the same sale at different times. Their
-    multiplicity does not make the document identity ambiguous or certify their
-    quantities. Repeated product items and non-exact references stay separate.
-    The same association rule applies to purchases, sales and own consumption.
-    Explicitly different operation identifiers preserve separate stock events.
+    Exact attribution alone never proves that two rows are the same stock event.
+    Multiple observations, inconsistent values and ambiguous items stay visible.
+    Only a single corroborated observation is represented by its document.
     """
     movimentos = movimentos.annotate(
         tipo_atribuido=Coalesce('detalhe__documento_tipo', Value('')),
@@ -102,13 +100,27 @@ def associar_documentos(movimentos, compras, vendas):
             Q(detalhe__documento_tipo=OuterRef('tipo_atribuido'),
               detalhe__documento_id=OuterRef('documento_atribuido'))).exclude(
             operacao_texto=OuterRef('identidade_operacao'))
-    documento = (Q(origem='compra', item_compra_operacional__isnull=False) |
-        Q(origem__in=('venda', 'consumo_proprio', 'devolucao_venda'), item_venda_operacional__isnull=False))
+    # Document identity is not event identity. Only a single observation with
+    # matching recorded values can be folded; all other evidence stays visible.
+    vendas_coerentes = vendas.filter(produto_id=OuterRef('produto_id'),
+        pk=OuterRef('item_venda_operacional'), estoque_antes=OuterRef('antes'),
+        estoque_depois=OuterRef('depois'), estoque_movimentado__gt=0).filter(
+        estoque_depois=F('estoque_antes') - F('estoque_movimentado'),
+        quantidade=F('estoque_movimentado'), unidade=F('estoque_unidade_snapshot'),
+        venda__cancelada=False, venda__estoque_devolvido_cancelamento=False)
+    compras_coerentes = compras.filter(produto_id=OuterRef('produto_id'),
+        pk=OuterRef('item_compra_operacional'), quantidade=OuterRef('detalhe__quantidade_entrada'),
+        unidade=OuterRef('detalhe__unidade_entrada'))
+    documento = (
+        Q(origem='compra', detalhe__acao='entrada', detalhe__conversao='nenhuma',
+          detalhe__fator__isnull=True, detalhe__unidade_base=F('detalhe__unidade_entrada'),
+          depois=F('antes') + F('detalhe__quantidade_entrada')) & Exists(compras_coerentes)
+        | Q(origem__in=('venda', 'consumo_proprio')) & Exists(vendas_coerentes))
     return movimentos.annotate(operacao_ambigua=Case(
         When(origem='devolucao_venda', detalhe__acao__in=('devolucao', 'cancelamento'),
              depois__gt=F('antes'), then=Value(True)),
-        When(documento & ~Exists(distintas), then=Value(False)),
-        default=Exists(outros), output_field=BooleanField()))
+        When(documento & ~Exists(distintas) & ~Exists(outros), then=Value(False)),
+        default=Value(True), output_field=BooleanField()))
 
 
 def evidencias_documentais(movimentos, pagina):
@@ -121,7 +133,7 @@ def evidencias_documentais(movimentos, pagina):
         Q(origem='compra', item_compra_operacional__in=compras) |
         Q(origem__in=('venda', 'consumo_proprio', 'devolucao_venda'), item_venda_operacional__in=vendas))
     resultado = {}
-    for m in consulta.order_by('sequencia', 'pk'):
+    for m in consulta.select_related('detalhe').order_by('sequencia', 'pk'):
         fonte = 'venda' if m.origem in ('venda', 'consumo_proprio', 'devolucao_venda') else 'compra'
         item = getattr(m, f'item_{fonte}_operacional')
         resultado.setdefault((fonte, item), []).append(m)
@@ -144,6 +156,12 @@ def apresentar_operacoes(pagina, evidencias):
                 titulo=('Devolução' if r['origem']=='devolucao_venda' else 'Movimentação') +
                     f" identificada · {r['referencia']}")
         r['evidencias_operacionais'] = evidencias.get((fonte, r['pk']), [])
+        if fonte == 'compra' and len(r['evidencias_operacionais']) == 1:
+            m = r['evidencias_operacionais'][0]
+            detalhe = getattr(m, 'detalhe', None)
+            if detalhe and m.depois is not None and unidade_documental(detalhe.unidade_base):
+                r['saldo_registrado_documento'] = dict(valor=m.depois,
+                    unidade=unidade_documental(detalhe.unidade_base), origem=f'Registro #{m.pk}')
         if (fonte == 'digital' and not r.get('independente') and r['origem'] in ('compra', 'venda', 'consumo_proprio', 'devolucao_venda')
                 and re.fullmatch(r'(Compra|Venda) #\d+', r['referencia'])):
             # An unpaired observer is evidence, not another documentary sale/receipt.

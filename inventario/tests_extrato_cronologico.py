@@ -57,7 +57,7 @@ class CronologiaTests(CronologiaFixture, TestCase):
     def test_ok_entre_vendas_e_get_somente_leitura(self):
         with CaptureQueriesContext(connection) as consultas:
             r = self.resposta()
-        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT', '(SELECT')) for q in consultas))
+        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT', '(SELECT', 'DECLARE ')) for q in consultas))
         eventos = list(r.context['extrato'])
         self.assertEqual([e['instante'] for e in eventos], sorted(e['instante'] for e in eventos))
         self.assertEqual([e['fonte'] for e in eventos], ['compra', 'venda', 'conferencia', 'venda', 'venda'])

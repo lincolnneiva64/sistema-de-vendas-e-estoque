@@ -253,16 +253,9 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         'dia', 'instante', 'fonte', 'ordem', 'pk')
     if _consulta:
         return unificada
-    fontes_operacionais = [
-        vendas_q.filter(Q(venda__cancelada=False) | Q(estoque_movimentado__gt=0,
-            estoque_depois=F('estoque_antes') - F('estoque_movimentado'))),
-        devolvidos_removidos_q, devolucoes_q, manuais_q.filter(origem='ajuste')]
-    if regularizacoes_q is not None:
-        fontes_operacionais.append(regularizacoes_q)
-    if params.get('visual') != 'a' and rodada and rodada.ok_em and inicio and inicio < fim:
-        fontes_operacionais.append(conferencia_q)
-    operacional = compras_q.union(*fontes_operacionais, movimentos_q.filter(operacao_independente=True), all=True).order_by(
-        'dia', 'instante', 'fonte', 'ordem', 'pk')
+    # Use the same chronology for display and balance continuity. Unknown
+    # observations and returns must remain visible rather than create hidden gaps.
+    operacional = unificada
     pagina = Paginator(operacional, 50).get_page(params.get('extrato_pagina'))
     pagina.devolucao_sem_data = sem_data
     tecnicos_por_item = tecnicos_das_vendas(tecnicos, pagina) if timeline else {}
@@ -319,7 +312,7 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
                 nota='Estado atual: ' + linha['origem'] + (' · Estoque devolvido' if linha['devolvido'] else ' · Sem devolução de estoque confirmada'),
                 url=reverse('estoque:venda_detalhe', args=[linha['documento']]))
         else:
-            linha.update(titulo=ORIGENS.get(linha['origem'], ORIGENS['nao_identificada']),
+            linha.update(titulo=ORIGENS.get(linha['origem'], ORIGENS['nao_identificada']) + f" · Registro #{linha['pk']}",
                 fonte_texto='Registro digital', nota=linha['referencia'] or 'Origem sem documento identificado',
                 classe='compra' if linha['origem'] == 'compra' else 'venda' if linha['origem'] == 'venda' else 'pendente')
             # Only explicit document references can create links; no fuzzy matching.

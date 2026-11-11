@@ -38,6 +38,16 @@ def projetar(linhas, pagina=1, tamanho=50):
 
 
 class SaldoDocumentalTests(TestCase):
+    def test_snapshot_divergente_visivel_sem_reiniciar_calculo(self):
+        atual = venda(2, 2, referencia_antes=D(20), referencia_baixa=D(2),
+            referencia_depois=D(18), referencia_unidade='UN', referencia_habilitada=False)
+        posterior = venda(3, 1)
+        projetar([venda(1, 1, 10), atual, posterior])
+        self.assertEqual(atual['saldo_calculado']['valor'], D(8))
+        self.assertEqual(atual['saldo_registrado_operacional']['valor'], D(18))
+        self.assertTrue(atual['saldo_divergente'])
+        self.assertEqual(posterior['saldo_calculado']['valor'], D(7))
+
     def test_28_menos_13_sem_somar_evidencia_digital_27(self):
         anterior = venda(996, 14, 28)
         atual = venda(1049, 13, documento_atual=True,
@@ -92,16 +102,17 @@ class SaldoDocumentalTests(TestCase):
         self.assertEqual(segunda['saldo_calculado']['valor'], D(4))
 
     def test_paginacao_nao_troca_ancora_nem_pula_movimentos(self):
-        # The newer recorded reference replaces the previous calculation, both
-        # inside a page and when it lies on the preceding page.
+        # New snapshots must not replace the documentary calculation, including
+        # when the divergent snapshot is on the previous page.
         linhas = [venda(996, 1, 28), venda(1049, 13, 77), venda(1050, 2)]
         completo = deepcopy(linhas)
         projetar(completo)
         pagina = projetar(linhas, pagina=2, tamanho=2)
-        self.assertEqual(pagina[0]['saldo_calculado']['valor'], D(75))
+        self.assertEqual(pagina[0]['saldo_calculado']['valor'], D(13))
         self.assertEqual(pagina[0]['saldo_calculado'], completo[2]['saldo_calculado'])
         self.assertEqual(linhas[1]['saldo'], D(77))
-        self.assertIsNone(completo[1]['saldo_calculado'])
+        self.assertEqual(completo[1]['saldo_calculado']['valor'], D(15))
+        self.assertTrue(completo[1]['saldo_divergente'])
         self.assertEqual(completo[1]['saldo_registrado_operacional']['valor'], D(77))
 
     def test_lacuna_em_pagina_anterior_nao_e_ignorada(self):

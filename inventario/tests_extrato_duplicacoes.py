@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
+from uuid import uuid4
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.db import connection
@@ -14,7 +15,7 @@ from django.utils import timezone
 from estoque.models import ItemVenda, MovimentacaoEstoqueManual, Venda
 from offline.browser_support import Chrome
 from . import ajustes
-from .models import AplicacaoAjuste, DecisaoAjuste, MovimentoObservado
+from .models import AplicacaoAjuste, DecisaoAjuste, DetalheMovimentoEstoque, MovimentoObservado
 from .models import ItemInventario, RodadaContagem
 from .conversao import snapshot
 from .tests import produto
@@ -84,12 +85,12 @@ class VendasDuplicadasTests(CronologiaFixture, TestCase):
         r = self.resposta(periodo='personalizado', data_inicial=dia, data_final=dia)
         self.assertEqual(len(self.digitais(r)), 1)
 
-    def test_opcao_a_preserva_os_dois_registros(self):
+    def test_opcao_a_nao_duplica_observacao_comprovada(self):
         # A still ends at the OK; include the observer in that original interval.
         self.rodada.ok_em = self.ok.replace(hour=19)
         self.rodada.save()
         r = self.resposta(visual='a')
-        self.assertEqual(len(self.digitais(r)), 1)
+        self.assertEqual(len(self.digitais(r)), 0)
         self.assertFalse(any(l.get('registros_tecnicos') for l in r.context['extrato']))
 
     def test_mesma_venda_dois_produtos_uma_saida_por_extrato(self):
@@ -134,9 +135,99 @@ class VendasDuplicadasTests(CronologiaFixture, TestCase):
         with CaptureQueriesContext(connection) as muitas:
             r = self.resposta()
         self.assertLessEqual(len(muitas), len(poucas)+1)
-        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT','(SELECT')) for q in muitas))
+        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT','(SELECT','DECLARE ')) for q in muitas),
+            [q['sql'][:180] for q in muitas if not q['sql'].lstrip().upper().startswith(('SELECT','(SELECT','DECLARE '))])
         self.assertEqual(list(MovimentoObservado.objects.filter(pk=self.tecnico.pk).values()), antes)
         self.assertEqual(self.digitais(r), [])
+
+
+class VisibilidadeDivergenciasTests(CronologiaFixture, TestCase):
+    def setUp(self):
+        super().setUp()
+        ItemVenda.objects.filter(pk=self.posterior.pk).update(estoque_antes=10,
+            estoque_movimentado=1, estoque_depois=9, estoque_unidade_snapshot='PCT')
+        self.tecnico = MovimentoObservado.objects.create(produto=self.produto, sequencia=1,
+            antes=11, depois=10, origem='venda', referencia=f'Venda #{self.posterior.venda_id}',
+            registrado_em=self.ok.replace(hour=16, minute=19)+timedelta(seconds=1))
+
+    def resposta(self, **params):
+        resposta = self.client.get(self.url, params)
+        self.assertEqual(resposta.status_code, 200)
+        return resposta
+
+    def test_divergencia_preserva_observacao_e_documentos_seguintes(self):
+        resposta = self.resposta()
+        linhas = list(resposta.context['extrato'])
+        self.assertIn(self.tecnico.pk, [r['pk'] for r in linhas if r['fonte']=='digital'])
+        self.assertIn(self.outra.pk, [r['pk'] for r in linhas if r['fonte']=='venda'])
+        self.assertEqual([r['instante'] for r in linhas], sorted(r['instante'] for r in linhas))
+        self.assertContains(resposta, 'Não determinável neste trecho')
+        self.assertContains(resposta, f'Registro de estoque #{self.tecnico.pk}')
+        self.assertEqual(sum(r['operacao_documental']['quantidade']
+                             for r in linhas if r['fonte']=='venda'), 3)
+
+    def test_observacoes_repetidas_nao_sao_ocultadas(self):
+        segundo = MovimentoObservado.objects.create(produto=self.produto, sequencia=2,
+            antes=10, depois=9, origem='venda', referencia=self.tecnico.referencia,
+            registrado_em=self.tecnico.registrado_em+timedelta(seconds=1))
+        linhas = list(self.resposta().context['extrato'])
+        self.assertEqual({r['pk'] for r in linhas if r['fonte']=='digital'},
+                         {self.tecnico.pk, segundo.pk})
+
+    def test_evento_nao_identificado_visivel_nas_duas_apresentacoes(self):
+        MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(
+            origem='nao_identificada', referencia='Origem desconhecida fictícia',
+            registrado_em=self.ok-timedelta(minutes=1))
+        for visual in ('a', 'b'):
+            resposta = self.resposta(visual=visual)
+            self.assertContains(resposta, f'data-registro="registro-digital-{self.tecnico.pk}"')
+            self.assertContains(resposta, f'Registro #{self.tecnico.pk}')
+
+    def test_quantidade_documental_divergente_nao_e_ocultada(self):
+        MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(antes=10, depois=9)
+        ItemVenda.objects.filter(pk=self.posterior.pk).update(quantidade=2)
+        linhas = list(self.resposta().context['extrato'])
+        self.assertIn(self.tecnico.pk, [r['pk'] for r in linhas if r['fonte']=='digital'])
+        venda = next(r for r in linhas if r['fonte']=='venda' and r['pk']==self.posterior.pk)
+        self.assertEqual(venda['operacao_documental']['quantidade'], 2)
+
+    def test_saldos_documental_e_registrado_aparecem_juntos(self):
+        ItemVenda.objects.filter(pk=self.anterior.pk).update(estoque_antes=21,
+            estoque_movimentado=1, estoque_depois=20, estoque_unidade_snapshot='PCT')
+        resposta = self.resposta()
+        linha = next(r for r in resposta.context['extrato']
+                     if r['fonte']=='venda' and r['pk']==self.posterior.pk)
+        self.assertEqual(linha['saldo_calculado']['valor'], 19)
+        self.assertEqual(linha['saldo_registrado_operacional']['valor'], 9)
+        self.assertTrue(linha['saldo_divergente'])
+        self.assertContains(resposta, 'Documental calculado')
+        self.assertContains(resposta, 'Saldo registrado')
+        self.assertContains(resposta, 'Divergência entre saldo documental e registrado')
+
+    def test_compra_com_observacao_divergente_permanece_visivel(self):
+        MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(origem='compra',
+            referencia=f'Compra #{self.compra.pk}', antes=0, depois=99,
+            registrado_em=self.inicio+timedelta(seconds=1))
+        linhas = list(self.resposta().context['extrato'])
+        self.assertEqual(sum(r['fonte']=='compra' for r in linhas), 1)
+        self.assertIn(self.tecnico.pk, [r['pk'] for r in linhas if r['fonte']=='digital'])
+
+    def test_compra_com_atribuicao_coerente_nao_duplica_entrada(self):
+        item = self.compra.itens.get()
+        MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(origem='compra',
+            referencia=f'Compra #{self.compra.pk}', antes=5, depois=7,
+            registrado_em=self.inicio+timedelta(seconds=1))
+        DetalheMovimentoEstoque.objects.create(movimento=self.tecnico, operacao_id=uuid4(),
+            ordem=1, acao='entrada', documento_tipo='compra', documento_id=str(self.compra.pk),
+            item_referencia=str(item.pk), executor=self.gestor, executor_nome='Gestor fictício',
+            contexto='autenticado', unidade_base='CX', quantidade_entrada=2,
+            unidade_entrada='CX', conversao='nenhuma')
+        linhas = list(self.resposta().context['extrato'])
+        self.assertFalse(any(r['fonte']=='digital' for r in linhas))
+        compra = next(r for r in linhas if r['fonte']=='compra')
+        self.assertEqual(compra['entrada'], 2)
+        self.assertEqual(compra['saldo_registrado_operacional']['valor'], 7)
+        self.assertIsNone(compra['saldo_calculado'])
 
 
 class AplicadaFixture(AjustesFixture):
@@ -207,7 +298,7 @@ class RegularizacaoTests(AplicadaFixture, TestCase):
         movimentos = list(MovimentacaoEstoqueManual.objects.values())
         with CaptureQueriesContext(connection) as consultas:
             self.resposta()
-        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT','(SELECT')) for q in consultas))
+        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT','(SELECT','DECLARE ')) for q in consultas))
         self.assertEqual(list(AplicacaoAjuste.objects.values()), antes)
         self.assertEqual(list(MovimentacaoEstoqueManual.objects.values()), movimentos)
 
@@ -228,8 +319,10 @@ class RegularizacaoBrowserTests(AplicadaFixture, StaticLiveServerTestCase):
                         deviceScaleFactor=1,mobile=largura<768))
                     tab.call('Page.navigate', dict(url=self.live_server_url+self.historico))
                     tab.wait("!!document.querySelector('[data-registro^=registro-regularizacao-]')")
+                    tab.wait("getComputedStyle(document.querySelector('.visual-b .tabela-extrato table')).display==='block'")
                     self.assertEqual(tab.evaluate("document.querySelectorAll('[data-registro^=registro-regularizacao-]').length"),1)
-                    self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                    self.assertTrue(tab.evaluate('document.documentElement.scrollWidth <= innerWidth'),
+                        tab.evaluate("JSON.stringify({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:[...document.querySelectorAll('main *')].filter(e=>e.getBoundingClientRect().right>innerWidth).slice(0,6).map(e=>[e.tagName,e.className,e.textContent.slice(0,90)])})"))
                     self.assertTrue(tab.evaluate("[...document.querySelectorAll('details')].every(e=>!e.open)"))
                     self.assertIn('Regularização aplicada',tab.evaluate("document.querySelector('[data-registro^=registro-regularizacao-]').innerText"))
                     capturar(tab,f'regularizacao-{largura}.png')
