@@ -1,11 +1,12 @@
 import '/offline/assets/connection-recovery-v1/sales.js';
 import {formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
-import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
+import {operationDetails,resolutionButton} from '/offline/assets/sale-resolution-v1/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
 import {Repository, openDB, saleOperationState, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
 import {draftScope, loadDraft, saveDraft, discardDraft, projectAssembly, prepareDraftSubmission, confirmDraftSubmission, releaseDraftSubmission, finalizeDraftOffline, releaseConfirmedDraft, lastConfirmedDraft, startNextOfflineDraft, lastLocalDraft, ambiguousSales, listRecoverableDrafts, recoverDraft} from '/offline/assets/sale-cost-check-v1/sales-drafts.js';
 import {readStock,validateStock} from '/offline/assets/sack-conversion-v1/sales-stock.js';
-import {closedLocally,closureKey,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
+import {closedLocally,closureKey,mirrorClosure} from '/offline/assets/sale-resolution-v1/sales-closures.js';
+import {resolutionPending} from '/offline/assets/sale-resolution-v1/sales-resolutions.js';
 
 if (!window.salesDraftBridge) await new Promise(resolve => document.addEventListener('sales-draft-bridge-ready', resolve, {once:true}));
 await window.salesOffline.ready;
@@ -136,13 +137,14 @@ function setDiscardEnabled(enabled) {
     discard.disabled = !enabled;
     discard.hidden = !enabled;
 }
-function renderDeviceSales(operations) {
+function renderDeviceSales(operations,closures) {
     deviceSalesList.replaceChildren();
     deviceSales.hidden = operations.length === 0;
     deviceSalesSummary.textContent = `Vendas registradas neste dispositivo (${operations.length})`;
     for (const operation of [...operations].sort((left, right) => right.sequence - left.sequence)) {
         const row = document.createElement('div');
-        const state = saleOperationState(operation);
+        const closed=closedLocally(closures,operation);
+        const state = closed ? {label:'Encerrada sem gerar venda. Histórico preservado.'} : saleOperationState(operation);
         const payload = operation.payload || {};
         const total = (payload.itens || []).reduce((sum, item) =>
             sum + Number(item.quantidade) * Number(item.preco_unitario), 0);
@@ -152,6 +154,7 @@ function renderDeviceSales(operations) {
             + `${total.toLocaleString('pt-BR', {style:'currency', currency:'BRL'})} — Ref. ${operation.operation_id}`;
         timeText(summary, summary.textContent);
         row.append(summary);
+        const resolve=!closed && resolutionButton(operation);if(resolve)row.append(resolve);
         row.append(operationTimes(operation));
         if (operation.status === 'substituida_manual') {
             const replacementNote = document.createElement('span');
@@ -163,14 +166,14 @@ function renderDeviceSales(operations) {
             link.href = state.url; link.textContent = ` Abrir venda #${state.recordId}`;
             link.target = '_blank'; link.rel = 'noopener noreferrer';
             row.append(link);
-        } else if (ambiguousSales([operation], scope).length) {
+        } else if (!closed && ambiguousSales([operation], scope).length) {
             const query = document.createElement('button');
             query.type = 'button'; query.textContent = 'Consultar resultado';
             query.disabled = recoveringOnline;
             query.addEventListener('click', () => { void window.salesDraftUI.recoverOnline(operation.operation_id); });
             row.append(query);
         }
-        if (operation.status === 'resultado_desconhecido') {
+        if (!closed && operation.status === 'resultado_desconhecido') {
             const detail = operationDetails(operation, scope);
             if (detail) row.append(detail);
             const manual = document.createElement('button');
@@ -311,7 +314,7 @@ async function refreshCompletion() {
     stockView = nextStock;
     const sales = operations.filter(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
     const deviceOperations = sales.filter(op => op.device_id === scope.device_id);
-    renderDeviceSales(deviceOperations);
+    renderDeviceSales(deviceOperations,nextStock.closures);
     if (!localCompletion) {
         const latest = [...deviceOperations].sort((left, right) => right.sequence - left.sequence)[0];
         historicalCompletion = latest ? {operation_id:latest.operation_id, draft_id:latest.operation_id,
@@ -322,7 +325,7 @@ async function refreshCompletion() {
         && !closedLocally(nextStock.closures,op)).length;
     queueCount.textContent = `${pendingCount} venda(s) aguardando sincronização ou resolução.`;
     queueCount.hidden = pendingCount === 0;
-    hasAmbiguousSales = ambiguousSales(operations,scope).length > 0;
+    hasAmbiguousSales = ambiguousSales(operations.filter(op=>!closedLocally(nextStock.closures,op)),scope).length > 0;
     nextSale.hidden = true;
     if (!localCompletion) {
         if (hasAmbiguousSales) {
@@ -422,6 +425,7 @@ async function refreshCompletion() {
         announce('draft-confirmed',marker.operation_id,marker.draft_id);
         document.dispatchEvent(new Event('sales-completion-released'));
     }
+    const resolve=!closed && resolutionButton(operation);if(resolve)message.append(resolve);
     offlineActions();
 }
 function schedule(delay = 250) {
@@ -918,8 +922,10 @@ async function reconcileUnknownSales() {
     automaticRecoveryRunning = true;
     try {
         if (!await checkIdentity() || !navigator.onLine) return;
+        const metadata=await repo.all('metadata');
         const operations = (await repo.all('operations')).filter(operation =>
             operation.type === 'criar_venda' && operation.status === 'resultado_desconhecido'
+            && !closedLocally(metadata,operation) && !resolutionPending(metadata,operation)
             && operation.actor_id === scope.actor_id && operation.environment_id === scope.environment_id
             && operation.device_id === scope.device_id)
             .sort((left, right) => left.sequence - right.sequence);

@@ -1,8 +1,9 @@
 import {POLICY, CONNECTION_POLICY, connectionStatus, Repository, Stability, openDB, commandOf, hash, validHealth, validReceipt, indicatorState} from '/offline/assets/2-8f/core.js';
 import {renderIndicator, formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
-import {operationDetails} from '/offline/assets/2-8g-close/operation-details.js';
+import {operationDetails,resolutionButton} from '/offline/assets/sale-resolution-v1/operation-details.js';
 import {revisionPresentation} from '/offline/assets/2-8g-close/sales-revisions.js';
-import {closedLocally,closureKey,installClosureUI,mirrorClosure} from '/offline/assets/2-8g-close/sales-closures.js';
+import {closedLocally,closureKey,installClosureUI,mirrorClosure} from '/offline/assets/sale-resolution-v1/sales-closures.js';
+import {resolutionPending} from '/offline/assets/sale-resolution-v1/sales-resolutions.js';
 
 const pilot = !!document.getElementById('offline-pilot');
 const globalIndicator = document.getElementById('offline-global');
@@ -287,6 +288,7 @@ async function render() {
         nextStep.className = 'offline-operation-next-step';
         nextStep.textContent = 'Próximo passo seguro: ' + safeNextStep(op);
         row.append(title, status, details, reason, lookup, nextStep);
+        const resolve=resolutionButton(op);if(resolve)row.append(resolve);
         if (op.type !== 'venda_local' && op.status !== 'conflito') {
             const verify = document.createElement('button');
             verify.type = 'button';
@@ -631,7 +633,7 @@ async function runSynchronization() {
         const scoped = (await repo.all('operations')).filter(op => op.actor_id === scope.actor_id && op.environment_id === scope.environment_id);
         if (!preparedSyncScope(scope, scoped)) return;
         const closureMetadata=await repo.all('metadata');
-        const operations = scoped.filter(op => !closedLocally(closureMetadata,op) && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
+        const operations = scoped.filter(op => !closedLocally(closureMetadata,op) && !resolutionPending(closureMetadata,op) && ['pendente', 'resultado_desconhecido', 'erro'].includes(op.status)).sort((a, b) => a.sequence - b.sequence);
         if (!operations.length || !await confirmSynchronization(operations.length)) return;
         syncing = true; stopped = false; notice = null; progress = '0/' + operations.length; await changed();
         let confirmed = 0;
@@ -648,6 +650,7 @@ async function runSynchronization() {
                 if (stopped || !stability.ready(performance.now(), Date.now())) { stopped = true; await probe(); break; }
                 const current = await repo.get('operations', operations[index].operation_id);
                 if (!current || ['confirmada', 'conflito'].includes(current.status)) continue;
+                if(resolutionPending(await repo.all('metadata'),current))continue;
                 if (current.status === 'resultado_desconhecido') {
                     try {
                         const lookup = await reconcile(current);

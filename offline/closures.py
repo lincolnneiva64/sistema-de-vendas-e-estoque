@@ -37,6 +37,8 @@ def checked_original(operation_id, data, user, environment, lock=False):
 
 @transaction.atomic
 def close_conflict(operation_id, data, user, environment):
+    from .resolutions import lock_sales
+    lock_sales(user,operation_id)
     required = {'closure_id','hash','actor_id','environment_id','original_device_id','device_id','motivo','confirm'}
     if not isinstance(data,dict) or set(data) != required or data['confirm'] is not True:
         raise ValidationError('Confirmação explícita obrigatória.')
@@ -48,6 +50,11 @@ def close_conflict(operation_id, data, user, environment):
     if not isinstance(data['hash'],str) or not re.fullmatch('[0-9a-f]{64}',data['hash']):
         raise ValidationError('Hash inválido.')
     op = checked_original(operation_id,data,user,environment,lock=True)
+    from .models import AbandonoVendaOffline
+    from .resolutions import result as resolution_result
+    resolved=AbandonoVendaOffline.objects.filter(operation_id=op.operation_id).first()
+    if resolved:
+        return resolution_result(resolved)
     existing = EncerramentoVendaOffline.objects.filter(original=op).first()
     if existing:
         if (str(existing.closure_id) != data['closure_id'] or existing.motivo != data['motivo'].strip()

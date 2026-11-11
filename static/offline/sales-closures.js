@@ -1,4 +1,5 @@
 import {canonical, commandOf, hash, validReceipt} from '/offline/assets/2-8f/core.js';
+import {installResolutionUI} from '/offline/assets/sale-resolution-v1/sales-resolutions.js';
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export const closureKey = op => 'sales-closure:' + (op ? JSON.stringify([op.environment_id,op.actor_id,op.operation_id]) : 'invalid');
 export const intentKey = op => closureKey(op) + ':intent';
@@ -8,27 +9,28 @@ export function eligibleConflict(op) {
         && (op.server_result.conflict_kind || 'comercial') === 'comercial' && op.diagnostic_code !== 'uuid_comando_divergente';
 }
 export function validClosure(receipt,op) {
-    return eligibleConflict(op) && receipt?.status === 'encerrada_sem_venda' && uuid(receipt.closure_id)
+    return (eligibleConflict(op) || receipt?.kind === 'abandono' && op?.type === 'criar_venda'
+        && op.status !== 'confirmada') && receipt?.status === 'encerrada_sem_venda' && uuid(receipt.closure_id)
         && receipt.operation_id === op.operation_id && receipt.hash === op.payload_hash
         && receipt.actor_id === op.actor_id && receipt.environment_id === op.environment_id
         && receipt.original_device_id === op.device_id && uuid(receipt.device_id) && receipt.record_id === null
         && typeof receipt.motivo === 'string' && !!receipt.motivo.trim()
         && typeof receipt.closed_at === 'string' && /^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/.test(receipt.closed_at)
-        && Number.isFinite(Date.parse(receipt.closed_at)) && canonical(receipt.original_receipt) === canonical(op.server_result);
+        && Number.isFinite(Date.parse(receipt.closed_at)) && (receipt.kind === 'abandono'
+            ? receipt.original_receipt === null || validReceipt(receipt.original_receipt,op) && receipt.original_receipt.record_id === null
+            : canonical(receipt.original_receipt) === canonical(op.server_result));
 }
 export const closedLocally = (metadata,op) => validClosure(metadata?.find(row => row.key === closureKey(op))?.receipt,op);
-const ambiguous = (ops,scope) => ops.some(op => op.type === 'criar_venda' && op.actor_id === scope.actor_id
-    && op.environment_id === scope.environment_id && (['enviando','resultado_desconhecido'].includes(op.status)
-        || op.transport === 'online' && !['confirmada','conflito'].includes(op.status)));
 const hasRevision = (ops,meta,op) => !!op.payload?.revisao || ops.some(child => child.payload?.revisao?.original_operation_id === op.operation_id)
     || meta.some(row => row.original_operation_id === op.operation_id && row.relacao === 'revisao_de_conflito' && row.status !== 'descartada');
 
 // Original operation/history are read-only; only administrative metadata and the
 // matching assembly marker may be written. A later draft is never cleared.
-async function access(repo,scope,op,work) {
+async function access(repo,scope,op,work,administrative=false) {
     const signature = canonical(op);
     if (op.actor_id !== scope.actor_id || op.environment_id !== scope.environment_id
-        || !eligibleConflict(op) || await hash(commandOf(op)) !== op.payload_hash)
+        || !(eligibleConflict(op) || administrative && op.type === 'criar_venda' && op.status !== 'confirmada')
+        || await hash(commandOf(op)) !== op.payload_hash)
         throw new Error('Somente conflito definitivo íntegro pode ser encerrado.');
     let error;
     return repo.transaction(['metadata','operations'],true,(tx,done) => {
@@ -50,10 +52,14 @@ async function access(repo,scope,op,work) {
 }
 export async function mirrorClosure(repo,scope,op,receipt) {
     if (!validClosure(receipt,op)) throw new Error('Confirmação administrativa inválida. Montagem preservada.');
-    return access(repo,scope,op,({store,meta,ops}) => {
+    await access(repo,scope,op,({store,meta}) => {
         const previous = meta.find(row => row.key === closureKey(op));
         if (previous && canonical(previous.receipt) !== canonical(receipt)) throw new Error('Encerramento local divergente.');
         store.put({key:closureKey(op),receipt});
+    },receipt.kind==='abandono');
+    // The decision is durable even if a newer/incompatible assembly cannot be
+    // released. Never discard that assembly to make the decision visible.
+    return access(repo,scope,op,({store,meta,ops}) => {
         const marker = meta.find(row => row.tipo === 'venda_concluida_offline'
             && row.operation_id === op.operation_id && row.draft_id === op.operation_id
             && row.actor_id === scope.actor_id && row.environment_id === scope.environment_id
@@ -62,8 +68,9 @@ export async function mirrorClosure(repo,scope,op,receipt) {
         const fence = key && meta.find(row => row.key === key + ':revision');
         let revision = fence?.revision || 0,released = false;
         const pendingChild=ops.some(child=>child.payload?.revisao?.original_operation_id===op.operation_id
+            && !closedLocally(meta,child)
             && !(child.status==='conflito' && validReceipt(child.server_result,child) && child.server_result.code==='revisao_origem_bloqueada'));
-        if (key && marker.revision === revision && op.device_id === scope.device_id && !ambiguous(ops,scope) && !pendingChild) {
+        if (key && marker.revision === revision && op.device_id === scope.device_id && !pendingChild) {
             if (marker.revision !== revision || marker.actor_id !== scope.actor_id || marker.environment_id !== scope.environment_id
                 || marker.device_id !== scope.device_id || !Number.isSafeInteger(revision) || revision >= Number.MAX_SAFE_INTEGER)
                 throw new Error('Marcador da montagem incompatível.');
@@ -72,7 +79,7 @@ export async function mirrorClosure(repo,scope,op,receipt) {
             store.put({key:key + ':last-closure',operation_id:op.operation_id,closure_id:receipt.closure_id});
         }
         return {receipt,released,revision};
-    });
+    },receipt.kind==='abandono').catch(()=>({receipt,released:false}));
 }
 async function request(url,options) {
     const controller = new AbortController(),timer = setTimeout(() => controller.abort(),15000);
@@ -104,7 +111,7 @@ export async function closeOperation(repo,scope,op,motivo,confirm) {
     return navigator.locks.request('offline-pilot-sync',{ifAvailable:true},async lock => {
         if (!lock) throw new Error('Outra aba está processando operações. Aguarde.');
         const intent = await access(repo,scope,op,({store,meta,ops}) => {
-            if (hasRevision(ops,meta,op) || ambiguous(ops,scope)) throw new Error('Há revisão ou resultado desconhecido. Encerramento bloqueado.');
+            if (hasRevision(ops,meta,op)) throw new Error('Existe uma revisão ou venda substituta vinculada. Resolva essa operação antes de encerrar a original.');
             const existing = meta.find(row => row.key === intentKey(op));
             if (existing && existing.state !== 'recusada') return existing;
             if (existing) store.put({...existing,key:intentKey(op) + ':' + existing.body.closure_id});
@@ -127,6 +134,7 @@ export async function closeOperation(repo,scope,op,motivo,confirm) {
 
 let provider,installed=false;
 export function installClosureUI(context) {
+    installResolutionUI(context);
     provider=context;if(installed)return;installed=true;
     document.addEventListener('sales-close-operation',async event => {
         let dialog;

@@ -17,7 +17,7 @@ PROTECAO_PROPRIA = {
         'conferencia_estoque_confirmar', 'conferencia_estoque_corrigir', 'conferencia_estoque_produto',
         'historico_estoque_manual'},  # Same explicit stock actor/permission gate as the modal.
     'offline.views': {'snapshot', 'commercial_snapshot', 'synchronize', 'operation_result',
-        'close_sale_conflict', 'sale_closure_result', 'sale_cost_preflight'},
+        'close_sale_conflict', 'sale_closure_result', 'sale_cost_preflight', 'resolve_sale_pending'},
 }
 PUBLICAS = {'shell', 'sales_shell', 'revision_shell', 'versioned_asset', 'health', 'session', 'service_worker'}
 

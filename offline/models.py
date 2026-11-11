@@ -61,3 +61,22 @@ class EncerramentoVendaOffline(models.Model):
     motivo = models.TextField()
     evidencia = models.JSONField()
     encerrado_em = models.DateTimeField(auto_now_add=True)
+
+
+class ControleResolucaoVendaOffline(models.Model):
+    """Serializes an actor's sends and decisions, including absent operations."""
+    actor = models.OneToOneField(settings.AUTH_USER_MODEL, primary_key=True, on_delete=models.PROTECT)
+
+
+class AbandonoVendaOffline(models.Model):
+    """Permanent UUID reservation; never replaces an operation or its receipt."""
+    operation_id = models.UUIDField(unique=True)
+    closure_id = models.UUIDField(unique=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    environment_id = models.CharField(max_length=160)
+    device_id = models.UUIDField()
+    payload_hash = models.CharField(max_length=64)
+    comando = models.JSONField()
+    motivo = models.TextField()
+    evidencia = models.JSONField()
+    encerrado_em = models.DateTimeField(auto_now_add=True)

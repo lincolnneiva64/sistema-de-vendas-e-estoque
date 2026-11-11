@@ -26,7 +26,7 @@ def versioned_asset(request, filename):
     allowed = {"local-sales.js", "app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
-               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js", "sales-costs.js"}
+               "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js", "sales-costs.js", "sales-resolutions.js"}
     if filename not in allowed:
         return HttpResponse(status=404)
     return HttpResponse((settings.BASE_DIR / "static/offline" / filename).read_bytes(),
@@ -166,6 +166,26 @@ def close_sale_conflict(request, operation_id):
     return JsonResponse({'lookup':'encontrada','closure':result})
 
 
+@never_cache
+@authorized
+def resolve_sale_pending(request, operation_id):
+    from . import resolutions
+    if request.method not in {'GET','POST'}:
+        return JsonResponse({'erro':'Método não permitido.'},status=405)
+    if len(request.body) > 100000:
+        return JsonResponse({'erro':'Solicitação muito grande.'},status=413)
+    try:
+        if request.method == 'GET':
+            state=resolutions.inspect(operation_id,request.GET,request.user,environment_id(request))
+        else:
+            state=resolutions.resolve(operation_id,json.loads(request.body),request.user,environment_id(request))
+        return JsonResponse(state)
+    except (ValueError,TypeError,KeyError,ValidationError,OverflowError,UnicodeError) as exc:
+        return JsonResponse({'erro':str(exc),'code':'resolucao_recusada'},status=409)
+    except DatabaseError:
+        return JsonResponse({'erro':'Não foi possível confirmar. A venda permanece preservada. Consulte novamente.'},status=503)
+
+
 @require_GET
 @never_cache
 @authorized
@@ -173,9 +193,13 @@ def sale_closure_result(request, operation_id):
     try:
         op = checked_original(operation_id,request.GET,request.user,environment_id(request))
         closure = EncerramentoVendaOffline.objects.select_related('original').filter(original=op).first()
+        from .models import AbandonoVendaOffline
+        from .resolutions import result as resolution_result
+        resolved=AbandonoVendaOffline.objects.filter(operation_id=op.operation_id).first()
         return JsonResponse({'lookup':'encontrada' if closure else 'nao_encontrada',
                              'operation_id':str(op.operation_id),'hash':op.payload_hash,
-                             'closure':closure_result(closure) if closure else None})
+                             'closure':resolution_result(resolved) if resolved else closure_result(closure) if closure else None,
+                             **({'lookup':'encontrada'} if resolved else {})})
     except (ValueError,TypeError,ValidationError):
         return JsonResponse({'erro':'Consulta de encerramento incompatível.'},status=409)
     except DatabaseError:
@@ -285,13 +309,21 @@ def _operation_result(request, operation_id):
     try:
         chain = revision_chain(operation)
         closure = EncerramentoVendaOffline.objects.select_related('original').filter(original=operation).first()
+        administrative = _administrative_result(operation,closure)
     except (DatabaseError, ValidationError):
         return JsonResponse({"lookup": "indeterminada", "erro": "Vinculo de revisao indisponível."}, status=503)
     return JsonResponse({"lookup": "encontrada", "operation_id": str(operation.operation_id),
                          "hash": operation.payload_hash, "actor_id": str(operation.actor_id),
                          "environment_id": operation.environment_id, "type": operation.type,
                          "device_id": str(operation.device_id), "receipt": receipt, "revisions": chain,
-                         "closure": closure_result(closure) if closure else None})
+                         "closure": administrative})
+
+
+def _administrative_result(operation, legacy=None):
+    from .models import AbandonoVendaOffline
+    from .resolutions import result as resolution_result
+    resolved=AbandonoVendaOffline.objects.filter(operation_id=operation.operation_id).first()
+    return resolution_result(resolved) if resolved else closure_result(legacy) if legacy else None
 
 
 @require_GET

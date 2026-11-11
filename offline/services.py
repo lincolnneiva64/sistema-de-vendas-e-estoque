@@ -9,7 +9,7 @@ from django.utils.dateparse import parse_datetime
 
 from locacoes.models import EventoLocacao, Locacao, TarefaOperacionalLocacao
 from estoque.models import EntregaRotaItem, EventoVenda
-from .models import OperacaoSincronizacao, RevisaoVendaOffline, EncerramentoVendaOffline
+from .models import OperacaoSincronizacao, RevisaoVendaOffline, EncerramentoVendaOffline, AbandonoVendaOffline
 from .sale_commands import SALE_OPERATION_TYPE, execute_sale, validate_sale_payload
 from estoque.services.vendas import ErroGravarVenda
 
@@ -84,6 +84,28 @@ def process_operation(command, user, *, local_owner=None):
         raise ValidationError("Modalidade local invalida.")
     if not local_owner and command["type"] == "venda_local":
         raise ValidationError("Operacao local exige autorizacao propria.")
+    if command['type'] == SALE_OPERATION_TYPE and not local_owner:
+        from .resolutions import lock_sales, compatible
+        lock_sales(user,command['operation_id'])
+        abandoned=AbandonoVendaOffline.objects.filter(operation_id=command['operation_id']).first()
+        if abandoned:
+            if not compatible(command,abandoned):
+                return {'operation_id':command['operation_id'],'hash':digest,'status':'conflito',
+                        'code':'uuid_comando_divergente','erro':'Identidade já utilizada.'},409
+            original=OperacaoSincronizacao.objects.filter(operation_id=command['operation_id']).first()
+            if original:
+                return original.resultado,409 if original.status=='conflito' else 200
+            return {'operation_id':command['operation_id'],'hash':digest,'status':'conflito',
+                    'record_id':None,'completed_at':abandoned.encerrado_em.isoformat(),
+                    'code':'encerrada_administrativamente','conflict_kind':'tecnico',
+                    'erro':'Venda encerrada sem gerar venda. Envio bloqueado definitivamente.'},409
+    elif local_owner:
+        from .resolutions import lock_operation
+        lock_operation(command['operation_id'])
+        if AbandonoVendaOffline.objects.filter(operation_id=command['operation_id']).exists():
+            return {'operation_id':command['operation_id'],'hash':digest,'status':'conflito',
+                    'code':'uuid_comando_divergente','record_id':None,'completed_at':timezone.now().isoformat(),
+                    'erro':'Identidade já utilizada por outra operação.'},409
     # get_or_create uses the database UNIQUE constraint to arbitrate concurrent inserts.
     operation, created = OperacaoSincronizacao.objects.get_or_create(
         operation_id=command["operation_id"],
@@ -154,7 +176,8 @@ def _process_sale_creation(operation, command, user, digest, executor=None):
                 or original.payload_hash != revision["original_hash"]
                 or command_hash(original.comando) != original.payload_hash):
             revision_error = "Origem da revisao incompatível. Operacao original preservada."
-        elif EncerramentoVendaOffline.objects.filter(original=original).exists():
+        elif (EncerramentoVendaOffline.objects.filter(original=original).exists()
+                or AbandonoVendaOffline.objects.filter(operation_id=original.operation_id).exists()):
             revision_error = "Original encerrada administrativamente sem venda. Nova revisao bloqueada."
         elif not commercial_conflict(original):
             revision_error = "Origem nao esta em conflito comercial. Consulte a venda oficial antes de prosseguir."

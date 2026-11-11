@@ -2,6 +2,13 @@ import {commercialConflict} from '/offline/assets/2-8g-close/sales-revisions.js'
 import {validClosure} from '/offline/assets/2-8g-close/sales-closures.js';
 import {formatOfflineTime, timeText, operationTimes} from '/offline/assets/2-8f/presentation.js';
 // Opening details remains read-only. Review is an explicit separate navigation.
+export function resolutionButton(operation) {
+    if(operation?.type!=='criar_venda' || !['pendente','enviando','conflito','resultado_desconhecido','erro'].includes(operation.status))return null;
+    const button=document.createElement('button');button.type='button';
+    button.textContent='Resolver venda pendente';button.dataset.resolvePending=operation.operation_id;
+    button.addEventListener('click',()=>document.dispatchEvent(new CustomEvent('sales-resolve-pending',{detail:{operation_id:operation.operation_id}})));
+    return button;
+}
 export function operationDetails(operation, scope, revisionView = null,closure = null) {
     if (!operation || operation.actor_id !== scope.actor_id || operation.environment_id !== scope.environment_id
         || !['pendente', 'enviando', 'conflito', 'resultado_desconhecido', 'erro'].includes(operation.status)) return null;
