@@ -38,6 +38,38 @@ def projetar(linhas, pagina=1, tamanho=50):
 
 
 class SaldoDocumentalTests(TestCase):
+    def test_compra_sem_fator_preserva_referencia_registrada_sem_converter_nota(self):
+        compra = dict(pk=1, documento=1, fonte='compra', quantidade=D(100), unidade='CX',
+            registro_original=dict(antes=D(5), depois=D(6), unidade='UN'))
+        posterior = venda(2, 1)
+        projetar([compra, posterior])
+        self.assertIsNone(compra['saldo_calculado'])
+        self.assertEqual(compra['saldo_registrado_operacional']['valor'], D(6))
+        self.assertEqual(posterior['saldo_calculado']['valor'], D(5))
+        self.assertIn('compra #1', posterior['saldo_calculado']['origem'])
+
+    def test_compra_reconstruida_inicia_trecho_sem_inventar_zero(self):
+        compra = dict(pk=1, documento=1, fonte='compra', quantidade=D(3), unidade='UN',
+            saldo_tipo='Reconstruído e corroborado', saldo_antes=D(2), saldo=D(5), saldo_unidade='UN')
+        posterior = venda(2, 1)
+        projetar([compra, posterior])
+        self.assertEqual(compra['saldo_calculado']['anterior'], D(2))
+        self.assertEqual(compra['saldo_calculado']['valor'], D(5))
+        self.assertIsNone(compra['saldo_registrado_operacional'])
+        self.assertEqual(posterior['saldo_calculado']['valor'], D(4))
+
+    def test_ajuste_aplicado_soma_diferenca_uma_vez_sem_trocar_documental(self):
+        ajuste = dict(pk=2, fonte='regularizacao', saldo=D(18), saldo_unidade='UN',
+            antes=D(20), depois=D(18), diferenca_aplicada=D(-2))
+        posterior = venda(3, 1)
+        linhas = [venda(1, 1, 10), ajuste, posterior]
+        completo = deepcopy(linhas)
+        projetar(completo)
+        self.assertEqual(completo[1]['saldo_calculado']['valor'], D(8))
+        self.assertEqual(completo[1]['saldo_registrado_operacional']['valor'], D(18))
+        pagina = projetar(linhas, pagina=2, tamanho=2)
+        self.assertEqual(pagina[0]['saldo_calculado']['valor'], D(7))
+
     def test_snapshot_divergente_visivel_sem_reiniciar_calculo(self):
         atual = venda(2, 2, referencia_antes=D(20), referencia_baixa=D(2),
             referencia_depois=D(18), referencia_unidade='UN', referencia_habilitada=False)

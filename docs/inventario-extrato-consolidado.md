@@ -1,5 +1,25 @@
 # Extrato consolidado — avaliação local
 
+## Associação e referências históricas compartilhadas
+
+A identidade da operação é separada da comprovação de conversão. Uma observação
+única com vínculo histórico comprovado fica nos detalhes do documento, inclusive
+quando nota e estoque usam unidades diferentes. Observações ambíguas ou de
+operações distintas permanecem visíveis. O agrupamento ocorre antes da paginação.
+
+Referências válidas de compras e reconstruções corroboradas podem iniciar um
+trecho documental. Valores registrados não substituem um cálculo documental em
+andamento. Ajustes persistidos entram pela diferença uma única vez. Antes/depois,
+quantidade da nota e movimento registrado são exibidos independentemente, sem
+usar conversões atuais para preencher fatores históricos ausentes.
+
+A projeção física parte do OK original e usa compras/vendas posteriores
+comprovadas, sem exigir ajuste aplicado. Uma lacuna preserva projeções anteriores
+e interrompe as seguintes. O ajuste da própria conferência não é novamente
+descontado dessa projeção. Contagem, projeção e saldo registrado são distintos.
+Prefixos de paginação recebem as mesmas referências históricas da página visível.
+As alterações são somente de consulta; não conciliam dados reais nem gravam saldos.
+
 Base: `b99c6d87c1555329d3aa37315013e3f86af4c4c2`.
 Worktree: `.worktrees/conferencia-tipografia-b99c6d8`.
 Preserva a tipografia e a projeção do saldo inicial da etapa anterior.

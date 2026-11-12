@@ -17,8 +17,8 @@ from .evidencia_remocoes import CAMPOS
 
 
 @contextmanager
-def carregar(rodadas, *, travar=False):
-    dados = _Lote(rodadas, travar)
+def carregar(rodadas, *, travar=False, ate=None):
+    dados = _Lote(rodadas, travar, ate=ate)
     try:
         yield dados
     finally:
@@ -26,7 +26,7 @@ def carregar(rodadas, *, travar=False):
 
 
 class _Lote:
-    def __init__(self, rodadas, travar):
+    def __init__(self, rodadas, travar, ate=None):
         if travar and not connection.in_atomic_block:
             raise ValueError('Validação do lote exige a transação e os locks existentes.')
         self.ativo, self.travar = True, travar
@@ -44,7 +44,10 @@ class _Lote:
             if corte is not None:
                 filtro |= Q(produto_id=r.item.produto_id, sequencia__gt=corte)
         self.movimentos = defaultdict(list)
-        for m in MovimentoObservado.objects.filter(filtro).order_by('sequencia'):
+        movimentos = MovimentoObservado.objects.filter(filtro)
+        if ate is not None:
+            movimentos = movimentos.filter(registrado_em__lte=ate)
+        for m in movimentos.order_by('sequencia'):
             self.movimentos[m.produto_id].append(m)
         self.incluidos = set(itens_incluidos().filter(pk__in=itens).values_list('pk', flat=True))
         self.decisoes = set(DecisaoAjuste.objects.filter(item_id__in=itens).values_list('item_id', flat=True))

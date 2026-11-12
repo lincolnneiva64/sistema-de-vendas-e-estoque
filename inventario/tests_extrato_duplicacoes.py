@@ -187,9 +187,11 @@ class VisibilidadeDivergenciasTests(CronologiaFixture, TestCase):
         MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(antes=10, depois=9)
         ItemVenda.objects.filter(pk=self.posterior.pk).update(quantidade=2)
         linhas = list(self.resposta().context['extrato'])
-        self.assertIn(self.tecnico.pk, [r['pk'] for r in linhas if r['fonte']=='digital'])
+        self.assertNotIn(self.tecnico.pk, [r['pk'] for r in linhas if r['fonte']=='digital'])
         venda = next(r for r in linhas if r['fonte']=='venda' and r['pk']==self.posterior.pk)
         self.assertEqual(venda['operacao_documental']['quantidade'], 2)
+        self.assertEqual(venda['registro_original']['movimentado'], 1)
+        self.assertEqual([e.pk for e in venda['evidencias_operacionais']], [self.tecnico.pk])
 
     def test_saldos_documental_e_registrado_aparecem_juntos(self):
         ItemVenda.objects.filter(pk=self.anterior.pk).update(estoque_antes=21,
@@ -227,7 +229,8 @@ class VisibilidadeDivergenciasTests(CronologiaFixture, TestCase):
         compra = next(r for r in linhas if r['fonte']=='compra')
         self.assertEqual(compra['entrada'], 2)
         self.assertEqual(compra['saldo_registrado_operacional']['valor'], 7)
-        self.assertIsNone(compra['saldo_calculado'])
+        self.assertEqual(compra['saldo_calculado']['anterior'], 5)
+        self.assertEqual(compra['saldo_calculado']['valor'], 7)
 
 
 class AplicadaFixture(AjustesFixture):

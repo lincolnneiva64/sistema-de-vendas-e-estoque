@@ -106,15 +106,19 @@ def associar_documentos(movimentos, compras, vendas):
         pk=OuterRef('item_venda_operacional'), estoque_antes=OuterRef('antes'),
         estoque_depois=OuterRef('depois'), estoque_movimentado__gt=0).filter(
         estoque_depois=F('estoque_antes') - F('estoque_movimentado'),
-        quantidade=F('estoque_movimentado'), unidade=F('estoque_unidade_snapshot'),
         venda__cancelada=False, venda__estoque_devolvido_cancelamento=False)
     compras_coerentes = compras.filter(produto_id=OuterRef('produto_id'),
-        pk=OuterRef('item_compra_operacional'), quantidade=OuterRef('detalhe__quantidade_entrada'),
-        unidade=OuterRef('detalhe__unidade_entrada'))
+        pk=OuterRef('item_compra_operacional'), quantidade__gt=0).filter(
+        quantidade=OuterRef('detalhe__quantidade_entrada')
+    )
+    compras_legadas = compras.filter(produto_id=OuterRef('produto_id'),
+        pk=OuterRef('item_compra_operacional'), quantidade__gt=0).annotate(
+        variacao=OuterRef('depois') - OuterRef('antes')).filter(quantidade=F('variacao'))
     documento = (
-        Q(origem='compra', detalhe__acao='entrada', detalhe__conversao='nenhuma',
-          detalhe__fator__isnull=True, detalhe__unidade_base=F('detalhe__unidade_entrada'),
-          depois=F('antes') + F('detalhe__quantidade_entrada')) & Exists(compras_coerentes)
+        Q(origem='compra', detalhe__acao='entrada') & Exists(compras_coerentes)
+        | Q(origem='compra', detalhe__isnull=True) & Exists(compras_legadas)
+        | (Q(origem__in=('venda', 'consumo_proprio'), detalhe__acao='saida',
+             detalhe__documento_tipo='venda', item_venda_operacional__isnull=False) & ~Q(item_atribuido=''))
         | Q(origem__in=('venda', 'consumo_proprio')) & Exists(vendas_coerentes))
     return movimentos.annotate(operacao_ambigua=Case(
         When(origem='devolucao_venda', detalhe__acao__in=('devolucao', 'cancelamento'),
@@ -179,12 +183,47 @@ def apresentar_operacoes(pagina, evidencias):
                     unidade=r['unidade'], efetivada=True)
 
 
-def preparar_fluxos_historicos(linhas, produto_id):
+def preparar_fluxos_historicos(linhas, produto_id, evidencias=None):
     """Same historical conversion for visible rows and the SQL prefix, in bulk."""
+    for r in linhas:
+        if r['fonte'] == 'digital':
+            antes, depois = r.get('antes'), r.get('depois')
+            r['registro_original'] = dict(antes=antes, depois=depois,
+                movimentado=abs(depois-antes) if antes is not None and depois is not None else None,
+                unidade=r.get('saldo_unidade', ''))
     docs = {(r['fonte'], str(r['documento']), str(r['pk'])): r for r in linhas
             if r['fonte'] in ('compra', 'venda') and not r.get('cancelada')}
     if not docs:
         return
+    if evidencias is None:
+        associados = associar_documentos(MovimentoObservado.objects.filter(produto_id=produto_id),
+            ItemCompra.objects.filter(produto_id=produto_id), ItemVenda.objects.filter(produto_id=produto_id))
+        evidencias = evidencias_documentais(associados, linhas)
+    for r in linhas:
+        if r['fonte'] == 'venda':
+            r['registro_original'] = dict(antes=r.get('referencia_antes'), depois=r.get('referencia_depois'),
+                movimentado=r.get('referencia_baixa'), unidade=r.get('referencia_unidade', ''))
+        vinculados = evidencias.get((r['fonte'], r['pk']), [])
+        if len(vinculados) == 1:
+            m = vinculados[0]
+            d = getattr(m, 'detalhe', None)
+            if r['fonte'] == 'compra' or (r['fonte'] == 'venda' and
+                    r.get('referencia_antes') is None and r.get('referencia_depois') is None):
+                r['registro_original'] = dict(antes=m.antes, depois=m.depois,
+                    movimentado=abs(m.depois-m.antes) if m.antes is not None and m.depois is not None else None,
+                    unidade=unidade_documental(d.unidade_base) if d else '')
+            elif r['fonte'] == 'venda':
+                original = r['registro_original']
+                for campo in ('antes', 'depois'):
+                    if original[campo] is None:
+                        original[campo] = getattr(m, campo)
+                if not original['unidade'] and d:
+                    original['unidade'] = unidade_documental(d.unidade_base)
+                if original['movimentado'] is None and m.antes is not None and m.depois is not None:
+                    original['movimentado'] = abs(m.depois-m.antes)
+        if r.get('saldo_tipo') == 'Reconstruído e corroborado':
+            r['referencia_historica'] = dict(antes=r['saldo_antes'], valor=r['saldo'],
+                unidade=r['saldo_unidade'], origem=r['saldo_evidencia'])
     encontrados = {}
     for d in DetalheMovimentoEstoque.objects.filter(
             movimento__produto_id=produto_id,
@@ -206,3 +245,6 @@ def preparar_fluxos_historicos(linhas, produto_id):
                 and m.antes is not None and m.depois is not None
                 and m.depois - m.antes == direcao * valor):
             r['fluxo_historico'] = (direcao * valor, unidade_documental(d.unidade_base))
+            if len(evidencias.get((r['fonte'], r['pk']), [])) == 1:
+                r['referencia_historica'] = dict(antes=m.antes, valor=m.depois,
+                    unidade=unidade_documental(d.unidade_base), origem=f'Registro #{m.pk} · {r["fonte"]} #{r["documento"]}')

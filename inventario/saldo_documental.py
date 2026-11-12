@@ -60,6 +60,18 @@ def referencia(linha, valor, base):
 
 def ancora(linha):
     fonte = linha['fonte']
+    historica = linha.get('referencia_historica')
+    if historica and numero(historica.get('valor')) is not None and unidade(historica.get('unidade')):
+        return historica
+    if fonte == 'compra' and linha.get('saldo_tipo') == 'Reconstruído e corroborado':
+        saldo = referencia(linha, linha.get('saldo'), linha.get('saldo_unidade'))
+        return dict(saldo, antes=linha.get('saldo_antes')) if saldo else None
+    if fonte == 'compra':
+        original = linha.get('registro_original', {})
+        saldo = referencia(linha, original.get('depois'), original.get('unidade'))
+        if saldo:
+            return dict(saldo, antes=original.get('antes'),
+                        origem=f'Saldo registrado na compra #{linha.get("documento") or linha["pk"]}')
     if fonte == 'manual':
         ajuste = linha.get('ajuste_manual')
         if ajuste:
@@ -97,6 +109,15 @@ def saida_realizada(linha):
 def movimento(linha):
     """None is a gap; a tuple contains the signed documentary amount/unit."""
     fonte = linha['fonte']
+    if fonte in ('manual', 'regularizacao'):
+        ajuste = linha.get('ajuste_manual', {})
+        valor = numero(linha.get('diferenca_aplicada', ajuste.get('diferenca')))
+        base = unidade(linha.get('saldo_unidade') or linha.get('referencia_unidade') or ajuste.get('unidade'))
+        if fonte == 'regularizacao' and valor is None:
+            antes, depois = numero(linha.get('antes')), numero(linha.get('depois'))
+            if antes is not None and depois is not None:
+                valor = depois - antes
+        return (valor, base) if valor is not None and base else None
     if linha.get('fluxo_historico'):
         return linha['fluxo_historico']
     operacao = linha.get('operacao_documental')
@@ -136,8 +157,6 @@ def estado_anterior(registros_invertidos):
             if base and base != saldo['unidade']:
                 return candidato
             candidato = dict(saldo, valor=saldo['valor'] + acumulado)
-        if fonte in ('manual', 'regularizacao'):
-            return candidato
         fluxo = movimento(linha)
         if fluxo is None:
             return candidato
@@ -184,16 +203,20 @@ def aplicar_saldos_documentais(pagina, cronologia, preparar_linhas=None, anterio
             continue
         fixo = ancora(linha)
         linha['saldo_registrado_operacional'] = linha.get('saldo_registrado_documento') or fixo
+        if fonte == 'compra' and not linha.get('saldo_registrado_documento'):
+            original = linha.get('registro_original', {})
+            linha['saldo_registrado_operacional'] = referencia(
+                linha, original.get('depois'), original.get('unidade'))
         if fonte == 'venda' and not fixo:
             # A documentary conflict disables an anchor, not the visibility of
             # the original recorded snapshot. It never seeds the calculation.
             linha['saldo_registrado_operacional'] = referencia(
                 linha, linha.get('referencia_depois'), linha.get('referencia_unidade'))
-        if fonte in ('manual', 'regularizacao'):
-            # An actual correction starts a new reference, not a sale/receipt.
-            estado = fixo
-            continue
         fluxo = movimento(linha)
+        if estado is None and fixo and fluxo and fixo['unidade'] == fluxo[1]:
+            antes = numero(fixo.get('antes', linha.get('referencia_antes')))
+            if antes is not None and antes + fluxo[0] == fixo['valor']:
+                estado = dict(fixo, valor=antes)
         if estado and fluxo and estado['unidade'] == fluxo[1]:
             anterior = estado['valor']
             estado = dict(estado, valor=anterior + fluxo[0])

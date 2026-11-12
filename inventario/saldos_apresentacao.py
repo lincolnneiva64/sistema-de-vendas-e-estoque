@@ -6,6 +6,75 @@ from django.utils.dateparse import parse_datetime
 from .models import AplicacaoAjuste
 
 
+def projetar_contagem(pagina, rodada):
+    """Read-only physical projection from the immutable OK, not stock balance.
+
+    Validate the prefix as well as the visible page. A gap stops only subsequent
+    projections; applying this conference's correction never moves stock twice
+    in this physical explanation.
+    """
+    if not rodada.ok_em or rodada.contado_base is None or rodada.sequencia_ok is None:
+        return
+    linhas = list(pagina)
+    if not linhas:
+        return
+    from .contexto_ajustes import carregar
+    from .conciliacao_documental import conciliar
+    from . import revisao_historico
+    alvo = max(r['instante'] for r in linhas)
+    referencias = {f'{"Compra" if r["fonte"] == "compra" else "Venda"} #{r["documento"]}'
+                   for r in linhas if r['fonte'] in ('compra', 'venda')}
+    limite_consulta = max([alvo] + [m.registrado_em for r in linhas
+                         for m in r.get('evidencias_operacionais', [])])
+    with carregar([rodada], ate=limite_consulta) as lote:
+        confirmacoes = lote.confirmacoes[rodada.pk]
+        conf = confirmacoes[-1] if confirmacoes else None
+        campos = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
+        if not conf or any(getattr(conf, c) != getattr(rodada, c) for c in campos):
+            return
+        revisao_historico.carregar(lote)
+        saldo, registrado, sequencia = rodada.contado_base, rodada.esperado, rodada.sequencia_ok
+        projecoes = {}
+        limite = ''
+        for m in lote.movimentos[rodada.item.produto_id]:
+            if m.sequencia <= rodada.sequencia_ok:
+                continue
+            if m.registrado_em > alvo and m.referencia not in referencias:
+                break
+            # Evidence can be timestamped just after the commercial document.
+            # Its exact identity, not a time approximation, attaches it below.
+            if m.registrado_em < rodada.ok_em:
+                limite = f'Movimento #{m.pk}: horário incompatível com o OK.'
+                break
+            try:
+                if m.sequencia != sequencia+1 or m.antes != registrado or m.depois is None:
+                    raise ValueError('Sequência ou saldos registrados descontínuos.')
+                if m.origem in ('compra', 'venda'):
+                    doc = conciliar(rodada, [m], _lote=lote)[0]
+                    antes = saldo
+                    saldo += m.depois-m.antes
+                    if saldo < 0:
+                        raise ValueError('Movimentação excede a contagem física de referência.')
+                    fonte = m.origem
+                    projecoes[(fonte, doc['item'])] = dict(antes=antes, depois=saldo,
+                        unidade=doc['unidade'], ok_em=rodada.ok_em, movimento=m.pk)
+                else:
+                    aplicada = lote.aplicacoes_revisao.get(m.referencia) if m.origem == 'ajuste_manual' else None
+                    if not aplicada:
+                        raise ValueError('Movimento posterior sem documento ou aplicação comprovada.')
+                    revisao_historico.validar_aplicacao(rodada, m, aplicada, lote)
+                registrado, sequencia = m.depois, m.sequencia
+            except ValueError as exc:
+                limite = f'Movimento #{m.pk}: {exc}'
+                break
+        for linha in linhas:
+            projecao = projecoes.get((linha['fonte'], linha['pk']))
+            if projecao:
+                linha['projecao_fisica'] = projecao
+            elif linha['instante'] > rodada.ok_em and limite:
+                linha['projecao_aviso'] = limite
+
+
 def numero(valor):
     n = Decimal(str(valor))
     if not n.is_finite() or abs(n) >= Decimal('1000000000'):

@@ -59,6 +59,9 @@ def apresentar_ajustes_manuais(pagina, produto_id):
     ids = [r['documento'] for r in linhas]
     documentos = {m.pk: m for m in MovimentacaoEstoqueManual.objects.filter(
         pk__in=ids, produto_id=produto_id, tipo='ajuste')}
+    aplicacoes = {a.decisao.movimentacao_id: a for a in AplicacaoAjuste.objects.filter(
+        decisao__movimentacao_id__in=ids, decisao__item__produto_id=produto_id
+    ).select_related('decisao')}
     detalhes = {}
     for d in DetalheMovimentoEstoque.objects.filter(
             documento_tipo='movimentacao_estoque_manual', documento_id__in=[str(i) for i in ids],
@@ -86,6 +89,13 @@ def apresentar_ajustes_manuais(pagina, produto_id):
                 if (unidade and quantidade_historica(d, d.quantidade_entrada,
                         d.unidade_entrada) == mov.depois):
                     dados.update(unidade=unidade, diferenca=d.quantidade_movimentada)
+        aplicada = aplicacoes.get(r['documento'])
+        if (aplicada and m and aplicada.antes == m.estoque_antes
+                and aplicada.depois == m.estoque_depois
+                and aplicada.antes + aplicada.diferenca == aplicada.depois
+                and unidade_documental(aplicada.unidade)):
+            dados.update(unidade=unidade_documental(aplicada.unidade),
+                         diferenca=aplicada.diferenca)
         r['ajuste_manual'] = dados
 
 
@@ -325,9 +335,6 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         linha['detalhe_id'] = f"registro-{fonte}-{linha['pk']}"
     if produto_id:
         analisar(produto_id, pagina, fim)
-    if timeline and rodada:
-        from .saldos_apresentacao import apresentar
-        apresentar(pagina, rodada)
     if produto_id:
         from .extrato_edicoes import apresentar_edicoes
         apresentar_edicoes(pagina, produto_id)
@@ -335,8 +342,11 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         apresentar_unidades(pagina, produto_id)
     apresentar_ajustes_manuais(pagina, produto_id)
     pagina.saldo_inicial = evidencia_inicial(pagina, inicio)
-    apresentar_operacoes(pagina, evidencias_documentais(comerciais, pagina))
+    evidencias = evidencias_documentais(comerciais, pagina)
+    apresentar_operacoes(pagina, evidencias)
     def preparar(linhas):
+        if any(r['fonte'] == 'compra' for r in linhas):
+            analisar(produto_id, linhas, fim)
         apresentar_ajustes_manuais(linhas, produto_id)
         preparar_fluxos_historicos(linhas, produto_id)
 
@@ -374,9 +384,13 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
                 k = chave(r)
                 if primeira <= k <= ultima:
                     yield visiveis.get(k, r)
-        preparar_fluxos_historicos(pagina, produto_id)
+        preparar_fluxos_historicos(pagina, produto_id, evidencias)
         aplicar_saldos_documentais(pagina, unificada, preparar_linhas=preparar,
             anteriores_pagina=anteriores_pagina, registros_pagina=registros_pagina)
+    if timeline and rodada:
+        from .saldos_apresentacao import apresentar, projetar_contagem
+        apresentar(pagina, rodada)
+        projetar_contagem(pagina, rodada)
     for sentido, numero in (('anterior', pagina.number - 1), ('proxima', pagina.number + 1)):
         consulta = params.copy()
         consulta['extrato_pagina'] = numero

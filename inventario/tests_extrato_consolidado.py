@@ -132,7 +132,9 @@ class ConsolidadoTests(HistoricoFixture, TestCase):
         self.assertIsNone(next(l for l in compras.values() if l['documento']==self.compra.pk)['saldo'])
         self.assertEqual(self.linha(r,venda_anterior)['saldo'],D('.2'))
         self.assertEqual(self.linha(r,venda_final)['saldo'],D('.2'))
-        self.assertIsNone(self.linha(r,kg)['saldo'])
+        self.assertEqual(self.linha(r,kg)['registro_original']['depois'], D('1.2'))
+        self.assertEqual(self.linha(r,kg)['registro_original']['unidade'], 'FD')
+        self.assertEqual(self.linha(r,kg)['operacao_documental']['unidade'], 'KG')
         self.assertEqual(r.context['esperado'],D('.2'))
 
     def manual(self,dia=1.5):
