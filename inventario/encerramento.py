@@ -9,7 +9,7 @@ from django.utils import timezone
 from . import services
 from .conversao import converter
 from .conversao_fisica import cadastro_contagem, carregar
-from .models import Inventario, RodadaContagem
+from .models import Inventario, RodadaContagem, PropostaAjuste
 from .selecao import itens_incluidos
 
 SALT = 'inventario.encerramento-administrativo.v1'
@@ -27,6 +27,7 @@ def resumo(inventario):
     if not itens:
         raise ValueError('A conferencia nao possui produtos participantes.')
     carregar(itens)
+    marcos = set(PropostaAjuste.objects.filter(rodada__item__inventario=inventario, estado='aplicado').values_list('rodada_id', flat=True))
     evidencias=[]; aplicados=0; pendentes=0
     for item in itens:
         rodadas=item.rodadas_encerramento
@@ -46,8 +47,8 @@ def resumo(inventario):
         if not conf or conf.versao_entrada>=r.versao or any(getattr(conf,c)!=getattr(r,c) for c in campos):
             raise ValueError(f'{item.cadastro["nome"]}: OK sem confirmacao original compativel.')
         decisao=getattr(item,'decisao',None)
-        aplicados+=int(decisao is not None)
-        pendentes+=int(decisao is None and r.contado_base!=r.esperado)
+        aplicados+=int(decisao is not None or r.pk in marcos)
+        pendentes+=int(decisao is None and r.pk not in marcos and r.contado_base!=r.esperado)
         evidencias.append(dict(item=item.pk,produto=item.produto_id,nome=item.cadastro['nome'],
             rodada=r.pk,numero=r.numero,versao=r.versao,confirmacao=conf.pk,
             esperado=r.esperado,contado=r.contado_base,decisao=decisao.pk if decisao else None))

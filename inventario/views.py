@@ -61,7 +61,7 @@ def resumo_inicial():
     # Current rounds only: requesting a recount must replace, not add to, its
     # former round in these totals. Never confirms or reconciles from a GET.
     ultima = RodadaContagem.objects.filter(item_id=OuterRef("item_id")).order_by("-numero").values("pk")[:1]
-    atuais = rodadas_incluidas().filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True, item__inventario__cancelada_em__isnull=True)
+    atuais = rodadas_incluidas().filter(pk=Subquery(ultima), encerrada_em__isnull=True, item__decisao__isnull=True, item__inventario__cancelada_em__isnull=True).exclude(propostas__estado='aplicado')
     return atuais.aggregate(
         conferencias=Count("item__inventario_id", distinct=True, filter=Q(item__inventario__finalizada_em__isnull=True)),
         aguardando_ok=Count("pk", filter=Q(ok_em__isnull=True)),
@@ -105,6 +105,12 @@ def linhas_revisao(inventario):
             to_attr="rodadas_revisao"),
         "decisao",
     ).order_by("pk"))
+    from .marco_fisico import recibos
+    from .models import PropostaAjuste
+    marcos = {a.proposta.rodada_id: a for a in recibos(PropostaAjuste.objects.filter(
+        rodada__item__inventario=inventario, estado='aplicado'))}
+    produtos_com_marco = set(PropostaAjuste.objects.filter(estado='aplicado',
+        rodada__item__produto_id__in=[i.produto_id for i in itens]).values_list('rodada__item__produto_id', flat=True))
     carregar_relacoes(itens)
     sinais_por_item, eventos_por_item = defaultdict(list), defaultdict(list)
     for sinal in SinalizacaoFisica.objects.filter(rodada__item__in=itens).select_related(
@@ -154,15 +160,16 @@ def linhas_revisao(inventario):
             situacao = "Aguardando OK" if not rodada.ok_em else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
             if rodada.numero > 1 and not rodada.ok_em:
                 situacao = "Recontagem"
-            if inseguro or any(s.resolvida_em is None for s in sinalizacoes):
+            if inseguro or any(s.resolvida_em is None and (not rodada.ok_em or s.criado_em >= rodada.ok_em) for s in sinalizacoes):
                 situacao = "Revisão necessária"
             destaque = "falta" if diferenca is not None and diferenca < 0 else "sobra" if diferenca is not None and diferenca > 0 else "neutro"
             linhas.append({"item": item, "rodada": rodada, "diferenca": diferenca, "valor": valor,
-                "bloqueio": bloqueio, "decisao": decisao,
+                "bloqueio": bloqueio, "decisao": decisao, "marco": marcos.get(rodada.pk),
+                "saldo_estimado": item.produto_id not in produtos_com_marco,
                 "situacao": situacao, "destaque": destaque,
                 "esperado_texto": quantidade(rodada.esperado, item.cadastro),
                 "contado_texto": quantidade(rodada.contado_base if rodada.ok_em else None, item.cadastro),
-                "diferenca_texto": quantidade(rodada.contado - rodada.esperado if rodada.ok_em else None, item.cadastro, diferenca=True),
+                "diferenca_texto": quantidade(diferenca, item.cadastro, diferenca=True),
                 "sinalizacoes": sinalizacoes, "chave_sinalizacao": str(uuid4()),
                 "remocoes_legadas": remocoes_legadas.sugestoes(rodada, lote) if lote else [],
                 "movimentos": [{"registro": m, "origem": ORIGENS.get(m.origem, ORIGENS["nao_identificada"]),
@@ -326,7 +333,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         linha['cadastro_contagem'] = cadastro_contagem(linha['item'])
         linha['passo_embalagens_admin'] = '0.001' if linha['cadastro_contagem']['continua'] or fracao_fisica(linha['cadastro_contagem']) else '1'
         linha['solicitar_relacao'] = not linha['item'].cadastro['fracionado'] and linha['item'].cadastro['base'] in BASES and not avulsos_fisicos(linha['cadastro_contagem'])
-        linha['edicao_admin'] = pode_editar_contagem and not linha['decisao'] and not rodada.encerrada_em
+        linha['edicao_admin'] = pode_editar_contagem and not linha['decisao'] and not linha['marco'] and not rodada.encerrada_em
         if linha['edicao_admin']:
             linha['autorizacao_admin'] = contagem_admin.autorizacao(request.user, inventario, rodada)
             linha['embalagens_admin'] = entrada(rodada.embalagens, linha['item'].cadastro['continua'])
@@ -366,8 +373,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,
         "modo_historico": bool(inventario.finalizada_em or inventario.cancelada_em),
         "encerramento_previa": encerramento_previa, "encerramento_erro": encerramento_erro,
-        "revisao_historica_disponivel": any(l['diferenca'] is not None and l['diferenca'] != 0
-            and not l['decisao'] for l in linhas),
+        "revisao_historica_disponivel": any(l['diferenca'] is not None and not l['decisao'] and not l['marco'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
         "atualizacao": atualizacao, "previa_lote": previa_lote,
         "erro": erro, "link": link, "links_adicionais": links_adicionais, "funcionario_padrao": request.POST.get("funcionario", "") if erro else "", "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),

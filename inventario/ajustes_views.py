@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from . import ajustes, acesso_ajustes, confirmacao_ajustes
-from .models import Inventario, RodadaContagem, AplicacaoAjuste
+from .models import Inventario, RodadaContagem, AplicacaoAjuste, PropostaAjuste
+from .marco_fisico import recibos
 from .views import gestor, privado
 
 
@@ -94,6 +95,6 @@ def painel(request, inventario_id):
         token_aplicacao=ajustes.previa_atualizacao(inventario.pk, selecionadas) if selecionadas else '',
         habilitado=getattr(settings, 'INVENTARIO_AJUSTES_HABILITADOS', False),
         pode_aprovar=request.user.has_perm('inventario.aprovar_ajuste'),
-        aplicacoes=Paginator(AplicacaoAjuste.objects.filter(proposta__rodada__item__inventario=inventario)
-            .select_related('proposta__rodada__item', 'usuario', 'decisao').order_by('-aplicado_em', 'pk'), 30)
-            .get_page(request.GET.get('auditoria_pagina'))))
+        aplicacoes=Paginator(sorted(recibos(PropostaAjuste.objects.filter(
+            rodada__item__inventario=inventario, estado='aplicado').select_related('rodada__item')),
+            key=lambda a: a.aplicado_em, reverse=True), 30).get_page(request.GET.get('auditoria_pagina'))))

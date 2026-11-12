@@ -5,7 +5,8 @@ from django.http import JsonResponse
 from django.urls import reverse
 
 from . import ajustes, services
-from .models import AplicacaoAjuste, Inventario
+from .models import AplicacaoAjuste, Inventario, PropostaAjuste, EventoAjuste
+from .marco_fisico import recibos
 
 
 def solicitada(request):
@@ -28,9 +29,9 @@ def resultado(inventario_id, previa):
                        or not isinstance(e.get('assinatura'), str) for e in entradas)
                 or len({e['rodada'] for e in entradas}) != len(entradas)):
             raise ValueError('Prévia de atualização inválida.')
-        registros = list(AplicacaoAjuste.objects.filter(
-            proposta__rodada_id__in=[e['rodada'] for e in entradas],
-            proposta__rodada__item__inventario_id=inventario_id).select_related('proposta', 'decisao'))
+        registros = recibos(PropostaAjuste.objects.filter(
+            rodada_id__in=[e['rodada'] for e in entradas], estado='aplicado',
+            rodada__item__inventario_id=inventario_id))
         assinaturas = {e['rodada']: e['assinatura'] for e in entradas}
         correspondem = all(a.proposta.assinatura == assinaturas.get(a.proposta.rodada_id) for a in registros)
         esperados = len(entradas)
@@ -38,8 +39,8 @@ def resultado(inventario_id, previa):
         propostas = dados.get('propostas')
         if not isinstance(propostas, list) or not 1 <= len(propostas) <= 500:
             raise ValueError('Prévia de aplicação inválida.')
-        registros = list(AplicacaoAjuste.objects.filter(proposta_id__in=propostas,
-            proposta__rodada__item__inventario_id=inventario_id).select_related('proposta', 'decisao'))
+        registros = recibos(PropostaAjuste.objects.filter(pk__in=propostas, estado='aplicado',
+            rodada__item__inventario_id=inventario_id))
         correspondem = len(set(propostas)) == len(propostas)
         esperados = len(propostas)
     else:
@@ -47,8 +48,9 @@ def resultado(inventario_id, previa):
     if not registros:
         return dict(ok=False, estado='nao_registrado', erro='Nenhuma aplicação deste lote foi registrada.')
     if (len(registros) != esperados or not correspondem or any(
-            a.proposta.estado != 'aplicado' or a.decisao.rodada_id != a.proposta.rodada_id
-            or a.antes + a.diferenca != a.depois or not a.decisao.movimentacao_id for a in registros)):
+            a.proposta.estado != 'aplicado' or a.antes + a.diferenca != a.depois
+            or (not getattr(a, 'sem_ajuste', False) and (a.decisao.rodada_id != a.proposta.rodada_id
+                or not a.decisao.movimentacao_id)) for a in registros)):
         return dict(ok=False, estado='inconclusivo', erro='Auditoria não corresponde integralmente à prévia. Consulte o histórico; não reaplique.')
     return dict(ok=True, estado='aplicado', mensagem='Estoque atualizado com sucesso',
         aplicacoes=[str(a.pk) for a in registros],
@@ -105,6 +107,8 @@ def mensagens_validas(request, inventario_id):
             except ValueError:
                 continue
             if AplicacaoAjuste.objects.filter(pk=identificador, usuario=request.user,
+                    proposta__estado='aplicado', proposta__rodada__item__inventario_id=inventario_id).exists() or EventoAjuste.objects.filter(
+                    pk=identificador, usuario=request.user, acao='marco_sem_ajuste',
                     proposta__estado='aplicado', proposta__rodada__item__inventario_id=inventario_id).exists():
                 validas.append(mensagem)
     previa = request.GET.get('resultado_atualizacao') if request.method == 'GET' else None

@@ -277,6 +277,7 @@ def verificar_observador():
 def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar=False, *, token_hash=None):
     # Global lock serializes editing/finalization/reopening. Product lock still
     # serializes each OK with commercial writers; no stock write is performed.
+    from .models import PropostaAjuste
     inventario, acesso = bloquear_inventario_acesso(acesso_id)
     validar_escrita(inventario, acesso, token_hash)
     atribuicao = AtribuicaoContagem.objects.filter(acesso=acesso, rodada_id=rodada_id).first()
@@ -288,7 +289,8 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
         raise PermissionDenied("Contagem confirmada pelo administrador. Solicite revisão ao responsável.")
     if rodada.encerrada_em:
         raise ValueError("Rodada encerrada. Atualize a página.")
-    if DecisaoAjuste.objects.filter(item=rodada.item).exists():
+    if (DecisaoAjuste.objects.filter(item=rodada.item).exists()
+            or PropostaAjuste.objects.filter(rodada__item=rodada.item, estado='aplicado').exists()):
         raise ValueError("Item com decisão de ajuste. Crie outra conferência.")
     try:
         versao = int(versao)
@@ -480,6 +482,7 @@ def recontar(usuario, rodada_id, motivo):
     permitir(usuario, "revisar_inventario")
     if not str(motivo).strip():
         raise ValueError("Justifique a reabertura ou recontagem.")
+    from .models import PropostaAjuste
     original = RodadaContagem.objects.get(pk=rodada_id)
     inventario = Inventario.objects.select_for_update().get(pk=original.item.inventario_id)
     exigir_nao_cancelada(inventario)
@@ -489,7 +492,8 @@ def recontar(usuario, rodada_id, motivo):
     if not itens_incluidos(inventario).filter(pk=item.pk).exists():
         raise ValueError("Produto retirado da conferencia. Reinclua antes de solicitar contagem.")
     rodada = RodadaContagem.objects.select_for_update().get(pk=rodada_id)
-    if rodada.encerrada_em or DecisaoAjuste.objects.filter(item=item).exists():
+    if (rodada.encerrada_em or DecisaoAjuste.objects.filter(item=item).exists()
+            or PropostaAjuste.objects.filter(rodada__item=item, estado='aplicado').exists()):
         raise ValueError("Rodada encerrada ou ajuste já aplicado.")
     rodada.encerrada_em = timezone.now()
     rodada.save(update_fields=["encerrada_em"])
@@ -507,7 +511,7 @@ def posteriores(rodada):
 
 def movimentos_relevantes(rodada):
     primeira = rodada.confirmacoes.order_by("versao_entrada").first()
-    corte = primeira.sequencia_ok if primeira else rodada.sequencia_ok
+    corte = rodada.sequencia_ok
     if corte is None:
         return MovimentoObservado.objects.none()
     return MovimentoObservado.objects.filter(produto_id=rodada.item.produto_id, sequencia__gt=corte).order_by("sequencia")
@@ -544,46 +548,12 @@ def conciliar(usuario, rodada_id, movimento_id, referencia):
 
 
 def validar_cadeia(rodada, produto, documentos=(), *, _lote=None):
-    if _lote is not None:
-        _lote.conferir(rodada)
-    if not (rodada.item_id in _lote.incluidos if _lote is not None else itens_incluidos().filter(pk=rodada.item_id).exists()):
-        raise ValueError("Produto retirado da conferencia.")
-    if _lote is None:
-        verificar_observador()
-    elif _lote.erro_observador:
-        raise ValueError(_lote.erro_observador)
-    if not rodada.ok_em or rodada.encerrada_em:
-        raise ValueError("Confirme uma rodada ativa antes da revisão.")
-    if (rodada.item_id in _lote.pendentes if _lote is not None else SinalizacaoFisica.objects.filter(rodada__item_id=rodada.item_id, resolvida_em__isnull=True).exists()):
-        raise ValueError("Movimentação física sinalizada sem resolução. Revisão ou recontagem necessária.")
-    if not produto.ativo or produto.excluido or produto.quantidade is None or not cadastro_compativel(produto, rodada.item.cadastro):
-        raise ValueError("Produto ou conversão alterado. Solicite nova conferência.")
-    exigir_representavel(rodada)
-    confirmacoes = _lote.confirmacoes[rodada.pk] if _lote is not None else list(rodada.confirmacoes.order_by("versao_entrada"))
-    primeira = confirmacoes[0] if confirmacoes else rodada
-    movimentos = _lote.movimentos[rodada.item.produto_id] if _lote is not None else list(movimentos_relevantes(rodada))
-    proxima, saldo = primeira.sequencia_ok + 1, primeira.esperado
-    saldos = {primeira.sequencia_ok: primeira.esperado}
-    conciliados = _lote.conciliados[rodada.pk] if _lote is not None else set(rodada.conciliacoes.filter(conciliado_em__gte=rodada.ok_em).values_list("movimento_id", flat=True))
-    for movimento in movimentos:
-        identificacao = (f'{rodada.item.cadastro["nome"]} (produto #{produto.pk}), '
-                         f'movimento #{movimento.pk}, sequência {movimento.sequencia}, '
-                         f'{movimento.referencia or movimento.origem}: ')
-        if movimento.sequencia != proxima or movimento.antes != saldo or movimento.depois is None:
-            raise ValueError(identificacao + "Histórico descontínuo. Revisão técnica e recontagem necessárias.")
-        if movimento.origem not in ORIGENS or movimento.origem == "nao_identificada":
-            raise ValueError(identificacao + "Movimento digital sem origem rastreável. Exige revisão técnica e recontagem; aprovação bloqueada.")
-        if movimento.pk not in conciliados and movimento.pk not in documentos:
-            raise ValueError(identificacao + "Há movimento entre confirmações ou após o último OK sem conciliação física comprovada. Confira o documento ou solicite recontagem.")
-        saldo, proxima = movimento.depois, proxima + 1
-        saldos[movimento.sequencia] = movimento.depois
-    for confirmacao in confirmacoes:
-        if saldos.get(confirmacao.sequencia_ok) != confirmacao.esperado:
-            raise ValueError("Referências entre confirmações não conciliadas. Solicite revisão técnica ou recontagem.")
-    atual = _lote.sequencias.get(produto.pk, 0) if _lote is not None else sequencia(produto.pk)
-    if proxima - 1 != atual or saldo != produto.quantidade:
-        raise ValueError("Saldo ou sequência sem conciliação. Solicite recontagem.")
-    return atual
+    from .marco_fisico import comprovar
+    movimentos = (_lote.movimentos[produto.pk] if _lote is not None
+                  else list(posteriores(rodada)))
+    posicao, _ = comprovar(rodada, produto, movimentos,
+        travar=_lote.travar if _lote is not None else False, lote=_lote)
+    return posicao
 
 
 @transaction.atomic
@@ -643,12 +613,14 @@ def resolver_sinalizacao(usuario, sinalizacao_id, evidencia):
 
 @transaction.atomic
 def revisar(usuario, rodada_id, motivo):
+    from .models import PropostaAjuste
     permitir(usuario, "revisar_inventario")
     if not str(motivo).strip():
         raise ValueError("Documente a correspondência física no OK e a ausência de lançamentos pendentes.")
     exigir_nao_cancelada(Inventario.objects.select_for_update().get(itens__rodadas__pk=rodada_id))
     rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
-    if DecisaoAjuste.objects.filter(item=rodada.item).exists():
+    if (DecisaoAjuste.objects.filter(item=rodada.item).exists()
+            or PropostaAjuste.objects.filter(rodada__item=rodada.item, estado='aplicado').exists()):
         raise ValueError("Ajuste já aplicado.")
     produto = Produto.objects.select_for_update().get(pk=rodada.item.produto_id)
     from .contexto_ajustes import carregar

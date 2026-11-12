@@ -69,6 +69,11 @@ def investigar(rodada, params):
                 diferenca=(rodada.contado_base - rodada.esperado) if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None else None,
                 fisica=rodada.contado_base if rodada.ok_em else None,
                 esperado=rodada.esperado if rodada.ok_em else None)
+    from .marco_fisico import recibos
+    from .models import PropostaAjuste
+    aplicados = recibos(PropostaAjuste.objects.filter(rodada=rodada, estado='aplicado'))
+    contexto['marco_aplicado'] = aplicados[0] if aplicados else None
+    contexto['ok_original'] = rodada.confirmacoes.order_by('-versao_entrada').first()
     for chave, consulta in (('operacoes_url', ''), ('evidencias_url', 'evidencias')):
         destino = params.copy()
         destino.pop('extrato_pagina', None)

@@ -1,4 +1,3 @@
-import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 
 
@@ -51,13 +50,7 @@ def comparacao_fisica(dados):
 
 
 def equivalencia_visual(valor, cadastro, *, avulsos=None):
-    """Secondary quantity for display only; never feeds counts or adjustments.
-
-    Whole-KG rounding needs an explicit N/1KG composition, the matching saved
-    factor and package/KG units. A recorded fractional KG count vetoes it.
-    Other weights keep their exact decimals; no current factor replaces a
-    frozen conference factor.
-    """
+    """Display the frozen conversion; product names never define physical units."""
     base = str(cadastro.get('base') or '').strip().upper()
     destino = str(cadastro.get('secundaria') or '').strip().upper()
     if not base or not destino or base == destino or valor is None:
@@ -70,16 +63,6 @@ def equivalencia_visual(valor, cadastro, *, avulsos=None):
             contexto.prec = 36
             exato = valor * fator
         exibido = exato
-        composicao = re.search(r'(?<![\d.,])(\d+)\s*/\s*1(?:[.,]0+)?\s*KG\b',
-                               str(cadastro.get('nome') or '').upper())
-        kg_inteiro = (destino == 'KG' and base in {'FD', 'CX', 'PCT', 'DZ'}
-                      and composicao and fator == Decimal(composicao[1]))
-        if avulsos is not None:
-            parcela = Decimal(str(avulsos))
-            if not parcela.is_finite() or parcela != parcela.to_integral_value():
-                kg_inteiro = False
-        if kg_inteiro:
-            exibido = exato.quantize(Decimal(1), rounding=ROUND_HALF_UP)
     except (InvalidOperation, ValueError, TypeError):
         return {}
     aproximado = exibido != exato

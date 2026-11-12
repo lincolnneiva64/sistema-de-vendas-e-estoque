@@ -40,7 +40,7 @@ class _Lote:
         filtro = Q(pk__in=[])
         for r in rodadas:
             confs = self.confirmacoes[r.pk]
-            corte = confs[0].sequencia_ok if confs else r.sequencia_ok
+            corte = r.sequencia_ok
             if corte is not None:
                 filtro |= Q(produto_id=r.item.produto_id, sequencia__gt=corte)
         self.movimentos = defaultdict(list)

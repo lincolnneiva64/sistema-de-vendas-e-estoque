@@ -57,7 +57,7 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
     try:
         # All conferences use the same evidence checks for preparation/approval.
         # Actual execution remains separately guarded in aplicar().
-        if (item.pk in _lote.decisoes if _lote is not None else DecisaoAjuste.objects.filter(item=item).exists()):
+        if PropostaAjuste.objects.filter(rodada__item=item, estado='aplicado').exists() or (item.pk in _lote.decisoes if _lote is not None else DecisaoAjuste.objects.filter(item=item).exists()):
             resultado['estado'] = 'Aplicado'
             return resultado
         if (not rodada.ok_em or rodada.esperado is None or rodada.contado_base is None
@@ -76,21 +76,21 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
         sequencia, documentos = comprovar_cadeia(rodada, produto, movimentos,
             travar=travar_documentos, _lote=_lote)
         resultado['documentos'] = documentos
-        diferenca = (rodada.contado_base - rodada.esperado).quantize(Decimal('.001'))
-        resultante = produto.quantidade + diferenca
+        from .marco_fisico import REGRA, resultante as saldo_marco
+        diferenca_ok = rodada.contado_base - rodada.esperado
+        resultante = saldo_marco(rodada.contado_base, documentos)
+        diferenca = resultante - produto.quantidade
         resultado.update(diferenca=diferenca, resultante=resultante)
-        if diferenca == 0:
-            resultado.update(estado='Sem ajuste', bloqueio='Sem diferença a aplicar.')
-            return resultado
         if not Decimal(0) <= resultante < Decimal('1000000000'):
             raise ValueError('Saldo proposto fora dos limites do estoque.')
-        dados = dict(inventario=item.inventario_id, item=item.pk, produto=produto.pk,
+        dados = dict(regra=REGRA, diferenca_ok=str(diferenca_ok), inventario=item.inventario_id, item=item.pk, produto=produto.pk,
             rodada=rodada.pk, versao=rodada.versao, confirmacao=confirmacao.pk,
             ok_em=rodada.ok_em.isoformat(), esperado=str(rodada.esperado), contado=str(rodada.contado_base),
             cadastro=item.cadastro, sequencia=sequencia, atual=str(produto.quantidade),
             documentos=documentos,
             diferenca=str(diferenca), resultante=str(resultante),
-            sinais=list(_lote.sinais[item.pk]) if _lote is not None else list(item.rodadas.values_list('sinalizacoes__pk', 'sinalizacoes__evidencia').order_by('numero', 'sinalizacoes__pk')))
+            sinais=[])  # Pre-OK signals remain in their original audit journal.
+
         fisico = representacao_fisica(rodada)
         if fisico:
             dados['representacao_fisica'] = fisico
@@ -215,7 +215,8 @@ def aplicar(usuario, inventario_id, previa, confirmacao=False):
     if len(propostas) != len(dados['propostas']):
         raise ValueError('Proposta indisponível ou fora da conferência.')
     if all(p.estado == 'aplicado' for p in propostas):
-        return list(AplicacaoAjuste.objects.filter(proposta__in=propostas).order_by('proposta__rodada_id'))
+        from .marco_fisico import recibos
+        return recibos(propostas)
     if any(p.estado != 'aprovado' for p in propostas):
         raise ValueError('Lote alterado ou parcialmente executado anteriormente. Consulte o resultado e prepare nova prévia.')
     travadas = bloquear(inventario_id, [p.rodada_id for p in propostas])
@@ -249,13 +250,21 @@ def _gravar_aplicacoes(usuario, inventario_id, avaliacoes):
     Callers hold inventory, round, item, product and documentary locks and have
     validated the complete lot in this same atomic transaction before writing.
     """
+    # The existing bulk writer still handles every nonzero correction. Zero
+    # references use the same proposal journal without a fictional stock write.
+    zeradas = [e for e in avaliacoes if e[3]['diferenca'] == 0]
+    if zeradas:
+        from .marco_fisico import registrar_sem_ajuste
+        resultados = [registrar_sem_ajuste(usuario, pr, r, a) for pr, r, p, a in zeradas]
+        restantes = [e for e in avaliacoes if e[3]['diferenca'] != 0]
+        return resultados + (_gravar_aplicacoes(usuario, inventario_id, restantes) if restantes else [])
     if len(avaliacoes) > 1:
         return _gravar_lote(usuario, inventario_id, avaliacoes)
     lote = uuid4()
     resultados = []
     for proposta, rodada, produto, atual in avaliacoes:
         # The product remains locked; no other transaction can change it between
-        # this read and the stock service's UPDATE. Always current + difference.
+        # this read and the stock service's UPDATE. The target is the physical OK plus proved subsequent effects.
         resultado = conferir_ou_ajustar_estoque(produto.pk, MovimentacaoEstoqueManual.TIPO_AJUSTE,
             novo_estoque=atual['resultante'], motivo=proposta.justificativa,
             observacao=descricao_representacao(atual) + f'Conferência {inventario_id}; proposta {proposta.pk}; lote {lote}', usuario=usuario)
@@ -352,7 +361,8 @@ def atualizar(usuario, inventario_id, previa, confirmacao=False, observacao=''):
     if propostas:
         if len(propostas) == len(entradas) and all(
                 propostas[e['rodada']].assinatura == e['assinatura'] for e in entradas):
-            return list(AplicacaoAjuste.objects.filter(proposta__in=propostas.values()).order_by('proposta__rodada_id'))
+            from .marco_fisico import recibos
+            return recibos(propostas.values())
         raise ValueError('Seleção parcialmente atualizada. Confira os resultados e confirme uma nova seleção.')
     assinaturas = {e['rodada']: e['assinatura'] for e in entradas}
     avaliacoes = []
@@ -395,6 +405,9 @@ def projetar_resultado(linhas_revisao):
         proposta__estado='aplicado').values(
             'decisao__item_id', 'decisao__rodada_id', 'proposta__rodada_id',
             'antes', 'diferenca', 'depois', 'unidade')}
+    from .marco_fisico import recibos
+    marcos = {a.proposta.rodada_id: a for a in recibos(PropostaAjuste.objects.filter(
+        rodada_id__in=[l['rodada'].pk for l in linhas_revisao], estado='aplicado'))}
     campos_ok = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
     ultima = ConfirmacaoContagem.objects.filter(rodada_id=OuterRef('rodada_id')).order_by(
         '-versao_entrada').values('pk')[:1]
@@ -407,7 +420,10 @@ def projetar_resultado(linhas_revisao):
         linha = dict(rodada=rodada, atual=item.produto.quantidade,
             unidade=item.cadastro.get('base', ''), estado='Requer prévia',
             bloqueio='', saldo_aplicado=None, unidade_aplicada='', preliminar=True)
-        if revisao['decisao']:
+        if rodada.pk in marcos:
+            marco = marcos[rodada.pk]
+            linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)
+        elif revisao['decisao']:
             linha['estado'] = 'Aplicado'
             aplicacao = aplicadas.get(item.pk)
             if (aplicacao and aplicacao['decisao__rodada_id'] == rodada.pk
@@ -419,13 +435,11 @@ def projetar_resultado(linhas_revisao):
         elif (not rodada.ok_em or rodada.esperado is None or rodada.contado_base is None
                 or rodada.sequencia_ok is None or rodada.encerrada_em):
             linha.update(estado='Bloqueado', bloqueio='Confirmação física ausente ou rodada encerrada.')
-        elif any(s.resolvida_em is None for s in revisao['sinalizacoes']):
+        elif any(s.resolvida_em is None and s.criado_em >= rodada.ok_em for s in revisao['sinalizacoes']):
             linha.update(estado='Bloqueado', bloqueio='Sinalização física pendente de resolução.')
         elif (rodada.pk not in confirmacoes or any(
                 confirmacoes[rodada.pk][campo] != getattr(rodada, campo) for campo in campos_ok)):
             linha.update(estado='Bloqueado', bloqueio='OK sem confirmação original compatível; solicite recontagem.')
-        elif rodada.contado_base == rodada.esperado:
-            linha.update(estado='Sem diferença', bloqueio='Sem diferença registrada para atualizar.')
         else:
             try:
                 exigir_precisao_ajuste(rodada)
@@ -469,6 +483,11 @@ def preparar_resultado(inventario):
                 and aplicacao.unidade.strip()
                 and aplicacao.antes + aplicacao.diferenca == aplicacao.depois):
             linha.update(saldo_aplicado=aplicacao.depois, unidade_aplicada=aplicacao.unidade)
+    from .marco_fisico import recibos
+    for marco in recibos(PropostaAjuste.objects.filter(rodada_id__in=[l['rodada'].pk for l in linhas], estado='aplicado')):
+        for linha in linhas:
+            if linha['rodada'].pk == marco.proposta.rodada_id:
+                linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)
     aptas = [l for l in linhas if not l['bloqueio'] and l['estado'] in ('Pendente de revisão', 'Aprovado')]
     resumo = dict(aptos=len(aptas), bloqueados=sum(l['estado'] == 'Bloqueado' for l in linhas),
         aplicados=sum(l['estado'] == 'Aplicado' for l in linhas),

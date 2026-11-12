@@ -51,7 +51,9 @@ def validar_aplicacao(rodada, movimento, aplicacao, lote):
             and a.antes == h.estoque_antes == m.antes == Decimal(e['atual'])
             and a.depois == h.estoque_depois == m.depois == Decimal(e['resultante'])
             and a.diferenca == h.diferenca == d.diferenca == Decimal(e['diferenca'])
-            and a.diferenca == c.contado_base - c.esperado
+            and (a.diferenca == c.contado_base - c.esperado if e.get('regra') != 'marco_fisico_v1'
+                 else (Decimal(e['diferenca_ok']) == c.contado_base - c.esperado
+                       and c.contado_base + sum((Decimal(x['efeito']) for x in e['documentos']), Decimal(0)) == a.depois))
             and a.antes + a.diferenca == a.depois
             and a.unidade == r.item.cadastro['base'] and h.tipo == h.TIPO_AJUSTE
             and a.usuario_id == d.aprovado_por_id == h.usuario_id
@@ -79,21 +81,7 @@ def validar_aplicacao(rodada, movimento, aplicacao, lote):
 
 def validar(rodada, produto, lote):
     lote.conferir(rodada)
-    movimentos = lote.movimentos[rodada.item.produto_id]
-    comerciais = [m for m in movimentos if m.origem in ('venda', 'compra')]
-    documentos = conciliar(rodada, comerciais, travar=lote.travar, _lote=lote) if comerciais else []
-    comprovados = {d['observador'] for d in documentos}
-    # An audit record alone never skips subsequent movements or chain checks.
-    for m in movimentos:
-        if m.origem in ('venda', 'compra'):
-            continue
-        aplicacao = lote.aplicacoes_revisao.get(m.referencia) if m.origem == 'ajuste_manual' else None
-        if aplicacao:
-            validar_aplicacao(rodada, m, aplicacao, lote)
-            comprovados.add(m.pk)
-        else:
-            # Same safeguards as application: a textual conciliation cannot
-            # replace a historical document or a verified application receipt.
-            conciliar(rodada, [m], travar=lote.travar, _lote=lote)
-    sequencia = services.validar_cadeia(rodada, produto, documentos=comprovados, _lote=lote)
-    return sequencia, comprovados
+    from .marco_fisico import comprovar
+    posicao, documentos = comprovar(rodada, produto, lote.movimentos[produto.pk],
+        travar=lote.travar, lote=lote)
+    return posicao, {d['observador'] for d in documentos}

@@ -16,13 +16,8 @@ from .saldo_documental import quantidade_historica
 
 def comprovar_cadeia(rodada, produto, movimentos, travar=False, *, _lote=None):
     """Same documentary criteria for review and application; never write stock."""
-    from . import services
-    # Keep the existing application safeguard: a textual conciliation cannot
-    # turn an unsupported stock origin into documentary proof.
-    documentos = conciliar(rodada, movimentos, travar=travar, _lote=_lote)
-    sequencia = services.validar_cadeia(rodada, produto,
-        documentos={d['observador'] for d in documentos}, _lote=_lote)
-    return sequencia, documentos
+    from .marco_fisico import comprovar
+    return comprovar(rodada, produto, movimentos, travar=travar, lote=_lote)
 
 
 def comprovar_compra(rodada, m, compra_id, travar=False, *, _lote=None):
