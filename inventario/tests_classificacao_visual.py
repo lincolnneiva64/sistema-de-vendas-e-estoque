@@ -31,14 +31,14 @@ class ClassificacaoVisualTests(unittest.TestCase):
         evidencia = linha['comparacao_fisica']['dados'].copy()
         resumo = resumo_painel([linha])
         self.assertEqual((linha['resultado'], linha['resultado_label'], linha['diferenca_texto']),
-                         ('correto', 'Ajuste de precisão', 'Ajuste de precisão'))
+                         ('correto', 'Correto', 'Sem diferença'))
         self.assertEqual(resumo['corretos'], 1)
         self.assertEqual(linha['diferenca'], D('-.001'))
         self.assertEqual(linha['estimativa'], D('-.01'))
         self.assertEqual(linha['comparacao_fisica']['dados'], evidencia)
         _, texto = self.renderizar(linha)
         self.assertIn('Ajuste aplicado', texto)
-        self.assertIn('Ajuste de precisão', texto)
+        self.assertIn('Correto', texto)
         self.assertNotIn('Diferença de arredondamento', texto)
 
     def test_42_un_iguais_e_falta_sobra_fisicas(self):
@@ -54,7 +54,7 @@ class ClassificacaoVisualTests(unittest.TestCase):
             self.assertEqual(linha['diferenca_texto'], texto)
 
     def test_revisao_e_atualizacao_independentes_da_classificacao(self):
-        for estado, rotulo in [('Aplicado', 'Ajuste aplicado'), ('Sem diferença', 'Sem diferença no OK · revisão pendente'),
+        for estado, rotulo in [('Aplicado', 'Ajuste aplicado'), ('Sem diferença', 'Sem ajuste necessário'),
                                ('Bloqueado', 'Ajuste bloqueado'), ('Requer prévia', 'Ajuste pendente')]:
             linha = self.preparar(estado=estado, revisar=True)
             resumo_painel([linha])

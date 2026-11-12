@@ -55,7 +55,6 @@ class TabelaVisualTests(unittest.TestCase):
         cls.root = Path(__file__).resolve().parents[1]
         cls.engine = Engine(dirs=[cls.root/'inventario/templates'], libraries={
             'conferencia_visual': 'inventario.templatetags.conferencia_visual',
-            'horarios_documentos': 'estoque.templatetags.horarios_documentos',
             'l10n': 'django.templatetags.l10n',
         })
 
