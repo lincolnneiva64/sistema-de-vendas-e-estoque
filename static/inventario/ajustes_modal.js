@@ -24,13 +24,10 @@
     };
     const atualizarEstado = resumo => {
         abrir.disabled = false;
-        estado.textContent = resumo.erro || (resumo.aptos > 0
-            ? resumo.aptos + ' produto(s) apto(s) com diferença. '
-            : resumo.sem_divergencias ? 'Conferência sem divergências. Nenhum ajuste necessário.'
-            : resumo.concluidos ? 'Todos os ajustes de estoque foram concluídos.'
-            : resumo.pendentes ? resumo.pendentes + ' ajuste(s) pendente(s). Nenhum produto apto para atualizar agora. '
-            : 'Revisão pendente. Consulte a situação dos produtos. ');
-        if (resumo.bloqueados.length) estado.textContent += ' Bloqueados (' + resumo.bloqueados.length + '): ' + resumo.bloqueados.map(p => p.nome).join(', ') + '.';
+        estado.textContent = resumo.erro || (resumo.aplicados + ' marco(s) confirmado(s); '
+            + resumo.aguardando + ' aguardando confirmação; '
+            + resumo.revisao + ' produto(s) exigem revisão.');
+        if (resumo.bloqueados.length) estado.textContent += ' Revisar: ' + resumo.bloqueados.map(p => p.nome).join(', ') + '.';
     };
     const mostrarSucesso = payload => {
         if (!payload.ok || payload.estado !== 'aplicado' || !Number.isInteger(payload.quantidade) || payload.quantidade < 1) {
@@ -38,8 +35,8 @@
         }
         atualizarEstado(payload.resumo);
         sucesso.querySelector('[data-conferencia-sucesso]').textContent = root.dataset.conferenciaTitulo;
-        sucesso.querySelector('[data-quantidade-sucesso]').textContent = payload.quantidade + ' produto(s) tiveram seus saldos atualizados nesta operação.';
-        sucesso.querySelector('[data-pendencias-sucesso]').textContent = payload.resumo.pendentes + ' ajuste(s) pendente(s); ' + payload.resumo.bloqueados.length + ' produto(s) bloqueado(s).';
+        sucesso.querySelector('[data-quantidade-sucesso]').textContent = payload.quantidade + ' marco(s) confirmado(s) nesta operação.';
+        sucesso.querySelector('[data-pendencias-sucesso]').textContent = payload.resumo.aguardando + ' marco(s) aguardando confirmação; ' + payload.resumo.revisao + ' produto(s) exigem revisão.';
         if (previa.open) previa.close();
         sucesso.showModal();
     };
@@ -85,7 +82,7 @@
         const botoes = [...form.querySelectorAll('button')];
         botoes.forEach(b => { b.disabled = true; });
         form.setAttribute('aria-busy','true');
-        mensagem.textContent = 'Atualizando... Aguarde a confirmação do servidor.';
+        mensagem.textContent = 'Confirmando marcos... Aguarde a resposta do servidor.';
         try {
             const payload = await request(endpoint, data);
             if (!payload.ok || payload.estado !== 'aplicado') throw new Error(payload.erro || 'Resultado não comprovado.');
@@ -104,7 +101,7 @@
                     }
                 } catch (_) { /* Uncertain result stays an error, never success. */ }
             }
-            mensagem.textContent = erro.message + ' Sem confirmação desta operação, não considere o estoque atualizado. Feche e revise novamente; em caso de resposta perdida, consulte o histórico.';
+            mensagem.textContent = erro.message + ' Sem recibo desta operação, não considere os marcos confirmados. Feche e revise novamente; em caso de resposta perdida, consulte o histórico.';
             mensagem.setAttribute('role','alert');
             form.removeAttribute('aria-busy');
             enviando = false;

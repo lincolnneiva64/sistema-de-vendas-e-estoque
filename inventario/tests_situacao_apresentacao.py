@@ -8,7 +8,12 @@ from .tests_tabela_visual import TabelaVisualTests
 class SituacaoApresentacaoTests(unittest.TestCase):
     setUpClass = classmethod(TabelaVisualTests.setUpClass.__func__)
     linha = TabelaVisualTests.linha
-    renderizar = TabelaVisualTests.renderizar
+    def renderizar(self, linha):
+        from types import SimpleNamespace
+        from .confirmacao_estoque import classificar
+        linha['rodada'] = SimpleNamespace(**linha['rodada'], encerrada_em=None)
+        classificar([linha])
+        return TabelaVisualTests.renderizar(self, linha)
     def caso(self, diferenca, estado='Requer prévia', marco=None):
         linha = self.linha(estado=estado)
         linha.update(marco=marco, revisar=False)
@@ -23,24 +28,24 @@ class SituacaoApresentacaoTests(unittest.TestCase):
     def test_zero_marco_pendente_inclusive_bloqueio_documental(self):
         for estado in ('Requer prévia', 'Bloqueado', 'Sem diferença'):
             html, texto = self.renderizar(self.caso(D('0'), estado))
-            self.assertIn('Contagem OK · Marco pendente', texto)
+            self.assertIn('Aguardando confirmação', texto)
             self.assertNotIn('Ajuste pendente', texto)
             self.assertNotIn('estado-bloqueado', html)
 
     def test_zero_marco_aplicado(self):
         _, texto = self.renderizar(self.caso(D('0'), 'Aplicado', {'diferenca': D('0')}))
-        self.assertIn('Marco aplicado', texto)
+        self.assertIn('Confirmado', texto)
         self.assertNotIn('pendente', texto)
 
     def test_correcao_pendente(self):
         for diferenca in (D('-1'), D('1')):
             _, texto = self.renderizar(self.caso(diferenca, 'Bloqueado'))
-            self.assertIn('Correção pendente', texto)
+            self.assertIn('Aguardando confirmação', texto)
             self.assertNotIn('Contagem OK', texto)
 
     def test_correcao_aplicada_preservada_mesmo_com_diferenca_atual_zero(self):
         _, texto = self.renderizar(self.caso(D('0'), 'Aplicado', {'diferenca': D('-1')}))
-        self.assertIn('Ajuste aplicado', texto)
+        self.assertIn('Confirmado', texto)
         self.assertNotIn('Marco pendente', texto)
 
     def test_projecao_desconhecida_preserva_contagem_original_e_unidade(self):

@@ -365,6 +365,8 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
     por_rodada = {l['rodada'].pk: l for l in atualizacao['linhas']}
     for linha in linhas:
         linha['atualizacao'] = por_rodada.get(linha['rodada'].pk)
+    from .confirmacao_estoque import classificar
+    resumo_confirmacao = classificar(linhas)
     previa_lote = ajustes.previa_atualizacao(inventario.pk, atualizacao['aptas']) if prever and atualizacao['aptas'] else ''
     acessos = list(inventario.acessos.select_related("funcionario"))
     for acesso in acessos:
@@ -378,7 +380,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
             and request.user.has_perm("inventario.revisar_inventario")):
         from . import encerramento
         try:
-            encerramento_previa = encerramento.previa(request.user, inventario)
+            encerramento_previa = encerramento.previa(request.user, inventario, resumo_confirmacao=resumo_confirmacao)
         except ValueError as exc:
             encerramento_erro = str(exc)
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,
@@ -386,6 +388,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         "encerramento_previa": encerramento_previa, "encerramento_erro": encerramento_erro,
         "revisao_historica_disponivel": any(l['diferenca'] is not None and not l['decisao'] and not l['marco'] for l in linhas),
         "resumo_painel": resumo, "consultado_em": timezone.now(),
+        "resumo_confirmacao": resumo_confirmacao,
         "atualizacao": atualizacao, "previa_lote": previa_lote,
         "erro": erro, "link": link, "links_adicionais": links_adicionais, "funcionario_padrao": request.POST.get("funcionario", "") if erro else "", "sucesso": sucesso, "whatsapp_url": whatsapp_url, "destinatario": destinatario, "funcionarios": Funcionario.objects.filter(ativo=True).order_by("nome"),
         "eventos_selecao": inventario.eventos.filter(acao__in=["produto_retirado", "produto_reincluido"]).select_related("usuario").order_by("pk"),
@@ -515,10 +518,14 @@ def mobile(request):
 
 def estado_conferencia(acesso):
     inventario = Inventario.objects.get(pk=acesso.inventario_id)
-    return {"versao": inventario.versao, "finalizada": inventario.finalizada_em is not None,
+    estado = {"versao": inventario.versao, "finalizada": inventario.finalizada_em is not None,
         "finalizada_em": inventario.finalizada_em.isoformat() if inventario.finalizada_em else None,
         "enviada": acesso.ciclo == inventario.ciclo and AcessoInventario.objects.filter(pk=acesso.pk, enviada_em__isnull=False).exists(),
         "pode_escrever": inventario.finalizada_em is None and acesso.ciclo == inventario.ciclo and not AcessoInventario.objects.filter(pk=acesso.pk, enviada_em__isnull=False).exists()}
+    if estado['finalizada']:
+        from .confirmacao_estoque import consultar
+        estado['confirmacao_estoque'] = consultar(inventario)
+    return estado
 
 
 @privado
@@ -532,6 +539,10 @@ def finalizar(request):
             return redirect("inventario:mobile")
         estado = estado_conferencia(acesso)
         mensagem = "Conferência finalizada e enviada ao responsável." if estado["finalizada"] else "Sua atribuição foi enviada. A conferência geral aguarda as demais atribuições."
+        if estado['finalizada']:
+            resumo = estado['confirmacao_estoque']
+            mensagem += (f" {resumo['confirmados']} marcos confirmados; {resumo['aguardando']} aguardando confirmação; "
+                f"{resumo['revisao']} produtos exigem revisão. O encerramento não confirma marcos nem altera estoque.")
         return JsonResponse({"conferencia": estado, "mensagem": mensagem})
     except (ValueError, ObjectDoesNotExist) as exc:
         return JsonResponse({"erro": str(exc)}, status=409)
@@ -657,8 +668,8 @@ def finalizar_administrativamente(request, inventario_id):
     if dados.get("ja_finalizada"):
         messages.info(request, f"Conferencia nº {inventario_id} ja finalizada. Nenhum ajuste foi executado.")
     else:
-        messages.success(request, f"Conferencia nº {inventario_id} finalizada. {dados['aplicados']} produtos com ajuste ja aplicado; "
-            f"{dados['sem_ajuste']} permanecem sem ajuste aplicado, sendo {dados['diferencas_pendentes']} com diferenca registrada. "
+        messages.success(request, f"Conferencia nº {inventario_id} finalizada. {dados['confirmados']} marcos confirmados; "
+            f"{dados['aguardando']} aguardando confirmação; {dados['revisao']} produtos exigem revisão. "
             "Nenhum saldo foi alterado pelo encerramento. Bloqueios e historico preservados.")
     return redirect("inventario:lista")
 

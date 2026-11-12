@@ -90,6 +90,7 @@ def painel(request, inventario_id):
     return render(request, 'inventario/ajustes.html', dict(inventario=inventario, linhas=pagina,
         revisao_historica=revisao_historica,
         resumo=resumo, erro=erro, confirmacoes=confirmacoes,
+        resumo_confirmacao=resultado.get('resumo_confirmacao', {}),
         messages=mensagens,
         ajustes_pendentes=sum(l['diferenca'] is not None and l['diferenca'] != 0 and l['estado'] != 'Aplicado' for l in linhas),
         token_aplicacao=ajustes.previa_atualizacao(inventario.pk, selecionadas) if selecionadas else '',

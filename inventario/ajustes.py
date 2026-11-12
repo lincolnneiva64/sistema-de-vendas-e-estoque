@@ -484,12 +484,16 @@ def preparar_resultado(inventario):
                 and aplicacao.antes + aplicacao.diferenca == aplicacao.depois):
             linha.update(saldo_aplicado=aplicacao.depois, unidade_aplicada=aplicacao.unidade)
     from .marco_fisico import recibos
-    for marco in recibos(PropostaAjuste.objects.filter(rodada_id__in=[l['rodada'].pk for l in linhas], estado='aplicado')):
-        for linha in linhas:
-            if linha['rodada'].pk == marco.proposta.rodada_id:
-                linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)
+    marcos = {m.proposta.rodada_id: m for m in recibos(PropostaAjuste.objects.filter(
+        rodada_id__in=[l['rodada'].pk for l in linhas], estado='aplicado'))}
+    for linha in linhas:
+        marco = marcos.get(linha['rodada'].pk)
+        if marco:
+            linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)
     aptas = [l for l in linhas if not l['bloqueio'] and l['estado'] in ('Pendente de revisão', 'Aprovado')]
     resumo = dict(aptos=len(aptas), bloqueados=sum(l['estado'] == 'Bloqueado' for l in linhas),
         aplicados=sum(l['estado'] == 'Aplicado' for l in linhas),
         pendentes=sum(l['estado'] == 'Pendente de revisão' for l in linhas), total=len(linhas))
-    return dict(linhas=linhas, aptas=aptas, resumo=resumo, erro='')
+    from .confirmacao_estoque import classificar_avaliacoes
+    resumo_confirmacao = classificar_avaliacoes(linhas, marcos)
+    return dict(linhas=linhas, aptas=aptas, resumo=resumo, erro='', resumo_confirmacao=resumo_confirmacao)

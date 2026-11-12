@@ -14,17 +14,19 @@ from .views import gestor, privado
 
 def estado(inventario):
     resultado = ajustes.preparar_resultado(inventario)
-    bloqueados = [dict(nome=l['rodada'].item.cadastro['nome'], motivo=l['bloqueio'])
-                  for l in resultado['linhas'] if l['estado'] == 'Bloqueado']
-    pendentes = sum(l['estado'] != 'Aplicado' and l['diferenca'] is not None and l['diferenca'] != 0
-                    for l in resultado['linhas'])
-    sem_divergencias = bool(resultado['linhas']) and not resultado['erro'] and all(
-        l['estado'] == 'Sem ajuste' for l in resultado['linhas'])
-    concluidos = bool(resultado['linhas']) and not resultado['erro'] and all(
-        l['estado'] in ('Sem ajuste', 'Aplicado') for l in resultado['linhas']) and not sem_divergencias
-    return resultado, dict(sem_divergencias=sem_divergencias, concluidos=concluidos,
+    aptas = {l['rodada'].pk for l in resultado['aptas']}
+    confirmadas = {l['rodada'].pk for l in resultado['linhas'] if l['confirmacao_estoque'] == 'Confirmado'}
+    bloqueados = [dict(nome=l['rodada'].item.cadastro['nome'],
+        motivo=l['bloqueio'] or ('Proposta rejeitada; revise a contagem.' if l['estado'] == 'Rejeitado'
+            else 'Sem recibo de confirmação compatível; revise o histórico.'))
+        for l in resultado['linhas'] if l['rodada'].pk not in aptas | confirmadas]
+    pendentes = sum(l['rodada'].pk not in confirmadas for l in resultado['linhas'])
+    aplicados = sum(l['rodada'].pk in confirmadas for l in resultado['linhas'])
+    concluidos = bool(resultado['linhas']) and not resultado['erro'] and not pendentes
+    return resultado, dict(sem_divergencias=False, concluidos=concluidos,
         aptos=len(resultado['aptas']), bloqueados=bloqueados,
-        pendentes=pendentes, aplicados=resultado['resumo'].get('aplicados', 0), erro=resultado['erro'])
+        pendentes=pendentes, aguardando=len(resultado['aptas']), revisao=len(bloqueados),
+        aplicados=aplicados, erro=resultado['erro'])
 
 
 def recibo(inventario, previa):
@@ -56,13 +58,11 @@ def modal(request, inventario_id):
             # This explicit, CSRF-protected click replaces the historical access page.
             historica = acesso_ajustes.iniciar(request.user, inventario) if inventario.finalizada_em else ''
             resultado, resumo = estado(inventario)
-            precisao = [l for l in resultado['linhas'] if l.get('bloqueio_codigo') == 'precisao']
-            outros_bloqueados = [l for l in resultado['linhas']
-                                if l['estado'] == 'Bloqueado' and l.get('bloqueio_codigo') != 'precisao']
+            outros_bloqueados = resumo['bloqueados']
             token = ajustes.previa_atualizacao(inventario.pk, resultado['aptas']) if resultado['aptas'] else ''
             html = render_to_string('inventario/previa_ajustes_modal.html', dict(
                 inventario=inventario, atualizacao=resultado, previa_lote=token, resumo_modal=resumo,
-                pendentes_precisao=precisao, outros_bloqueados=outros_bloqueados,
+                outros_bloqueados=outros_bloqueados,
                 revisao_historica=historica, ajustes_habilitados=getattr(settings,'INVENTARIO_AJUSTES_HABILITADOS',False)), request=request)
             return JsonResponse(dict(ok=True, html=html, resumo=resumo))
         if acao != 'atualizar':

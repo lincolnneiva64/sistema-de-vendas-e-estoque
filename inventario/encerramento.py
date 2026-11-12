@@ -20,14 +20,16 @@ def permitir(usuario):
     services.permitir(usuario, 'revisar_inventario')
 
 
-def resumo(inventario):
+def resumo(inventario, *, resumo_confirmacao=None):
     itens = list(itens_incluidos(inventario).prefetch_related('decisao', Prefetch('rodadas',
         queryset=RodadaContagem.objects.order_by('numero').prefetch_related('confirmacoes'),
         to_attr='rodadas_encerramento')).order_by('pk'))
     if not itens:
         raise ValueError('A conferencia nao possui produtos participantes.')
     carregar(itens)
-    marcos = set(PropostaAjuste.objects.filter(rodada__item__inventario=inventario, estado='aplicado').values_list('rodada_id', flat=True))
+    from .marco_fisico import recibos
+    marcos = {a.proposta.rodada_id for a in recibos(PropostaAjuste.objects.filter(
+        rodada__item__inventario=inventario, estado='aplicado'))}
     evidencias=[]; aplicados=0; pendentes=0
     for item in itens:
         rodadas=item.rodadas_encerramento
@@ -47,23 +49,27 @@ def resumo(inventario):
         if not conf or conf.versao_entrada>=r.versao or any(getattr(conf,c)!=getattr(r,c) for c in campos):
             raise ValueError(f'{item.cadastro["nome"]}: OK sem confirmacao original compativel.')
         decisao=getattr(item,'decisao',None)
-        aplicados+=int(decisao is not None or r.pk in marcos)
-        pendentes+=int(decisao is None and r.pk not in marcos and r.contado_base!=r.esperado)
+        aplicados+=int(r.pk in marcos)
+        pendentes+=int(r.pk not in marcos and r.contado_base!=r.esperado)
         evidencias.append(dict(item=item.pk,produto=item.produto_id,nome=item.cadastro['nome'],
             rodada=r.pk,numero=r.numero,versao=r.versao,confirmacao=conf.pk,
             esperado=r.esperado,contado=r.contado_base,decisao=decisao.pk if decisao else None))
     dados=dict(total=len(itens),aplicados=aplicados,sem_ajuste=len(itens)-aplicados,
         diferencas_pendentes=pendentes,rodadas=evidencias,ciclo=inventario.ciclo,versao=inventario.versao)
+    if resumo_confirmacao is None:
+        from .confirmacao_estoque import consultar
+        resumo_confirmacao = consultar(inventario)
+    dados.update(resumo_confirmacao)
     dados['assinatura']=hashlib.sha256(json.dumps(dados,cls=DjangoJSONEncoder,sort_keys=True).encode()).hexdigest()
     return dados
 
 
-def previa(usuario,inventario):
+def previa(usuario,inventario, *, resumo_confirmacao=None):
     permitir(usuario)
     services.exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         raise ValueError('Conferencia ja finalizada.')
-    dados=resumo(inventario)
+    dados=resumo(inventario, resumo_confirmacao=resumo_confirmacao)
     dados['token']=signing.dumps(dict(usuario=usuario.pk,inventario=inventario.pk,assinatura=dados['assinatura']),salt=SALT)
     return dados
 

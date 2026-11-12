@@ -1,10 +1,6 @@
-{% load conferencia_visual %}<td data-label="Atualização do estoque" class="situacao-atualizacao">{% with a=linha.atualizacao %}
+{% load conferencia_visual %}<td data-label="Confirmação do estoque" class="situacao-atualizacao">{% with a=linha.atualizacao %}
 <div class="conteudo-atualizacao">
-{% if a.estado == 'Aplicado' or linha.marco %}<strong class="estado-atualizacao estado-aplicado">{% if linha.marco and linha.marco.diferenca != 0 %}Ajuste aplicado{% else %}Marco aplicado{% endif %}</strong>
-{% elif linha.comparacao_atual.diferenca == 0 %}<strong class="estado-atualizacao">Contagem OK · Marco pendente</strong>
-{% elif linha.comparacao_atual.diferenca is not None %}<strong class="estado-atualizacao">Correção pendente</strong>
-{% elif linha.rodada.ok_em %}<strong class="estado-atualizacao">Projeção não comprovada</strong>
-{% else %}<strong class="estado-atualizacao">Aguardando OK</strong>{% endif %}
+<strong class="estado-atualizacao{% if linha.confirmacao_estoque == 'Confirmado' %} estado-aplicado{% endif %}">{{ linha.confirmacao_estoque }}</strong>
 <button type="button" class="ver-detalhes-conferencia" popovertarget="detalhes-conferencia-{{ linha.item.pk }}" aria-label="Ver detalhes de {{ linha.item.cadastro.nome }}">Ver detalhes</button>
 </div>
 {% include 'inventario/detalhes_tabela.html' %}
