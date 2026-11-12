@@ -1,5 +1,18 @@
 # Tabela da conferência — apresentação compacta
 
+## Explicação dos saldos no resumo
+
+A tabela distingue estoque registrado no OK, contagem confirmada e diferença
+original do estoque atual. Mostra entradas/saídas posteriores comprovadas,
+projeção física e diferença atual (projeção menos estoque registrado), usando o
+lote de evidências já carregado. Não há consultas por movimento nesse cálculo.
+
+Uma lacuna ou sinalização pendente preserva os números conhecidos e os totais
+comprovados, mas impede apresentar a projeção como completa. O motivo aparece
+na própria linha, inclusive com diferença original zero. Ajustes próprios já
+auditados não são somados como movimento físico. A classificação, os custos,
+as permissões, a aplicação e a finalização não recebem esses campos como entrada.
+
 Etapa exclusivamente visual, local. Preservadas todas as alterações anteriores.
 Nenhuma alteração em cálculos, conversões, serviços, auditoria, modelos ou migrations.
 

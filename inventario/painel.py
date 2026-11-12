@@ -4,6 +4,64 @@ from decimal import Decimal
 from .apresentacao import equivalencia_visual, quantidade
 
 
+def explicar_saldos(linha, lote, historico_valido):
+    """Explain the summary using its existing read-only, batched evidence.
+
+    These fields never authorize adjustments, replace the OK or feed stock
+    services. A conference's own adjustment is not another physical movement.
+    """
+    from .conciliacao_documental import conciliar
+    item, rodada = linha['item'], linha['rodada']
+    cadastro = dict(base=item.cadastro.get('base', ''),
+                    continua=item.cadastro.get('continua', False))
+    dados = dict(entradas=Decimal(0), saidas=Decimal(0), posteriores=0,
+                 sem_comprovacao=0, projecao=None, diferenca_atual=None,
+                 limite='', unidade=cadastro['base'])
+    if not rodada.ok_em or rodada.sequencia_ok is None:
+        dados['limite'] = 'Aguardando contagem física confirmada com OK.'
+    elif lote is not None:
+        comprovados = {m['registro'].pk for m in linha['movimentos'] if m['comprovado_documentalmente']}
+        for registro in linha['movimentos']:
+            m = registro['registro']
+            if m.sequencia <= rodada.sequencia_ok:
+                continue
+            dados['posteriores'] += 1
+            if m.origem in ('compra', 'venda'):
+                try:
+                    if m.pk not in comprovados:
+                        conciliar(rodada, [m], _lote=lote)
+                    variacao = m.depois - m.antes
+                    dados['entradas' if variacao > 0 else 'saidas'] += abs(variacao)
+                except ValueError as exc:
+                    dados['sem_comprovacao'] += 1
+                    dados['limite'] = dados['limite'] or str(exc)
+            elif m.pk not in comprovados:
+                # A later gap must not reclassify an already audited adjustment
+                # as an unproved physical entry/exit.
+                aplicada = getattr(lote, 'aplicacoes_revisao', {}).get(m.referencia) if m.origem == 'ajuste_manual' else None
+                if aplicada:
+                    from .revisao_historico import validar_aplicacao
+                    try:
+                        validar_aplicacao(rodada, m, aplicada, lote)
+                        continue
+                    except ValueError:
+                        pass
+                dados['sem_comprovacao'] += 1
+                dados['limite'] = dados['limite'] or (
+                    f'Movimento #{m.pk} · {m.referencia or m.origem}: '
+                    'origem ou unidade histórica sem comprovação. Revise o movimento antes de concluir.')
+        if (historico_valido and not dados['sem_comprovacao'] and rodada.contado_base is not None
+                and item.produto.quantidade is not None):
+            dados['projecao'] = rodada.contado_base + dados['entradas'] - dados['saidas']
+            dados['diferenca_atual'] = dados['projecao'] - item.produto.quantidade
+        else:
+            dados['limite'] = dados['limite'] or linha['bloqueio'] or 'Histórico posterior ao OK não comprovado.'
+    for campo in ('entradas', 'saidas', 'projecao', 'diferenca_atual'):
+        dados[campo + '_texto'] = quantidade(dados[campo], cadastro)
+    dados['diferenca_ok_texto'] = quantidade(linha['diferenca'], cadastro)
+    linha['explicacao_saldos'] = dados
+
+
 def resumo_painel(linhas):
     resumo = dict(total=len(linhas), conferidos=0, faltas=0, sobras=0, corretos=0,
                   pendentes=0, com_custo=0, sem_custo=0, revisao=0,

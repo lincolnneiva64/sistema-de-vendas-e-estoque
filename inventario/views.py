@@ -30,7 +30,7 @@ from . import confirmacao_ajustes
 from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica, ConfirmacaoContagem
 from .apresentacao import entrada, quantidade
-from .painel import resumo_painel
+from .painel import resumo_painel, explicar_saldos
 from .selecao import itens_incluidos, rodadas_incluidas, salvar_selecao
 from .rastreabilidade import ORIGENS
 from .titulos import preparar_titulos
@@ -171,6 +171,7 @@ def linhas_revisao(inventario):
                     "comprovado_documentalmente": m.pk in movimentos_comprovados,
                     "entre_confirmacoes": rodada.sequencia_ok is not None and m.sequencia <= rodada.sequencia_ok} for m in todos_movimentos],
                 "historico": item.rodadas_revisao, "eventos": eventos_por_item[item.pk]})
+            explicar_saldos(linhas[-1], lote, historico_valido=bool(rodada.ok_em and not inseguro))
     from .conversao_fisica import representacao_fisica
     from .apresentacao import comparacao_fisica
     for linha in linhas:

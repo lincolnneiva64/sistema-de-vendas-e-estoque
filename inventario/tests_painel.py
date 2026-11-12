@@ -29,7 +29,7 @@ def linha(esperado='10', contado='8', custo='10', atual='12', *, encerrada=False
                                       for v in (esperado, contado, custo, atual)]
     return dict(item=Objeto(custo_base=custo, cadastro={'base': 'UN', 'continua': False, 'fracionado': False},
                            produto=Objeto(quantidade=atual, unidade_compra='UN', unidade_venda_1='')),
-                rodada=Objeto(esperado=esperado, ok_em=True if contado is not None else None,
+                rodada=Objeto(esperado=esperado, contado_base=contado, ok_em=True if contado is not None else None,
                               encerrada_em=True if encerrada else None),
                 diferenca=contado-esperado if contado is not None and esperado is not None else None,
                 situacao='Aguardando OK' if contado is None else 'Falta')
