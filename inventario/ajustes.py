@@ -65,11 +65,9 @@ def avaliar(rodada, produto=None, travar_documentos=False, *, _lote=None):
                 or (_lote.maior_numero.get(item.pk, 0) > rodada.numero if _lote is not None
                     else item.rodadas.filter(numero__gt=rodada.numero).exists())):
             raise ValueError('Confirmação física ausente, alterada ou substituída por recontagem.')
-        confs = _lote.confirmacoes[rodada.pk] if _lote is not None else None
-        confirmacao = (confs[-1] if confs else None) if _lote is not None else rodada.confirmacoes.order_by('-versao_entrada').first()
-        if not confirmacao or any(getattr(confirmacao, campo) != getattr(rodada, campo)
-                for campo in ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')):
-            raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
+        from .marco_fisico import ok_referencia
+        confirmacao = ok_referencia(rodada, _lote.confirmacoes[rodada.pk] if _lote is not None else None,
+            _lote.confirmacoes_admin if _lote is not None else None)
         if resultado['diferenca'] != 0:
             exigir_precisao_ajuste(rodada)
         from .conciliacao_documental import comprovar_cadeia
@@ -406,8 +404,10 @@ def projetar_resultado(linhas_revisao):
             'decisao__item_id', 'decisao__rodada_id', 'proposta__rodada_id',
             'antes', 'diferenca', 'depois', 'unidade')}
     from .marco_fisico import recibos
-    marcos = {a.proposta.rodada_id: a for a in recibos(PropostaAjuste.objects.filter(
-        rodada_id__in=[l['rodada'].pk for l in linhas_revisao], estado='aplicado'))}
+    propostas_aplicadas = list(PropostaAjuste.objects.filter(
+        rodada_id__in=[l['rodada'].pk for l in linhas_revisao], estado='aplicado'))
+    marcos = {a.proposta.rodada_id: a for a in recibos(propostas_aplicadas)}
+    sem_recibo = {p.rodada_id for p in propostas_aplicadas} - marcos.keys()
     campos_ok = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
     ultima = ConfirmacaoContagem.objects.filter(rodada_id=OuterRef('rodada_id')).order_by(
         '-versao_entrada').values('pk')[:1]
@@ -423,6 +423,8 @@ def projetar_resultado(linhas_revisao):
         if rodada.pk in marcos:
             marco = marcos[rodada.pk]
             linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)
+        elif rodada.pk in sem_recibo:
+            linha.update(estado='Bloqueado', bloqueio='Aplicação registrada sem recibo compatível. Revise a auditoria; não reaplique.')
         elif revisao['decisao']:
             linha['estado'] = 'Aplicado'
             aplicacao = aplicadas.get(item.pk)
@@ -470,23 +472,12 @@ def preparar_resultado(inventario):
     atuais = list(rodadas.select_related('item__produto').order_by('item__cadastro__nome', 'pk'))
     with carregar(atuais) as lote:
         linhas = [avaliar(r, _lote=lote) for r in atuais]
-    # Presentation only: an applied balance is historical, never a fresh forecast.
-    aplicadas = {a.proposta.rodada_id: a for a in AplicacaoAjuste.objects.filter(
-        proposta__rodada_id__in=[l['rodada'].pk for l in linhas if l['estado'] == 'Aplicado'],
-        proposta__estado='aplicado').select_related('proposta', 'decisao')}
+    # The same receipt service describes current balances across conferences.
+    from .marco_fisico import referencias_estoque
+    marcos, referencias = referencias_estoque((r.item.produto for r in atuais), rodada_ids=[r.pk for r in atuais])
     for linha in linhas:
-        linha.update(saldo_aplicado=None, unidade_aplicada='')
-        aplicacao = aplicadas.get(linha['rodada'].pk)
-        if (linha['estado'] == 'Aplicado' and aplicacao
-                and aplicacao.decisao.rodada_id == linha['rodada'].pk
-                and aplicacao.decisao.item_id == linha['rodada'].item_id
-                and aplicacao.unidade.strip()
-                and aplicacao.antes + aplicacao.diferenca == aplicacao.depois):
-            linha.update(saldo_aplicado=aplicacao.depois, unidade_aplicada=aplicacao.unidade)
-    from .marco_fisico import recibos
-    marcos = {m.proposta.rodada_id: m for m in recibos(PropostaAjuste.objects.filter(
-        rodada_id__in=[l['rodada'].pk for l in linhas], estado='aplicado'))}
-    for linha in linhas:
+        linha.update(saldo_aplicado=None, unidade_aplicada='',
+            referencia_estoque=referencias[linha['rodada'].item.produto_id])
         marco = marcos.get(linha['rodada'].pk)
         if marco:
             linha.update(estado='Aplicado', saldo_aplicado=marco.depois, unidade_aplicada=marco.unidade)

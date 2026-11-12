@@ -155,12 +155,12 @@ class MarcoFisicoTests(Operacoes, AjustesFixture, TestCase):
         historico = self.client.get(reverse('inventario:historico_produto', args=[inv.pk, r.pk]),
             {'periodo': 'completo'})
         self.assertEqual(historico.status_code, 200)
-        self.assertContains(historico, 'Marco físico estabelecido sem alteração de quantidade')
+        self.assertContains(historico, 'Referência física aplicada sem alteração de quantidade')
         with self.assertRaises(ValueError):
             services.recontar(self.usuario, r.pk, 'Não editar um marco já aplicado.')
         painel = self.client.get(reverse('inventario:ajustes', args=[inv.pk]))
         self.assertEqual(painel.status_code, 200)
-        self.assertContains(painel, 'Marco sem alteração de quantidade')
+        self.assertContains(painel, 'Referência física sem alteração de quantidade')
         detalhe = self.client.get(reverse('inventario:detalhe', args=[inv.pk]))
         self.assertNotContains(detalhe, 'data-abrir-edicao-admin=')
 
@@ -259,7 +259,7 @@ class MarcoFisicoTests(Operacoes, AjustesFixture, TestCase):
         self.assertEqual(tabela.colunas, 7)
         self.assertFalse(tabela.abertos)
         self.assertContains(response, 'Saldo registrado no OK')
-        self.assertContains(response, 'Estimado')
+        self.assertContains(response, 'Saldo provável')
         self.aplicar_marco()
         response = self.client.get(reverse('inventario:detalhe', args=[self.inv.pk]))
         self.assertContains(response, 'Ajuste aplicado')

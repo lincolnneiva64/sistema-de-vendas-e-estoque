@@ -33,11 +33,11 @@
 {% if pode_gerenciar and not inventario.finalizada_em %}<details class="card"><summary class="button secondary">Cancelar conferência</summary><h2>Cancelar esta conferência?</h2><p>A conferência será encerrada como cancelada. Seus registros históricos serão preservados, os links dos funcionários serão revogados e nenhuma quantidade de estoque será alterada.</p><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}">Voltar</a><form method="post" action="{% url 'inventario:cancelar' inventario.pk %}">{% csrf_token %}<button name="confirmacao" value="sim">Confirmar cancelamento</button></form></details>{% endif %}
 <section class="indicadores-painel" aria-label="Confirmação do estoque">
 <div class="indicador" data-indicador="conferidos"><span>Produtos conferidos</span><strong>{{ resumo_confirmacao.conferidos }}<small> / {{ resumo_painel.total }}</small></strong><p>Com OK na rodada atual</p></div>
-<div class="indicador"><span>Marcos confirmados</span><strong>{{ resumo_confirmacao.confirmados }}</strong></div>
-<div class="indicador"><span>Marcos aguardando confirmação</span><strong>{{ resumo_confirmacao.aguardando }}</strong></div>
+<div class="indicador"><span>Referências físicas confirmadas</span><strong>{{ resumo_confirmacao.confirmados }}</strong></div>
+<div class="indicador"><span>Referências físicas aguardando confirmação</span><strong>{{ resumo_confirmacao.aguardando }}</strong></div>
 <div class="indicador"><span>Produtos que exigem revisão</span><strong>{{ resumo_confirmacao.revisao }}</strong></div>
 </section>
-<p>Finalizar a conferência não confirma marcos nem aplica ajustes. Marcos ainda não confirmados: {{ resumo_confirmacao.aguardando|add:resumo_confirmacao.revisao }}.</p>
+<p>Finalizar a conferência não confirma referências físicas nem aplica ajustes. Referências físicas ainda não confirmadas: {{ resumo_confirmacao.aguardando|add:resumo_confirmacao.revisao }}.</p>
 <section class="indicadores-painel" aria-label="Resumo da conferência">
 <div class="indicador indicador-falta" data-indicador="faltas"><span>Faltas</span><strong>{{ resumo_painel.faltas }}</strong><p>Abaixo do estoque exibido</p></div>
 <div class="indicador indicador-sobra" data-indicador="sobras"><span>Sobras</span><strong>{{ resumo_painel.sobras }}</strong><p>Acima do estoque exibido</p></div>

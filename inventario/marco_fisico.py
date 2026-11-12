@@ -2,12 +2,99 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
-from django.db.models import Q
+from django.db.models import F, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 
 from .models import (AplicacaoAjuste, DetalheMovimentoEstoque, EventoAjuste,
                      EventoInventario, PropostaAjuste, SinalizacaoFisica)
 
 REGRA = 'marco_fisico_v1'
+ROTULOS_SALDO = {
+    'provavel': 'Saldo provável',
+    'aplicado': 'Referência física aplicada',
+    'posterior': 'Saldo atualizado por movimentações posteriores',
+}
+
+
+def ok_referencia(rodada, confirmacoes=None, eventos_admin=None):
+    """Select the current immutable OK; administrative corrections keep its time."""
+    confirmacoes = list(rodada.confirmacoes.all() if confirmacoes is None else confirmacoes)
+    conf = max(confirmacoes, key=lambda c: c.versao_entrada, default=None)
+    campos = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
+    if (not rodada.ok_em or not conf or conf.rodada_id != rodada.pk
+            or conf.versao_entrada >= rodada.versao
+            or any(getattr(conf, c) != getattr(rodada, c) for c in campos)):
+        raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
+    if conf.acesso_id is None:
+        if eventos_admin is None:
+            eventos_admin = {e.dados.get('confirmacao_id'): e for e in EventoInventario.objects.filter(
+                rodada=rodada, acao='contagem_admin_confirmada')}
+        por_id = {c.pk: c for c in confirmacoes}
+        atual, visitados = conf, set()
+        while atual.acesso_id is None:
+            evento = eventos_admin.get(atual.pk)
+            if not evento or atual.pk in visitados:
+                raise ValueError('Confirmação administrativa sem evidência de contagem física original. Registre uma nova contagem física.')
+            visitados.add(atual.pk)
+            dados = evento.dados
+            anterior_id = dados.get('confirmacao_anterior_id')
+            if dados.get('tipo') == 'nova_contagem' and anterior_id is None:
+                break  # Explicit physical observation, not merely approval of an old number.
+            anterior = por_id.get(anterior_id)
+            if (dados.get('tipo') != 'correcao_anterior' or anterior is None
+                    or anterior.versao_entrada >= atual.versao_entrada
+                    or any(getattr(anterior, c) != getattr(atual, c)
+                        for c in ('ok_em', 'esperado', 'sequencia_ok'))):
+                raise ValueError('Confirmação administrativa não comprova novo horário de contagem física. Revise o OK original ou registre nova contagem.')
+            atual = anterior
+    return conf
+
+
+def referencias_estoque(produtos, *, rodada_ids=()):
+    """Batch existing receipts, including other conferences; never apply or rewrite."""
+    from .models import SequenciaEstoque
+    produtos = list(produtos)
+    ids = [p.pk for p in produtos]
+    sem_ajuste = EventoAjuste.objects.filter(proposta_id=OuterRef('pk'),
+        acao='marco_sem_ajuste').order_by('-criado_em').values('criado_em')[:1]
+    ultima = PropostaAjuste.objects.filter(estado='aplicado',
+        rodada__item__produto_id=OuterRef('rodada__item__produto_id')).annotate(
+            instante=Coalesce(F('aplicacao__aplicado_em'), Subquery(sem_ajuste))).filter(
+                instante__isnull=False).order_by('-instante', '-pk').values('pk')[:1]
+    # Load complete evidence only for the latest reference and requested historical rounds.
+    marcos = recibos(PropostaAjuste.objects.filter(estado='aplicado',
+        rodada__item__produto_id__in=ids).filter(Q(pk=Subquery(ultima)) | Q(rodada_id__in=rodada_ids)
+        ).select_related('confirmacao', 'rodada__item'))
+    por_rodada, por_produto = {}, {}
+    for marco in marcos:
+        por_rodada[marco.proposta.rodada_id] = marco
+        produto_id = marco.proposta.rodada.item.produto_id
+        anterior = por_produto.get(produto_id)
+        if anterior is None or (marco.aplicado_em, str(marco.proposta_id)) > (anterior.aplicado_em, str(anterior.proposta_id)):
+            por_produto[produto_id] = marco
+    sequencias = dict(SequenciaEstoque.objects.filter(produto_id__in=ids).values_list('produto_id', 'sequencia'))
+    saldos = {p.pk: descrever_saldo(p, por_produto.get(p.pk), sequencias.get(p.pk, 0)) for p in produtos}
+    return por_rodada, saldos
+
+
+def descrever_saldo(produto, marco, sequencia):
+    """Describe the stored balance, not an alternative balance or authorization."""
+    estado, motivo = 'provavel', 'Sem referência física aplicada.'
+    if marco:
+        corte = marco.proposta.evidencia.get('sequencia')
+        unidade = (produto.unidade_venda_1 or produto.unidade_compra or '').strip().upper()
+        if (type(corte) is int and corte >= 0 and produto.quantidade is not None
+                and unidade == marco.unidade.strip().upper()):
+            corte += 0 if getattr(marco, 'sem_ajuste', False) else 1
+            if sequencia == corte and produto.quantidade == marco.depois:
+                estado, motivo = 'aplicado', 'Saldo registrado na aplicação da referência física.'
+            elif sequencia > corte:
+                estado, motivo = 'posterior', 'Saldo operacional após a referência física; a origem dos movimentos fica no histórico.'
+            else:
+                motivo = 'Referência física aplicada; continuidade do saldo atual a verificar.'
+        else:
+            motivo = 'Referência física aplicada; saldo, unidade ou sequência atual a verificar.'
+    return dict(estado=estado, rotulo=ROTULOS_SALDO[estado], motivo=motivo, marco=marco)
 
 
 def vigente(rodada, lote=None):
@@ -26,12 +113,10 @@ def validar_contagem(rodada, produto, lote=None):
     from .conversao import cadastro_compativel, converter
     from .conversao_fisica import exigir_precisao_ajuste, cadastro_contagem
     from .selecao import itens_incluidos
-    confs = lote.confirmacoes[rodada.pk] if lote is not None else None
-    conf = (confs[-1] if confs else None) if lote is not None else rodada.confirmacoes.order_by('-versao_entrada').first()
-    campos = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
-    if (not rodada.ok_em or rodada.encerrada_em or not conf or
-            any(getattr(conf, c) != getattr(rodada, c) for c in campos)):
-        raise ValueError('OK sem confirmação original compatível; solicite recontagem.')
+    conf = ok_referencia(rodada, lote.confirmacoes[rodada.pk] if lote is not None else None,
+        lote.confirmacoes_admin if lote is not None else None)
+    if rodada.encerrada_em:
+        raise ValueError('Contagem retirada ou substituída por recontagem.')
     if vigente(rodada, lote):
         raise ValueError('Existe marco físico mais recente aplicado para este produto.')
     if ((rodada.item_id not in lote.incluidos or lote.maior_numero[rodada.item_id] > rodada.numero)
@@ -148,13 +233,23 @@ def recibos(propostas):
     """Normalize zero-effect receipts without inventing a stock movement."""
     propostas = list(propostas)
     aplicacoes = {a.proposta_id: a for a in AplicacaoAjuste.objects.filter(
-        proposta__in=propostas).select_related('proposta', 'decisao')}
+        proposta__in=propostas).select_related('proposta__confirmacao', 'proposta__rodada__item', 'decisao')}
     eventos = {e.proposta_id: e for e in EventoAjuste.objects.filter(
-        proposta__in=propostas, acao='marco_sem_ajuste').select_related('proposta', 'usuario')}
+        proposta__in=propostas, acao='marco_sem_ajuste').select_related(
+            'proposta__confirmacao', 'proposta__rodada__item', 'usuario')}
     resultado = []
     for p in propostas:
         if p.pk in aplicacoes:
-            resultado.append(aplicacoes[p.pk])
+            a = aplicacoes[p.pk]
+            from .ajustes import assinatura
+            if (p.estado != 'aplicado' or assinatura(p.evidencia) != p.assinatura
+                    or a.evidencia.get('preparacao') != p.evidencia
+                    or a.decisao.rodada_id != p.rodada_id
+                    or a.decisao.item_id != a.proposta.rodada.item_id
+                    or a.antes + a.diferenca != a.depois
+                    or a.unidade != p.evidencia.get('cadastro', {}).get('base')):
+                raise ValueError('Auditoria da referência física aplicada incompatível.')
+            resultado.append(a)
         elif p.pk in eventos:
             e = eventos[p.pk]
             from .ajustes import assinatura
@@ -165,7 +260,7 @@ def recibos(propostas):
                     or Decimal(p.evidencia['diferenca']) != 0
                     or Decimal(p.evidencia['atual']) != Decimal(p.evidencia['resultante'])):
                 raise ValueError('Auditoria do marco sem ajuste incompatível.')
-            resultado.append(SimpleNamespace(pk=e.pk, proposta=p, proposta_id=p.pk,
+            resultado.append(SimpleNamespace(pk=e.pk, proposta=e.proposta, proposta_id=p.pk,
                 usuario_id=e.usuario_id, usuario=e.usuario, aplicado_em=e.criado_em,
                 antes=Decimal(p.evidencia['atual']), depois=Decimal(p.evidencia['resultante']),
                 diferenca=Decimal(0), unidade=p.evidencia['cadastro']['base'],

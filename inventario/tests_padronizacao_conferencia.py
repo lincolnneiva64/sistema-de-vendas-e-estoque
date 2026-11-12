@@ -107,7 +107,7 @@ class PadronizacaoConferenciaTests(AjustesFixture, TestCase):
         self.assertFalse(MovimentoObservado.objects.exists())
         self.assertTrue(encerramento.finalizar(self.usuario, self.inv.pk, p['token'], 'sim')['ja_finalizada'])
         pagina = self.client.get(reverse('inventario:detalhe', args=[self.inv.pk]))
-        self.assertContains(pagina, 'Marcos aguardando confirmação')
+        self.assertContains(pagina, 'Referências físicas aguardando confirmação')
 
     def test_encerramento_revalida_totais_apos_confirmacao_do_marco(self):
         self.zero()

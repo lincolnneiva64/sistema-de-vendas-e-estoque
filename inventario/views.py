@@ -105,12 +105,9 @@ def linhas_revisao(inventario):
             to_attr="rodadas_revisao"),
         "decisao",
     ).order_by("pk"))
-    from .marco_fisico import recibos
-    from .models import PropostaAjuste
-    marcos = {a.proposta.rodada_id: a for a in recibos(PropostaAjuste.objects.filter(
-        rodada__item__inventario=inventario, estado='aplicado'))}
-    produtos_com_marco = set(PropostaAjuste.objects.filter(estado='aplicado',
-        rodada__item__produto_id__in=[i.produto_id for i in itens]).values_list('rodada__item__produto_id', flat=True))
+    from .marco_fisico import referencias_estoque
+    marcos, referencias = referencias_estoque((i.produto for i in itens),
+        rodada_ids=[i.rodadas_revisao[-1].pk for i in itens])
     carregar_relacoes(itens)
     sinais_por_item, eventos_por_item = defaultdict(list), defaultdict(list)
     for sinal in SinalizacaoFisica.objects.filter(rodada__item__in=itens).select_related(
@@ -149,7 +146,7 @@ def linhas_revisao(inventario):
                     # A committed receipt is already the physical reference. Do not
                     # demand reconstruction before it for this read-only comparison.
                     comparacao_atual.update(limite='', marco_aplicado=True)
-                    bloqueio = 'Marco confirmado. Nenhum novo ajuste será aplicado nesta conferência.'
+                    bloqueio = 'Referência física aplicada. Nenhum novo ajuste será aplicado nesta conferência.'
                 else:
                     # Reuse this read-only proof once; keep the historical OK intact.
                     from .marco_fisico import comprovar, resultante
@@ -182,7 +179,8 @@ def linhas_revisao(inventario):
             linhas.append({"item": item, "rodada": rodada, "diferenca": diferenca, "valor": valor,
                 "comparacao_atual": comparacao_atual,
                 "bloqueio": bloqueio, "decisao": decisao, "marco": marcos.get(rodada.pk),
-                "saldo_estimado": item.produto_id not in produtos_com_marco,
+                "saldo_estimado": referencias[item.produto_id]['estado'] == 'provavel',
+                "referencia_estoque": referencias[item.produto_id],
                 "situacao": situacao, "destaque": destaque,
                 "esperado_texto": quantidade(rodada.esperado, item.cadastro),
                 "contado_texto": quantidade(rodada.contado_base if rodada.ok_em else None, item.cadastro),
@@ -547,8 +545,8 @@ def finalizar(request):
         mensagem = "Conferência finalizada e enviada ao responsável." if estado["finalizada"] else "Sua atribuição foi enviada. A conferência geral aguarda as demais atribuições."
         if estado['finalizada']:
             resumo = estado['confirmacao_estoque']
-            mensagem += (f" {resumo['confirmados']} marcos confirmados; {resumo['aguardando']} aguardando confirmação; "
-                f"{resumo['revisao']} produtos exigem revisão. O encerramento não confirma marcos nem altera estoque.")
+            mensagem += (f" {resumo['confirmados']} referências físicas confirmadas; {resumo['aguardando']} aguardando confirmação; "
+                f"{resumo['revisao']} produtos exigem revisão. O encerramento não confirma referências físicas nem altera estoque.")
         return JsonResponse({"conferencia": estado, "mensagem": mensagem})
     except (ValueError, ObjectDoesNotExist) as exc:
         return JsonResponse({"erro": str(exc)}, status=409)
@@ -675,7 +673,7 @@ def finalizar_administrativamente(request, inventario_id):
     if dados.get("ja_finalizada"):
         messages.info(request, f"Conferencia nº {inventario_id} ja finalizada. Nenhum ajuste foi executado.")
     else:
-        messages.success(request, f"Conferencia nº {inventario_id} finalizada. {dados['confirmados']} marcos confirmados; "
+        messages.success(request, f"Conferencia nº {inventario_id} finalizada. {dados['confirmados']} referências físicas confirmadas; "
             f"{dados['aguardando']} aguardando confirmação; {dados['revisao']} produtos exigem revisão. "
             "Nenhum saldo foi alterado pelo encerramento. Bloqueios e historico preservados.")
     return redirect("inventario:lista")

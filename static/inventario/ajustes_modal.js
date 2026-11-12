@@ -24,7 +24,7 @@
     };
     const atualizarEstado = resumo => {
         abrir.disabled = false;
-        estado.textContent = resumo.erro || (resumo.aplicados + ' marco(s) confirmado(s); '
+        estado.textContent = resumo.erro || (resumo.aplicados + ' referência(s) física(s) confirmada(s); '
             + resumo.aguardando + ' aguardando confirmação; '
             + resumo.revisao + ' produto(s) exigem revisão.');
         if (resumo.bloqueados.length) estado.textContent += ' Revisar: ' + resumo.bloqueados.map(p => p.nome).join(', ') + '.';
@@ -35,8 +35,8 @@
         }
         atualizarEstado(payload.resumo);
         sucesso.querySelector('[data-conferencia-sucesso]').textContent = root.dataset.conferenciaTitulo;
-        sucesso.querySelector('[data-quantidade-sucesso]').textContent = payload.quantidade + ' marco(s) confirmado(s) nesta operação.';
-        sucesso.querySelector('[data-pendencias-sucesso]').textContent = payload.resumo.aguardando + ' marco(s) aguardando confirmação; ' + payload.resumo.revisao + ' produto(s) exigem revisão.';
+        sucesso.querySelector('[data-quantidade-sucesso]').textContent = payload.quantidade + ' referência(s) física(s) confirmada(s) nesta operação.';
+        sucesso.querySelector('[data-pendencias-sucesso]').textContent = payload.resumo.aguardando + ' referência(s) física(s) aguardando confirmação; ' + payload.resumo.revisao + ' produto(s) exigem revisão.';
         if (previa.open) previa.close();
         sucesso.showModal();
     };
@@ -82,7 +82,7 @@
         const botoes = [...form.querySelectorAll('button')];
         botoes.forEach(b => { b.disabled = true; });
         form.setAttribute('aria-busy','true');
-        mensagem.textContent = 'Confirmando marcos... Aguarde a resposta do servidor.';
+        mensagem.textContent = 'Confirmando referências físicas... Aguarde a resposta do servidor.';
         try {
             const payload = await request(endpoint, data);
             if (!payload.ok || payload.estado !== 'aplicado') throw new Error(payload.erro || 'Resultado não comprovado.');
@@ -101,7 +101,7 @@
                     }
                 } catch (_) { /* Uncertain result stays an error, never success. */ }
             }
-            mensagem.textContent = erro.message + ' Sem recibo desta operação, não considere os marcos confirmados. Feche e revise novamente; em caso de resposta perdida, consulte o histórico.';
+            mensagem.textContent = erro.message + ' Sem recibo desta operação, não considere os referências físicas confirmadas. Feche e revise novamente; em caso de resposta perdida, consulte o histórico.';
             mensagem.setAttribute('role','alert');
             form.removeAttribute('aria-busy');
             enviando = false;

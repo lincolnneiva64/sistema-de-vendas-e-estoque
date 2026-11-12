@@ -9,7 +9,7 @@ from django.utils import timezone
 from . import services
 from .conversao import converter
 from .conversao_fisica import cadastro_contagem, carregar
-from .models import Inventario, RodadaContagem, PropostaAjuste
+from .models import Inventario, RodadaContagem, PropostaAjuste, EventoInventario
 from .selecao import itens_incluidos
 
 SALT = 'inventario.encerramento-administrativo.v1'
@@ -28,26 +28,40 @@ def resumo(inventario, *, resumo_confirmacao=None):
         raise ValueError('A conferencia nao possui produtos participantes.')
     carregar(itens)
     from .marco_fisico import recibos
-    marcos = {a.proposta.rodada_id for a in recibos(PropostaAjuste.objects.filter(
+    marcos = {a.proposta.rodada_id: a for a in recibos(PropostaAjuste.objects.filter(
         rodada__item__inventario=inventario, estado='aplicado'))}
+    administrativas = {r.pk for item in itens for r in item.rodadas_encerramento
+        if any(c.acesso_id is None for c in r.confirmacoes.all())}
+    eventos_admin = {e.dados.get('confirmacao_id'): e for e in EventoInventario.objects.filter(
+        rodada_id__in=administrativas, acao='contagem_admin_confirmada')}
     evidencias=[]; aplicados=0; pendentes=0
     for item in itens:
         rodadas=item.rodadas_encerramento
         r=rodadas[-1] if rodadas else None
         if not r or r.encerrada_em or sum(x.encerrada_em is None for x in rodadas)!=1 or not r.ok_em:
             raise ValueError(f'{item.cadastro["nome"]}: falta OK valido na rodada atual. O encerramento foi recusado.')
-        try:
-            valores=converter(cadastro_contagem(item),r.embalagens,r.avulsos)
-        except ValueError as exc:
-            raise ValueError(f'{item.cadastro["nome"]} (produto #{item.produto_id}): {exc} '
-                             'Revise a contagem e a relação física antes de finalizar.') from exc
-        if valores[2]!=r.contado or valores[3]!=r.contado_base or r.esperado is None or r.sequencia_ok is None:
-            raise ValueError(f'{item.cadastro["nome"]}: contagem inconsistente. O encerramento foi recusado.')
+        if r.pk not in marcos:
+            try:
+                valores=converter(cadastro_contagem(item),r.embalagens,r.avulsos)
+            except ValueError as exc:
+                raise ValueError(f'{item.cadastro["nome"]} (produto #{item.produto_id}): {exc} '
+                                 'Revise a contagem e a relação física antes de finalizar.') from exc
+            if valores[2]!=r.contado or valores[3]!=r.contado_base or r.esperado is None or r.sequencia_ok is None:
+                raise ValueError(f'{item.cadastro["nome"]}: contagem inconsistente. O encerramento foi recusado.')
         confirmacoes=list(r.confirmacoes.all())
-        conf=max(confirmacoes,key=lambda c:c.versao_entrada,default=None)
-        campos=('ok_em','esperado','contado_base','contado','sequencia_ok','embalagens','avulsos')
-        if not conf or conf.versao_entrada>=r.versao or any(getattr(conf,c)!=getattr(r,c) for c in campos):
-            raise ValueError(f'{item.cadastro["nome"]}: OK sem confirmacao original compativel.')
+        from .marco_fisico import ok_referencia
+        try:
+            if r.pk in marcos:
+                # Already committed receipts are not pending administrative observations.
+                # Preserve their original interpretation without replaying the application.
+                conf=marcos[r.pk].proposta.confirmacao
+                campos=('ok_em','esperado','contado_base','contado','sequencia_ok','embalagens','avulsos')
+                if conf.rodada_id!=r.pk or any(getattr(conf,c)!=getattr(r,c) for c in campos):
+                    raise ValueError('Rodada atual incompatível com o recibo aplicado.')
+            else:
+                conf=ok_referencia(r, confirmacoes, eventos_admin)
+        except ValueError as exc:
+            raise ValueError(f'{item.cadastro["nome"]}: {exc}') from exc
         decisao=getattr(item,'decisao',None)
         aplicados+=int(r.pk in marcos)
         pendentes+=int(r.pk not in marcos and r.contado_base!=r.esperado)

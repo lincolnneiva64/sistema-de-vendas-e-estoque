@@ -69,11 +69,18 @@ def investigar(rodada, params):
                 diferenca=(rodada.contado_base - rodada.esperado) if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None else None,
                 fisica=rodada.contado_base if rodada.ok_em else None,
                 esperado=rodada.esperado if rodada.ok_em else None)
-    from .marco_fisico import recibos
-    from .models import PropostaAjuste
-    aplicados = recibos(PropostaAjuste.objects.filter(rodada=rodada, estado='aplicado'))
-    contexto['marco_aplicado'] = aplicados[0] if aplicados else None
-    contexto['ok_original'] = rodada.confirmacoes.order_by('-versao_entrada').first()
+    from .marco_fisico import referencias_estoque, ok_referencia
+    marcos, referencias = referencias_estoque([item.produto], rodada_ids=[rodada.pk])
+    contexto['marco_aplicado'] = marcos.get(rodada.pk)
+    contexto['referencia_estoque'] = referencias[item.produto_id]
+    try:
+        contexto['ok_original'] = (contexto['marco_aplicado'].proposta.confirmacao
+            if contexto['marco_aplicado'] else ok_referencia(rodada))
+    except ValueError as exc:
+        contexto['ok_original'] = None
+        contexto['ok_referencia_erro'] = str(exc)
+    contexto['confirmacoes_substituidas'] = rodada.confirmacoes.exclude(
+        pk=contexto['ok_original'].pk if contexto['ok_original'] else None).count()
     for chave, consulta in (('operacoes_url', ''), ('evidencias_url', 'evidencias')):
         destino = params.copy()
         destino.pop('extrato_pagina', None)

@@ -1,19 +1,19 @@
 {% include "inventario/ajustes_diretos.html" %}
 <div class="atualizacao-resultado" id="atualizacao-resultado">
   <h3>Confirmação do estoque</h3>
-  <p>{{ resumo_confirmacao.confirmados }} marcos confirmados · {{ resumo_confirmacao.aguardando }} aguardando confirmação · {{ resumo_confirmacao.revisao }} produtos exigem revisão.</p>
-  {% if modo_historico %}<p>Encerramento registrado. Os marcos ainda não confirmados permanecem pendentes; encerrar não aplica ajustes.</p>{% endif %}
+  <p>{{ resumo_confirmacao.confirmados }} referências físicas confirmadas · {{ resumo_confirmacao.aguardando }} aguardando confirmação · {{ resumo_confirmacao.revisao }} produtos exigem revisão.</p>
+  {% if modo_historico %}<p>Encerramento registrado. As referências físicas ainda não confirmadas permanecem pendentes; encerrar não aplica ajustes.</p>{% endif %}
   {% if atualizacao.erro %}<p class="erro">{{ atualizacao.erro }}</p>{% endif %}
   {% if not ajustes_habilitados %}<p class="aviso">Aplicação real desabilitada no servidor. A prévia não altera o estoque.</p>{% endif %}
   {% if previa_lote %}
     <h4>Revisar confirmação em lote</h4>
-    <p>Os marcos elegíveis abaixo serão confirmados, inclusive com diferença zero. Impedidos e já confirmados ficam fora do lote.</p>
+    <p>As referências físicas elegíveis abaixo serão confirmadas, inclusive com diferença zero. Impedidos e já confirmados ficam fora do lote.</p>
     {% include 'inventario/previa_produtos_ajuste.html' %}
     <p>A diferença será aplicada ao estoque atual, preservando as movimentações posteriores ao OK. Se os dados mudarem, o lote será recusado e será necessário revisar outra prévia. O lote é aplicado integralmente ou revertido.</p>
     <form method="post" id="confirmar-atualizacao-resultado">
       {% csrf_token %}<input type="hidden" name="acao" value="atualizar"><input type="hidden" name="previa" value="{{ previa_lote }}">
       <details><summary>Adicionar observação</summary><label>Observação opcional<textarea name="observacao" maxlength="4000"></textarea></label></details>
-      <div class="acoes"><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Cancelar</a><button name="confirmacao" value="sim" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar marcos do lote</button></div>
+      <div class="acoes"><a class="button secondary" href="{% url 'inventario:detalhe' inventario.pk %}#titulo-resumo">Cancelar</a><button name="confirmacao" value="sim" {% if not ajustes_habilitados %}disabled{% endif %}>Confirmar referências físicas do lote</button></div>
     </form>
 
   {% else %}<p class="status">Consulte a situação de cada produto acima. A atualização exige revisão validada e autorização.</p>{% endif %}

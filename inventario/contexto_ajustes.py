@@ -11,7 +11,7 @@ from estoque.models import (Venda, ItemVenda, EventoVenda, ItemVendaRemovido, Aj
                             Compra, ItemCompra, EdicaoCompra)
 from .models import (ConfirmacaoContagem, MovimentoObservado, RodadaContagem,
                      DecisaoAjuste, PropostaAjuste, ConciliacaoMovimento, SequenciaEstoque,
-                     DetalheMovimentoEstoque)
+                     DetalheMovimentoEstoque, EventoInventario)
 from .selecao import itens_incluidos
 from .evidencia_remocoes import CAMPOS
 
@@ -37,6 +37,9 @@ class _Lote:
         self.confirmacoes = defaultdict(list)
         for c in ConfirmacaoContagem.objects.filter(rodada_id__in=ids).order_by('versao_entrada'):
             self.confirmacoes[c.rodada_id].append(c)
+        administrativas = {c.rodada_id for confs in self.confirmacoes.values() for c in confs if c.acesso_id is None}
+        self.confirmacoes_admin = {e.dados.get('confirmacao_id'): e for e in EventoInventario.objects.filter(
+            rodada_id__in=administrativas, acao='contagem_admin_confirmada')}
         filtro = Q(pk__in=[])
         for r in rodadas:
             confs = self.confirmacoes[r.pk]
