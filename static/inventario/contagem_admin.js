@@ -32,6 +32,18 @@ document.querySelectorAll('form[data-edicao-admin]').forEach(form => {
         form.querySelector('[data-total-admin]').textContent = Number.isFinite(total)
             ? total.toLocaleString('pt-BR', {maximumFractionDigits: 3}) + ' ' + form.dataset.base : '—';
     };
+    const anteriores = [principal.value, avulsos?.value || ''];
+    form.querySelectorAll('[name=tipo][type=radio]').forEach(opcao => opcao.addEventListener('change', () => {
+        const nova = form.elements.tipo.value === 'nova';
+        principal.value = nova ? '' : anteriores[0];
+        if (avulsos) avulsos.value = nova ? '' : anteriores[1];
+        botao.textContent = nova ? 'Registrar nova contagem feita agora' : 'Salvar correção anterior';
+        form.querySelector('[data-referencia-contagem]').textContent = nova
+            ? 'Conte fisicamente agora e digite os valores. Será aberta outra rodada com um novo horário de OK.'
+            : 'Correção dos números da contagem anterior; horário e referência do OK serão mantidos.';
+        atualizarTotal();
+        principal.focus();
+    }));
     form.addEventListener('input', atualizarTotal);
     principal.addEventListener('input', () => {
         principal.removeAttribute('aria-invalid');

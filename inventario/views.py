@@ -145,20 +145,26 @@ def linhas_revisao(inventario):
                 # for confirmed rounds, including observer and stock checks.
                 if not rodada.ok_em:
                     raise ValueError("Confirme uma rodada ativa antes da revisão.")
-                # Reuse this read-only proof once; keep the historical OK intact.
-                from .marco_fisico import comprovar, resultante
-                _, documentos = comprovar(rodada, item.produto, todos_movimentos, lote=lote)
-                movimentos_comprovados = {d['observador'] for d in documentos}
-                projetado = resultante(rodada.contado_base, documentos)
-                if projetado < 0:
-                    raise ValueError('Movimentações posteriores excedem a contagem; projeção não comparável.')
-                comparacao_atual.update(contado=projetado, projetada=bool(documentos), limite='')
-                if rodada.revisao_sequencia is None:
-                    bloqueio = "Histórico validado. Revisão administrativa não registrada."
-                elif rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0):
-                    bloqueio = "Histórico validado. Revisão administrativa desatualizada."
+                if rodada.pk in marcos:
+                    # A committed receipt is already the physical reference. Do not
+                    # demand reconstruction before it for this read-only comparison.
+                    comparacao_atual.update(limite='', marco_aplicado=True)
+                    bloqueio = 'Marco confirmado. Nenhum novo ajuste será aplicado nesta conferência.'
                 else:
-                    bloqueio = "Histórico validado. Revisão administrativa registrada."
+                    # Reuse this read-only proof once; keep the historical OK intact.
+                    from .marco_fisico import comprovar, resultante
+                    _, documentos = comprovar(rodada, item.produto, todos_movimentos, lote=lote)
+                    movimentos_comprovados = {d['observador'] for d in documentos}
+                    projetado = resultante(rodada.contado_base, documentos)
+                    if projetado < 0:
+                        raise ValueError('Movimentações posteriores excedem a contagem; projeção não comparável.')
+                    comparacao_atual.update(contado=projetado, projetada=bool(documentos), limite='')
+                    if rodada.revisao_sequencia is None:
+                        bloqueio = "Histórico validado. Revisão administrativa não registrada."
+                    elif rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0):
+                        bloqueio = "Histórico validado. Revisão administrativa desatualizada."
+                    else:
+                        bloqueio = "Histórico validado. Revisão administrativa registrada."
             except ValueError as exc:
                 bloqueio = str(exc)
                 inseguro = rodada.ok_em is not None
@@ -642,7 +648,8 @@ def editar_contagem_admin(request, inventario_id, rodada_id):
         if request.POST.get('confirmacao') != 'sim':
             raise ValueError('Confirme a contagem para registrar o OK.')
         contagem_admin.confirmar(request.user, inventario_id, rodada_id,
-            request.POST.get('autorizacao'), request.POST.get('embalagens'), request.POST.get('avulsos'))
+            request.POST.get('autorizacao'), request.POST.get('embalagens'), request.POST.get('avulsos'),
+            tipo=request.POST.get('tipo', 'corrigir'))
     except (ValueError, PermissionDenied) as exc:
         if 'application/json' in request.headers.get('Accept', ''):
             return JsonResponse({'erro': str(exc)}, status=403 if isinstance(exc, PermissionDenied) else 409)

@@ -146,14 +146,15 @@ class PadronizacaoConferenciaTests(AjustesFixture, TestCase):
         self.assertEqual(pagina.status_code, 200)
         linha = pagina.context['linhas'][0]
         self.assertEqual(linha['confirmacao_estoque'], 'Revisão necessária')
-        self.assertIsNone(linha['comparacao_atual']['diferenca'])
+        self.assertEqual(linha['comparacao_atual']['diferenca'], 1)
+        self.assertIsNone(linha['comparacao_operacional']['diferenca'])
         self.assertEqual(linha['diferenca'], 0)
         html = pagina.content.decode()
         contado = html.split('data-label="Contado"', 1)[1].split('</td>', 1)[0]
         from django.utils.html import strip_tags
-        self.assertIn(linha['contado_texto'], strip_tags(contado))
+        self.assertIn(linha['comparacao_atual']['contado_texto'], strip_tags(contado))
         self.assertNotIn('Não comparável', contado)
-        self.assertIn('Projeção não comprovada', contado)
+        self.assertIn('Contagem original no OK', contado)
         tabela = Tabela()
         tabela.feed(html)
         self.assertEqual(tabela.colunas, 7)

@@ -51,11 +51,12 @@ class SituacaoApresentacaoTests(unittest.TestCase):
     def test_projecao_desconhecida_preserva_contagem_original_e_unidade(self):
         linha = self.caso(None, 'Bloqueado')
         linha['contado_texto'] = '3 PCT + 2 UN (20 UN)'
+        linha['comparacao_atual']['contado_texto'] = '3,333 PCT'
         html, texto = self.renderizar(linha)
         contado = html.split('data-label="Contado"', 1)[1].split('</td>', 1)[0]
-        self.assertIn('3 PCT', contado)
-        self.assertIn('2 UN (20 UN)', contado)
-        self.assertIn('Contagem original no OK · Projeção não comprovada', contado)
+        self.assertIn('3,333 PCT', contado)
+        self.assertIn('20 UN', contado)
+        self.assertIn('Contagem original no OK', contado)
         self.assertNotIn('Não comparável', contado)
         self.assertNotIn('estado-bloqueado', html)
         self.assertNotIn('Correção pendente', texto)

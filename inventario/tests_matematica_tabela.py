@@ -110,29 +110,30 @@ class MatematicaTabelaTests(TestCase):
         self.conferir('1', '1')
         self.movimentar('.3')
         linha, _ = self.consultar()
-        self.assert_matematica(linha, '.7', '.7', '0', '0', '0')
+        self.assert_matematica(linha, '.7', '1', '.3', str(D('.3')/D('.7')*100), '3')
+        self.assertEqual(linha['comparacao_operacional']['diferenca'], 0)
         self.assertTrue(linha['comparacao_atual']['projetada'])
         pagina = self.client.get(reverse('inventario:detalhe', args=[self.inv.pk]))
-        self.assertContains(pagina, 'Projetado após o OK')
+        self.assertContains(pagina, 'Contagem original no OK')
 
     def test_compra_e_venda_posteriores_percentual_sobre_estoque_exibido(self):
         self.conferir('2', '.5')
         self.movimentar('1', entrada=True)
         self.movimentar('.5')
         linha, resumo = self.consultar()
-        self.assert_matematica(linha, '2.5', '1', '-1.5', '-60', '-15')
-        self.assertEqual(resumo['percentual_financeiro'], 60)
+        self.assert_matematica(linha, '2.5', '.5', '-2', '-80', '-20')
+        self.assertEqual(resumo['percentual_financeiro'], 80)
         self.assertEqual(linha['diferenca'], D('-1.5'))  # Original OK is intact.
-        self.assertEqual(linha['percentual_quantidade'], -60)
+        self.assertEqual(linha['percentual_quantidade'], -80)
 
     def test_outro_tipo_de_unidade_e_conversao_congelada(self):
         self.conferir('2', '1', unidade='CX', fracionado=True, fator=12)
         self.movimentar('6', unidade='UN', fator=12, atribuir=True)
         linha, _ = self.consultar()
-        self.assert_matematica(linha, '1.5', '.5', '-1', str((-D(1)/D('1.5'))*100), '-10')
+        self.assert_matematica(linha, '1.5', '1', '-.5', str((-D('.5')/D('1.5'))*100), '-5')
         self.assertEqual(linha['comparacao_atual']['unidade'], 'CX')
-        self.assertEqual(linha['comparacao_atual']['diferenca_texto'], '-1 CX')
-        self.assertEqual(linha['contado_equivalencia']['texto'], '6 UN')
+        self.assertEqual(linha['comparacao_atual']['diferenca_texto'], '−0,5 CX')
+        self.assertEqual(linha['contado_equivalencia']['texto'], '12 UN')
 
     def test_unidade_alterada_nao_converte_pelo_cadastro_atual(self):
         self.conferir('1', '1')
@@ -142,22 +143,23 @@ class MatematicaTabelaTests(TestCase):
         self.assertIsNone(linha['estimativa'])
         self.assertEqual(linha['resultado_label'], 'Não comparável')
 
-    def test_movimento_sem_prova_nao_inventa_contagem_nem_diferenca(self):
+    def test_movimento_sem_prova_exibe_comparacao_sem_inventar_ajuste(self):
         self.conferir('1', '1')
         Produto.objects.filter(pk=self.produto.pk).update(quantidade=D('.7'))
         linha, resumo = self.consultar()
         c = linha['comparacao_atual']
         self.assertEqual(c['estoque'], D('.7'))
-        self.assertIsNone(c['contado'])
-        self.assertIsNone(c['diferenca'])
-        self.assertIsNone(c['percentual'])
-        self.assertIsNone(c['estimativa'])
+        self.assertEqual(c['contado'], 1)
+        self.assertEqual(c['diferenca'], D('.3'))
+        self.assertEqual(c['percentual'], D('.3')/D('.7')*100)
+        self.assertEqual(c['estimativa'], 3)
+        self.assertIsNone(linha['comparacao_operacional']['diferenca'])
         self.assertTrue(c['limite'])
         self.assertTrue(resumo['parcial'])
         self.assertEqual(linha['diferenca'], 0)
 
     @override_settings(INVENTARIO_AJUSTES_HABILITADOS=True)
-    def test_aplicado_exibe_zero_atual_e_preserva_diferenca_historica(self):
+    def test_aplicado_preserva_contagem_e_diferenca_historica(self):
         self.conferir('2', '.5')
         r = type(self.r).objects.select_related('item__produto').get(pk=self.r.pk)
         a = ajustes.avaliar(r)
@@ -165,7 +167,7 @@ class MatematicaTabelaTests(TestCase):
         self.movimentar('.2')
         antes = ConfirmacaoContagem.objects.get(rodada=self.r)
         linha, _ = self.consultar()
-        self.assert_matematica(linha, '.3', '.3', '0', '0', '0')
+        self.assert_matematica(linha, '.3', '.5', '.2', str(D('.2')/D('.3')*100), '2')
         self.assertEqual(linha['diferenca'], D('-1.5'))
         self.assertEqual(linha['marco'].diferenca, D('-1.5'))
         self.assertEqual(ConfirmacaoContagem.objects.get(pk=antes.pk).contado_base, D('.5'))
@@ -209,7 +211,7 @@ class MatematicaTabelaTests(TestCase):
                         self.assertEqual(tab.evaluate('document.querySelectorAll(".tabela-resumo thead th").length'), 7)
                         self.assertFalse(tab.evaluate('document.documentElement.scrollWidth>innerWidth'))
                         self.assertTrue(tab.evaluate('[...document.querySelectorAll("details")].every(d=>!d.open)'))
-                        self.assertIn('Projetado após o OK', tab.evaluate('document.querySelector(".contado-coluna").innerText'))
+                        self.assertIn('Contagem original no OK', tab.evaluate('document.querySelector(".contado-coluna").innerText'))
                         tab.evaluate('document.querySelector(".resumo-inventario").scrollIntoView();true')
                         captura = tab.call('Page.captureScreenshot', {'format': 'png'})
                         (pasta / f'tabela-{largura}.png').write_bytes(base64.b64decode(captura['data']))

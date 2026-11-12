@@ -14,6 +14,7 @@ from .selecao import itens_incluidos
 
 SALT = 'inventario-contagem-administrativa-v1'
 ACAO = 'contagem_admin_confirmada'
+NOVA = 'nova_contagem_admin'
 
 
 def autorizacao(usuario, inventario, rodada):
@@ -31,9 +32,18 @@ def valores_auditoria(rodada):
     return {campo: str(getattr(rodada, campo)) if getattr(rodada, campo) is not None else None for campo in campos}
 
 
+def mesma_contagem(valores, rodada):
+    """An omitted zero-loose-unit field is not a new physical observation."""
+    return (valores[0] == rodada.embalagens
+        and (valores[1] or 0) == (rodada.avulsos or 0)
+        and valores[2:] == (rodada.contado, rodada.contado_base))
+
+
 @transaction.atomic
-def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
+def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos, *, tipo='corrigir'):
     services.permitir(usuario, 'revisar_inventario')
+    if tipo not in ('corrigir', 'nova'):
+        raise ValueError('Escolha corrigir a contagem anterior ou registrar uma nova contagem física agora.')
     try:
         dados = signing.loads(token, salt=SALT, max_age=43200)
     except (signing.BadSignature, TypeError, ValueError):
@@ -44,11 +54,22 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
         raise PermissionDenied('Formulário fora desta conferência ou deste usuário.')
     inventario = Inventario.objects.select_for_update().get(pk=inventario_id)
     services.exigir_nao_cancelada(inventario)
-    if dados.get('ciclo') != inventario.ciclo:
-        raise ValueError('O ciclo da conferência mudou. Atualize a página.')
     referencia = RodadaContagem.objects.get(pk=rodada_id, item__inventario=inventario)
     item = ItemInventario.objects.select_for_update().get(pk=referencia.item_id)
     rodada = RodadaContagem.objects.select_for_update().get(pk=rodada_id)
+    valores = converter(cadastro_contagem(item), embalagens, avulsos)
+    # An explicit new count reuses the existing round lifecycle. Its accepted
+    # request can be retried even after the old round was closed or the new one applied.
+    if tipo == 'nova':
+        anterior_nova = EventoInventario.objects.filter(inventario=inventario, rodada=rodada,
+            usuario=usuario, acao=NOVA, dados__versao_entrada=dados['versao']).first()
+        if anterior_nova:
+            conf = ConfirmacaoContagem.objects.get(pk=anterior_nova.dados['confirmacao_id'])
+            if (conf.embalagens, conf.avulsos) != valores[:2]:
+                raise ValueError('Esta versão já registrou outra nova contagem. Atualize a página.')
+            return RodadaContagem.objects.get(pk=conf.rodada_id)
+    if dados.get('ciclo') != inventario.ciclo:
+        raise ValueError('O ciclo da conferência mudou. Atualize a página.')
     if (rodada.encerrada_em or item.rodadas.filter(numero__gt=rodada.numero).exists()
             or not itens_incluidos(inventario).filter(pk=item.pk).exists()):
         raise ValueError('Esta rodada não está disponível. Atualize a página.')
@@ -56,27 +77,46 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
             or AplicacaoAjuste.objects.filter(proposta__rodada__item=item).exists()
             or PropostaAjuste.objects.filter(rodada__item=item, estado='aplicado').exists()):
         raise ValueError('Produto com ajuste de estoque aplicado. A correção exige um processo separado.')
-    valores = converter(cadastro_contagem(item), embalagens, avulsos)
     anterior = rodada.confirmacoes.filter(versao_entrada=dados['versao']).first()
     if anterior:
         # Retry only this administrator's accepted request, never somebody else's OK.
+        evento_anterior = EventoInventario.objects.filter(inventario=inventario, rodada=rodada,
+            usuario=usuario, acao=ACAO, dados__confirmacao_id=anterior.pk).first()
+        if tipo == 'nova' and evento_anterior and evento_anterior.dados.get('tipo') != 'nova_contagem':
+            raise ValueError('Esta versão já corrigiu a contagem anterior. Atualize antes de registrar uma nova contagem.')
         if (anterior.acesso_id is None and (anterior.embalagens, anterior.avulsos) == valores[:2]
-                and EventoInventario.objects.filter(inventario=inventario, rodada=rodada,
-                    usuario=usuario, acao=ACAO, dados__confirmacao_id=anterior.pk).exists()):
+                and evento_anterior):
             return rodada
         raise ValueError('Esta versão já foi confirmada com outra contagem. Atualize a página.')
     if rodada.versao != dados['versao']:
         raise ValueError('A contagem mudou em outra aba ou acesso. Atualize a página.')
+    if tipo == 'nova' and rodada.ok_em:
+        nova = services.recontar(usuario, rodada.pk, 'Nova contagem física realizada agora pelo administrador.')
+        inventario.refresh_from_db()
+        nova = confirmar(usuario, inventario.pk, nova.pk,
+            autorizacao(usuario, inventario, nova), embalagens, avulsos)
+        conf = nova.confirmacoes.order_by('-versao_entrada').first()
+        services.evento(inventario, NOVA, usuario, rodada=rodada,
+            versao_entrada=dados['versao'], nova_rodada=nova.pk, confirmacao_id=conf.pk,
+            estoque_alterado=False)
+        return nova
+    ultimo = rodada.confirmacoes.order_by('-versao_entrada').first()
+    if rodada.ok_em:
+        campos = ('embalagens', 'avulsos', 'contado', 'contado_base', 'esperado', 'sequencia_ok', 'ok_em')
+        if not ultimo or any(getattr(ultimo, c) != getattr(rodada, c) for c in campos):
+            raise ValueError('Confirmação anterior incompatível. Registre uma nova contagem física agora.')
+        if mesma_contagem(valores, rodada):
+            return rodada  # Reconfirming identical numbers never creates a new temporal reference.
     services.verificar_observador()
     produto = Produto.objects.select_for_update().get(pk=item.produto_id)
     if not produto.ativo or produto.excluido or produto.quantidade is None or not cadastro_compativel(produto, item.cadastro):
         raise ValueError('Produto ou cadastro alterado. Revise antes de confirmar a contagem.')
     antes = valores_auditoria(rodada)
-    ultimo = rodada.confirmacoes.order_by('-versao_entrada').first()
     rodada.embalagens, rodada.avulsos, rodada.contado, rodada.contado_base = valores
-    rodada.esperado = produto.quantidade
-    rodada.sequencia_ok = services.sequencia(produto.pk)
-    rodada.ok_em = timezone.now()
+    if not rodada.ok_em:
+        rodada.esperado = produto.quantidade
+        rodada.sequencia_ok = services.sequencia(produto.pk)
+        rodada.ok_em = timezone.now()
     confirmacao = ConfirmacaoContagem.objects.create(rodada=rodada, versao_entrada=rodada.versao,
         embalagens=valores[0], avulsos=valores[1], contado=valores[2], contado_base=valores[3],
         esperado=rodada.esperado, sequencia_ok=rodada.sequencia_ok, ok_em=rodada.ok_em,
@@ -92,5 +132,6 @@ def confirmar(usuario, inventario_id, rodada_id, token, embalagens, avulsos):
         unidade=item.cadastro['base'], secundaria=item.cadastro['secundaria'],
         fator=item.cadastro['fator'], conferencia_id=inventario.pk, rodada_numero=rodada.numero,
         ciclo=inventario.ciclo, usuario_nome=usuario.get_username(), estoque_alterado=False,
+        tipo='correcao_anterior' if ultimo and antes['ok_em'] else 'nova_contagem',
         contagem_fisica=auditoria_fisica(item, valores[0], valores[1]))
     return rodada

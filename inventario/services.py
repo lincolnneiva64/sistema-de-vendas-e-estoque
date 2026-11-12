@@ -284,7 +284,7 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
     if not atribuicao:
         raise PermissionDenied("Produto fora desta atribuição.")
     rodada = RodadaContagem.objects.select_for_update().select_related("item").get(pk=rodada_id)
-    from .contagem_admin import confirmado
+    from .contagem_admin import confirmado, mesma_contagem
     if confirmado(rodada):
         raise PermissionDenied("Contagem confirmada pelo administrador. Solicite revisão ao responsável.")
     if rodada.encerrada_em:
@@ -308,6 +308,12 @@ def salvar_contagem(acesso_id, rodada_id, versao, embalagens, avulsos, confirmar
         raise ValueError("Esta contagem foi atualizada em outra aba. Atualize a página.")
     if confirmar:
         valores = converter(cadastro_contagem(rodada.item), embalagens, avulsos)
+        if rodada.ok_em and mesma_contagem(valores, rodada):
+            ultima = rodada.confirmacoes.order_by('-versao_entrada').first()
+            campos = ('ok_em', 'esperado', 'contado_base', 'contado', 'sequencia_ok', 'embalagens', 'avulsos')
+            if not ultima or any(getattr(ultima, c) != getattr(rodada, c) for c in campos):
+                raise ValueError('OK sem confirmação original compatível. Solicite revisão.')
+            return rodada
     else:
         principal, avulso = decimal_entrada(embalagens), decimal_entrada(avulsos)
         valores = converter(cadastro_contagem(rodada.item), principal if principal is not None else 0,
