@@ -134,16 +134,25 @@ def linhas_revisao(inventario):
             conciliacoes = {c.movimento_id: c for c in rodada.conciliacoes.all() if c.conciliado_em >= rodada.ok_em} if rodada.ok_em else {}
             todos_movimentos = list(lote.movimentos[item.produto_id]) if lote is not None and (rodada.ok_em or rodada.confirmacoes.all()) else []
             sinalizacoes = sinais_por_item[item.pk]
-            diferenca = rodada.contado_base - rodada.esperado if rodada.ok_em else None
+            diferenca = (rodada.contado_base - rodada.esperado
+                if rodada.ok_em and rodada.contado_base is not None and rodada.esperado is not None else None)
             valor = (diferenca * item.custo_base).quantize(Decimal("0.01")) if diferenca is not None and item.custo_base is not None else None
             inseguro = False
             movimentos_comprovados = set()
+            comparacao_atual = dict(contado=None, projetada=False, limite='Aguardando OK confirmado.')
             try:
                 # There is no chain to review before an OK. Keep all validation
                 # for confirmed rounds, including observer and stock checks.
                 if not rodada.ok_em:
                     raise ValueError("Confirme uma rodada ativa antes da revisão.")
-                _, movimentos_comprovados = revisao_historico.validar(rodada, item.produto, lote)
+                # Reuse this read-only proof once; keep the historical OK intact.
+                from .marco_fisico import comprovar, resultante
+                _, documentos = comprovar(rodada, item.produto, todos_movimentos, lote=lote)
+                movimentos_comprovados = {d['observador'] for d in documentos}
+                projetado = resultante(rodada.contado_base, documentos)
+                if projetado < 0:
+                    raise ValueError('Movimentações posteriores excedem a contagem; projeção não comparável.')
+                comparacao_atual.update(contado=projetado, projetada=bool(documentos), limite='')
                 if rodada.revisao_sequencia is None:
                     bloqueio = "Histórico validado. Revisão administrativa não registrada."
                 elif rodada.revisao_sequencia != lote.sequencias.get(item.produto_id, 0):
@@ -153,17 +162,19 @@ def linhas_revisao(inventario):
             except ValueError as exc:
                 bloqueio = str(exc)
                 inseguro = rodada.ok_em is not None
+                comparacao_atual['limite'] = str(exc)
             try:
                 decisao = item.decisao
             except DecisaoAjuste.DoesNotExist:
                 decisao = None
-            situacao = "Aguardando OK" if not rodada.ok_em else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
+            situacao = "Aguardando OK" if diferenca is None else "Correto" if diferenca == 0 else "Falta" if diferenca < 0 else "Sobra"
             if rodada.numero > 1 and not rodada.ok_em:
                 situacao = "Recontagem"
             if inseguro or any(s.resolvida_em is None and (not rodada.ok_em or s.criado_em >= rodada.ok_em) for s in sinalizacoes):
                 situacao = "Revisão necessária"
             destaque = "falta" if diferenca is not None and diferenca < 0 else "sobra" if diferenca is not None and diferenca > 0 else "neutro"
             linhas.append({"item": item, "rodada": rodada, "diferenca": diferenca, "valor": valor,
+                "comparacao_atual": comparacao_atual,
                 "bloqueio": bloqueio, "decisao": decisao, "marco": marcos.get(rodada.pk),
                 "saldo_estimado": item.produto_id not in produtos_com_marco,
                 "situacao": situacao, "destaque": destaque,

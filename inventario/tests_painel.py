@@ -24,7 +24,9 @@ from .tests import produto
 from .tests_browser import CHROME
 
 
-def linha(esperado='10', contado='8', custo='10', atual='12', *, encerrada=False):
+def linha(esperado='10', contado='8', custo='10', atual='esperado', *, encerrada=False):
+    if atual == 'esperado':
+        atual = esperado
     esperado, contado, custo, atual = [Decimal(v) if v is not None else None
                                       for v in (esperado, contado, custo, atual)]
     return dict(item=Objeto(custo_base=custo, cadastro={'base': 'UN', 'continua': False, 'fracionado': False},
@@ -32,6 +34,7 @@ def linha(esperado='10', contado='8', custo='10', atual='12', *, encerrada=False
                 rodada=Objeto(esperado=esperado, ok_em=True if contado is not None else None,
                               encerrada_em=True if encerrada else None),
                 diferenca=contado-esperado if contado is not None and esperado is not None else None,
+                comparacao_atual=dict(contado=contado, projetada=False, limite=''),
                 situacao='Aguardando OK' if contado is None else 'Falta')
 
 
@@ -92,9 +95,10 @@ class CalculosPainelTests(SimpleTestCase):
     def test_base_percentual_convertida_para_mesma_unidade_da_diferenca(self):
         linhas = [linha(esperado='0.2', contado='0')]
         linhas[0]['item'].cadastro.update(base='FD', secundaria='KG', fator='10', fracionado=True)
+        linhas[0]['item'].produto.unidade_compra = 'FD'
         resumo_painel(linhas)
-        self.assertEqual(linhas[0]['diferenca_texto'], '-2 KG')
-        self.assertEqual(linhas[0]['base_percentual'], '2 KG')
+        self.assertEqual(linhas[0]['comparacao_atual']['diferenca_texto'], '-0,2 FD')
+        self.assertEqual(linhas[0]['base_percentual'], '0,2 FD')
         self.assertEqual(linhas[0]['percentual_quantidade'], -100)
 
     def test_rodada_encerrada_nao_duplicada_e_saldo_atual_sem_referencia_inventada(self):
@@ -143,10 +147,13 @@ class PainelHTTPTests(PainelFixture, TestCase):
         self.assertEqual(antes, [list(model.objects.order_by('pk').values()) for model in modelos])
         linha_falta = next(l for l in resposta.context['linhas'] if l['item'].produto_id == self.produtos[0].pk)
         self.assertEqual((linha_falta['estoque_atual_texto'], linha_falta['esperado_texto']), ('7 UN', '10 UN'))
-        self.assertEqual(resposta.context['resumo_painel']['impacto'], 40)
+        # The unproven write disables only that comparison, never invents a
+        # projection or reuses its old shortage in the current financial total.
+        self.assertIsNone(linha_falta['comparacao_atual']['diferenca'])
+        self.assertEqual(resposta.context['resumo_painel']['impacto'], 20)
         self.assertContains(resposta, 'base 10 UN')
-        self.assertContains(resposta, 'R$ 40,00')
-        self.assertContains(resposta, '13,33%')
+        self.assertContains(resposta, 'R$ 20,00')
+        self.assertContains(resposta, '20,00%')
         self.assertContains(resposta, 'name="acao" value="recontar"', count=4)
         self.assertNotContains(resposta, 'value="aprovar"')
         self.assertFalse(settings.INVENTARIO_AJUSTES_HABILITADOS)

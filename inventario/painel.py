@@ -1,93 +1,76 @@
-"""Read-only management projection. Never used by blind counting endpoints."""
+"""Read-only table comparison. Historical OKs never become current differences."""
 from decimal import Decimal
 
 from .apresentacao import equivalencia_visual, quantidade
 
 
 def resumo_painel(linhas):
-    resumo = dict(total=len(linhas), conferidos=0, faltas=0, sobras=0, corretos=0,
+    resumo = dict(total=len(linhas), conferidos=0, comparaveis=0, faltas=0, sobras=0, corretos=0,
                   pendentes=0, com_custo=0, sem_custo=0, revisao=0,
                   impacto=Decimal(0), saldo=Decimal(0), base_financeira=Decimal(0))
     for linha in linhas:
-        item, rodada = linha["item"], linha["rodada"]
-        unidade_atual = (item.produto.unidade_venda_1 or item.produto.unidade_compra or "").strip().upper()
-        # Read-only equivalences: live stock uses its current registered units;
-        # the count uses only the conference's frozen conversion.
-        cadastro_atual = dict(base=unidade_atual,
-            secundaria=getattr(item.produto, 'unidade_venda_2', '') or '',
-            fator=getattr(item.produto, 'fator_conversao', None),
-            nome=getattr(item.produto, 'nome', item.cadastro.get('nome', '')))
-        parcela = getattr(rodada, 'avulsos', None)
-        linha['estoque_atual_equivalencia'] = equivalencia_visual(
-            item.produto.quantidade, cadastro_atual, avulsos=parcela)
-        linha['contado_equivalencia'] = ({} if linha.get('comparacao_fisica') else
-            equivalencia_visual(rodada.contado_base if rodada.ok_em else None,
-                                item.cadastro, avulsos=parcela))
-        diferenca = linha["diferenca"]
-        confirmado = (rodada.ok_em is not None and rodada.encerrada_em is None
-                      and diferenca is not None)
-        resultado = "pendente" if not confirmado else "falta" if diferenca < 0 else "sobra" if diferenca > 0 else "correto"
-        fisico = linha.get('comparacao_fisica', {})
-        if confirmado and fisico:
-            # Physical classification only. Keep decimal balances, costs and the
-            # independent administrative/review states untouched.
-            d = fisico['dados'].get('diferenca_fisica')
-            if fisico.get('normalizacao'):
-                resultado = 'correto'
-            elif d is None:
-                resultado = 'pendente'
+        item, rodada = linha['item'], linha['rodada']
+        unidade = (item.produto.unidade_venda_1 or item.produto.unidade_compra or '').strip().upper()
+        cadastro = dict(base=unidade or '(unidade indisponível)', continua=unidade in {'KG', 'MIL'})
+        comparacao = linha.setdefault('comparacao_atual', dict(
+            contado=None, projetada=False, limite='Comparação atual não comprovada.'))
+        comparacao.update(estoque=item.produto.quantidade, unidade=unidade,
+            diferenca=None, percentual=None, estimativa=None, base_percentual=None,
+            percentual_motivo='', contado_texto='Não comparável', diferenca_texto='Não comparável')
+        comparacao['estoque_texto'] = quantidade(comparacao['estoque'], cadastro)
+        # A current conversion cannot bridge a historical unit change.
+        comparavel = (rodada.ok_em is not None and rodada.encerrada_em is None
+            and comparacao['contado'] is not None and comparacao['estoque'] is not None
+            and unidade == item.cadastro.get('base') and not comparacao['limite'])
+        if not comparavel:
+            comparacao['limite'] = comparacao['limite'] or 'Unidade, saldo ou referência temporal incompatível.'
+        resultado = 'pendente'
+        if comparavel:
+            diferenca = comparacao['contado'] - comparacao['estoque']
+            comparacao.update(diferenca=diferenca,
+                contado_texto=quantidade(comparacao['contado'], cadastro),
+                diferenca_texto=quantidade(diferenca, cadastro))
+            resultado = 'falta' if diferenca < 0 else 'sobra' if diferenca > 0 else 'correto'
+            base = abs(comparacao['estoque'])
+            comparacao['base_percentual'] = quantidade(base, cadastro)
+            if base:
+                comparacao['percentual'] = diferenca / base * 100
             else:
-                resultado = 'correto' if Decimal(d) == 0 else 'falta' if Decimal(d) < 0 else 'sobra'
-        linha.update(resultado=resultado, resultado_label={"pendente": "Aguardando OK", "falta": "Falta",
-                     "sobra": "Sobra", "correto": "Correto"}[resultado], percentual_quantidade=None,
-                     base_percentual=None, percentual_motivo="Aguardando OK", estimativa=None,
-                     estoque_atual_texto=quantidade(item.produto.quantidade,
-                         {"base": unidade_atual or "(unidade indisponível)", "continua": unidade_atual in {"KG", "MIL"}}),
-                     revisar=linha["situacao"] == "Revisão necessária")
-        if confirmado and resultado == 'pendente':
-            linha['resultado_label'] = 'Resíduo decimal' if fisico.get('normalizacao') else 'Referência aproximada'
-        if linha["revisar"]:
-            resumo["revisao"] += 1
-        if not confirmado:
-            resumo["pendentes"] += 1
-            continue
-        resumo["conferidos"] += 1
-        resumo[{"falta": "faltas", "sobra": "sobras", "correto": "corretos", "pendente": "pendentes"}[resultado]] += 1
-        linha["diferenca_texto"] = fisico["diferenca"] if fisico else quantidade(diferenca, item.cadastro, diferenca=True)
-        if fisico and resultado == 'correto':
-            linha['diferenca_texto'] = 'Sem diferença'
-        if fisico.get('normalizacao'):
-            linha['resultado_label'] = 'Ajuste de precisão'
-            linha['diferenca_texto'] = 'Ajuste de precisão'
-        base = abs(rodada.esperado)
-        linha["base_percentual"] = quantidade(base, item.cadastro, diferenca=True)
-        if base:
-            linha["percentual_quantidade"] = diferenca / base * 100
-            linha["percentual_motivo"] = ""
+                comparacao['percentual_motivo'] = 'Estoque exibido igual a zero; percentual não definido.'
         else:
-            linha["percentual_motivo"] = "Esperado no OK igual a zero"
-        if fisico:
-            dados = fisico['dados']
-            d = dados.get('diferenca_fisica')
-            if d is not None and Decimal(dados['esperado_unidades']) != 0:
-                linha['percentual_quantidade'] = Decimal(d) / abs(Decimal(dados['esperado_unidades'])) * 100
-                linha['base_percentual'] = dados['esperado_unidades'].split('.')[0] + ' UN'
-            elif d is None:
-                linha['percentual_quantidade'] = None
-                linha['percentual_motivo'] = 'Referência física aproximada; consulte os detalhes decimais'
-        if item.custo_base is None or item.custo_base < 0:
-            resumo["sem_custo"] += 1
+            comparacao['percentual_motivo'] = comparacao['limite']
+        comparacao['resultado'] = resultado
+        comparacao['situacao'] = ('Aguardando OK' if not rodada.ok_em else 'Não comparável') if not comparavel else {
+            'falta': 'Falta', 'sobra': 'Sobra', 'correto': 'Sem diferença'}[resultado]
+        comparacao['destaque'] = resultado if resultado in ('falta', 'sobra') else 'neutro'
+        # Explanatory equivalences never replace the primary comparison unit.
+        linha['estoque_atual_texto'] = comparacao['estoque_texto']
+        linha['estoque_atual_equivalencia'] = equivalencia_visual(
+            comparacao['estoque'], item.cadastro) if comparavel else {}
+        linha['contado_equivalencia'] = equivalencia_visual(
+            comparacao['contado'], item.cadastro) if comparavel else {}
+        linha.update(resultado=resultado, resultado_label=comparacao['situacao'],
+            percentual_quantidade=comparacao['percentual'], base_percentual=comparacao['base_percentual'],
+            percentual_motivo=comparacao['percentual_motivo'], estimativa=None,
+            revisar=linha['situacao'] == 'Revisão necessária')
+        resumo['revisao'] += int(linha['revisar'])
+        resumo['conferidos'] += int(rodada.ok_em is not None and rodada.encerrada_em is None)
+        resumo['comparaveis'] += int(comparavel)
+        resumo[{'falta': 'faltas', 'sobra': 'sobras', 'correto': 'corretos', 'pendente': 'pendentes'}[resultado]] += 1
+        if not comparavel:
             continue
-        # Sum the displayed monetary amounts. Costs use the same frozen base
-        # unit as the reference and count; never sum quantities across units.
-        linha["estimativa"] = (diferenca * item.custo_base).quantize(Decimal("0.01"))
-        resumo["com_custo"] += 1
-        resumo["impacto"] += abs(linha["estimativa"])
-        resumo["saldo"] += linha["estimativa"]
-        resumo["base_financeira"] += (base * item.custo_base).quantize(Decimal("0.01"))
-    resumo["percentual_financeiro"] = (resumo["impacto"] / resumo["base_financeira"] * 100
-                                        if resumo["base_financeira"] > 0 else None)
-    if not resumo["com_custo"]:
-        resumo["impacto"] = resumo["saldo"] = None
-    resumo["parcial"] = resumo["sem_custo"] > 0
+        if item.custo_base is None or item.custo_base < 0:
+            resumo['sem_custo'] += 1
+            continue
+        comparacao['estimativa'] = (comparacao['diferenca'] * item.custo_base).quantize(Decimal('.01'))
+        linha['estimativa'] = comparacao['estimativa']
+        resumo['com_custo'] += 1
+        resumo['impacto'] += abs(comparacao['estimativa'])
+        resumo['saldo'] += comparacao['estimativa']
+        resumo['base_financeira'] += (abs(comparacao['estoque']) * item.custo_base).quantize(Decimal('.01'))
+    resumo['percentual_financeiro'] = (resumo['impacto'] / resumo['base_financeira'] * 100
+                                      if resumo['base_financeira'] > 0 else None)
+    if not resumo['com_custo']:
+        resumo['impacto'] = resumo['saldo'] = None
+    resumo['parcial'] = resumo['sem_custo'] > 0 or resumo['pendentes'] > 0
     return resumo
