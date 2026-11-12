@@ -384,7 +384,8 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
             and request.user.has_perm("inventario.revisar_inventario")):
         from . import encerramento
         try:
-            encerramento_previa = encerramento.previa(request.user, inventario, resumo_confirmacao=resumo_confirmacao)
+            encerramento_previa = encerramento.previa(request.user, inventario,
+                resumo_confirmacao=resumo_confirmacao, linhas_confirmacao=linhas)
         except ValueError as exc:
             encerramento_erro = str(exc)
     return render(request, "inventario/detalhe.html", {"inventario": inventario, "linhas": linhas, "messages": mensagens,

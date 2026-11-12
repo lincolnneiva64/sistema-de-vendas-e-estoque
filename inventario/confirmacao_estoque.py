@@ -24,7 +24,7 @@ def classificar(linhas):
     return totais
 
 
-def consultar(inventario):
+def consultar(inventario, *, detalhar=False):
     from .views import linhas_revisao
     from . import ajustes
     linhas = linhas_revisao(inventario)
@@ -32,7 +32,8 @@ def consultar(inventario):
     por_rodada = {l['rodada'].pk: l for l in atualizacao['linhas']}
     for linha in linhas:
         linha['atualizacao'] = por_rodada.get(linha['rodada'].pk)
-    return classificar(linhas)
+    totais = classificar(linhas)
+    return (totais, linhas) if detalhar else totais
 
 
 def classificar_avaliacoes(linhas, marcos):

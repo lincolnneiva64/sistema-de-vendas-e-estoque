@@ -20,7 +20,7 @@ def permitir(usuario):
     services.permitir(usuario, 'revisar_inventario')
 
 
-def resumo(inventario, *, resumo_confirmacao=None):
+def resumo(inventario, *, resumo_confirmacao=None, linhas_confirmacao=None):
     itens = list(itens_incluidos(inventario).prefetch_related('decisao', Prefetch('rodadas',
         queryset=RodadaContagem.objects.order_by('numero').prefetch_related('confirmacoes'),
         to_attr='rodadas_encerramento')).order_by('pk'))
@@ -34,7 +34,7 @@ def resumo(inventario, *, resumo_confirmacao=None):
         if any(c.acesso_id is None for c in r.confirmacoes.all())}
     eventos_admin = {e.dados.get('confirmacao_id'): e for e in EventoInventario.objects.filter(
         rodada_id__in=administrativas, acao='contagem_admin_confirmada')}
-    evidencias=[]; aplicados=0; pendentes=0
+    evidencias=[]; aplicados=0; pendentes=0; impedimentos={}
     for item in itens:
         rodadas=item.rodadas_encerramento
         r=rodadas[-1] if rodadas else None
@@ -61,29 +61,56 @@ def resumo(inventario, *, resumo_confirmacao=None):
             else:
                 conf=ok_referencia(r, confirmacoes, eventos_admin)
         except ValueError as exc:
-            raise ValueError(f'{item.cadastro["nome"]}: {exc}') from exc
+            if r.pk in marcos:
+                raise ValueError(f'{item.cadastro["nome"]}: {exc}') from exc
+            # Closing is not permission to apply stock. Keep physical-proof
+            # impediments as acknowledged outstanding issues, never repair an OK.
+            conf=max(confirmacoes,key=lambda c:c.versao_entrada,default=None)
+            campos=('ok_em','esperado','contado_base','contado','sequencia_ok','embalagens','avulsos')
+            if (not conf or conf.versao_entrada>=r.versao
+                    or any(getattr(conf,c)!=getattr(r,c) for c in campos)):
+                raise ValueError(f'{item.cadastro["nome"]}: OK sem confirmação original compatível.') from exc
+            impedimentos[r.pk]=str(exc)
         decisao=getattr(item,'decisao',None)
         aplicados+=int(r.pk in marcos)
         pendentes+=int(r.pk not in marcos and r.contado_base!=r.esperado)
         evidencias.append(dict(item=item.pk,produto=item.produto_id,nome=item.cadastro['nome'],
             rodada=r.pk,numero=r.numero,versao=r.versao,confirmacao=conf.pk,
-            esperado=r.esperado,contado=r.contado_base,decisao=decisao.pk if decisao else None))
+            esperado=r.esperado,contado=r.contado_base,decisao=decisao.pk if decisao else None,
+            unidade=item.cadastro['base'],ok_em=r.ok_em.isoformat(),
+            ok_em_texto=timezone.localtime(r.ok_em).strftime('%d/%m/%Y %H:%M:%S'),sequencia_ok=r.sequencia_ok,
+            embalagens=r.embalagens,avulsos=r.avulsos))
     dados=dict(total=len(itens),aplicados=aplicados,sem_ajuste=len(itens)-aplicados,
         diferencas_pendentes=pendentes,rodadas=evidencias,ciclo=inventario.ciclo,versao=inventario.versao)
-    if resumo_confirmacao is None:
+    if resumo_confirmacao is None or linhas_confirmacao is None:
         from .confirmacao_estoque import consultar
-        resumo_confirmacao = consultar(inventario)
+        resumo_confirmacao, linhas_confirmacao = consultar(inventario, detalhar=True)
+    por_rodada={l['rodada'].pk:l for l in linhas_confirmacao}
+    pendencias=[]
+    for evidencia in evidencias:
+        rodada_id=evidencia['rodada']
+        if rodada_id in marcos:
+            continue
+        linha=por_rodada[rodada_id]
+        situacao=linha['confirmacao_estoque']
+        motivo=(impedimentos.get(rodada_id)
+            or (linha.get('comparacao_atual') or {}).get('limite')
+            or (linha.get('atualizacao') or {}).get('bloqueio')
+            or (linha.get('bloqueio') if situacao=='Revisão necessária' else '')
+            or 'Referência física ainda não aplicada; exige confirmação administrativa própria.')
+        pendencias.append(dict(evidencia,situacao=situacao,motivo=motivo))
+    dados['pendencias']=pendencias
     dados.update(resumo_confirmacao)
     dados['assinatura']=hashlib.sha256(json.dumps(dados,cls=DjangoJSONEncoder,sort_keys=True).encode()).hexdigest()
     return dados
 
 
-def previa(usuario,inventario, *, resumo_confirmacao=None):
+def previa(usuario,inventario, *, resumo_confirmacao=None, linhas_confirmacao=None):
     permitir(usuario)
     services.exigir_nao_cancelada(inventario)
     if inventario.finalizada_em:
         raise ValueError('Conferencia ja finalizada.')
-    dados=resumo(inventario, resumo_confirmacao=resumo_confirmacao)
+    dados=resumo(inventario, resumo_confirmacao=resumo_confirmacao, linhas_confirmacao=linhas_confirmacao)
     dados['token']=signing.dumps(dict(usuario=usuario.pk,inventario=inventario.pk,assinatura=dados['assinatura']),salt=SALT)
     return dados
 
