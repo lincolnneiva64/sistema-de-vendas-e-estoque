@@ -26,9 +26,9 @@ class UnidadeFinalBrowserTests(DecisoesBrowserTests):
         self.assertEqual(t.evaluate('campoUnidade.value'), '')
         self.assertEqual(t.evaluate('[...campoUnidade.options].map(o=>o.value)'), ['', 'UN'])
         self.assertNotIn('2,95', t.evaluate("document.querySelector('#secaoItensCompra').innerText"))
-        self.assertIn('Unidade inválida. Selecione uma unidade cadastrada para continuar.', t.evaluate("document.querySelector('#avisoUnidadesCompra').textContent"))
-        self.assertIn(self.produto.nome, t.evaluate("document.querySelector('#avisoUnidadesCompra').textContent"))
-        self.assertEqual(t.evaluate("linhaUnidade.querySelector('.compra-unidade-label').childNodes[0].textContent.trim()"), 'Unidade')
+        self.assertIn('Unidade inválida. Selecione uma unidade cadastrada.', t.evaluate("linhaUnidade.querySelector('.aviso-unidade-compra').textContent"))
+        self.assertFalse(t.evaluate("!!document.querySelector('#avisoUnidadesCompra')"))
+        self.assertFalse(t.evaluate("!!linhaUnidade.querySelector('.compra-unidade-label')"))
         valores = t.evaluate("[linhaUnidade.querySelector('[name=\"quantidade[]\"]').value,linhaUnidade.querySelector('.campo-preco-unitario-compra').value,linhaUnidade.querySelector('.valor-total-item').textContent,document.querySelector('#previaDecisaoPrecosCompra').value]")
         # Tentativa real de concluir: deve focalizar Unidade, sem abrir financeiro.
         self.tocar(t, '#btnSalvarCompra')
@@ -42,7 +42,7 @@ class UnidadeFinalBrowserTests(DecisoesBrowserTests):
         t.call('Input.dispatchKeyEvent',dict(type='keyUp',key='ArrowDown',code='ArrowDown',windowsVirtualKeyCode=40))
         self.assertEqual(t.evaluate('campoUnidade.value'), 'UN')
         self.assertTrue(t.evaluate("linhaUnidade.querySelector('.aviso-unidade-compra').hidden"))
-        self.assertTrue(t.evaluate("document.querySelector('#avisoUnidadesCompra').hidden"))
+        self.assertFalse(t.evaluate("!!document.querySelector('#avisoUnidadesCompra')"))
         self.assertEqual(valores, t.evaluate("[linhaUnidade.querySelector('[name=\"quantidade[]\"]').value,linhaUnidade.querySelector('.campo-preco-unitario-compra').value,linhaUnidade.querySelector('.valor-total-item').textContent,document.querySelector('#previaDecisaoPrecosCompra').value]"))
         self.capturar_unidade(t, f'{largura}-corrigida')
         if largura < 820:
