@@ -542,7 +542,7 @@ class FracionadosDiagnosticoBrowserTests(FracionadosFixture,StaticLiveServerTest
                 self.assertEqual(Decimal(tab.evaluate('document.querySelector("[name=preco_vista_fracionado]").value').replace(',','.')),0)
                 tab.evaluate('document.querySelector("[name=preco_prazo_fracionado]").value="1,30";document.getElementById("form-produto").requestSubmit();true')
                 tab.wait('!!document.querySelector(".precos-seletivos-feedback")')
-                self.assertIn('Salve primeiro',tab.evaluate('document.querySelector(".precos-seletivos-feedback").textContent'))
+                self.assertIn('Configuração alterada',tab.evaluate('document.querySelector(".precos-seletivos-feedback").textContent'))
                 self.assertFalse(tab.evaluate('!!document.querySelector("dialog[open] [data-destinatario]")'))
                 self.assertEqual({p['id']:p for p in Produto.objects.values()},antes)
                 tab.evaluate('document.querySelector("[name=preco_prazo_fracionado]").value="0.00";true')

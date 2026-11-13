@@ -1066,13 +1066,17 @@ select.campo-obrigatorio-piscando:focus,
     const observada=JSON.parse(document.getElementById('produto-apresentacao-observada').textContent);
     const unidade=v=>String(v || '').trim().toUpperCase();
     const fracionado=['true','1','sim'].includes(String(form.elements.vende_fracionado.value).toLowerCase());
-    const mudouApresentacao=unidade(form.elements.unidade_compra.value)!==unidade(observada.unidade_compra)
-      || fracionado!==observada.vende_fracionado
-      || (fracionado && (unidade(form.elements.unidade_venda_2.value)!==unidade(observada.unidade_venda_2)
-        || numero(form.elements.fator_conversao.value)!==numero(observada.fator_conversao)));
-    if(mudouApresentacao){
+    const alteracoes=[];
+    if(unidade(form.elements.unidade_compra.value)!==unidade(observada.unidade_compra))alteracoes.push('Unidade de compra: '+observada.unidade_compra+' → '+form.elements.unidade_compra.value);
+    if(fracionado!==observada.vende_fracionado)alteracoes.push('Venda fracionada: '+(observada.vende_fracionado?'Sim':'Não')+' → '+(fracionado?'Sim':'Não'));
+    if(fracionado){
+      if(unidade(form.elements.unidade_venda_2.value)!==unidade(observada.unidade_venda_2))alteracoes.push('Unidade fracionada: '+observada.unidade_venda_2+' → '+form.elements.unidade_venda_2.value);
+      if(numero(form.elements.fator_conversao.value)!==numero(observada.fator_conversao))alteracoes.push('Fator de conversão: '+numero(observada.fator_conversao)+' → '+numero(form.elements.fator_conversao.value));
+    }
+    if(alteracoes.length){
       event.preventDefault();delete form.dataset.enviando;
-      window.notificarPrecosSeletivos('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.','warning');
+      const orientacao={% if form.grupo_precos.precos_regularizados %}'A apresentação define a compatibilidade do grupo ativo. Restaure o campo indicado para reajustar preços, ou revise o vínculo antes de mudar a apresentação.'{% else %}'Salve somente a configuração, sem reajustar os preços, e confira a nova prévia do grupo.'{% endif %};
+      window.notificarPrecosSeletivos('Configuração alterada: '+alteracoes.join('; ')+'. '+orientacao+' Nenhum dado foi salvo.','warning');
       return;
     }
     if(form.dataset.precoConsentido==='1'){delete form.dataset.precoConsentido;return;}
@@ -1314,7 +1318,7 @@ select.campo-obrigatorio-piscando:focus,
         id="{{ form.fator_conversao.id_for_label }}"
         class="form-control"
         step="0.01"
-        value="{{ form.fator_conversao.value|default_if_none:'' }}"
+        value="{{ form.fator_conversao.value|default_if_none:''|unlocalize }}"
     >
 </div>
 <div class="col-12 col-md-3" id="bloco-unidade-fracionada">
@@ -1363,7 +1367,7 @@ select.campo-obrigatorio-piscando:focus,
     class="form-control"
     id="id_preco_vista"
     name="preco_vista"
-    value="{% if form.instance.pk %}{% if form.instance.cadastro_incompleto and form.preco_vista.value == form.preco_compra.value %}{% else %}{{ form.preco_vista.value|default_if_none:'' }}{% endif %}{% endif %}"
+    value="{% if form.instance.pk %}{% if form.instance.cadastro_incompleto and form.preco_vista.value == form.preco_compra.value %}{% else %}{{ form.preco_vista.value|default_if_none:''|unlocalize }}{% endif %}{% endif %}"
 >
     </div>
 </div>
@@ -1396,7 +1400,7 @@ select.campo-obrigatorio-piscando:focus,
     class="form-control"
     id="id_preco_prazo"
     name="preco_prazo"
-    value="{% if form.instance.pk %}{% if form.instance.cadastro_incompleto and form.preco_prazo.value == form.preco_compra.value %}{% else %}{{ form.preco_prazo.value|default_if_none:'' }}{% endif %}{% endif %}"
+    value="{% if form.instance.pk %}{% if form.instance.cadastro_incompleto and form.preco_prazo.value == form.preco_compra.value %}{% else %}{{ form.preco_prazo.value|default_if_none:''|unlocalize }}{% endif %}{% endif %}"
 >
     </div>
 </div>
@@ -2319,33 +2323,16 @@ document.addEventListener("DOMContentLoaded", function () {
     return Number.isFinite(n) ? n : 0;
   }
 
-  function textoSelect(select) {
-    if (!select) return "";
-    const op = select.options[select.selectedIndex];
-    return String(op ? op.textContent : select.value || "").trim().toLowerCase();
-  }
-
-  function vendeFracionadoAtivo(campo) {
-    const valor = String((campo && campo.value) || "").trim().toLowerCase();
-    const label = textoSelect(campo);
-    return ["sim", "true", "1", "s"].includes(valor) || label === "sim";
-  }
-
   const form = document.querySelector('form[method="post"]');
   if (!form) return;
 
   form.addEventListener("submit", function () {
     const campoReal = document.getElementById("id_fator_conversao");
     const campoVisual = document.getElementById("fator_visual");
-    const campoVende = document.getElementById("id_vende_fracionado") || document.getElementById("vende_fracionado_visual");
 
     if (!campoReal) return;
 
-    let fator = numeroBR((campoVisual && campoVisual.value) || campoReal.value);
-
-    if (vendeFracionadoAtivo(campoVende) && fator <= 0) {
-      fator = 1;
-    }
+    const fator = numeroBR((campoVisual && campoVisual.value) || campoReal.value);
 
     if (fator > 0) {
       campoReal.value = fator.toFixed(2);
@@ -3214,7 +3201,7 @@ document.addEventListener("DOMContentLoaded", function () {
     function fatorMudou() {
       if (travadoEstoque) return;
 
-      campoFator.value = formatar(numero(fatorVisual.value), 2);
+      campoFator.value = String(fatorVisual.value || "").trim() ? numero(fatorVisual.value).toFixed(2) : "";
       disparar(campoFator);
 
       principalParaFracionado();

@@ -93,7 +93,21 @@ def grupos_detalhe(request, grupo_id):
             novos = list(Produto.objects.filter(pk__in=ids, excluido=False, ativo=True, vinculo_grupo__isnull=True).order_by('pk'))
             if not ids or len(novos) != len(ids):
                 raise ValidationError('Selecione produtos ativos disponíveis e sem vínculo.')
-            return JsonResponse({'precos_vinculados': diagnosticar_grupo([*atuais, *novos], validar_precos=False)})
+            diagnostico = diagnosticar_grupo([*atuais, *novos], validar_precos=False)
+            avaliacao = []
+            for produto in novos:
+                individual = diagnosticar_grupo([*atuais, produto], validar_precos=False)
+                motivos = []
+                for diferenca in individual['incompatibilidades']:
+                    candidato = next(p for p in diferenca['integrantes'] if p['produto_id'] == produto.pk)
+                    valores_grupo = list(dict.fromkeys(p['valor'] for p in diferenca['integrantes'] if p['produto_id'] != produto.pk))
+                    motivos.append(f"{diferenca['rotulo']}: {candidato['valor']}. Grupo: {', '.join(valores_grupo)}.")
+                motivos.extend(b['motivo'] for b in individual['bloqueios'] if b['produto_id'] is not None)
+                if individual['bloqueios'] and not motivos:
+                    motivos = [b['motivo'] for b in individual['bloqueios']]
+                avaliacao.append({'produto_id': produto.pk, 'nome': produto.nome,
+                                  'compativel': not individual['bloqueios'], 'motivos': motivos})
+            return JsonResponse({'precos_vinculados': diagnostico, 'avaliacao_adicao': avaliacao})
         erro = recusa_operador_precos(request.user)
         if erro is not None:
             return erro

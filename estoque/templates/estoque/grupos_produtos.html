@@ -159,6 +159,7 @@
       <label for="grupoProdutoBusca">Buscar produto disponível</label>
       <input type="search" id="grupoProdutoBusca" placeholder="Nome do produto">
       <div id="grupoProdutoElegiveis"></div>
+      <div id="grupoProdutoSituacaoAdicao" role="status" hidden></div>
       <label class="grupo-produtos-opcao" id="grupoProdutoAdicaoConfirmacao" hidden><input type="checkbox" id="grupoProdutoAdicaoCompatibilidade">Confirmo a compatibilidade dos novos integrantes. Seus preços atuais serão preservados.</label>
       <div class="grupo-produtos-acoes">
         <button type="button" id="grupoProdutoConfirmarAdicao" class="grupo-produtos-primario" disabled>Confirmar adição</button>
@@ -459,6 +460,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   function atualizarElegiveis() {
     adicaoPrevia=null;el('grupoProdutoAplicarAdicao').hidden=true;
+    el('grupoProdutoSituacaoAdicao').hidden=true;
     el('grupoProdutoAdicaoConfirmacao').hidden=true;el('grupoProdutoAdicaoCompatibilidade').checked=false;
     const busca = el('grupoProdutoBusca').value.trim().toLocaleLowerCase();
     const opcoes = Array.from(el('grupoProdutoElegiveis').querySelectorAll('label'));
@@ -493,10 +495,25 @@ document.addEventListener('DOMContentLoaded', function () {
     el('grupoProdutoElegiveis').querySelectorAll('input:checked').forEach(input=>dados.append('produto_ids',input.value));
     ocupado=true;erro.textContent='';
     try{
-      const previa=(await requisitar(grupoUrl,dados)).precos_vinculados;
+      const resultado=await requisitar(grupoUrl,dados);
+      const previa=resultado.precos_vinculados;
+      const situacao=el('grupoProdutoSituacaoAdicao');situacao.replaceChildren();
+      (resultado.avaliacao_adicao || []).forEach(produto=>{
+        const linha=document.createElement('p');
+        linha.dataset.produtoId=produto.produto_id;
+        linha.dataset.compativel=produto.compativel ? '1' : '0';
+        linha.className=produto.compativel ? 'grupo-produtos-status' : 'grupo-produtos-erro';
+        linha.textContent=produto.nome+': '+(produto.compativel ? 'Pode ser incluído. Preços atuais preservados.' : 'Impedido. '+produto.motivos.join(' '));
+        situacao.append(linha);
+      });
+      situacao.hidden=false;
       mostrarPrecos(previa,true);
       el('grupoProdutoRegularizar').hidden=true;
-      if(previa.bloqueios.length)throw new Error('Entrada bloqueada. Confira os problemas apresentados na prévia.');
+      if(previa.bloqueios.length){
+        const impedidos=(resultado.avaliacao_adicao || []).filter(p=>!p.compativel).map(p=>p.nome);
+        situacao.scrollIntoView({block:'nearest'});
+        throw new Error('Entrada bloqueada'+(impedidos.length ? ' para: '+impedidos.join(', ') : '')+'. Nenhum produto foi adicionado. Desmarque os impedidos para conferir e incluir os compatíveis, ou corrija os campos indicados no cadastro.');
+      }
       adicaoPrevia=dados;adicaoPrevia.set('acao','adicionar');
       adicaoPrevia.set('versao_observada',previa.versao_observada);adicaoPrevia.set('confirmar','1');
       el('grupoProdutoAdicaoConfirmacao').hidden=false;el('grupoProdutoAdicaoCompatibilidade').checked=false;

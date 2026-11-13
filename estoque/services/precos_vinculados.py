@@ -98,7 +98,11 @@ def impedir_escrita_direta(produto_id, atualizacoes, using='default'):
             if campo in atualizacoes:
                 anterior=getattr(produto,campo);novo=atualizacoes[campo]
                 if campo.startswith('unidade_'):anterior,novo=_unidade(anterior),_unidade(novo)
-                if anterior!=novo:raise ValidationError('Desvincule o produto antes de alterar a apresentacao/conversao do grupo ativo.')
+                if anterior!=novo:
+                    rotulos = {'unidade_compra':'Unidade de compra', 'unidade_venda_1':'Unidade principal',
+                               'unidade_venda_2':'Unidade fracionada', 'fator_conversao':'Fator de conversão',
+                               'vende_fracionado':'Venda fracionada'}
+                    raise ValidationError(f'{rotulos[campo]}: {anterior} → {novo}. A apresentação define a compatibilidade do grupo ativo. Restaure o campo ou revise o vínculo antes de alterar a apresentação; nenhum dado foi salvo.')
     campos=set(atualizacoes).intersection((*PRECOS_VINCULADOS, 'preco_venda'))
     if not produto.vende_fracionado and not atualizacoes.get('vende_fracionado'):
         campos.difference_update(PRECOS_VINCULADOS[2:])
@@ -367,7 +371,15 @@ def salvar_formulario_produto(form, *, operador=None):
             if mudou_apresentacao and any(
                 getattr(atual,c) != getattr(produto,c) for c in campos_precos
             ):
-                raise ValidationError('Salve primeiro a configuração de unidade, fator e venda fracionada sem reajustar preços. Depois reabra o cadastro, confira a compatibilidade do grupo e confirme os destinatários.')
+                anterior = (_unidade(atual.unidade_compra), *_assinatura_apresentacao(atual))
+                proposta = (_unidade(produto.unidade_compra), *_assinatura_apresentacao(produto))
+                rotulos = ('Unidade de compra', 'Unidade principal', 'Unidade fracionada', 'Fator de conversão', 'Venda fracionada')
+                detalhes = '; '.join(f'{rotulo}: {antes} → {depois}'
+                                    for rotulo, antes, depois in zip(rotulos, anterior, proposta) if antes != depois)
+                orientacao = ('A apresentação define a compatibilidade do grupo ativo. Restaure o campo indicado para reajustar preços, ou revise o vínculo antes de mudar a apresentação.'
+                              if vinculo.grupo.precos_regularizados else
+                              'Salve somente a configuração, sem reajustar os preços, e confira a nova prévia do grupo.')
+                raise ValidationError(f'Configuração alterada: {detalhes}. {orientacao} Nenhum dado foi salvo.')
             custos = [c for c in ('preco_compra', 'preco_compra_fracionado') if getattr(produto, c) != getattr(atual, c)]
             if custos:
                 # Validate the proposed editor values, then write only this
