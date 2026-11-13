@@ -1,7 +1,7 @@
 ﻿{% extends 'estoque/base.html' %}{% load horarios_documentos horarios_recebimentos %}
 {% block title %}Receber do cliente{% endblock %}
 {% block content %}
-<p style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
+<p class="rc-aviso-horario" style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
 
 <aside class="rc-atalhos-lateral{% if cliente %} rc-atalhos-cliente-selecionado{% endif %}" id="atalhosReceberCliente" aria-label="Atalhos do receber cliente">
   <button type="button" class="rc-atalhos-toggle" id="btnAtalhosReceberCliente" aria-expanded="false" aria-controls="atalhosReceberClientePainel">Atalhos</button>
@@ -1240,7 +1240,313 @@
       opacity: .5;
       cursor: not-allowed;
     }
-  }</style>
+  }
+/* Compactacao visual local da pagina: preserva visibilidade, ordem e contratos. */
+.receber-cliente-page { padding-top: 6px; padding-bottom: 16px; }
+.receber-cliente-page .receber-cliente-shell { padding-inline: 12px; }
+.receber-cliente-page .rc-header { margin-bottom: 6px; }
+.receber-cliente-page .rc-panel,
+.receber-cliente-page .rc-cliente-busca-card,
+.receber-cliente-page .rc-rota-receber-card { margin-bottom: 6px; border-radius: 9px; }
+.receber-cliente-page .rc-cliente-busca-card { padding: 6px 8px; }
+.receber-cliente-page .rc-cliente-busca-topo { margin-bottom: 3px; }
+.receber-cliente-page .rc-resumo-geral-receber { gap: 6px; margin-bottom: 6px; }
+.receber-cliente-page .rc-resumo-geral-card { padding: 7px 9px; border-radius: 9px; }
+.receber-cliente-page .rc-resumo-geral-valor { margin-top: 3px; }
+.receber-cliente-page .rc-cliente-faixa .rc-card { min-height: 40px; padding: 5px 8px; }
+.receber-cliente-page .rc-panel-head { padding: 5px 8px; gap: 4px 10px; }
+.receber-cliente-page .rc-form { padding: 6px 8px; gap: 6px 8px; }
+.receber-cliente-page .rc-field { min-width: 0; }
+.receber-cliente-page .rc-field label { margin-bottom: 3px; }
+.receber-cliente-page .rc-distribuicao { margin: 0 8px 6px; gap: 4px; }
+.receber-cliente-page .rc-distribuicao-item { padding: 5px 7px; }
+.receber-cliente-page .rc-saldo-total {
+  margin: 0 8px 6px; padding: 5px 7px; display: flex;
+  justify-content: flex-end; flex-wrap: wrap; gap: 2px 16px;
+}
+.receber-cliente-page .rc-actions { padding: 6px 8px; gap: 6px; }
+.receber-cliente-page #formReceberCliente > .mt-3.mb-3 {
+  margin-block: 6px !important; display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px;
+}
+.receber-cliente-page #formReceberCliente > .mt-3.mb-3 > div {
+  grid-column: 1 / -1; margin-bottom: 0 !important;
+}
+.receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+  margin-bottom: 0 !important; min-width: 0; overflow-wrap: anywhere;
+}
+.receber-cliente-page .rc-historico { margin-top: 6px; padding: 8px; border-radius: 9px; }
+.receber-cliente-page .rc-historico-subtitle { margin-bottom: 5px; }
+.receber-cliente-page .rc-historico-lista { max-height: 260px; }
+.receber-cliente-page .rc-historico-item { padding: 5px 2px; }
+.receber-cliente-page .rc-historico-meta { gap: 3px 6px; }
+.receber-cliente-page .rc-historico-aplicacoes { margin-top: 3px; padding-left: 4px; }
+.receber-cliente-page .rc-historico-obs { margin-top: 3px; }
+@media (min-width: 721px) {
+  .receber-cliente-page .rc-rota-receber-card {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end; gap: 4px 10px; padding: 6px 8px;
+  }
+  .receber-cliente-page .rc-rota-form { margin-bottom: 0; grid-template-columns: minmax(0, 1fr); }
+  .receber-cliente-page .rc-rota-acoes { margin-top: 0; gap: 6px; flex-wrap: wrap; }
+  .receber-cliente-page .rc-rota-clientes-detalhes { grid-column: 1 / -1; }
+  .receber-cliente-page .rc-historico-item {
+    display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 2px 12px; align-items: start;
+  }
+  .receber-cliente-page .rc-historico-meta { grid-row: span 2; }
+  .receber-cliente-page .rc-historico-aplicacoes,
+  .receber-cliente-page .rc-historico-obs { margin-top: 0; }
+}
+@media (min-width: 981px) {
+  .receber-cliente-page .rc-pos-confirmacao-layout { gap: 5px; }
+  .receber-cliente-page .rc-summary {
+    grid-template-columns: minmax(240px, 1.6fr) minmax(130px, .8fr) minmax(110px, .6fr) minmax(170px, 1fr);
+  }
+  .receber-cliente-page .rc-panel-head { padding: 5px 8px; }
+  .receber-cliente-page .rc-form { padding: 6px 8px; gap: 6px 8px; }
+}
+@media (max-width: 720px) {
+  .receber-cliente-page .receber-cliente-shell { padding-inline: 10px; }
+  .receber-cliente-page .rc-header { gap: 5px; }
+  .receber-cliente-page .rc-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .receber-cliente-page .rc-summary .rc-card.cliente {
+    grid-column: 1 / -1; min-height: 0; border-right: 0; border-bottom: 1px solid #e2e8f0;
+  }
+  .receber-cliente-page .rc-summary .rc-card.total { grid-column: auto; align-items: flex-start; text-align: left; }
+  .receber-cliente-page .rc-cliente-faixa { padding: 0; }
+  .receber-cliente-page .rc-cliente-faixa .rc-card { padding: 5px 7px; }
+  .receber-cliente-page .rc-summary .rc-value { overflow-wrap: anywhere; }
+  .receber-cliente-page .rc-summary .rc-card.total .rc-value { font-size: 1rem; }
+  .receber-cliente-page .rc-cliente-busca-card { padding: 6px 8px; }
+  .receber-cliente-page .rc-rota-receber-card { padding: 6px 8px; }
+  .receber-cliente-page .rc-resumo-geral-card { padding: 6px 8px; }
+  .receber-cliente-page .rc-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .receber-cliente-page .rc-form > .rc-field:first-child {
+    grid-column: 1 / -1; display: grid;
+    grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; align-items: end;
+  }
+  .receber-cliente-page .rc-form > .rc-field:first-child > label,
+  .receber-cliente-page .rc-form > .rc-field:first-child > .rc-calculadora { grid-column: 1 / -1; }
+  .receber-cliente-page .rc-calculadora-toggle { width: auto; margin-top: 0; padding-inline: 12px; }
+  .receber-cliente-page .rc-confirmar-cliente-acoes,
+  .receber-cliente-page .rc-duplicidade-alerta,
+  .receber-cliente-page .rc-credito-futuro { grid-column: 1 / -1; }
+  .receber-cliente-page .rc-distribuicao { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .receber-cliente-page .rc-field input:not([type="hidden"]),
+  .receber-cliente-page .rc-forma-pagamento-btn,
+  .receber-cliente-page .rc-calculadora-toggle,
+  .receber-cliente-page .rc-btn { min-height: 44px; }
+  .receber-cliente-page .rc-field input,
+  .receber-cliente-page .rc-forma-pagamento-btn { padding-inline: 7px; }
+  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+    min-height: 44px; padding-block: 4px; align-items: center !important;
+  }
+  .receber-cliente-page #formReceberCliente input[name="dividas"] {
+    width: 20px; height: 20px; flex: 0 0 20px;
+  }
+  .receber-cliente-page .rc-conta-mobile-card { margin: 5px 8px; padding: 6px 7px; border-radius: 8px; }
+  .receber-cliente-page .rc-conta-mobile-topo { padding-bottom: 4px; margin-bottom: 4px; gap: 6px; }
+  .receber-cliente-page .rc-conta-mobile-grid { gap: 3px 6px; }
+  .receber-cliente-page .rc-conta-mobile-campo { padding: 3px 5px; }
+  .receber-cliente-page .rc-conta-mobile-grid .rc-conta-mobile-campo:last-child {
+    grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px;
+  }
+  .receber-cliente-page .rc-conta-mobile-preview { margin-top: 4px; padding-top: 4px; }
+  .receber-cliente-page .rc-historico { padding: 7px; }
+  .receber-cliente-page .rc-historico-lista { max-height: 240px; }
+  .receber-cliente-page .rc-historico-aplicacoes { padding-left: 0; }
+}
+
+/* Refinamento para aprovacao: leitura confortavel e acoes fora do conteudo. */
+.receber-cliente-page { clear: both; }
+.receber-cliente-page .rc-historico-meta { line-height: 1.4; }
+.receber-cliente-page .rc-historico-aplicacao { font-size: .8125rem; line-height: 1.45; }
+.receber-cliente-page .rc-historico-obs { font-size: .8125rem; line-height: 1.4; }
+.receber-cliente-page .rc-historico-item { padding-block: 7px; }
+.receber-cliente-page .rc-historico-lista { max-height: 300px; }
+body:has(.receber-cliente-page) .offline-global {
+  position: relative; top: auto; left: auto; float: left; width: fit-content; margin: 6px 12px;
+}
+body:has(.receber-cliente-page) .offline-disclosure > summary {
+  width: auto; min-width: 88px; height: 44px; padding: 7px 12px;
+  writing-mode: horizontal-tb; border: 2px solid var(--offline-border); border-radius: 8px;
+}
+body:has(.receber-cliente-page) .offline-panel { left: 0; top: calc(100% + 6px); }
+body:has(.receber-cliente-page) .rc-atalhos-lateral {
+  position: relative; top: auto; right: auto; left: auto;
+  float: right; width: fit-content; max-width: calc(100% - 24px); margin: 6px 12px;
+}
+body:has(.receber-cliente-page) .rc-atalhos-toggle {
+  position: static; min-height: 44px; padding: 7px 12px;
+  border-right: 1px solid #facc15; border-radius: 8px;
+}
+body:has(.receber-cliente-page) .rc-atalhos-painel { display: none; }
+body:has(.receber-cliente-page) .rc-atalhos-lateral.aberto .rc-atalhos-painel {
+  display: block; position: absolute; left: 0; top: calc(100% + 6px);
+  width: min(300px, calc(100vw - 24px));
+}
+body:has(.receber-cliente-page) .atalho-despesa-global {
+  position: relative !important; left: auto !important; bottom: auto !important;
+  margin: 8px 12px; vertical-align: middle;
+}
+body:has(.receber-cliente-page) .botao-voltar-topo,
+body:has(.receber-cliente-page) .botao-voltar-topo.recolhido {
+  position: relative; right: auto; bottom: auto; transform: none;
+  margin: 8px 12px; vertical-align: middle; min-width: 44px; width: auto;
+}
+@media (max-width: 720px) {
+  .receber-cliente-page .rc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .receber-cliente-page .rc-summary .rc-card.total {
+    grid-column: 1 / -1; flex-direction: row; align-items: baseline;
+    justify-content: space-between; gap: 8px; border-top: 1px solid #e2e8f0;
+  }
+  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 {
+    grid-template-columns: minmax(0, 1fr); gap: 3px;
+  }
+  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+    min-height: 48px; padding: 7px 8px; border-bottom: 1px solid #e2e8f0;
+    font-size: .875rem; line-height: 1.45;
+  }
+  .receber-cliente-page .rc-field label,
+  .receber-cliente-page .rc-label,
+  .receber-cliente-page .rc-conta-mobile-label { font-size: .75rem; }
+  .receber-cliente-page .rc-field input,
+  .receber-cliente-page .rc-forma-pagamento-btn { font-size: 1rem; min-height: 46px; }
+  .receber-cliente-page #valorRecebidoCliente { font-size: 1.25rem; min-height: 48px; }
+  .receber-cliente-page .rc-confirmar-cliente-acoes .rc-btn { min-height: 48px; font-size: .9375rem; }
+  .receber-cliente-page .rc-conta-mobile-valor { font-size: .875rem; line-height: 1.35; }
+  .receber-cliente-page .rc-conta-mobile-preview { font-size: .875rem; line-height: 1.4; }
+  .receber-cliente-page .rc-historico-meta { font-size: .8125rem; }
+  .receber-cliente-page .rc-historico-lista { max-height: 280px; }
+}
+
+
+/* Busca e recebimento proximos; a ordem do formulario e seus eventos nao mudam. */
+.receber-cliente-page .rc-dividas-titulo {
+  color: #172033; line-height: 1.45; overflow-wrap: anywhere;
+}
+@media (min-width: 981px) {
+  .receber-cliente-page .receber-cliente-shell {
+    display: grid; grid-template-columns: minmax(250px, .85fr) minmax(0, 2fr);
+    grid-template-areas:
+      "header header"
+      "indicators indicators"
+      "route route"
+      "notices notices"
+      "loading loading"
+      "search payment"
+      "client payment"
+      "debts debts"
+      "accounts accounts"
+      "history history";
+    gap: 0 10px; align-items: start;
+  }
+  .receber-cliente-page .rc-header { grid-area: header; margin-bottom: 0; }
+  .receber-cliente-page .rc-resumo-geral-receber { grid-area: indicators; margin-bottom: 0; }
+  .receber-cliente-page .rc-rota-receber-card { grid-area: route; margin-bottom: 0; }
+  .receber-cliente-page .rc-notificacoes { grid-area: notices; }
+  .receber-cliente-page .rc-carregando-cliente { grid-area: loading; margin-bottom: 0; }
+  .receber-cliente-page .rc-cliente-busca-card { grid-area: search; margin-bottom: 0; }
+  .receber-cliente-page .rc-pos-confirmacao-layout,
+  .receber-cliente-page .rc-pos-confirmacao-esquerda,
+  .receber-cliente-page #formReceberCliente { display: contents; }
+  .receber-cliente-page .rc-summary {
+    grid-area: client; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 0;
+  }
+  .receber-cliente-page .rc-summary .rc-card.cliente { grid-column: 1 / -1; border-bottom: 1px solid #e2e8f0; }
+  .receber-cliente-page .rc-summary .rc-card.total {
+    grid-column: 1 / -1; flex-direction: row; align-items: baseline;
+    justify-content: space-between; gap: 8px; border-top: 1px solid #e2e8f0;
+  }
+  .receber-cliente-page .rc-summary .rc-card { min-width: 0; }
+  .receber-cliente-page .rc-summary .rc-value { overflow-wrap: anywhere; }
+  .receber-cliente-page #formReceberCliente > .rc-panel { grid-area: payment; margin-bottom: 0; }
+  .receber-cliente-page .rc-form {
+    grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+  }
+  .receber-cliente-page .rc-form .rc-field input,
+  .receber-cliente-page .rc-forma-pagamento-btn { padding-inline: 7px; }
+  .receber-cliente-page .rc-confirmar-cliente-acoes .rc-btn { min-height: 44px; padding-inline: 7px; }
+  .receber-cliente-page #contas-do-cliente { grid-area: accounts; margin-bottom: 0; }
+  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 { grid-area: debts; }
+  .receber-cliente-page .rc-historico { grid-area: history; margin-top: 0; }
+  .receber-cliente-page .rc-header,
+  .receber-cliente-page .rc-resumo-geral-receber,
+  .receber-cliente-page .rc-rota-receber-card,
+  .receber-cliente-page .rc-notificacoes,
+  .receber-cliente-page .rc-carregando-cliente.visivel,
+  .receber-cliente-page .rc-cliente-busca-card,
+  .receber-cliente-page .rc-summary,
+  .receber-cliente-page #formReceberCliente > .rc-panel,
+  .receber-cliente-page #contas-do-cliente { margin-bottom: 6px; }
+}
+@media (min-width: 981px) and (max-width: 1199px) {
+  .receber-cliente-page .rc-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .receber-cliente-page .rc-dividas-titulo { font-size: .9375rem; }
+}
+
+
+/* Faixa superior exclusiva desta tela, sem linhas vazias nem controles sobrepostos. */
+body:has(.receber-cliente-page) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "status horario session atalhos"
+    "page page page page"
+    "despesa despesa topo topo"
+    "ambiente ambiente ambiente ambiente";
+  gap: 4px 8px; align-items: center; align-content: start;
+}
+body:has(.receber-cliente-page) [data-auth-session] {
+  grid-area: session; margin: 0 4px !important; min-width: 0;
+}
+body:has(.receber-cliente-page) [data-auth-session] button { min-height: 44px; padding-inline: 10px; }
+body:has(.receber-cliente-page) .offline-global { grid-area: status; float: none; margin: 4px 0 4px 10px; }
+body:has(.receber-cliente-page) .rc-aviso-horario {
+  grid-area: horario; min-width: 0; margin: 0; line-height: 1.4; overflow-wrap: anywhere;
+}
+body:has(.receber-cliente-page) .rc-atalhos-lateral {
+  grid-area: atalhos; float: none; margin: 4px 10px 4px 0; max-width: none;
+}
+body:has(.receber-cliente-page) .rc-atalhos-lateral.aberto .rc-atalhos-painel { left: auto; right: 0; }
+body:has(.receber-cliente-page) .receber-cliente-page { grid-area: page; min-width: 0; }
+body:has(.receber-cliente-page) .atalho-despesa-global { grid-area: despesa; justify-self: start; }
+body:has(.receber-cliente-page) .botao-voltar-topo { grid-area: topo; justify-self: end; }
+body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
+@media (max-width: 720px) {
+  body:has(.receber-cliente-page) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "status session atalhos"
+      "horario horario horario"
+      "page page page"
+      "despesa despesa topo"
+      "ambiente ambiente ambiente";
+    column-gap: 6px; row-gap: 3px;
+  }
+  body:has(.receber-cliente-page) .rc-aviso-horario { margin: 0 10px 3px; }
+  body:has(.receber-cliente-page) [data-auth-session] { justify-self: end; }
+  body:has(.rc-cliente-selecionado) {
+    grid-template-areas:
+      "status horario session"
+      "page page page"
+      "despesa despesa topo"
+      "ambiente ambiente ambiente";
+  }
+  body:has(.rc-cliente-selecionado) .rc-aviso-horario { margin: 4px 0; }
+}
+
+
+.receber-cliente-page .rc-historico-title {
+  font-weight: 950; color: #123a65; background: #eff6ff;
+  border-left: 4px solid #3b82f6; border-radius: 4px;
+  padding: 4px 7px; margin-bottom: 4px; line-height: 1.3;
+}
+
+</style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}{% if cliente %} rc-cliente-selecionado{% endif %}">
   <div class="receber-cliente-shell">
@@ -1506,9 +1812,11 @@
 </script>
 
     {% if messages %}
+      <div class="rc-notificacoes">
       {% for message in messages %}
         <div class="rc-message {{ message.tags }}">{{ message }}</div>
       {% endfor %}
+      </div>
     {% endif %}
 
     <section class="rc-cliente-busca-card" aria-label="Buscar cliente para receber">
@@ -1727,8 +2035,8 @@
         <input type="hidden" name="selecao_dividas_ativa" value="1">
 
         <div class="mt-3 mb-3">
-          <div class="fw-semibold mb-2">
-            D&Iacute;VIDAS QUE SER&Atilde;O PAGAS
+          <div class="fw-semibold mb-2 rc-dividas-titulo">
+            D&Iacute;VIDAS QUE SER&Atilde;O PAGAS{% if cliente %} &mdash; {{ cliente.nome }}{% endif %}
           </div>
 
           <div class="small text-muted mb-2">
@@ -1773,7 +2081,7 @@
         <section class="rc-panel" id="contas-do-cliente">
           <div class="rc-panel-head">
             <h2 class="rc-panel-title">Contas abertas do cliente</h2>
-            <span id="resumoPreviaCliente">Informe um valor para calcular a previa.</span>
+            <span id="resumoPreviaCliente">Informe o valor recebido para calcular a prévia.</span>
           </div>
           {% if credito_disponivel > 0 %}
             <section class="rc-creditos-disponiveis" aria-label="Creditos disponiveis do cliente">
@@ -2003,7 +2311,7 @@
           </div>
         </section>
         <section class="rc-historico">
-          <h2 class="rc-historico-title">Histórico recente do cliente</h2>
+          <h2 class="rc-historico-title">Últimos pagamentos do cliente</h2>
           <p class="rc-historico-subtitle">Últimos pagamentos registrados para este cliente.</p>
           {% if pagamentos_recentes %}
             <div class="rc-historico-lista" id="historicoRecenteCliente">
@@ -2497,6 +2805,8 @@
 <script>
 (function () {
   function initReceberClienteFinanceiro() {
+    // A redisplayed form (including validation errors) cancels stale navigation intent.
+    try { sessionStorage.removeItem("receberClienteAcoesRecibo"); } catch (_) {}
     if (window.receberClienteFinanceiroAbort) {
       window.receberClienteFinanceiroAbort.abort();
     }
@@ -2994,31 +3304,15 @@
       });
 
       if (resumo) {
+        resumo.style.whiteSpace = "normal";
         if (valorInformado <= 0) {
-          resumo.textContent = "Informe um valor para calcular a prévia.";
+          resumo.textContent = "Informe o valor recebido para calcular a prévia.";
         } else if (!aplicacoes.length) {
           resumo.textContent = "Nenhuma dívida selecionada receberá este valor.";
         } else {
-          const detalhes = aplicacoes.map(function (item) {
-            let textoAplicacao = item.titulo + " \u2014 " + moeda(item.valor);
-
-            if (item.descricao) {
-              textoAplicacao += "\n" + item.descricao;
-            }
-
-            if (item.saldoApos <= 0.009) {
-              textoAplicacao += "\nAp\u00f3s o recebimento, esta "
-                + ((item.titulo || "").startsWith("Loca") ? "locação" : "d\u00edvida")
-                + " ficar\u00e1 quitada.";
-            } else {
-              textoAplicacao += "\nSaldo ap\u00f3s o recebimento: " + moeda(item.saldoApos);
-            }
-
-            return textoAplicacao;
-          });
-
-          resumo.style.whiteSpace = "pre-line";
-          resumo.textContent = "Aplicação do recebimento: " + detalhes.join(" | ");
+          resumo.textContent = moeda(aplicado) + " em " + dividasAtingidas
+            + (dividasAtingidas === 1 ? " dívida." : " dívidas.")
+            + " Detalhes na tabela abaixo.";
         }
       }
 
@@ -3251,7 +3545,10 @@
         valor.removeAttribute("aria-readonly");
 
         if (valor.dataset.dividaFoiSelecionada === "1") {
-          valor.value = "";
+          valor.value = totalAberto.toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
         }
 
         calcularPrevia();
@@ -3277,10 +3574,29 @@
       calcularPrevia();
     }
 
+    let focoDividaPendente;
+    function cancelarFocoDivida() {
+      clearTimeout(focoDividaPendente);
+    }
+    // Every debt change schedules focus after the current interaction pauses.
+    document.addEventListener("pointerdown", cancelarFocoDivida, listenerOptions);
+    document.addEventListener("keydown", cancelarFocoDivida, listenerOptions);
+    document.addEventListener("wheel", cancelarFocoDivida, listenerOptions);
+    document.addEventListener("touchmove", cancelarFocoDivida, listenerOptions);
+    valor?.addEventListener("input", cancelarFocoDivida, listenerOptions);
+    controller.signal.addEventListener("abort", cancelarFocoDivida, { once: true });
     dividasCheckboxes.forEach(function (checkbox) {
       checkbox.addEventListener(
         "change",
-        sincronizarValorComDividasSelecionadas,
+        function () {
+          cancelarFocoDivida();
+          sincronizarValorComDividasSelecionadas();
+          focoDividaPendente = setTimeout(function () {
+            if (!valor || !checkbox.isConnected) return;
+            valor.focus({ preventScroll: true });
+            valor.select();
+          }, 700);
+        },
         listenerOptions
       );
     });
@@ -3417,7 +3733,16 @@
       }
     }, listenerOptions);
     form?.addEventListener("submit", async function (event) {
-      if (form.dataset.confirmado === "1") return;
+      if (form.dataset.confirmado === "1") {
+        // One-shot navigation intent only; never changes the payment payload.
+        try {
+          sessionStorage.setItem("receberClienteAcoesRecibo", JSON.stringify({
+            origem: new URL(form.action, window.location.href).pathname,
+            criadoEm: Date.now()
+          }));
+        } catch (_) { /* Storage unavailable: preserve normal submission. */ }
+        return;
+      }
 
       event.preventDefault();
       calcularPrevia();

@@ -506,6 +506,11 @@
     .rcp-actions > a { font-size: 0.8rem; }
 
   }
+  .rcp-page .rcp-actions-panel {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 1px #dbeafe, 0 5px 14px rgba(15, 23, 42, 0.05);
+  }
+  .rcp-page .rcp-actions-panel .rcp-section-title { color: #123a65; font-weight: 950; }
 </style>
 
 <main
@@ -751,6 +756,69 @@
 </main>
 
 {% if operacao.status_recibo == "pendente" %}
+<script>
+(function () {
+  let intencao = null;
+  try {
+    intencao = JSON.parse(sessionStorage.getItem("receberClienteAcoesRecibo") || "null");
+    sessionStorage.removeItem("receberClienteAcoesRecibo");
+  } catch (_) { return; }
+  const navegacao = performance.getEntriesByType("navigation")[0];
+  const origemEsperada = "{% url 'estoque:receber_cliente' cliente.id %}";
+  if (!intencao || intencao.origem !== origemEsperada
+      || Date.now() - intencao.criadoEm < 0 || Date.now() - intencao.criadoEm > 120000
+      || (navegacao && navegacao.type !== "navigate")) return;
+  try {
+    const referencia = new URL(document.referrer);
+    if (referencia.origin !== location.origin || referencia.pathname !== origemEsperada) return;
+  } catch (_) { return; }
+  let interagiu = false;
+  const cancelar = () => { interagiu = true; };
+  const eventos = ["wheel", "touchstart", "pointerdown", "keydown"];
+  eventos.forEach(evento => window.addEventListener(evento, cancelar, { passive: true, once: true }));
+  async function posicionar() {
+    if (document.fonts?.ready) await document.fonts.ready;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      eventos.forEach(evento => window.removeEventListener(evento, cancelar));
+      const acoes = document.getElementById("acoes-envio-recibo");
+      if (interagiu || !acoes || !acoes.getClientRects().length) return;
+      let cabecalho = 0;
+      document.querySelectorAll("header, [data-auth-session], .offline-global").forEach(elemento => {
+        const estilo = getComputedStyle(elemento);
+        const caixa = elemento.getBoundingClientRect();
+        if (["fixed", "sticky"].includes(estilo.position) && caixa.top < 120
+            && caixa.bottom > 0 && caixa.height < innerHeight / 3) {
+          cabecalho = Math.max(cabecalho, caixa.bottom);
+        }
+      });
+      // Measure the natural position, not the mobile sticky panel's viewport position.
+      const painel = document.getElementById("acoes-recibo-recebimento");
+      const posicaoAnterior = painel.style.position;
+      painel.style.position = "static";
+      // Use spare viewport height for the preceding route/accounts context.
+      // Keep room below every receipt control, including floating footer actions.
+      const alturaAcoes = painel.getBoundingClientRect().bottom - acoes.getBoundingClientRect().top;
+      const espacoContexto = Math.max(0, Math.min(
+        (innerHeight - cabecalho) * 0.30,
+        innerHeight - cabecalho - alturaAcoes - 96
+      ));
+      const destino = Math.max(0, scrollY + acoes.getBoundingClientRect().top - cabecalho - 12 - espacoContexto);
+      const pagina = acoes.closest(".rcp-page");
+      const rolagem = document.scrollingElement;
+      if (pagina && rolagem) {
+        const extra = Math.max(0, destino - (rolagem.scrollHeight - innerHeight));
+        if (extra > 0) {
+          pagina.style.paddingBottom = (parseFloat(getComputedStyle(pagina).paddingBottom) + extra) + "px";
+        }
+      }
+      painel.style.position = posicaoAnterior;
+      window.scrollTo({ top: destino, behavior: "instant" });
+    }));
+  }
+  if (document.readyState === "complete") posicionar();
+  else window.addEventListener("load", posicionar, { once: true });
+})();
+</script>
 <script>
 (function () {
   const page = document.querySelector(".rcp-page");
