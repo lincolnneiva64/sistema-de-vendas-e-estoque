@@ -16,8 +16,10 @@ class UnidadeSelecaoDjangoTests(CompraPreRevisaoFixture, TestCase):
     def test_post_adulterado_recusado_e_rascunho_preservado(self):
         item = self.compra.itens.get()
         self.compra.itens.update(unidade='2,95')
-        resposta = self.client.post(self.salvar_url, self.payload(**{'unidade[]':['2,95']}))
-        self.assertEqual(resposta.status_code, 400)
+        for invalida in ('2,95', ''):
+            with self.subTest(unidade=invalida):
+                resposta = self.client.post(self.salvar_url, self.payload(**{'unidade[]':[invalida]}))
+                self.assertEqual(resposta.status_code, 400)
         item.refresh_from_db()
         self.assertEqual(item.unidade, '2,95')
         self.assertEqual(item.quantidade, 9)
@@ -78,8 +80,9 @@ class UnidadeSelecaoBrowserTests(CompraPreRevisaoFixture, StaticLiveServerTestCa
             self.assertGreater(t.evaluate('unidadeTeste.getBoundingClientRect().width'), 0)
             self.assertNotEqual(t.evaluate('getComputedStyle(unidadeTeste).pointerEvents'), 'none')
 
-            self.assertEqual(t.evaluate('unidadeTeste.value'), '2,95')
-            self.assertEqual(t.evaluate('[...unidadeTeste.options].filter(o=>!o.disabled).map(o=>o.value)'), ['UN'])
+            self.assertEqual(t.evaluate('unidadeTeste.value'), '')
+            self.assertNotIn('2,95', t.evaluate('[...unidadeTeste.options].map(o=>o.value)'))
+            self.assertEqual(t.evaluate('[...unidadeTeste.options].filter(o=>!o.disabled).map(o=>o.value)'), ['', 'UN'])
             t.evaluate("window.valoresTeste=[linhaTeste.querySelector('[name=\"quantidade[]\"]').value,linhaTeste.querySelector('.campo-preco-unitario-compra').value];true")
             # Atribuição inválida também não cria opção selecionável.
             t.evaluate("unidadeTeste.value='2,95';unidadeTeste.dispatchEvent(new Event('change',{bubbles:true}));true")
@@ -92,10 +95,10 @@ class UnidadeSelecaoBrowserTests(CompraPreRevisaoFixture, StaticLiveServerTestCa
             t.evaluate('unidadeTeste.focus();true')
             t.call('Input.insertText', {'text':'2,95'})
             self.assertEqual(t.evaluate('unidadeTeste.value'), 'UN')
-            self.assertEqual(t.evaluate('[...unidadeTeste.options].filter(o=>!o.disabled).map(o=>o.value)'), ['UN'])
+            self.assertEqual(t.evaluate('[...unidadeTeste.options].filter(o=>!o.disabled).map(o=>o.value)'), ['', 'UN'])
             if width < 820:
                 t.evaluate("linhaTeste.querySelector('.btn-cancelar-edicao-item-mobile').click();true")
-                self.assertEqual(t.evaluate('unidadeTeste.value'), '2,95')
+                self.assertEqual(t.evaluate('unidadeTeste.value'), '')
                 self.assertFalse(t.evaluate('unidadeTeste.checkValidity()'))
         self.assertEqual(self.compra.itens.get().unidade, '2,95')  # GET/edição visual não grava.
         self.assert_sem_efeitos()

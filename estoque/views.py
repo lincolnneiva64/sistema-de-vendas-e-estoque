@@ -11800,10 +11800,12 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "cartoes_credito": list(CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")),
     }
 
-def _validar_unidade_compra(produto, unidade):
+def _validar_unidade_compra(produto, unidade, exigir_escolha=False):
     """Compras usam quantidade e custo na unidade base, sem conversão implícita."""
     base = _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
-    recebida = _normalizar_unidade_estoque(unidade) or base
+    recebida = _normalizar_unidade_estoque(unidade)
+    if not recebida and not exigir_escolha:
+        recebida = base
     if not base or recebida != base:
         raise ValueError(
             f"Unidade {recebida or '(vazia)'} de {produto.nome} inválida para compra. "
@@ -11884,7 +11886,8 @@ def _dados_compra_post(request, exigir_itens=True, compra_edicao=None):
 
         quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
         preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)
-        unidade = _validar_unidade_compra(produto, unidades[indice] if indice < len(unidades) else "")
+        unidade = _validar_unidade_compra(
+            produto, unidades[indice] if indice < len(unidades) else "", exigir_escolha=True)
         if not quantidade.is_finite() or quantidade <= 0:
             raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
         if not preco_unitario.is_finite() or preco_unitario < 0:

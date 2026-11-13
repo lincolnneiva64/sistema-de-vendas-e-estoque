@@ -31,13 +31,13 @@ class CompraRascunhoUnidadeTests(CompraPreRevisaoFixture, TestCase):
         self.assertFalse(page.context['item_linhas'][0]['unidade_divergente'])
         self.assertEqual(page.context['item_linhas'][0]['unidade'], item.unidade)
 
-    def test_codigo_legitimo_com_numero_e_unidade_vazia(self):
+    def test_codigo_legitimo_com_numero_e_escolha_obrigatoria(self):
         self.produto.unidade_compra = 'CX12'
         self.produto.unidade_venda_1 = 'CX12'
         self.produto.save()
         for unidade in (' cx12 ', ''):
             response = self.client.post(self.salvar_url, self.payload(**{'unidade[]': [unidade]}))
-            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200 if unidade else 400)
             self.assertEqual(self.compra.itens.get().unidade, 'CX12')
 
     def test_falha_financeira_reenvia_mesma_revisao_sem_duplicar(self):
