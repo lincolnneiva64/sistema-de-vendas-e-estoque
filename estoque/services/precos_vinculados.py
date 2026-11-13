@@ -173,7 +173,7 @@ def _validar(produtos):
         raise ValidationError([f"Produto {b['produto_id']}: {b['motivo']}" for b in diagnostico['bloqueios']])
 
 
-def _gravar(grupo, produtos, propostas, operador, origem, operation_id=None, evidencia_extra=None, reverte=None, evento_anterior=None, autoria_final=None, using='default'):
+def _gravar(grupo, produtos, propostas, operador, origem, operation_id=None, evidencia_extra=None, reverte=None, evento_anterior=None, autoria_final=None, using='default', apresentacao_confirmada=False):
     exigir_operador_precos(operador)
     from estoque.models import Produto, AlteracaoPrecoVinculado
     evidencia={**(evidencia_extra or {}), 'integrantes':[p.pk for p in produtos], 'alteracoes':{},
@@ -203,6 +203,13 @@ def _gravar(grupo, produtos, propostas, operador, origem, operation_id=None, evi
             else: autoria['_adocao'] = token
             adocao['autoria_nova'] = token
             novos['precos_canonicos_adotados'] = candidato.precos_canonicos_adotados
+        if apresentacao_confirmada:
+            # Only the coordinated presentation command enables this option,
+            # after validating the final presentation AND prices under locks.
+            # Merge both into the same UPDATE; never persist zero-price setup.
+            novos.update({campo:getattr(candidato,campo) for campo in
+                ('unidade_compra','unidade_venda_1','unidade_venda_2','fator_conversao','vende_fracionado')
+                if getattr(p,campo)!=getattr(candidato,campo)})
         if novos:
             # Derived percentages remain individual, based on each own cost.
             for campo, percentual in [('preco_vista_fracionado','percentual_vista_fracionado'),('preco_prazo_fracionado','percentual_prazo_fracionado')]:

@@ -1,4 +1,4 @@
-"""Explicit, audited presentation commands; never saves commercial form values."""
+"""Explicit, audited presentation and optional sale-price commands."""
 import copy
 from decimal import Decimal
 
@@ -12,7 +12,7 @@ from django.utils import timezone
 from estoque.models import Produto, Unidade, GrupoProdutoVinculado, AlteracaoPrecoVinculado
 from .precos_vinculados import (serializar_grupos, exigir_operador_precos,
     bloquear_produtos_precos, diagnosticar_grupo, validar_precos_individuais,
-    versao_cadastro_produto, _unidade)
+    versao_cadastro_produto, _unidade, PRECOS_VINCULADOS, custo_fracionado_produto, _gravar)
 
 SALT = 'estoque.apresentacao_grupo.v1'
 CAMPOS = ('unidade_compra', 'unidade_venda_1', 'vende_fracionado',
@@ -35,6 +35,11 @@ class ApresentacaoForm(forms.Form):
         opcoes = [(u, u) for u in sorted(unidades)]
         self.fields['unidade_compra'].choices = opcoes
         self.fields['unidade_venda_2'].choices = [('', 'Selecione'), *opcoes]
+        if dados.get('incluir_precos') == '1':
+            for campo, rotulo in zip(PRECOS_VINCULADOS,
+                    ('Venda à vista', 'Venda a prazo', 'Venda fracionada à vista', 'Venda fracionada a prazo')):
+                self.fields[campo] = forms.DecimalField(label=rotulo, max_digits=10,
+                    decimal_places=2, min_value=Decimal('0'))
 
     def clean(self):
         dados = super().clean()
@@ -121,6 +126,7 @@ def _preparar(grupo_id, fonte_id, dados):
     novos = {c: form.cleaned_data[c] for c in
         ('unidade_compra', 'vende_fracionado', 'unidade_venda_2', 'fator_conversao')}
     novos['unidade_venda_1'] = novos['unidade_compra']
+    incluir_precos = dados.get('incluir_precos') == '1'
     propostas = {p.pk: copy.copy(p) for p in produtos}
     for p in produtos:
         candidato = propostas[p.pk]
@@ -129,6 +135,11 @@ def _preparar(grupo_id, fonte_id, dados):
             if c in ('fator_conversao', 'unidade_venda_2') and not novos['vende_fracionado']:
                 continue
             setattr(candidato, c, valor)
+        if incluir_precos:
+            for c in PRECOS_VINCULADOS:
+                setattr(candidato, c, form.cleaned_data[c])
+            candidato.preco_venda = candidato.preco_vista
+            candidato.precos_canonicos_adotados = True
     riscos = _riscos_historicos(produtos, propostas)
     bloqueios = [{'produto_id': p.pk, 'motivo': f'{p.nome}: {riscos[p.pk]}'}
         for p in produtos if p.pk in riscos]
@@ -141,9 +152,16 @@ def _preparar(grupo_id, fonte_id, dados):
             bloqueios.append({'produto_id': p.pk, 'motivo': p.nome+': '+' '.join(exc.messages)})
     observada = {'grupo': grupo.pk, 'versao': grupo.versao_precos, 'fonte': fonte_id,
         'produtos': {str(p.pk): versao_cadastro_produto(p) for p in produtos},
-        'propostas': {str(p.pk): _estado(propostas[p.pk]) for p in produtos}}
+        'propostas': {str(p.pk): _estado(propostas[p.pk]) for p in produtos},
+        'incluir_precos': incluir_precos,
+        'precos': {str(p.pk): {c:str(getattr(propostas[p.pk],c)) for c in PRECOS_VINCULADOS} for p in produtos}}
     previa = {'produtos': [{'id': p.pk, 'nome': p.nome, 'anteriores': _estado(p),
-        'novos': _estado(propostas[p.pk])} for p in produtos], 'bloqueios': bloqueios}
+        'novos': _estado(propostas[p.pk]),
+        'precos_anteriores': {c:str(getattr(p,c)) for c in PRECOS_VINCULADOS},
+        'precos_novos': {c:str(getattr(propostas[p.pk],c)) for c in PRECOS_VINCULADOS},
+        'custos': {'principal': str(p.preco_compra),
+                   'fracionado': str(custo_fracionado_produto(propostas[p.pk]))}}
+        for p in produtos], 'bloqueios': bloqueios, 'incluir_precos': incluir_precos}
     return grupo, produtos, propostas, observada, previa
 
 
@@ -173,6 +191,13 @@ def aplicar_apresentacao(grupo_id, fonte_id, dados, *, operador):
         raise ValidationError([b['motivo'] for b in previa['bloqueios']])
     alteracoes = {str(p.pk): {'anteriores': _estado(p), 'novos': _estado(propostas[p.pk])}
         for p in produtos if _estado(p) != _estado(propostas[p.pk])}
+    if observada['incluir_precos']:
+        # Reuse price provenance/adoption/audit. Its writer merges each row's
+        # confirmed presentation with its final prices in the SAME transaction.
+        return _gravar(grupo, produtos, propostas, operador, 'apresentacao_precos_grupo',
+            apresentacao_confirmada=True,
+            evidencia_extra={'apresentacao': alteracoes, 'selecionados': [p.pk for p in produtos],
+                             'campos': list(PRECOS_VINCULADOS), 'formato': 2})
     if not alteracoes:
         return
     for p in produtos:

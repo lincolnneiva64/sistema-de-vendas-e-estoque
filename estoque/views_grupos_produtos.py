@@ -97,7 +97,10 @@ def grupos_detalhe(request, grupo_id):
             if request.POST['acao'] == 'previa_apresentacao':
                 return JsonResponse(previa_apresentacao(grupo_id, fonte, request.POST, operador=request.user))
             aplicar_apresentacao(grupo_id, fonte, request.POST, operador=request.user)
-            messages.success(request, 'Apresentação salva nos produtos confirmados. Preços, saldos e mínimos foram preservados.')
+            messages.success(request,
+                'Apresentação e preços de venda salvos juntos nos produtos confirmados. Custos, saldos e mínimos foram preservados.'
+                if request.POST.get('incluir_precos') == '1' else
+                'Apresentação salva nos produtos confirmados. Preços, saldos e mínimos foram preservados.')
             return JsonResponse({'ok': True, 'reabrir_url': reverse('estoque:produto_editar', args=[fonte])})
         if request.POST.get('acao') == 'previa_adicao':
             ids = {int(v) for v in request.POST.getlist('produto_ids')}

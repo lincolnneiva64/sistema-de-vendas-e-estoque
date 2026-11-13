@@ -1,3 +1,4 @@
+{% load l10n %}
 <style>#confirmarApresentacao .ps-confirm-primary:disabled {background:#cbd5e1;color:#475569;border-color:#cbd5e1;cursor:not-allowed;}</style>
 <div class="col-12 alert alert-warning" id="apresentacaoPendente" role="status" hidden>
   Apresentação alterada, ainda não salva. Ao salvar, confira a prévia dos produtos vinculados.
@@ -10,6 +11,13 @@
   const decimal = v => {let t = String(v || '').trim(); if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); return t;};
   const numero = v => Number(decimal(v));
   const unidade = v => String(v || '').trim().toUpperCase();
+  const camposPrecos = ['preco_vista','preco_prazo','preco_vista_fracionado','preco_prazo_fracionado'];
+  const precosObservados = {
+    preco_vista:'{{ form.precos_observados.preco_vista|unlocalize }}',
+    preco_prazo:'{{ form.precos_observados.preco_prazo|unlocalize }}',
+    preco_vista_fracionado:'{{ form.precos_observados.preco_vista_fracionado|unlocalize }}',
+    preco_prazo_fracionado:'{{ form.precos_observados.preco_prazo_fracionado|unlocalize }}',
+  };
   function proposta() {
     return {
       unidade_compra: (document.getElementById('unidade_compra_visual') || form.elements.unidade_compra).value,
@@ -44,20 +52,44 @@
       dialog.setAttribute('aria-labelledby', 'tituloApresentacao');
       const header = document.createElement('header'); header.className = 'ps-confirm-header';
       const titulo = document.createElement('h2'); titulo.id = 'tituloApresentacao';
-      titulo.className = 'ps-confirm-title'; titulo.textContent = 'Confirmar apresentação dos produtos';
+      titulo.className = 'ps-confirm-title'; titulo.textContent = previa.incluir_precos ? 'Confirmar apresentação e preços' : 'Confirmar apresentação dos produtos';
       const pergunta = document.createElement('p'); pergunta.className = 'ps-confirm-description';
-      pergunta.textContent = 'Esta alteração também precisa ser aplicada aos outros produtos vinculados para manter a compatibilidade. Deseja atualizar os demais produtos?';
-      const escopo = document.createElement('p'); escopo.textContent = 'Somente a apresentação será salva. Preços, saldos, mínimos e demais edições deste formulário não serão gravados. Nenhum dado foi salvo ainda.';
+      pergunta.textContent = previa.incluir_precos
+        ? 'Esta proposta aplica a apresentação e os preços de venda a todos os integrantes. Deseja atualizar os demais produtos?'
+        : 'Esta alteração também precisa ser aplicada aos outros produtos vinculados para manter a compatibilidade. Deseja atualizar os demais produtos?';
+      const escopo = document.createElement('p'); escopo.textContent = (previa.incluir_precos
+        ? 'Apresentação e os quatro preços de venda mostrados serão salvos juntos em todos os produtos abaixo. Custos de compra, saldos e mínimos serão preservados.'
+        : 'Somente a apresentação será salva. Os preços individuais serão preservados, assim como custos, saldos e mínimos.')+' Demais edições deste formulário não serão gravadas. Nenhum dado foi salvo ainda.';
       header.append(titulo, pergunta, escopo); dialog.append(header);
       const lista = document.createElement('div'); lista.className = 'ps-confirm-body'; dialog.append(lista);
       const campos = {unidade_compra:'Unidade de compra', vende_fracionado:'Venda fracionada', unidade_venda_2:'Unidade fracionada', fator_conversao:'Fator de conversão'};
       const texto = v => typeof v === 'boolean' ? (v ? 'Sim' : 'Não') : String(v || '—');
+      const moeda = v => v !== null && Number.isFinite(Number(v))
+        ? new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v)) : 'Não informado';
       previa.produtos.forEach(p => {
         const card = document.createElement('section'); card.className = 'ps-confirm-card';
+        card.dataset.produtoId = p.id;
         const nome = document.createElement('strong'); nome.textContent = p.nome; card.append(nome);
+        const apresentacao = document.createElement('p'); apresentacao.textContent = 'Apresentação — anterior → nova'; card.append(apresentacao);
         Object.entries(campos).forEach(([campo, rotulo]) => {
           const linha = document.createElement('p'); linha.textContent = rotulo+': '+texto(p.anteriores[campo])+' → '+texto(p.novos[campo]); card.append(linha);
         });
+        const custos = document.createElement('p'); custos.className = 'ps-confirm-description';
+        const principal = p.novos.unidade_compra;
+        const fracionada = p.novos.unidade_venda_2 || 'fracionada';
+        custos.textContent = 'Custos individuais usados na validação: '+moeda(p.custos.principal)+'/'+principal
+          +(p.novos.vende_fracionado ? ' e '+moeda(p.custos.fracionado)+'/'+fracionada : '')+'. Não serão alterados.';
+        card.append(custos);
+        const precos = document.createElement('div'); precos.className = 'ps-confirm-prices';
+        const rotulos = ['À vista por '+principal, 'A prazo por '+principal, 'À vista por '+fracionada, 'A prazo por '+fracionada];
+        camposPrecos.forEach((campo, i) => {
+          if (i > 1 && !p.novos.vende_fracionado) return;
+          const bloco = document.createElement('div'); bloco.className = 'ps-confirm-price'; bloco.dataset.campo = campo;
+          const label = document.createElement('div'); label.className = 'ps-confirm-price-title'; label.textContent = rotulos[i];
+          const valores = document.createElement('div'); valores.textContent = moeda(p.precos_anteriores[campo])+' → '+moeda(p.precos_novos[campo]);
+          bloco.append(label, valores); precos.append(bloco);
+        });
+        card.append(precos);
         lista.append(card);
       });
       if (previa.bloqueios.length) {
@@ -76,7 +108,7 @@
     });
   }
   // Capture before ordinary price/stock submit handlers: this command saves
-  // only the signed presentation preview, never the rest of the ModelForm.
+  // only the signed presentation/optional sale prices, never the whole ModelForm.
   form.addEventListener('submit', async event => {
     const p = proposta();
     if (!mudou(p)) return;
@@ -88,12 +120,16 @@
     try {
       const dados = new FormData();
       Object.entries(p).forEach(([c,v]) => dados.set(c,v));
+      const precos = Object.fromEntries(camposPrecos.map(c => [c, decimal(form.elements[c].value)]));
+      const incluirPrecos = camposPrecos.some(c => numero(precos[c]) !== numero(precosObservados[c]));
+      dados.set('incluir_precos', incluirPrecos ? '1' : '0');
+      if (incluirPrecos) Object.entries(precos).forEach(([c,v]) => dados.set(c,v));
       dados.set('csrfmiddlewaretoken', form.elements.csrfmiddlewaretoken.value);
       dados.set('versao_cadastro_precos', form.elements.versao_cadastro_precos.value);
       dados.set('fonte', '{{ form.instance.pk }}'); dados.set('acao', 'previa_apresentacao');
       const previa = await requisitar(dados);
       if (!(await confirmar(previa))) {
-        pendente.textContent = 'Alteração de apresentação não salva. Os valores preenchidos são uma proposta; os cadastros permanecem inalterados.';
+        pendente.textContent = 'Alteração de apresentação'+(incluirPrecos ? ' e preços' : '')+' não salva. Os valores preenchidos são uma proposta; os cadastros permanecem inalterados.';
         return;
       }
       dados.set('acao', 'aplicar_apresentacao'); dados.set('confirmar', '1'); dados.set('assinatura', previa.assinatura);
