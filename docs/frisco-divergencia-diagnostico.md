@@ -132,9 +132,10 @@ usuário recebe orientação para reabrir e conferir os valores persistidos.
   prévias antigas. Evento `apresentacao_grupo` guarda antes/depois, integrantes e
   operador, sem alterações de preço; eventos anteriores não são modificados.
 - Preços, custos, percentuais persistidos, saldos, mínimos, autoria de preços e
-  vínculos são preservados. O cálculo automático antigo de custo fracionado no
-  editor foi desativado para produtos vinculados: alterar apresentação ou reabrir
-  não deve substituir na tela o custo persistido por um custo calculado.
+  vínculos são preservados. Nesta entrega inicial, o cálculo de custo fracionado no
+  editor foi desativado para produtos vinculados. Essa proteção visual excessiva
+  foi corrigida posteriormente, conforme a seção de custo fracionado ao final;
+  a restrição de gravação do comando conjunto permanece a mesma.
 - Primeira ativação de fracionamento com base CX preservada pode conservar saldo
   4 CX e mínimo existentes. O estoque equivalente de 72 UN é apenas a exibição da
   conversão explicitamente confirmada; o saldo gravado continua 4 CX.
@@ -212,3 +213,51 @@ commit, push, deploy, intervenção na Compra #280 ou alteração de dados reais
 `git diff --check` aprovado; os arquivos novos também foram verificados quanto a
 espaços no fim de linha. Espaços antigos do template foram preservados para não
 introduzir limpeza fora do escopo.
+
+## Correção pontual — cálculo visual do custo fracionado
+
+Base publicada: `81f6d3e01077e04f99dfe273597b2c44c08fd643`.
+Worktree isolada: `.worktrees/custo-fracionado-81f6d3e`.
+
+Causa: `atualizarPrecoCompraFracionado()` retornava imediatamente quando havia
+grupo vinculado. Como a mesma função atende à inicialização do formulário, à
+edição da compra e à edição do fator, todos esses percursos deixavam de calcular.
+O campo mostrava o custo fracionado persistido (por exemplo, zero), em vez do custo
+derivado de 11,70 / 18 = 0,65.
+
+Correção funcional de duas linhas: remover o retorno exclusivo de vinculados,
+reutilizando o cálculo e o arredondamento existentes. O formulário volta a mostrar
+0,65 na abertura com CX/18 UN, recalcula ao editar compra/fator e esvazia o custo
+derivado quando o fator está vazio ou zero. Nenhum fallback para fator 1.
+
+O valor calculado é o valor atual do formulário. Abrir ou editar campos não grava
+o banco. O salvamento normal do cadastro continua sendo uma ação separada; esta
+correção não modifica suas regras. A operação **conjunta de apresentação** continua
+enviando exclusivamente apresentação/versão/assinatura/CSRF e gravando apenas os
+campos permitidos de apresentação. Não envia nem persiste custos calculados,
+preços, quantidades ou mínimos. Seu serviço transacional e a confirmação publicada
+não foram alterados.
+
+Os testes de apresentação distinguem agora o custo calculado visível de 0,65 do
+custo persistido de zero na fixture; a comparação integral dos registros continua
+exigindo que a confirmação conjunta preserve preços, custos, saldos e mínimos.
+Novos percursos de navegador desktop/mobile verificam o carregamento, compra 18
+com fator 18 (1,00), fator 24 (0,75), fator vazio/zero sem fallback, restauração de
+11,70/18 e recusa/cancelamento de uma mudança insegura, sem gravar campos comerciais.
+
+Validação: **7 testes direcionados aprovados em 24,181 s**, PostgreSQL descartável
+`inventario-disposable-pg-qrpwn_si`, encerrado pelo runner. Dois percursos novos de
+cálculo em navegador, três percursos publicados de confirmação/cancelamento e
+incompatibilidade em desktop/mobile, mais preservação/reenvio e rollback forçado
+de falha na segunda escrita. Comparados todos os campos persistidos dos produtos,
+vínculos, eventos, movimentos observados e mínimos, sem gravação colateral de custo.
+As imagens `amostras/custo-fracionado/1280-custo-calculado.png` e
+`390-custo-calculado.png` foram abertas e inspecionadas: mostram compra 11,70,
+CX/18 UN e custo fracionado 0,65. Mobile emulado, sem aparelho físico.
+
+O serviço de apresentação, seu modal de confirmação, o endpoint de aplicação e o
+serviço de preços permanecem idênticos à base. `git diff --check` aprovado.
+Permanece o aviso preexistente Django `urls.W005`.
+
+Não houve acesso aos Friscos reais, banco operacional ou Neon. Sem commit, push,
+deploy ou migrations novas. Evidências visuais ficam somente em `amostras/`.

@@ -1866,8 +1866,6 @@ camposFracionados.forEach(campo => {
     }
 
     function atualizarPrecoCompraFracionado() {
-        // A linked presentation command must not derive or replace costs.
-        {% if form.grupo_precos %}return;{% endif %}
         if (!campoPrecoCompraFracionado) return;
 
         const compra = numero(campoPrecoCompra?.value);
