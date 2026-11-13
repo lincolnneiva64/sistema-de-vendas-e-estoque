@@ -2129,6 +2129,7 @@
     #tabelaItensCompra .linha-item td:first-child input:not(.conferencia-nota-checkbox),
     #tabelaItensCompra .linha-item td:nth-child(2) input,
     #tabelaItensCompra .linha-item td:nth-child(3) input,
+    #tabelaItensCompra .linha-item td:nth-child(3) select,
     #tabelaItensCompra .linha-item td:nth-child(4) input {
       display:inline;
       width:auto;
@@ -2214,6 +2215,7 @@
     }
     #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(2) input,
     #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(3) input,
+    #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(3) select,
     #tabelaItensCompra .linha-item.item-editando-mobile td:nth-child(4) input {
       display:block;
       width:100%;
@@ -3152,7 +3154,10 @@
                 </div>
               </td>
               <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
-              <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="Unidade" value="{{ linha.unidade }}" list="unidadesCompraMobile">
+              <td data-label="Unidade"><select name="unidade[]" aria-label="Unidade"{% if linha.produto_id %} required{% endif %}>
+                  <option value="{{ linha.unidade_estoque|default:'' }}">{{ linha.unidade_estoque|default:"Escolha o produto" }}</option>
+                  {% if linha.unidade_divergente %}<option value="{{ linha.unidade }}" selected disabled>{{ linha.unidade }} — inválida; escolha a unidade</option>{% endif %}
+                </select>
                 {% if linha.unidade_estoque %}<small>Estoque em {{ linha.unidade_estoque }}.</small>{% endif %}
                 <small class="aviso-unidade-compra" role="alert"{% if not linha.unidade_divergente %} hidden{% endif %}>Unidade divergente. Confira quantidade e preco por embalagem antes de finalizar.</small>
               </td>
@@ -3192,6 +3197,31 @@
     if(!opcao && fonte){opcao=fonte.cloneNode(true);select.append(opcao);}
     return opcao || null;
   };
+  // O contrato de compra usa a unidade base; fracionamento de vendas não é
+  // uma conversão suportada pelo finalizador de compras.
+  window.compraPreencherUnidades = function(linha, valor) {
+    const campo = linha.querySelector('[name="unidade[]"]');
+    const produto = linha.querySelector('[name="produto_id[]"]');
+    if (!campo) return;
+    const opt = produto?.selectedOptions[0];
+    const base = (opt?.dataset.unidadeEstoque || opt?.dataset.unidade || '').trim().toUpperCase();
+    const original = String(valor === undefined ? campo.value : valor).trim();
+    const normalizado = original.toUpperCase();
+    campo.replaceChildren();
+    campo.required = !!produto?.value;
+    if (!produto?.value || !base) {
+      campo.add(new Option(produto?.value ? 'Produto sem unidade base' : 'Escolha o produto', ''));
+    } else {
+      campo.add(new Option(base, base));
+      if (original && normalizado !== base) {
+        const legado = new Option(original + ' — inválida; escolha a unidade', original, true, true);
+        legado.disabled = true;
+        campo.add(legado);
+      } else {
+        campo.value = base;
+      }
+    }
+  };
   document.querySelectorAll('#tabelaItensCompra select[name="produto_id[]"]').forEach(select=>{
     const id=select.value, fonte=porId.get(id);
     if(fonte){
@@ -3219,12 +3249,6 @@
         <button type="button" id="btnAdicionarItem" class="compras-btn compras-btn-secondary">+ Adicionar item</button>
       </div>
     </section>
-
-    <datalist id="unidadesCompraMobile">
-      {% for unidade in unidades_produto %}
-        <option value="{{ unidade.sigla }}">{{ unidade.nome }}</option>
-      {% endfor %}
-    </datalist>
 
     <div class="compra-remover-modal" id="modalRemoverItemCompra" aria-hidden="true">
       <div class="compra-remover-modal-card" role="dialog" aria-modal="true" aria-labelledby="tituloModalRemoverItemCompra">
@@ -3508,6 +3532,7 @@
     setBloqueadoRascunhoControle(btnVoltarLancamentoProdutoMobile, rascunhoBloqueado);
     document.querySelectorAll("#tabelaItensCompra [name='quantidade[]'], #tabelaItensCompra [name='unidade[]'], #tabelaItensCompra .campo-preco-unitario-compra").forEach(function(campo) {
       campo.readOnly = rascunhoBloqueado;
+      if (campo.name === "unidade[]") campo.inert = rascunhoBloqueado;
       campo.setAttribute("aria-disabled", rascunhoBloqueado ? "true" : "false");
     });
     if (mensagemProximosPassosCompra) {
@@ -4442,7 +4467,7 @@
     window.garantirOpcaoProdutoCompra(produto,opt.value);
     produto.value = opt.value;
     produtoBusca.value = opt.textContent.trim();
-    unidade.value = opt.dataset.unidadeEstoque || opt.dataset.unidade || "";
+    window.compraPreencherUnidades(linha, opt.dataset.unidadeEstoque || opt.dataset.unidade || "");
     validarUnidadeCompra(linha);
     preco.value = precoCampo(opt.dataset.precoCompra || "0");
     sincronizarPrecoUnitarioLinha(linha);
@@ -4784,7 +4809,7 @@
       estoqueValor.textContent = "-";
     }
     linha.querySelector('[name="quantidade[]"]').value = "1";
-    linha.querySelector('[name="unidade[]"]').value = "";
+    window.compraPreencherUnidades(linha, "");
     validarUnidadeCompra(linha);
     campoPrecoUnitario(linha).value = "0,00";
     sincronizarPrecoUnitarioLinha(linha);
@@ -4853,7 +4878,7 @@
     const busca = linha.querySelector('[name="produto_busca[]"]');
     if (busca) busca.value = linha.dataset.edicaoNomeOriginal || "";
     if (campos.quantidade) campos.quantidade.value = linha.dataset.edicaoQuantidadeOriginal || "";
-    if (campos.unidade) campos.unidade.value = linha.dataset.edicaoUnidadeOriginal || "";
+    window.compraPreencherUnidades(linha, linha.dataset.edicaoUnidadeOriginal || "");
     if (campos.preco) campos.preco.value = linha.dataset.edicaoPrecoOriginal || "";
     validarUnidadeCompra(linha);
     sincronizarPrecoUnitarioLinha(linha);
@@ -5059,6 +5084,8 @@
     const produtoBusca = linha.querySelector('[name="produto_busca[]"]');
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     const unidade = linha.querySelector('[name="unidade[]"]');
+    window.compraPreencherUnidades(linha);
+    validarUnidadeCompra(linha);
     const preco = campoPrecoUnitario(linha);
     const checkboxConferenciaNota = linha.querySelector(".conferencia-nota-checkbox");
     const btnEditarItemMobile = linha.querySelector(".btn-editar-item-mobile");
@@ -5106,7 +5133,8 @@
     produtoBusca.addEventListener("input", function(event) {
       produto.value = "";
       produto.selectedIndex = 0;
-      unidade.value = "";
+      window.compraPreencherUnidades(linha, "");
+      validarUnidadeCompra(linha);
       preco.value = "0,00";
       sincronizarPrecoUnitarioLinha(linha);
       limparConferenciaNotaLinha(linha);
@@ -6262,7 +6290,7 @@
     }
     const opt = select.selectedOptions[0];
     const base = (opt?.dataset.unidadeEstoque || opt?.dataset.unidade || '').trim().toUpperCase();
-    const valor = campo.value.trim().toUpperCase() || base;
+    const valor = campo.value.trim().toUpperCase();
     const valida = !!base && valor === base;
     campo.setCustomValidity(valida ? '' : `Use ${base || 'a unidade base cadastrada'} e confira quantidade e preço por embalagem.`);
     const aviso = linha.querySelector('.aviso-unidade-compra');
@@ -6270,10 +6298,10 @@
     return valida;
   }
 
-  formCompra.addEventListener('input', event => {
+  ['input', 'change'].forEach(tipo => formCompra.addEventListener(tipo, event => {
     const linha = event.target.closest('.linha-item');
     if (linha) validarUnidadeCompra(linha);
-  });
+  }));
 
   function validarItensManuaisPendentes() {
     const linha = Array.from(document.querySelectorAll(".linha-item")).find(item =>
@@ -7937,7 +7965,7 @@
       if (produtoBusca) produtoBusca.value = item.produto_busca || "";
       if (produtoId) produtoId.value = item.produto_id || "";
       if (quantidade) quantidade.value = item.quantidade || "";
-      if (unidade) unidade.value = item.unidade || "";
+      window.compraPreencherUnidades(linha, item.unidade || "");
       if (precoVisivel) precoVisivel.value = item.preco_unitario_visivel || item.preco_unitario_oculto || "";
       if (precoOculto) precoOculto.value = item.preco_unitario_oculto || item.preco_unitario_visivel || "";
       if (observacaoItem) observacaoItem.value = item.observacao_item || "";
