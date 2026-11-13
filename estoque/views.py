@@ -10813,6 +10813,7 @@ def _criar_compra_rascunho_da_lista_fornecedor(lista, request, somente_coleta=Fa
         if item.produto_id in produtos_vistos:
             raise ValueError("Este produto ja esta na compra.")
         produtos_vistos.add(item.produto_id)
+        _validar_unidade_compra(item.produto, item.unidade)
 
     total_compra = sum((item.total for item in itens_validos), Decimal("0.00")).quantize(Decimal("0.01"))
     marcador_origem = f"Gerada a partir da Lista de Compras #{lista.id}"
@@ -10832,7 +10833,7 @@ def _criar_compra_rascunho_da_lista_fornecedor(lista, request, somente_coleta=Fa
             compra=compra,
             produto=item.produto,
             quantidade=item.quantidade_final,
-            unidade=item.unidade or item.produto.unidade_compra or item.produto.unidade_venda_1 or "",
+            unidade=_validar_unidade_compra(item.produto, item.unidade),
             preco_unitario=item.preco_compra,
             valor_total=item.total,
             observacao=None,
@@ -11799,6 +11800,18 @@ def _contexto_form_compra(compra=None, finalizando=False, fechamento_token=None,
         "cartoes_credito": list(CartaoCredito.objects.filter(ativo=True).order_by("titular", "nome")),
     }
 
+def _validar_unidade_compra(produto, unidade):
+    """Compras usam quantidade e custo na unidade base, sem conversão implícita."""
+    base = _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
+    recebida = _normalizar_unidade_estoque(unidade) or base
+    if not base or recebida != base:
+        raise ValueError(
+            f"Unidade {recebida or '(vazia)'} de {produto.nome} inválida para compra. "
+            f"Use {base or 'uma unidade base cadastrada no produto'} e confira quantidade e preço por embalagem."
+        )
+    return base
+
+
 def _dados_compra_post(request, exigir_itens=True, compra_edicao=None):
     fornecedor_id = request.POST.get("fornecedor_id")
     data_compra = parse_date(request.POST.get("data_compra") or "")
@@ -11871,7 +11884,7 @@ def _dados_compra_post(request, exigir_itens=True, compra_edicao=None):
 
         quantidade = _decimal_compra(quantidades[indice] if indice < len(quantidades) else "", casas=3)
         preco_unitario = _decimal_compra(precos[indice] if indice < len(precos) else "", casas=2)
-        unidade = (unidades[indice] if indice < len(unidades) else "").strip()
+        unidade = _validar_unidade_compra(produto, unidades[indice] if indice < len(unidades) else "")
         if not quantidade.is_finite() or quantidade <= 0:
             raise ValueError(f"Informe quantidade maior que zero para {produto.nome}.")
         if not preco_unitario.is_finite() or preco_unitario < 0:
@@ -12246,12 +12259,7 @@ def _finalizar_compra_com_financeiro(compra, valores_origem=None, atualizar_cust
             if not item.produto_id:
                 continue
             produto = produtos[item.produto_id]
-            unidade_base = produto.unidade_venda_1 or produto.unidade_compra or ""
-            if item.unidade and unidade_base and _normalizar_unidade_estoque(item.unidade) != _normalizar_unidade_estoque(unidade_base):
-                raise ValueError(
-                    f"Unidade {item.unidade} de {produto.nome} diverge do estoque em {unidade_base}. "
-                    "Confira a quantidade e o preco por embalagem antes de finalizar. Nenhuma conversao automatica foi aplicada."
-                )
+            _validar_unidade_compra(produto, item.unidade)
         revisao_precos_pendente, custos_anteriores = decisoes_compra.validar_finalizacao(
             compra, getattr(decisao_request, 'user', None), getattr(decisao_request, 'POST', {}),
             atualizar_preco_venda_produtos, atualizar_custo_produto_ids, produtos_bloqueados=produtos)
@@ -12652,6 +12660,8 @@ def compra_finalizar(request, pk):
             except (ValueError, IndexError) as exc:
                 if str(exc) == ERRO_TIPO_PAGAMENTO_COMPRA:
                     return redirect(f"{reverse('estoque:compra_editar', kwargs={'pk': compra.pk})}?erro_tipo_pagamento=1")
+                if request.headers.get("X-Compra-Decisao") == "1":
+                    return JsonResponse({"ok": False, "erro": str(exc)}, status=400)
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_editar", pk=compra.pk)
 
@@ -12673,10 +12683,14 @@ def compra_finalizar(request, pk):
             except decisoes_compra.DecisaoPrecosInvalida as exc:
                 return _compra_decisao_rejeitada(request, compra, dados, exc, finalizando=True)
             except ValueError as exc:
+                if request.headers.get("X-Compra-Decisao") == "1":
+                    return JsonResponse({"ok": False, "erro": str(exc)}, status=400)
                 messages.error(request, str(exc))
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
             except Exception:
                 logger.exception("Falha ao finalizar compra e lancar financeiro")
+                if request.headers.get("X-Compra-Decisao") == "1":
+                    return JsonResponse({"ok": False, "erro": "Não foi possível finalizar a compra. Estoque e financeiro não foram lançados. Tente novamente."}, status=500)
                 messages.error(request, "Nao foi possivel finalizar a compra. Nenhum valor foi lancado no financeiro.")
                 return redirect("estoque:compra_finalizar", pk=compra.pk)
             if dados["compra_a_prazo"]:

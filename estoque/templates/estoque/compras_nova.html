@@ -3154,7 +3154,7 @@
               <td data-label="Quantidade"><input type="text" name="quantidade[]" inputmode="decimal" value="{{ linha.quantidade }}"></td>
               <td data-label="Unidade"><input type="text" name="unidade[]" placeholder="Unidade" value="{{ linha.unidade }}" list="unidadesCompraMobile">
                 {% if linha.unidade_estoque %}<small>Estoque em {{ linha.unidade_estoque }}.</small>{% endif %}
-                {% if linha.unidade_divergente %}<small role="alert">Unidade divergente. Confira quantidade e preco por embalagem antes de finalizar.</small>{% endif %}
+                <small class="aviso-unidade-compra" role="alert"{% if not linha.unidade_divergente %} hidden{% endif %}>Unidade divergente. Confira quantidade e preco por embalagem antes de finalizar.</small>
               </td>
               <td data-label="Valor">
                 <input type="hidden" name="preco_unitario[]" value="{{ linha.preco_unitario }}">
@@ -4062,6 +4062,11 @@
   }
 
   function validarConclusaoItem(linha) {
+    if (!validarUnidadeCompra(linha)) {
+      focarCampo(linha.querySelector('[name="unidade[]"]'));
+      linha.querySelector('[name="unidade[]"]').reportValidity();
+      return false;
+    }
     const quantidade = linha.querySelector('[name="quantidade[]"]');
     const preco = campoPrecoUnitario(linha);
     const valorPreco = centavosMoeda(preco.value);
@@ -4437,7 +4442,8 @@
     window.garantirOpcaoProdutoCompra(produto,opt.value);
     produto.value = opt.value;
     produtoBusca.value = opt.textContent.trim();
-    unidade.value = opt.dataset.unidade || "";
+    unidade.value = opt.dataset.unidadeEstoque || opt.dataset.unidade || "";
+    validarUnidadeCompra(linha);
     preco.value = precoCampo(opt.dataset.precoCompra || "0");
     sincronizarPrecoUnitarioLinha(linha);
 
@@ -4779,6 +4785,7 @@
     }
     linha.querySelector('[name="quantidade[]"]').value = "1";
     linha.querySelector('[name="unidade[]"]').value = "";
+    validarUnidadeCompra(linha);
     campoPrecoUnitario(linha).value = "0,00";
     sincronizarPrecoUnitarioLinha(linha);
     linha.querySelector(".valor-total-item").textContent = "R$ 0,00";
@@ -4848,6 +4855,7 @@
     if (campos.quantidade) campos.quantidade.value = linha.dataset.edicaoQuantidadeOriginal || "";
     if (campos.unidade) campos.unidade.value = linha.dataset.edicaoUnidadeOriginal || "";
     if (campos.preco) campos.preco.value = linha.dataset.edicaoPrecoOriginal || "";
+    validarUnidadeCompra(linha);
     sincronizarPrecoUnitarioLinha(linha);
     limparEstadoEdicaoItemMobile(linha);
     recalcular();
@@ -4874,6 +4882,12 @@
 
     if (!produtoSelecionadoValido(linha)) {
       mostrarErroEdicaoItemMobile(linha, "Selecione um produto valido.");
+      return;
+    }
+
+    if (!validarUnidadeCompra(linha)) {
+      mostrarErroEdicaoItemMobile(linha, campos.unidade.validationMessage);
+      focarCampo(campos.unidade);
       return;
     }
 
@@ -6236,6 +6250,31 @@
     }
   }
 
+  function validarUnidadeCompra(linha) {
+    const campo = linha.querySelector('[name="unidade[]"]');
+    const select = linha.querySelector('[name="produto_id[]"]');
+    if (!campo) return true;
+    if (!select?.value) {
+      campo.setCustomValidity('');
+      const aviso = linha.querySelector('.aviso-unidade-compra');
+      if (aviso) aviso.hidden = true;
+      return true;
+    }
+    const opt = select.selectedOptions[0];
+    const base = (opt?.dataset.unidadeEstoque || opt?.dataset.unidade || '').trim().toUpperCase();
+    const valor = campo.value.trim().toUpperCase() || base;
+    const valida = !!base && valor === base;
+    campo.setCustomValidity(valida ? '' : `Use ${base || 'a unidade base cadastrada'} e confira quantidade e preço por embalagem.`);
+    const aviso = linha.querySelector('.aviso-unidade-compra');
+    if (aviso) aviso.hidden = valida;
+    return valida;
+  }
+
+  formCompra.addEventListener('input', event => {
+    const linha = event.target.closest('.linha-item');
+    if (linha) validarUnidadeCompra(linha);
+  });
+
   function validarItensManuaisPendentes() {
     const linha = Array.from(document.querySelectorAll(".linha-item")).find(item =>
       itemProvisorio(item) && item.dataset.pendenteManual === "1");
@@ -6295,24 +6334,31 @@
     const payload = new FormData(formCompra);
     formCompra.dataset.enviando = '1';
     if (botao) { botao.disabled = true; botao.textContent = 'Finalizando a compra...'; }
+    const controlador = new AbortController();
+    const limiteEspera = window.setTimeout(() => controlador.abort(), 30000);
+    let revisarPrecos = false;
     try {
-      const resposta = await fetch(formCompra.action || location.href, {method:'POST',body:payload,
+      const resposta = await fetch(formCompra.action || location.href, {method:'POST',body:payload,signal:controlador.signal,
         credentials:'same-origin',headers:{Accept:'application/json','X-Compra-Decisao':'1'}});
       const dados = resposta.headers.get('content-type')?.includes('application/json') ? await resposta.json() : null;
       if (resposta.ok && dados?.ok && dados.redirect) { location.assign(dados.redirect); return; }
+      revisarPrecos = !!dados?.revisar_precos;
       const erroPagina = !dados ? new DOMParser().parseFromString(await resposta.text(), 'text/html').querySelector('.compras-alert.error')?.textContent : '';
       throw new Error(dados?.erro || erroPagina || 'Não foi possível confirmar a finalização. Confira o estado da compra antes de tentar novamente.');
     } catch (falha) {
-      conferenciaPrecosConfirmada = false;
-      document.getElementById('previaDecisaoPrecosCompra').value = '';
-      document.getElementById('decisaoPrecosCompra').value = '';
-      document.getElementById('decisoesPrecosItensCompra').value = '{}';
-      erro.textContent = falha instanceof TypeError
+      if (revisarPrecos) {
+        conferenciaPrecosConfirmada = false;
+        document.getElementById('previaDecisaoPrecosCompra').value = '';
+        document.getElementById('decisaoPrecosCompra').value = '';
+        document.getElementById('decisoesPrecosItensCompra').value = '{}';
+      }
+      erro.textContent = falha.name === 'AbortError' ? 'O servidor demorou para confirmar. Confira o estado da compra antes de reenviar; a operação pode ter sido concluída.' : falha instanceof TypeError
         ? 'Sem confirmação do servidor. Confira o estado da compra antes de reenviar. Seus dados continuam nesta tela.'
         : falha.message;
       erro.hidden = false;
       erro.scrollIntoView({block:'center'});
     } finally {
+      window.clearTimeout(limiteEspera);
       delete formCompra.dataset.enviando;
       if (botao) { botao.disabled = false; botao.textContent = texto; }
     }
@@ -6415,6 +6461,12 @@
         return;
       }
 
+      const invalida = Array.from(tabela.querySelectorAll('tbody .linha-item')).find(linha => !validarUnidadeCompra(linha));
+      if (invalida) {
+        event.preventDefault();
+        invalida.querySelector('[name="unidade[]"]').reportValidity();
+        return;
+      }
       sincronizarTodosPrecosUnitarios();
       atualizarFluxoMobileCompra();
 
