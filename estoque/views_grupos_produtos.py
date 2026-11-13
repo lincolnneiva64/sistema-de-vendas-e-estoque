@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.contrib import messages
 from django.db import IntegrityError
 from django.db.models import Count
 from django.http import JsonResponse
@@ -87,6 +88,17 @@ def grupos_detalhe(request, grupo_id):
         except (ValueError, ValidationError):
             return JsonResponse({'erro': 'Referencia invalida para este grupo.'}, status=400)
     try:
+        if request.POST.get('acao') in ('previa_apresentacao', 'aplicar_apresentacao'):
+            from .services.apresentacao_vinculada import previa_apresentacao, aplicar_apresentacao
+            erro = recusa_operador_precos(request.user)
+            if erro is not None:
+                return erro
+            fonte = int(request.POST.get('fonte', ''))
+            if request.POST['acao'] == 'previa_apresentacao':
+                return JsonResponse(previa_apresentacao(grupo_id, fonte, request.POST, operador=request.user))
+            aplicar_apresentacao(grupo_id, fonte, request.POST, operador=request.user)
+            messages.success(request, 'Apresentação salva nos produtos confirmados. Preços, saldos e mínimos foram preservados.')
+            return JsonResponse({'ok': True, 'reabrir_url': reverse('estoque:produto_editar', args=[fonte])})
         if request.POST.get('acao') == 'previa_adicao':
             ids = {int(v) for v in request.POST.getlist('produto_ids')}
             atuais = list(grupo.produtos.order_by('pk'))

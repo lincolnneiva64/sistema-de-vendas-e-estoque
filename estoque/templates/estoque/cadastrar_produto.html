@@ -1037,6 +1037,9 @@ select.campo-obrigatorio-piscando:focus,
       
 
 <form method="post" class="row g-1" id="form-produto">
+  {% for message in messages %}
+  <div class="col-12 alert alert-{{ message.tags|default:'info' }}" role="status">{{ message }}</div>
+  {% endfor %}
   {% csrf_token %}
   {{ form.grupo_precos_id }}{{ form.versao_precos_grupo }}{{ form.versao_cadastro_precos }}
   {{ form.evidencia_diagnostico_cadastro }}
@@ -1054,6 +1057,7 @@ select.campo-obrigatorio-piscando:focus,
   {% include 'estoque/includes/precos_seletivos.html' %}
   {% if form.grupo_precos %}
   {{ form.apresentacao_observada|json_script:"produto-apresentacao-observada" }}
+  {% include 'estoque/includes/apresentacao_vinculada.html' %}
   <script>
   document.getElementById('form-produto').addEventListener('submit',async function(event){
     const form=this;
@@ -1862,6 +1866,8 @@ camposFracionados.forEach(campo => {
     }
 
     function atualizarPrecoCompraFracionado() {
+        // A linked presentation command must not derive or replace costs.
+        {% if form.grupo_precos %}return;{% endif %}
         if (!campoPrecoCompraFracionado) return;
 
         const compra = numero(campoPrecoCompra?.value);

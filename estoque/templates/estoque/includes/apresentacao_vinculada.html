@@ -1,0 +1,111 @@
+<style>#confirmarApresentacao .ps-confirm-primary:disabled {background:#cbd5e1;color:#475569;border-color:#cbd5e1;cursor:not-allowed;}</style>
+<div class="col-12 alert alert-warning" id="apresentacaoPendente" role="status" hidden>
+  Apresentação alterada, ainda não salva. Ao salvar, confira a prévia dos produtos vinculados.
+</div>
+<script>
+(() => {
+  const form = document.getElementById('form-produto');
+  const observada = JSON.parse(document.getElementById('produto-apresentacao-observada').textContent);
+  const url = "{% url 'estoque:grupos_produtos_detalhe' form.grupo_precos.pk %}";
+  const decimal = v => {let t = String(v || '').trim(); if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); return t;};
+  const numero = v => Number(decimal(v));
+  const unidade = v => String(v || '').trim().toUpperCase();
+  function proposta() {
+    return {
+      unidade_compra: (document.getElementById('unidade_compra_visual') || form.elements.unidade_compra).value,
+      vende_fracionado: (document.getElementById('vende_fracionado_visual') || form.elements.vende_fracionado).value,
+      unidade_venda_2: (document.getElementById('unidade_fracionada_visual') || form.elements.unidade_venda_2).value,
+      fator_conversao: decimal((document.getElementById('fator_visual') || form.elements.fator_conversao).value),
+    };
+  }
+  function mudou(p) {
+    const fracionado = p.vende_fracionado === 'True';
+    return unidade(p.unidade_compra) !== unidade(observada.unidade_compra)
+      || fracionado !== observada.vende_fracionado
+      || (fracionado && (unidade(p.unidade_venda_2) !== unidade(observada.unidade_venda_2)
+        || numero(p.fator_conversao) !== numero(observada.fator_conversao)));
+  }
+  const pendente = document.getElementById('apresentacaoPendente');
+  form.addEventListener('input', () => {pendente.hidden = !mudou(proposta());});
+  form.addEventListener('change', () => {pendente.hidden = !mudou(proposta());});
+  window.addEventListener('load', () => {pendente.hidden = !mudou(proposta());});
+  let ocupado = false;
+  async function requisitar(dados) {
+    const r = await fetch(url, {method:'POST', credentials:'same-origin', cache:'no-store', body:dados});
+    let resposta;
+    try { resposta = await r.json(); } catch (_) { throw new Error('Não foi possível confirmar o salvamento. Reabra o cadastro para conferir os valores persistidos.'); }
+    if (!r.ok) throw new Error(resposta.erro || 'Operação recusada. Nada foi salvo.');
+    return resposta;
+  }
+  function confirmar(previa) {
+    return new Promise(resolve => {
+      const dialog = document.createElement('dialog');
+      dialog.className = 'ps-confirm'; dialog.id = 'confirmarApresentacao';
+      dialog.setAttribute('aria-labelledby', 'tituloApresentacao');
+      const header = document.createElement('header'); header.className = 'ps-confirm-header';
+      const titulo = document.createElement('h2'); titulo.id = 'tituloApresentacao';
+      titulo.className = 'ps-confirm-title'; titulo.textContent = 'Confirmar apresentação dos produtos';
+      const pergunta = document.createElement('p'); pergunta.className = 'ps-confirm-description';
+      pergunta.textContent = 'Esta alteração também precisa ser aplicada aos outros produtos vinculados para manter a compatibilidade. Deseja atualizar os demais produtos?';
+      const escopo = document.createElement('p'); escopo.textContent = 'Somente a apresentação será salva. Preços, saldos, mínimos e demais edições deste formulário não serão gravados. Nenhum dado foi salvo ainda.';
+      header.append(titulo, pergunta, escopo); dialog.append(header);
+      const lista = document.createElement('div'); lista.className = 'ps-confirm-body'; dialog.append(lista);
+      const campos = {unidade_compra:'Unidade de compra', vende_fracionado:'Venda fracionada', unidade_venda_2:'Unidade fracionada', fator_conversao:'Fator de conversão'};
+      const texto = v => typeof v === 'boolean' ? (v ? 'Sim' : 'Não') : String(v || '—');
+      previa.produtos.forEach(p => {
+        const card = document.createElement('section'); card.className = 'ps-confirm-card';
+        const nome = document.createElement('strong'); nome.textContent = p.nome; card.append(nome);
+        Object.entries(campos).forEach(([campo, rotulo]) => {
+          const linha = document.createElement('p'); linha.textContent = rotulo+': '+texto(p.anteriores[campo])+' → '+texto(p.novos[campo]); card.append(linha);
+        });
+        lista.append(card);
+      });
+      if (previa.bloqueios.length) {
+        const erros = document.createElement('div'); erros.className = 'alert alert-danger'; erros.setAttribute('role', 'alert');
+        erros.textContent = 'Nada foi salvo. '+previa.bloqueios.map(b => b.motivo).join(' '); lista.prepend(erros);
+      }
+      const footer = document.createElement('footer'); footer.className = 'ps-confirm-footer';
+      const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'ps-confirm-button'; cancelar.textContent = 'Cancelar'; cancelar.dataset.cancelarApresentacao = '1';
+      const sim = document.createElement('button'); sim.type = 'button'; sim.className = 'ps-confirm-button ps-confirm-primary'; sim.textContent = 'Sim, atualizar todos'; sim.dataset.confirmarApresentacao = '1'; sim.disabled = !!previa.bloqueios.length;
+      footer.append(cancelar, sim); dialog.append(footer); document.body.append(dialog);
+      let concluido = false;
+      const terminar = valor => {if (concluido) return; concluido = true; dialog.close(); dialog.remove(); resolve(valor);};
+      cancelar.onclick = () => terminar(false); sim.onclick = () => terminar(true);
+      dialog.addEventListener('cancel', e => {e.preventDefault(); terminar(false);});
+      dialog.showModal(); cancelar.focus();
+    });
+  }
+  // Capture before ordinary price/stock submit handlers: this command saves
+  // only the signed presentation preview, never the rest of the ModelForm.
+  form.addEventListener('submit', async event => {
+    const p = proposta();
+    if (!mudou(p)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (ocupado) return;
+    ocupado = true; pendente.hidden = false;
+    const salvar = form.querySelector('.btn-salvar');
+    if (salvar) salvar.disabled = true;
+    try {
+      const dados = new FormData();
+      Object.entries(p).forEach(([c,v]) => dados.set(c,v));
+      dados.set('csrfmiddlewaretoken', form.elements.csrfmiddlewaretoken.value);
+      dados.set('versao_cadastro_precos', form.elements.versao_cadastro_precos.value);
+      dados.set('fonte', '{{ form.instance.pk }}'); dados.set('acao', 'previa_apresentacao');
+      const previa = await requisitar(dados);
+      if (!(await confirmar(previa))) {
+        pendente.textContent = 'Alteração de apresentação não salva. Os valores preenchidos são uma proposta; os cadastros permanecem inalterados.';
+        return;
+      }
+      dados.set('acao', 'aplicar_apresentacao'); dados.set('confirmar', '1'); dados.set('assinatura', previa.assinatura);
+      const resultado = await requisitar(dados);
+      window.location.assign(resultado.reabrir_url);
+    } catch (erro) {
+      pendente.textContent = erro.message+' A apresentação exibida é uma proposta, não uma confirmação de salvamento. Reabra o cadastro para conferir os valores persistidos.';
+      pendente.scrollIntoView({block:'center'});
+    } finally {
+      ocupado = false; delete form.dataset.enviando;
+      if (salvar) salvar.disabled = false;
+    }
+  }, true);
+})();
+</script>
