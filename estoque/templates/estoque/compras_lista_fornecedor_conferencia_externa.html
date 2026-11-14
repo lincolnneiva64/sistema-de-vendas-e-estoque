@@ -316,33 +316,7 @@
 </head>
 <body>
   <main class="externa-wrap">
-    <header class="externa-topo">
-      <h1>Conferencia de chegada</h1>
-      <div class="externa-info">
-        <div class="externa-info-item">
-          <span class="externa-label">Fornecedor</span>
-          <span class="externa-value">{% if lista.fornecedor %}{{ lista.fornecedor.nome }}{% else %}-{% endif %}</span>
-        </div>
-        <div class="externa-info-item">
-          <span class="externa-label">Lista</span>
-          <span class="externa-value">#{{ lista.id }}</span>
-        </div>
-        <div class="externa-info-item">
-          <span class="externa-label">Pedido</span>
-          <span class="externa-value">{{ lista.data_lista|date:"d/m/Y" }}</span>
-        </div>
-        <div class="externa-info-item">
-          <span class="externa-label">Chegada</span>
-          <span class="externa-value">{% if lista.data_chegada_prevista %}{{ lista.data_chegada_prevista|date:"d/m/Y" }}{% else %}-{% endif %}</span>
-        </div>
-        {% if conferente %}
-          <div class="externa-info-item">
-            <span class="externa-label">Conferente</span>
-            <span class="externa-value">{{ conferente }}</span>
-          </div>
-        {% endif %}
-      </div>
-    </header>
+
 
     {% if messages %}
       {% for message in messages %}
@@ -355,8 +329,7 @@
 
     <section class="externa-card {% if conferencia_salva or consulta_somente_leitura %}conferencia-salva-bloqueada{% endif %}" id="cardConferenciaExterna" data-consulta-somente-leitura="{% if consulta_somente_leitura %}1{% else %}0{% endif %}">
       <div class="externa-card-titulo">
-        <h2>Conferencia de chegada</h2>
-        <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
+        {% include 'estoque/includes/conferencia_cabecalho.html' with conferente_nome=conferente principal=True %}
       </div>
 
       <div class="busca-mobile">
@@ -445,7 +418,10 @@
   {% rodape_horarios lista %}
 </main>
 
-  {% if checklist_externa_editavel %}
+  {% include 'estoque/includes/conferencia_fila.html' %}
+  <script>
+    const filaConferenciaExterna = criarFilaConferenciaChegada('.linha-conferencia[data-item-id]');
+  </script>
   <script>
   (function() {
     function parseDecimal(valor) {
@@ -552,6 +528,7 @@
       resultado.className = 'resultado ' + status;
       item.classList.remove('pendente','ok','faltou','veio_a_mais','nao_veio');
       item.classList.add(status);
+      filaConferenciaExterna.atualizar(item);
       atualizarFiltro();
     }
     const busca = document.getElementById('buscaConferenciaListaFornecedor');
@@ -584,7 +561,8 @@
     function mostrarSugestoes() {
       if (!sugestoes) return;
       const termo = termoBusca();
-      const filtrados = produtos.filter(function(item) {
+      if (filaConferenciaExterna.finalizada() && !termo) { esconderSugestoes(); return; }
+      const filtrados = filaConferenciaExterna.ordenarProdutos(produtos).filter(function(item) {
         return !termo || item.termo.includes(termo);
       }).slice(0, 18);
       if (!filtrados.length) {
@@ -592,7 +570,7 @@
         return;
       }
       sugestoes.innerHTML = filtrados.map(function(item) {
-        return '<button type="button" class="sugestao-mobile" data-item-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.nome) + '</button>';
+        return '<button type="button" class="sugestao-mobile" data-item-id="' + escapeHtml(item.id) + '">' + escapeHtml(item.nome) + '<small>' + escapeHtml(filaConferenciaExterna.rotulo(item.id)) + '</small></button>';
       }).join('');
       sugestoes.classList.add('aberto');
     }
@@ -618,6 +596,11 @@
       const produto = produtos.find(function(item) { return item.id === botao.dataset.itemId; });
       const linha = itens.find(function(item) { return item.dataset.itemId === botao.dataset.itemId; });
       if (!produto || !linha || !busca) return;
+      filaConferenciaExterna.abrir(linha);
+      if (filaConferenciaExterna.conferido(linha) && botaoPendencias?.classList.contains('ativo')) {
+        botaoPendencias.classList.remove('ativo');
+        botaoPendencias.textContent = 'Mostrar so pendencias';
+      }
       busca.value = produto.nome;
       atualizarFiltro();
       esconderSugestoes();
@@ -679,7 +662,10 @@
       input.addEventListener('input', atualizarFiltro);
     });
     document.querySelectorAll('.proximo-btn').forEach(function(botao) {
-      botao.addEventListener('click', voltarParaBusca);
+      botao.addEventListener('click', function() {
+        filaConferenciaExterna.concluir(botao.closest('.linha-conferencia'));
+        voltarParaBusca();
+      });
     });
     botaoPendencias?.addEventListener('click', function() {
       botaoPendencias.classList.toggle('ativo');
@@ -749,6 +735,5 @@
     atualizarFiltro();
   })();
   </script>
-  {% endif %}
 </body>
 </html>

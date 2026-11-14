@@ -2053,8 +2053,10 @@
 
   <section class="lista-fornecedor-card conferencia-card">
     <div class="lista-fornecedor-card-titulo">
-      <h2>Conferencia de chegada</h2>
-      <small>Registre apenas o que chegou. Nao gera compra, estoque ou financeiro.</small>
+      <h2 class="conferencia-cabecalho-desktop">Conferencia de chegada</h2>
+      <div class="conferencia-cabecalho-mobile">
+        {% include 'estoque/includes/conferencia_cabecalho.html' with conferente_nome=conferente_link|default:lista.checklist_externa_conferente %}
+      </div>
     </div>
 
     <div class="conferencia-busca-mobile">
@@ -2738,7 +2740,9 @@
 {% rodape_horarios lista %}
 </main>
 
+{% include 'estoque/includes/conferencia_fila.html' %}
 <script>
+const filaConferencia = criarFilaConferenciaChegada('tr.linha-conferencia[data-item-id]');
 (function() {
   function parseDecimal(text) {
     if (text === null || text === undefined) return null;
@@ -2864,6 +2868,7 @@
     tr.classList.remove('pendente','ok','faltou','veio_a_mais','nao_veio');
     tr.classList.add(status);
     resultado.className = 'conferencia-resultado ' + status;
+    filaConferencia.atualizar(tr);
     atualizarFiltroPendencias();
     atualizarResumoConferencia();
   }
@@ -2956,7 +2961,8 @@
     if (!consultaMobileConferencia.matches || !sugestoesConferenciaMobile) return;
 
     const termo = termoBuscaConferencia();
-    const produtos = produtosDaChecklistConferencia()
+    if (filaConferencia.finalizada() && !termo) { esconderSugestoesConferencia(); return; }
+    const produtos = filaConferencia.ordenarProdutos(produtosDaChecklistConferencia())
       .filter(function(item) {
         return !termo || item.termo.includes(termo);
       })
@@ -2969,7 +2975,7 @@
 
     sugestoesConferenciaMobile.innerHTML = produtos.map(function(item) {
       return '<button type="button" class="conferencia-sugestao-mobile" data-item-id="' +
-        escapeHtml(item.id) + '">' + escapeHtml(item.nome) + '</button>';
+        escapeHtml(item.id) + '">' + escapeHtml(item.nome) + '<small>' + escapeHtml(filaConferencia.rotulo(item.id)) + '</small></button>';
     }).join('');
 
     sugestoesConferenciaMobile.classList.add('aberto');
@@ -2982,6 +2988,13 @@
     });
 
     if (!item || !buscaConferenciaMobile) return;
+    const linhaSelecionada = document.querySelector('tr.linha-conferencia[data-item-id="' + item.id + '"]');
+    filaConferencia.abrir(linhaSelecionada);
+    const filtro = document.getElementById('btnMostrarPendencias');
+    if (filaConferencia.conferido(linhaSelecionada) && filtro?.classList.contains('ativo')) {
+      filtro.classList.remove('ativo');
+      filtro.textContent = 'Mostrar so pendencias';
+    }
     buscaConferenciaMobile.value = item.nome;
     atualizarFiltroPendencias();
     esconderSugestoesConferencia();
@@ -3142,12 +3155,15 @@
   }
 
   document.querySelectorAll('.conferencia-proximo-btn').forEach(function(botao) {
-    botao.addEventListener('click', voltarParaBuscaProximoProduto);
+    botao.addEventListener('click', function() {
+      filaConferencia.concluir(botao.closest('tr.linha-conferencia'));
+      voltarParaBuscaProximoProduto();
+    });
   });
 
 
   function nomeProdutoDaLinha(tr) {
-    return String(tr.querySelector('.lista-fornecedor-produto')?.textContent || 'Produto').trim();
+    return String(tr.querySelector('.conferencia-produto-nome')?.textContent || 'Produto').trim();
   }
 
   function itemResumoDaLinha(tr) {

@@ -1,0 +1,5 @@
+<div class="conferencia-cabecalho-integrado">
+  {% if principal %}<h1>{% else %}<h2>{% endif %}Conferência de chegada{% if lista.fornecedor %} — {{ lista.fornecedor.nome }}{% endif %}{% if principal %}</h1>{% else %}</h2>{% endif %}
+  <p>Lista #{{ lista.id }} · Pedido: {{ lista.data_lista|date:"d/m/Y" }} · Chegada: {{ lista.data_chegada_prevista|date:"d/m/Y"|default:"—" }}</p>
+  {% if conferente_nome %}<p><strong>Conferente:</strong> {{ conferente_nome }}</p>{% endif %}
+</div>

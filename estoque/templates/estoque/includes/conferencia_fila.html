@@ -1,0 +1,160 @@
+<style>
+  .conferencia-cabecalho-integrado h1, .conferencia-cabecalho-integrado h2 { margin: 0; font-size: 1.18rem; line-height: 1.35; overflow-wrap: anywhere; }
+  .externa-card-titulo .conferencia-cabecalho-integrado h1 { color: #7c2d12; font-weight: 950; }
+  .conferencia-cabecalho-integrado p { margin: 5px 0 0; font-size: .875rem; line-height: 1.45; overflow-wrap: anywhere; }
+  .conferencia-cabecalho-mobile { display: none; }
+  @media (max-width: 620px) {
+    .conferencia-cabecalho-mobile { display: block; }
+    .conferencia-cabecalho-desktop { display: none; }
+    /* Keep existing scroll targets below the internal page's floating Online tab. */
+    .conferencia-card, .conferencia-busca-mobile { scroll-margin-top: 84px; }
+  }
+  .externa-wrap > .externa-card { margin-top: 0; }
+  .fila-progresso { margin: 10px 12px; padding: 12px; border: 1px solid #86bfa1; border-radius: 9px; background: #ecfdf3; color: #14532d; line-height: 1.4; }
+  .fila-progresso[hidden] { display: none !important; }
+  .fila-progresso h3 { font-size: 1rem; margin: 0 0 4px; }
+  .fila-progresso p { margin: 0; }
+  .fila-progresso small { display: block; margin-top: 5px; font-size: .875rem; color: #854d0e; }
+  .fila-progresso small[hidden] { display: none; }
+  .fila-chegada > .linha-conferencia.fila-conferido { background: #f1f5f9; border-color: #cbd5e1; }
+  .fila-chegada > .linha-conferencia.fila-conferido.fila-recolhido { background: #f1f5f9; border-color: #cbd5e1; }
+  .fila-chegada > tr.fila-conferido.fila-recolhido > td:first-child { background: #f1f5f9; }
+  .fila-chegada > .linha-conferencia.fila-atencao { border-left: 4px solid #d97706; }
+  .fila-chegada > .linha-conferencia.fila-conferido.fila-atencao.fila-recolhido,
+  .fila-chegada > tr.fila-conferido.fila-atencao.fila-recolhido > td:first-child { background: #fffbeb; border-color: #d97706; }
+  .fila-chegada .fila-atencao .fila-selo { color: #92400e; }
+  .fila-chegada .fila-resumo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; color: #334155; font-size: .875rem; line-height: 1.4; }
+  .fila-chegada .fila-resumo[hidden] { display: none !important; }
+  .fila-chegada .fila-selo { font-weight: 800; color: #166534; }
+  .fila-chegada .fila-reabrir { min-height: 44px; padding: 8px 12px; border: 1px solid #94a3b8; border-radius: 7px; background: white; color: #1e293b; font: inherit; font-weight: 700; cursor: pointer; }
+  .fila-chegada .fila-reabrir:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+  .fila-chegada > tr.fila-recolhido > td:not(:first-child),
+  .fila-chegada > div.fila-recolhido > .campo-grupo { display: none !important; }
+  .fila-chegada > tr.fila-recolhido > td:first-child { border-bottom: 0; }
+  .sugestao-mobile small, .conferencia-sugestao-mobile small { display: block; font-size: .8125rem; color: #475569; margin-top: 3px; }
+  #sugestoesConferenciaListaFornecedor button {
+    background: var(--fila-sug-fundo, #fff);
+    box-shadow: inset 3px 0 0 var(--fila-sug-borda, transparent);
+  }
+  #sugestoesConferenciaListaFornecedor button small {
+    color: var(--fila-sug-cor, #475569);
+    font-weight: var(--fila-sug-peso, inherit);
+  }
+  /* Follow the existing live row classes without changing suggestion JavaScript. */
+  {% for item in lista.itens.all %}
+  body:has(.linha-conferencia[data-item-id="{{ item.id }}"].fila-conferido.ok) #sugestoesConferenciaListaFornecedor button[data-item-id="{{ item.id }}"] {
+    --fila-sug-fundo: #dcfce7; --fila-sug-cor: #166534; --fila-sug-borda: #16a34a; --fila-sug-peso: 950;
+  }
+  body:has(.linha-conferencia[data-item-id="{{ item.id }}"].fila-conferido.fila-atencao) #sugestoesConferenciaListaFornecedor button[data-item-id="{{ item.id }}"] {
+    --fila-sug-fundo: #fffbeb; --fila-sug-cor: #92400e; --fila-sug-borda: #d97706; --fila-sug-peso: 900;
+  }
+  {% endfor %}
+</style>
+<script>
+// Presentation only: move existing rows; never replace fields or change submitted data.
+window.criarFilaConferenciaChegada = function (seletor) {
+  const itens = Array.from(document.querySelectorAll(seletor));
+  const porId = new Map(itens.map(item => [item.dataset.itemId, item]));
+  const estados = new Map();
+  let sequencia = 0;
+  const progresso = document.createElement('section');
+  progresso.className = 'fila-progresso';
+  progresso.setAttribute('role', 'status');
+  progresso.setAttribute('aria-live', 'polite');
+  progresso.setAttribute('aria-atomic', 'true');
+  progresso.innerHTML = '<h3>Todos os produtos foram verificados</h3><p></p><small>Existem divergências registradas para análise posterior.</small>';
+  document.getElementById('buscaConferenciaListaFornecedor')?.closest('.busca-mobile, .conferencia-busca-mobile')?.after(progresso);
+  function status(item) {
+    return ['pendente', 'ok', 'faltou', 'veio_a_mais', 'nao_veio'].find(s => item.classList.contains(s)) || 'pendente';
+  }
+  function verificado(item) { return ['ok', 'faltou', 'veio_a_mais', 'nao_veio'].includes(status(item)); }
+  function conferido(item) { return Boolean(item && estados.get(item).concluido && verificado(item)); }
+  function atualizarProgresso() {
+    const total = itens.filter(conferido).length;
+    progresso.dataset.verificados = total;
+    progresso.hidden = !itens.length || total !== itens.length;
+    progresso.querySelector('p').textContent = total + ' de ' + itens.length + ' produtos conferidos.';
+    progresso.querySelector('small').hidden = !itens.some(item => verificado(item) && status(item) !== 'ok');
+  }
+  function ordenar() {
+    if (!itens.length) return;
+    const pai = itens[0].parentElement;
+    const atuais = Array.from(pai.children).filter(item => estados.has(item));
+    const ordenados = itens.slice().sort((a, b) => Number(conferido(a)) - Number(conferido(b))
+      || (conferido(a) ? estados.get(a).ordem - estados.get(b).ordem : estados.get(a).indice - estados.get(b).indice));
+    if (atuais.every((item, i) => item === ordenados[i])) return;
+    const foco = document.activeElement;
+    const limite = atuais[atuais.length - 1].nextSibling;
+    ordenados.forEach(item => pai.insertBefore(item, limite));
+    if (foco?.isConnected && document.activeElement !== foco) foco.focus({ preventScroll: true });
+  }
+  function desenhar(item) {
+    const estado = estados.get(item);
+    if (!verificado(item)) { estado.concluido = false; estado.aberto = true; }
+    const feito = conferido(item);
+    item.classList.toggle('fila-conferido', feito);
+    item.classList.toggle('fila-recolhido', feito && !estado.aberto);
+    item.classList.toggle('fila-atencao', ['faltou', 'veio_a_mais', 'nao_veio'].includes(status(item)));
+    estado.resumo.hidden = !feito;
+    estado.selo.textContent = ({ ok: 'OK — Conferido', faltou: 'Falta — Verificado', veio_a_mais: 'Sobra — Verificado', nao_veio: 'Não chegou — Verificado' })[status(item)] || '';
+    const quantidade = item.querySelector('.campoQuantidadeRecebidaLista');
+    estado.quantidade.textContent = 'Qtd. conferida: ' + (quantidade?.value || '') + ' ' + (quantidade?.dataset.unidade || '');
+    const observacao = item.querySelector('textarea[name^="observacao_conferencia_"]');
+    estado.obs.textContent = observacao?.value.trim() ? 'Observação registrada' : '';
+    estado.botao.textContent = estado.aberto ? 'Recolher' : 'Reabrir';
+    estado.botao.setAttribute('aria-expanded', estado.aberto ? 'true' : 'false');
+    if (item.tagName === 'TR') item.firstElementChild.colSpan = feito && !estado.aberto ? 7 : 1;
+  }
+  itens.forEach((item, indice) => {
+    item.parentElement.classList.add('fila-chegada');
+    const resumo = document.createElement('div');
+    resumo.className = 'fila-resumo';
+    const selo = document.createElement('span'); selo.className = 'fila-selo'; selo.textContent = 'OK — Conferido';
+    const quantidade = document.createElement('span');
+    const obs = document.createElement('span');
+    const botao = document.createElement('button'); botao.type = 'button'; botao.className = 'fila-reabrir';
+    const nome = item.querySelector('.conferencia-produto-nome, .produto-nome');
+    botao.setAttribute('aria-label', 'Reabrir ou recolher ' + (nome?.textContent.trim() || 'produto'));
+    resumo.append(selo, quantidade, obs, botao);
+    if (item.tagName === 'TR') item.firstElementChild.append(resumo);
+    else nome.after(resumo);
+    estados.set(item, { concluido: verificado(item), aberto: false, ordem: sequencia++, indice, resumo, selo, quantidade, obs, botao });
+    botao.addEventListener('click', () => { estados.get(item).aberto = !estados.get(item).aberto; desenhar(item); });
+    desenhar(item);
+  });
+  ordenar();
+  atualizarProgresso();
+  return {
+    atualizar(item) {
+      if (!estados.has(item)) return;
+      const antes = estados.get(item).concluido;
+      desenhar(item);
+      if (antes !== estados.get(item).concluido) ordenar();
+      atualizarProgresso();
+    },
+    concluir(item) {
+      if (!estados.has(item) || !verificado(item)) return;
+      Object.assign(estados.get(item), { concluido: true, aberto: false, ordem: sequencia++ });
+      desenhar(item); ordenar(); atualizarProgresso();
+    },
+    abrir(item) { if (estados.has(item)) { estados.get(item).aberto = true; desenhar(item); } },
+    ordenarProdutos(produtos) {
+      return produtos.slice().sort((a, b) => {
+        const linhaA = porId.get(a.id), linhaB = porId.get(b.id);
+        const estadoA = estados.get(linhaA), estadoB = estados.get(linhaB);
+        return Number(conferido(linhaA)) - Number(conferido(linhaB))
+          || (conferido(linhaA) ? estadoA.ordem - estadoB.ordem : estadoA.indice - estadoB.indice);
+      });
+    },
+    rotulo(id) {
+      const item = porId.get(id);
+      if (conferido(item)) return status(item) === 'ok' ? 'OK — Conferido' : 'Verificado — Com divergência';
+      if (item && status(item) === 'nao_veio') return 'Atenção — Produto não chegou';
+      if (item && ['faltou', 'veio_a_mais'].includes(status(item))) return 'Atenção — Quantidade divergente';
+      return 'Pendente';
+    },
+    conferido,
+    finalizada() { return itens.length > 0 && itens.every(conferido); }
+  };
+};
+</script>
