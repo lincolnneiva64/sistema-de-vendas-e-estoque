@@ -1148,29 +1148,7 @@ select {
 .venda-gravada-responsavel select:disabled {
     opacity: 0.72;
 }
-@media (max-width: 980px) {
-    .barra-acoes-venda {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-    .acoes-venda-grupo.direita {
-        margin-left: 0;
-        justify-content: flex-start;
-    }
-    .venda-gravada-bloco {
-        align-items: stretch;
-        flex-wrap: wrap;
-        margin-left: 0;
-        width: 100%;
-    }
-    .venda-gravada-responsavel {
-        width: 100%;
-    }
-    .venda-gravada-responsavel select {
-        width: 100%;
-        min-width: 0;
-    }
-}
+
 .venda-toast {
     position: fixed;
     top: 76px;
@@ -1632,12 +1610,7 @@ select:focus {
     content: "| ";
 }
 
-@media (max-width: 980px) {
-    .preco-informacoes {
-        right: auto;
-        width: calc(300% + 14px);
-    }
-}
+
 
 #preco.preco-conferido-campo,
 #preco.preco-conferido-campo:focus {
@@ -1726,26 +1699,7 @@ td:first-child {
     padding-top: 5px;
 }
 
-@media (max-width: 980px) {
-    .bloco-lancamento {
-        padding: 8px;
-    }
 
-    .bloco-lancamento .topo-venda {
-        margin-bottom: 5px;
-    }
-
-    .bloco-lancamento .linha.linha-cabecalho-venda,
-    .bloco-lancamento .linha:not(.linha-cabecalho-venda) {
-        margin-top: 0;
-        margin-bottom: 6px;
-    }
-
-    .bloco-lancamento .barra-acoes-venda {
-        margin-top: 4px;
-        padding-top: 6px;
-    }
-}
 
 
 </style>
@@ -2132,762 +2086,9 @@ td:first-child {
         </div>
 
         <style>
-/* ===== MOBILE VENDAS LIMPO - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    body {
-        padding: 6px;
-        overflow-x: hidden;
-    }
+.mobile-select-bonito-btn,
+.mobile-select-overlay { display: none; }
 
-    #layout-vendas,
-    .bloco-venda,
-    .bloco-lancamento {
-        width: 100%;
-        max-width: 100%;
-        box-sizing: border-box;
-        overflow-x: hidden;
-    }
-
-    .bloco-venda,
-    .bloco-lancamento {
-        padding: 10px;
-        border-radius: 14px;
-    }
-
-    .topo-venda {
-        display: block;
-        margin-bottom: 8px;
-    }
-
-    .topo-venda h2 {
-        font-size: 30px;
-        margin-bottom: 10px;
-    }
-
-    .cliente-resumo.visivel {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 7px;
-        padding: 7px;
-    }
-
-    .cliente-resumo-item {
-        min-height: 44px;
-        padding: 8px 9px;
-    }
-
-    .cliente-resumo-label {
-        font-size: 10px;
-    }
-
-    .cliente-resumo-valor {
-        font-size: 14px;
-        white-space: normal;
-        overflow: visible;
-        text-overflow: clip;
-        line-height: 1.25;
-    }
-
-    .cliente-financeiro {
-        flex-wrap: wrap;
-        gap: 5px;
-    }
-
-    .cliente-financeiro-linha {
-        font-size: 12px;
-        padding: 5px 7px;
-        white-space: normal;
-        line-height: 1.2;
-    }
-
-    .linha.linha-cabecalho-venda {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
-        align-items: stretch;
-        margin-bottom: 8px;
-    }
-
-    .linha.linha-cabecalho-venda .cliente-autocomplete-wrap {
-        grid-column: 1 / -1;
-        order: -1;
-    }
-
-    input,
-    select {
-        width: 100%;
-        min-width: 0;
-        height: 48px;
-        font-size: 15px;
-        border-radius: 10px;
-        box-sizing: border-box;
-    }
-
-    #clienteBusca {
-        height: 52px;
-        font-size: 17px;
-    }
-
-    #msgEdicao:not(.visivel) {
-        display: none !important;
-    }
-
-    .linha:not(.linha-cabecalho-venda) {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
-        margin-top: 8px;
-        margin-bottom: 10px;
-    }
-
-    .linha:not(.linha-cabecalho-venda) .produto-autocomplete-wrap {
-        grid-column: 1 / -1;
-    }
-
-    #produtoBusca {
-        width: 100%;
-        height: 54px;
-        font-size: 17px;
-    }
-
-    #quantidade,
-    #unidade,
-    #custoVenda,
-    #preco {
-        width: 100%;
-        min-width: 0;
-        height: 50px;
-        font-size: 16px;
-        text-align: center;
-    }
-
-    .barra-acoes-venda {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        margin-top: 10px;
-        padding-top: 8px;
-        overflow-x: hidden;
-    }
-
-    .acoes-venda-grupo {
-        width: 100%;
-        max-width: 100%;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
-        margin-left: 0;
-        box-sizing: border-box;
-    }
-
-    .acao-venda-btn {
-        width: 100%;
-        max-width: 100%;
-        min-height: 44px;
-        height: auto;
-        padding: 9px 7px;
-        font-size: 13px;
-        line-height: 1.15;
-        text-align: center;
-        white-space: normal;
-        box-sizing: border-box;
-    }
-
-    #btnGravarVenda,
-    #btnVisualizarVenda {
-        grid-column: 1 / -1;
-    }
-
-    #btnGravarVenda {
-        min-height: 52px;
-        font-size: 17px;
-        border-radius: 12px;
-        background: #16a34a;
-        border-color: #15803d;
-        box-shadow: 0 8px 18px rgba(22, 163, 74, 0.28);
-    }
-
-    .atalhos-venda {
-        top: auto;
-        right: 8px;
-        bottom: calc(80px + env(safe-area-inset-bottom));
-        align-items: flex-end;
-        transform: translateX(calc(100% - 46px));
-    }
-
-    .locacoes-operacionais-venda {
-        bottom: calc(206px + env(safe-area-inset-bottom));
-    }
-
-    .locacoes-operacionais-venda .atalhos-venda-painel {
-        width: min(390px, calc(100vw - 62px));
-        max-height: min(72vh, calc(100dvh - 216px - env(safe-area-inset-bottom)), 520px);
-    }
-
-    .atalhos-venda-toggle {
-        width: 46px;
-        height: 116px;
-        min-height: 116px;
-        font-size: 12px;
-    }
-
-    .atalhos-venda-painel {
-        width: min(290px, calc(100vw - 54px));
-        max-height: min(72vh, 520px);
-        overflow-y: auto;
-    }
-
-    .grade-itens {
-        margin-top: 12px;
-        min-height: 240px;
-        max-height: 45vh;
-    }
-
-    .bloco-itens-scroll {
-        max-height: calc(45vh - 42px);
-    }
-}
-/* ===== FIM MOBILE VENDAS LIMPO - CHATGPT 2026-06-10 ===== */
-
-/* ===== SELECTS BONITOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-.mobile-select-bonito-btn {
-    display: none;
-}
-
-.mobile-select-overlay {
-    display: none;
-}
-
-@media (max-width: 980px) {
-    select.mobile-select-original {
-        display: none !important;
-    }
-
-    .mobile-select-bonito-btn {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        min-width: 0;
-        height: 50px;
-        padding: 0 14px;
-        border: 3px solid #64748b;
-        border-radius: 12px;
-        background: #ffffff;
-        color: #0f172a;
-        font-size: 17px;
-        font-weight: 800;
-        box-sizing: border-box;
-        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
-    }
-
-    .mobile-select-bonito-btn:active {
-        transform: scale(0.985);
-        background: #eff6ff;
-    }
-
-    .mobile-select-bonito-seta {
-        font-size: 18px;
-        opacity: 0.75;
-        margin-left: 8px;
-    }
-
-    .mobile-select-overlay.visivel {
-        position: fixed;
-        inset: 0;
-        z-index: 99999;
-        display: flex;
-        align-items: flex-end;
-        justify-content: center;
-        padding: 16px;
-        background: rgba(15, 23, 42, 0.48);
-        box-sizing: border-box;
-    }
-
-    .mobile-select-card {
-        width: 100%;
-        max-width: 520px;
-        max-height: 78vh;
-        overflow: hidden;
-        border-radius: 22px;
-        background: #f8fafc;
-        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
-        border: 1px solid #dbeafe;
-    }
-
-    .mobile-select-titulo {
-        padding: 16px 18px;
-        background: #eaf4ff;
-        color: #0f172a;
-        font-size: 20px;
-        font-weight: 900;
-        border-bottom: 1px solid #dbeafe;
-    }
-
-    .mobile-select-lista {
-        max-height: 58vh;
-        overflow-y: auto;
-        padding: 8px;
-    }
-
-    .mobile-select-opcao {
-        width: 100%;
-        min-height: 58px;
-        margin-bottom: 8px;
-        padding: 12px 14px;
-        border: 2px solid #dbeafe;
-        border-radius: 16px;
-        background: #ffffff;
-        color: #0f172a;
-        font-size: 19px;
-        font-weight: 800;
-        text-align: left;
-        box-sizing: border-box;
-    }
-
-    .mobile-select-opcao.selecionada {
-        border-color: #2563eb;
-        background: #dbeafe;
-        color: #102a5c;
-    }
-
-    .mobile-select-opcao:active {
-        transform: scale(0.99);
-        background: #bfdbfe;
-    }
-
-    .mobile-select-cancelar {
-        width: calc(100% - 16px);
-        min-height: 52px;
-        margin: 0 8px 10px;
-        border: 2px solid #cbd5e1;
-        border-radius: 16px;
-        background: #ffffff;
-        color: #334155;
-        font-size: 17px;
-        font-weight: 900;
-    }
-}
-/* ===== FIM SELECTS BONITOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-
-/* ===== REFINO VISUAL MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    body {
-        background: #f8fbff;
-    }
-
-    .bloco-venda,
-    .bloco-lancamento {
-        background: linear-gradient(180deg, #eaf4ff 0%, #f7fbff 100%);
-        border: 2px solid #93c5fd;
-        box-shadow: 0 8px 22px rgba(37, 99, 235, 0.10);
-    }
-
-    .topo-venda h2 {
-        color: #0f172a;
-        text-shadow: 0 1px 0 rgba(255,255,255,0.7);
-    }
-
-    .cliente-resumo.visivel {
-        background: #f1f8ff;
-        border: 1px solid #bfdbfe;
-        border-radius: 16px;
-    }
-
-    .cliente-resumo-item {
-        background: #ffffff;
-        border: 1px solid #cfe4ff;
-        border-radius: 14px;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
-    }
-
-    .cliente-resumo-label {
-        color: #475569;
-        font-weight: 900;
-    }
-
-    .cliente-resumo-valor,
-    .cliente-financeiro-linha {
-        color: #0f172a;
-    }
-
-    input,
-    select,
-    .mobile-select-bonito-btn {
-        border: 3px solid #64748b;
-        background: #ffffff;
-        color: #0f172a;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-    }
-
-    input:focus,
-    select:focus,
-    .mobile-select-bonito-btn:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
-        outline: none;
-    }
-
-    #produtoBusca {
-        background: #ffffff;
-    }
-
-    .barra-acoes-venda {
-        border-top: 2px solid #bfdbfe;
-        padding-top: 12px;
-    }
-
-    .acao-venda-btn {
-        border-radius: 14px;
-        border-width: 2px;
-        font-weight: 900;
-        box-shadow: 0 4px 10px rgba(37, 99, 235, 0.12);
-    }
-
-    .acao-venda-btn.secundaria {
-        background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%);
-        color: #102a5c;
-        border-color: #2563eb;
-    }
-
-    .acao-venda-btn.secundaria:active {
-        transform: scale(0.985);
-        background: #bfdbfe;
-    }
-
-    #btnGravarVenda {
-        background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
-        border-color: #166534;
-        color: #ffffff;
-        box-shadow: 0 8px 18px rgba(21, 128, 61, 0.28);
-    }
-
-    #btnNovaVenda {
-        background: #fff7ed;
-        color: #7c2d12;
-        border-color: #fb923c;
-    }
-
-    .pix-alerta,
-    .acao-venda-btn.pix-alerta {
-        background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
-        color: #7f1d1d;
-        border-color: #ef4444;
-    }
-
-    .mobile-select-card {
-        background: #f8fbff;
-        border: 2px solid #93c5fd;
-    }
-
-    .mobile-select-titulo {
-        background: linear-gradient(180deg, #dbeafe 0%, #eff6ff 100%);
-        color: #0f172a;
-    }
-
-    .mobile-select-opcao {
-        border-color: #bfdbfe;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-    }
-
-    .mobile-select-opcao.selecionada {
-        background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
-        border-color: #2563eb;
-    }
-}
-/* ===== FIM REFINO VISUAL MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-
-
-
-
-
-
-
-
-
-/* ===== CORES MOBILE VENDAS CREME FORTE - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    body {
-        background: #fff6cf;
-    }
-
-    .bloco-venda,
-    .bloco-lancamento {
-        background: linear-gradient(180deg, #dceeff 0%, #eef7ff 18%, #fff3c8 100%);
-        border-color: #5aa7f2;
-        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.16);
-    }
-
-    .cliente-resumo.visivel {
-        background: #fff3c8;
-        border-color: #9cc9f5;
-    }
-
-    .cliente-resumo-item {
-        background: #ffffff;
-        border-color: #d5dde7;
-    }
-
-    .cliente-resumo-item:nth-child(2),
-    .cliente-resumo-item:nth-child(3) {
-        background: #fff7df;
-        border-color: #dfc06b;
-    }
-
-    input,
-    select,
-    .mobile-select-bonito-btn {
-        background: #ffffff;
-        border-color: #627487;
-        color: #0f172a;
-        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.07);
-    }
-
-    input:focus,
-    select:focus,
-    .mobile-select-bonito-btn:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.18);
-        outline: none;
-    }
-
-    .barra-acoes-venda {
-        border-top-color: #d9b94f;
-    }
-
-    .acao-venda-btn.secundaria {
-        background: linear-gradient(180deg, #dcecff 0%, #9fcaff 100%);
-        border-color: #2563eb;
-        color: #16346b;
-        box-shadow: 0 5px 12px rgba(37, 99, 235, 0.15);
-    }
-
-    #btnGravarVenda {
-        background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
-        border-color: #166534;
-        color: #ffffff;
-        box-shadow: 0 8px 18px rgba(21, 128, 61, 0.28);
-    }
-
-    #btnNovaVenda {
-        background: linear-gradient(180deg, #fff2c7 0%, #f2d078 100%);
-        border-color: #d99a13;
-        color: #7c2d12;
-    }
-
-    .acao-venda-btn.pix-alerta,
-    .pix-alerta {
-        background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
-        color: #7f1d1d;
-        border-color: #ef4444;
-    }
-
-    .estoque-preview {
-        background: #ffeaa3;
-        border-color: #d99a13;
-        color: #7a4a00;
-        font-weight: 900;
-    }
-
-    .historico-produto-cliente {
-        background: #fff7df;
-        border-color: #dfc06b;
-        color: #5b6470;
-        font-weight: 800;
-    }
-
-    .produto-sugestoes,
-    .cliente-sugestoes {
-        background: #ffffff;
-        border-color: #2563eb;
-        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
-    }
-
-    .produto-sugestao-item.ativo,
-    .cliente-sugestao-item.ativo {
-        background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%);
-        color: #ffffff;
-    }
-}
-/* ===== FIM CORES MOBILE VENDAS CREME FORTE - CHATGPT 2026-06-10 ===== */
-
-
-
-
-
-/* ===== BOTAO ADICIONAR ITEM CENTRALIZADO - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    #btnAdicionarItemVenda {
-        grid-column: 1 / -1;
-        justify-self: center;
-        width: 46%;
-        min-width: 165px;
-        max-width: 230px;
-        min-height: 54px;
-        margin: 6px auto 16px auto;
-        display: block;
-        border-radius: 18px;
-        background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
-        border: 2px solid #a16207;
-        color: #422006;
-        font-weight: 900;
-        box-shadow: 0 6px 14px rgba(234, 179, 8, 0.24);
-    }
-
-    #btnAdicionarItemVenda:active {
-        transform: scale(0.985);
-        background: #fbbf24;
-    }
-}
-/* ===== FIM BOTAO ADICIONAR ITEM CENTRALIZADO - CHATGPT 2026-06-10 ===== */
-
-/* ===== ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    #btnAdicionarItemVenda {
-        grid-column: 1 / -1;
-        justify-self: center;
-        width: 42%;
-        min-width: 150px;
-        max-width: 210px;
-        min-height: 52px;
-        margin: 6px auto 12px auto;
-        display: block;
-        border-radius: 18px;
-        background: linear-gradient(180deg, #facc15 0%, #eab308 100%);
-        border: 2px solid #a16207;
-        color: #422006;
-        font-weight: 900;
-        box-shadow: 0 6px 14px rgba(234, 179, 8, 0.24);
-    }
-
-    .itens-lancados-mobile {
-        grid-column: 1 / -1;
-        width: 100%;
-        margin: 2px 0 14px 0;
-        padding: 10px;
-        border-radius: 16px;
-        border: 2px solid #d9b94f;
-        background: linear-gradient(180deg, #fffaf0 0%, #fff3c8 100%);
-        box-shadow: 0 6px 14px rgba(120, 76, 20, 0.10);
-    }
-
-    .itens-lancados-mobile-titulo {
-        margin-bottom: 8px;
-        color: #5f3b00;
-        font-size: 18px;
-        font-weight: 900;
-    }
-
-    .itens-lancados-mobile-lista {
-        display: grid;
-        gap: 8px;
-    }
-
-    .item-lancado-mobile-card {
-        padding: 10px;
-        border-radius: 14px;
-        border: 1px solid #e0c36f;
-        background: #ffffff;
-        color: #0f172a;
-        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
-    }
-
-    .item-lancado-mobile-produto {
-        font-size: 17px;
-        font-weight: 900;
-        line-height: 1.2;
-    }
-
-    .item-lancado-mobile-meta {
-        margin-top: 5px;
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        color: #475569;
-        font-size: 14px;
-        font-weight: 850;
-    }
-
-    .item-lancado-mobile-total {
-        color: #166534;
-        font-weight: 950;
-    }
-}
-/* ===== FIM ITENS LANCADOS MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-
-/* ===== ROLAGEM LISTA PRODUTOS MOBILE - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    .produto-sugestoes {
-        max-height: 280px;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-    }
-
-    .produto-sugestao-item {
-        touch-action: pan-y;
-    }
-}
-/* ===== FIM ROLAGEM LISTA PRODUTOS MOBILE - CHATGPT 2026-06-10 ===== */
-/* ===== ROLAGEM LISTA CLIENTES MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    .cliente-sugestoes {
-        max-height: 280px;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
-        touch-action: pan-y;
-    }
-
-    .cliente-sugestao-item {
-        touch-action: pan-y;
-    }
-}
-/* ===== FIM ROLAGEM LISTA CLIENTES MOBILE VENDAS - CHATGPT 2026-06-10 ===== */
-
-
-
-/* ===== TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
-@media (max-width: 980px) {
-    .itens-lancados-mobile-resumo {
-        margin-top: 10px;
-        padding: 10px 12px;
-        border-top: 3px solid #d6b94a;
-        background: linear-gradient(180deg, #fff7d6 0%, #f3df92 100%);
-        border-radius: 0 0 16px 16px;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
-    }
-
-    .itens-lancados-mobile-resumo-linha {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-        padding: 5px 0;
-        font-size: 15px;
-        font-weight: 900;
-        color: #5b3a00;
-    }
-
-    .itens-lancados-mobile-resumo-linha strong {
-        color: #166534;
-        font-size: 18px;
-        white-space: nowrap;
-    }
-
-    .itens-lancados-mobile-resumo-linha.total {
-        margin-top: 4px;
-        padding-top: 8px;
-        border-top: 1px solid rgba(91, 58, 0, 0.25);
-        font-size: 17px;
-    }
-
-    .itens-lancados-mobile-resumo-linha.total strong {
-        font-size: 22px;
-    }
-}
-/* ===== FIM TOTAL ITENS LANCADOS MOBILE - CHATGPT 2026-06-10 ===== */
 
 .modal-conferencia-estoque-backdrop {
     position: fixed;
@@ -3050,11 +2251,339 @@ td:first-child {
     padding-top: 5px !important;
 }
 
+/* Layout mobile da venda: campos, acoes e acesso aos paineis. */
 @media (max-width: 980px) {
+    html { overflow-x: clip; scroll-padding-block: 12px; }
+    body {
+        position: relative;
+        box-sizing: border-box;
+        min-height: 100dvh;
+        padding: 108px 8px max(16px, env(safe-area-inset-bottom));
+        overflow: visible;
+    }
+    #layout-vendas {
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        padding: 0;
+    }
+    .bloco-venda {
+        min-width: 0;
+        padding: 8px;
+        border-radius: 10px;
+        box-sizing: border-box;
+    }
+    .bloco-lancamento { position: static; }
+    .bloco-venda:not(.bloco-lancamento) { flex: none; }
+    .topo-venda { display: block; }
+    .topo-venda h2 { font-size: 22px; margin-bottom: 6px; }
+    .topo-venda [data-auth-session] { font-size: 12px; }
+
+    .cliente-resumo.visivel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        padding: 4px;
+        margin-bottom: 8px;
+    }
+    .cliente-resumo-item { padding: 4px 6px; gap: 2px; }
+    .cliente-resumo-item.cliente-contas { grid-column: 1 / -1; }
+    .cliente-resumo-label { font-size: 10px; }
+    .cliente-resumo-valor {
+        font-size: 12px;
+        line-height: 1.3;
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+    .cliente-financeiro { flex-wrap: wrap; gap: 4px; }
+    .cliente-financeiro-linha {
+        font-size: 12px;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    .pedido-importado-aviso, .venda-edicao-alerta { font-size: 12px; padding: 6px; }
+
+    .linha.linha-cabecalho-venda,
+    .linha:not(.linha-cabecalho-venda) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        align-items: stretch;
+    }
+    .linha-cabecalho-venda .cliente-autocomplete-wrap {
+        grid-column: 1 / -1;
+        order: -1;
+    }
+    .linha .produto-autocomplete-wrap { grid-column: 1 / -1; }
     .bloco-lancamento .linha-cabecalho-venda ~ .linha:not(.linha-cabecalho-venda) {
         margin-top: 12px !important;
         margin-bottom: 6px !important;
     }
+    .linha input, .linha select, .mobile-select-bonito-btn {
+        width: 100%;
+        min-width: 0;
+        height: 44px;
+        box-sizing: border-box;
+        padding: 0 8px;
+        font-size: 16px;
+        border-width: 1px;
+        border-radius: 7px;
+        box-shadow: none;
+    }
+    .linha input:focus, .linha select:focus, .mobile-select-bonito-btn:focus-visible {
+        outline: 2px solid #2563eb;
+        outline-offset: 1px;
+        box-shadow: none;
+    }
+    #quantidade, #custoVenda, #preco { text-align: right; }
+    #msgEdicao:not(.visivel) { display: none !important; }
+    .custo-venda-wrap, .preco-venda-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .custo-venda-wrap::before {
+        position: static;
+        display: block;
+        font-size: 11px;
+        line-height: 1.3;
+    }
+    .custo-venda-wrap input, .preco-venda-wrap input { margin-top: auto; flex: 0 0 44px; }
+    .preco-informacoes {
+        position: static;
+        width: auto;
+        min-width: 0;
+        flex-wrap: wrap;
+        gap: 2px 6px;
+        font-size: 11px;
+        line-height: 1.3;
+    }
+    .preco-margem-custo, .preco-informacoes .historico-produto-cliente {
+        max-width: 100%;
+        white-space: normal;
+        overflow: visible;
+        overflow-wrap: anywhere;
+    }
+    #estoquePreview {
+        position: static;
+        margin-top: 4px;
+        white-space: normal;
+        line-height: 1.3;
+    }
+    .produto-sugestoes, .cliente-sugestoes {
+        max-height: min(280px, 45dvh);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+    }
+    .produto-sugestao-item, .cliente-sugestao-item {
+        padding: 8px;
+        gap: 6px;
+        font-size: 14px;
+        touch-action: pan-y;
+    }
+
+    .barra-acoes-venda { flex-direction: column; align-items: stretch; gap: 8px; }
+    .acoes-venda-grupo, .venda-gravada-bloco.visivel {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+        min-width: 0;
+        margin-left: 0;
+        gap: 8px;
+        box-sizing: border-box;
+    }
+    .acoes-venda-grupo.direita { margin-left: 0; }
+    .acao-venda-btn, .venda-gravada-bloco .acao-venda-btn, .atalhos-venda .acao-venda-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        height: auto;
+        padding: 8px;
+        box-sizing: border-box;
+        font-size: 13px;
+        line-height: 1.25;
+        white-space: normal;
+        text-align: center;
+        border-width: 1px;
+        border-radius: 7px;
+        box-shadow: none;
+    }
+    #btnGravarVenda {
+        grid-column: 1 / -1;
+        font-size: 15px;
+        background: #15803d;
+        border-color: #166534;
+        color: #fff;
+    }
+    .venda-gravada-responsavel { grid-column: 1 / -1; width: 100%; }
+    .venda-gravada-responsavel select { width: 100%; min-width: 0; height: 44px; font-size: 16px; }
+    .cancelamento-nota-grupo { padding-left: 0; border-left: 0; }
+    .grade-itens { flex: none; min-height: 0; }
+    .bloco-itens-scroll { flex: none; max-height: min(55dvh, 440px); }
+    #contadorItens { position: static; white-space: normal; }
+    #resumoVenda {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+        gap: 8px !important;
+        padding: 10px !important;
+    }
+    #resumoVenda .resumo-vendas-hoje-na-barra {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 10px;
+        padding-bottom: 10px !important;
+        border-bottom: 1px solid #bfdbfe !important;
+    }
+    #resumoVenda .resumo-vendas-hoje-na-barra .titulo { grid-column: 1 / -1; }
+    #resumoVenda .resumo-vendas-hoje-na-barra .item {
+        min-width: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    #resumoVenda .resumo-vendas-hoje-na-barra .valor { display: block; }
+    #resumoVenda #contadorItens { grid-column: 1 / -1; }
+    #resumoVenda #totalGeral {
+        min-width: 0 !important;
+        font-size: 24px !important;
+        line-height: 1.2 !important;
+        overflow-wrap: anywhere;
+    }
+    /* O include compartilhado fixa este atalho com !important; aqui ele acompanha o fluxo. */
+    #atalho-despesa-global {
+        position: static !important;
+        min-height: 44px !important;
+        margin: 0 8px 8px;
+        border-radius: 7px !important;
+        box-shadow: none !important;
+    }
+
+    /* Duas linhas reservadas antes do formulario, com rolagem junto da pagina. */
+    #offline-global, .vendas-pendencias-lateral, .cobrancas-vendas-lateral, .atalhos-venda {
+        position: absolute;
+        top: 8px;
+        bottom: auto;
+        right: auto;
+        width: calc((100% - 32px) / 3);
+        max-width: none;
+        display: block;
+        transform: none;
+        transition: none;
+    }
+    #offline-global { left: 8px; }
+    .vendas-pendencias-lateral { left: calc((100% - 32px) / 3 + 16px); }
+    .cobrancas-vendas-lateral { left: calc((100% - 32px) / 3 * 2 + 24px); }
+    .atalhos-venda {
+        top: 56px;
+        left: calc(50% + 4px);
+        width: calc(50% - 12px);
+    }
+    .locacoes-operacionais-venda { left: 8px; }
+    .atalhos-venda.aberto { transform: none; }
+    #offline-global .offline-disclosure > summary,
+    .vendas-pendencias-toggle, .cobrancas-vendas-toggle, .atalhos-venda .atalhos-venda-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 100%;
+        height: 44px;
+        min-height: 44px;
+        margin: 0;
+        padding: 4px;
+        box-sizing: border-box;
+        border-width: 1px;
+        border-style: solid;
+        border-radius: 7px;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+        font-size: 11px;
+        line-height: 1.15;
+        box-shadow: none;
+    }
+    .vendas-pendencias-badge, .cobrancas-vendas-badge, .locacoes-operacionais-badge {
+        flex-shrink: 0;
+        margin: 0;
+    }
+    /* O pulso lateral de Pendencias invade Cobranca nesta disposicao horizontal.
+       Preserva cores e pulsos, mantendo a area de toque dentro de cada botao.
+       !important prevalece sobre a animacao de alerta do include compartilhado. */
+    .vendas-pendencias-toggle, .cobrancas-vendas-toggle {
+        transform: none !important;
+    }
+    .atalhos-venda-painel { display: none; }
+    .atalhos-venda.aberto .atalhos-venda-painel { display: block; }
+    #offline-global .offline-panel,
+    .vendas-pendencias-painel, .cobrancas-vendas-painel,
+    .atalhos-venda .atalhos-venda-painel {
+        position: fixed;
+        top: 108px;
+        left: 8px;
+        right: 8px;
+        bottom: auto;
+        width: auto;
+        max-height: calc(100dvh - 120px);
+        padding: 8px;
+        box-sizing: border-box;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border-width: 1px;
+        border-style: solid;
+        border-radius: 8px;
+    }
+
+    /* Preserva os selects e seus eventos; compacta apenas o visual existente. */
+    select.mobile-select-original { display: none !important; }
+    .mobile-select-bonito-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        color: #0f172a;
+        font-weight: 700;
+        text-align: left;
+    }
+    .mobile-select-bonito-texto { min-width: 0; overflow-wrap: anywhere; }
+    .mobile-select-bonito-seta { flex-shrink: 0; margin-left: 4px; }
+    .mobile-select-overlay.visivel {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 8px;
+        box-sizing: border-box;
+        background: rgba(15, 23, 42, 0.48);
+    }
+    .mobile-select-card {
+        display: flex;
+        flex-direction: column;
+        width: min(100%, 520px);
+        max-height: calc(100dvh - 16px);
+        overflow: hidden;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        background: #f8fafc;
+    }
+    .mobile-select-titulo { padding: 10px; font-size: 16px; font-weight: 700; }
+    .mobile-select-lista { min-height: 0; overflow-y: auto; padding: 0 8px; }
+    .mobile-select-opcao, .mobile-select-cancelar {
+        flex-shrink: 0;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px;
+        margin-bottom: 6px;
+        box-sizing: border-box;
+        border: 1px solid #cbd5e1;
+        border-radius: 7px;
+        background: #fff;
+        color: #0f172a;
+        font-size: 16px;
+        text-align: left;
+    }
+    .mobile-select-opcao.selecionada { border-color: #2563eb; background: #dbeafe; }
+    .mobile-select-cancelar { width: calc(100% - 16px); margin: 0 8px 8px; text-align: center; }
 }
 </style>
 
@@ -4195,6 +3724,21 @@ function calcularVencimentoCliente() {
     return dataParaInputDate(vencimento);
 }
 
+let vencimentoAutomaticoMobile = null;
+
+function usarVencimentoAutomaticoMobile() {
+    return window.matchMedia('(max-width: 980px)').matches && !window.salesOffline?.active;
+}
+
+function atualizarVencimentoAutomaticoMobile() {
+    if (!usarVencimentoAutomaticoMobile() || vendaEdicaoVenda?.id) return;
+    // Somente datas vazias ou geradas por este padrao podem ser atualizadas.
+    if (vencimentoVenda.value && vencimentoVenda.value !== vencimentoAutomaticoMobile) return;
+    // Em Consumo proprio a data e apenas referencia; a modalidade define o financeiro.
+    vencimentoAutomaticoMobile = (tipoVenda.value === 'A prazo' ? calcularVencimentoCliente() : '') || dataVenda.value;
+    vencimentoVenda.value = vencimentoAutomaticoMobile;
+}
+
 function atualizarPrazoEVencimentoCliente() {
     if (!clienteSelecionado) return;
 
@@ -4206,13 +3750,14 @@ function atualizarPrazoEVencimentoCliente() {
     if (vendaEdicaoVenda?.id) return;
 
     if (clientesConsumoProprioVenda.has(String(clienteSelecionado.id || ""))) {
-        vencimentoVenda.value = "";
+        if (!usarVencimentoAutomaticoMobile()) vencimentoVenda.value = "";
         tipoVenda.value = "consumo_proprio";
         tipoVenda.dispatchEvent(new Event("change", { bubbles: true }));
         return;
     }
 
-    vencimentoVenda.value = calcularVencimentoCliente();
+    if (usarVencimentoAutomaticoMobile()) atualizarVencimentoAutomaticoMobile();
+    else vencimentoVenda.value = calcularVencimentoCliente();
 
     if (prazo > 0) {
         tipoVenda.value = "A prazo";
@@ -4364,11 +3909,11 @@ function atualizarResumoFinanceiroCliente(cliente, previa = false) {
     }
 }
 
-function limparClienteSelecionado() {
+function limparClienteSelecionado(preservarVencimento = false) {
     clienteSelecionado = null;
     clienteResumoSuspenso = false;
     clienteId.value = "";
-    vencimentoVenda.value = "";
+    if (!preservarVencimento) vencimentoVenda.value = "";
     ocultarHistoricoProdutoCliente();
     if (clienteResumoFinanceiro) {
         clienteResumoFinanceiro.innerHTML = "";
@@ -4379,10 +3924,20 @@ function limparClienteSelecionado() {
 }
 
 dataVenda.value = dataLocalHojeInput();
+atualizarVencimentoAutomaticoMobile();
+tipoVenda.addEventListener('change', atualizarVencimentoAutomaticoMobile);
+vencimentoVenda.addEventListener('input', () => { vencimentoAutomaticoMobile = null; });
+vencimentoVenda.addEventListener('change', () => { vencimentoAutomaticoMobile = null; });
 setTimeout(() => focarProximoCampo(clienteBusca), 0);
 
 dataVenda.addEventListener("change", atualizarPrazoEVencimentoCliente);
 dataVenda.addEventListener("input", atualizarPrazoEVencimentoCliente);
+dataVenda.addEventListener("change", atualizarVencimentoAutomaticoMobile);
+dataVenda.addEventListener("input", atualizarVencimentoAutomaticoMobile);
+
+function navegacaoMobileVenda() {
+    return window.matchMedia('(max-width: 980px)').matches;
+}
 
 function focarProximoCampo(campo) {
     if (!campo) return;
@@ -4390,6 +3945,9 @@ function focarProximoCampo(campo) {
         campo = operadorVenda;
     }
     if (!campo || campo.disabled) return;
+    if (navegacaoMobileVenda() && campo.matches('select.mobile-select-original')) {
+        campo = document.querySelector('.mobile-select-bonito-btn[data-select-id="' + campo.id + '"]') || campo;
+    }
     campo.focus();
     if (typeof campo.select === "function") {
         campo.select();
@@ -4400,7 +3958,11 @@ function configurarEnterCabecalho(campo, proximoCampo) {
     campo.addEventListener("keydown", (e) => {
         if (e.key !== "Enter") return;
         e.preventDefault();
-        focarProximoCampo(proximoCampo);
+        if (navegacaoMobileVenda()) {
+            e.stopPropagation();
+            if (e.repeat || e.isComposing) return;
+        }
+        focarProximoCampo(navegacaoMobileVenda() && campo === dataVenda ? vencimentoVenda : proximoCampo);
     });
 }
 
@@ -4408,6 +3970,24 @@ configurarEnterCabecalho(dataVenda, clienteBusca);
 configurarEnterCabecalho(vencimentoVenda, tipoVenda);
 configurarEnterCabecalho(tipoVenda, operadorVenda);
 configurarEnterCabecalho(operadorVenda, produtoBusca);
+
+// Os botoes mobile reutilizam o foco e as validacoes dos campos originais.
+window.avancarSelectVendaMobile = (campo) => {
+    if (!navegacaoMobileVenda() || campo.disabled || !campo.value || campo.selectedOptions[0]?.disabled) return false;
+    if (campo === unidade && !validarEstoqueItemVendaAtual(true)) return false;
+    const proximo = campo === tipoVenda ? operadorVenda : campo === operadorVenda ? produtoBusca : campo === unidade ? preco : null;
+    if (!proximo) return false;
+    focarProximoCampo(proximo);
+    return true;
+};
+
+document.addEventListener('keydown', (event) => {
+    if (!navegacaoMobileVenda() || event.key !== 'Enter') return;
+    if (event.target.closest('#btnGravarVenda, #btnConfirmarFechamentoVenda, #btnConfirmarConfirmacaoVenda')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }
+}, true);
 
 let vendaToastTimer = null;
 let resolverConfirmacaoVenda = null;
@@ -5205,7 +4785,7 @@ clienteBusca.addEventListener("input", () => {
             }
         }
     } else {
-        limparClienteSelecionado();
+        limparClienteSelecionado(usarVencimentoAutomaticoMobile());
     }
 
     if (clienteBuscaTimer) {
@@ -5258,7 +4838,7 @@ clienteBusca.addEventListener("blur", () => {
                 ativarResumoClienteSelecionado();
             } else {
                 clienteBusca.value = "";
-                limparClienteSelecionado();
+                limparClienteSelecionado(usarVencimentoAutomaticoMobile());
             }
         } else {
             clienteResumo.classList.remove("visivel");
@@ -5282,15 +4862,23 @@ clienteBusca.addEventListener("keydown", (e) => {
         renderizarSugestoesClientes();
     } else if (e.key === "Enter") {
         e.preventDefault();
+        if (navegacaoMobileVenda()) {
+            e.stopPropagation();
+            if (e.repeat || e.isComposing) return;
+        }
         const listaAberta = clienteSugestoesBox.style.display === "block";
+        if (navegacaoMobileVenda() && !listaAberta && !clienteBusca.value.trim()) {
+            focarProximoCampo(dataVenda);
+            return;
+        }
         if (listaAberta && clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
             preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);
-            focarProximoCampo(tipoVenda);
+            focarProximoCampo(navegacaoMobileVenda() ? dataVenda : tipoVenda);
             return;
         }
 
         if (!listaAberta && clienteSelecionadoValido()) {
-            focarProximoCampo(tipoVenda);
+            focarProximoCampo(navegacaoMobileVenda() ? dataVenda : tipoVenda);
             return;
         }
 
@@ -7127,6 +6715,10 @@ if (btnAdicionarItemVenda) {
 preco.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
         e.preventDefault();
+        if (navegacaoMobileVenda()) {
+            e.stopPropagation();
+            if (e.repeat || e.isComposing) return;
+        }
         const adicionou = adicionarItemVendaAtual();
         // O mesmo Enter não deve fechar o aviso recém-aberto nem chegar
         // ao segundo lançador de itens registrado no documento.
@@ -8106,6 +7698,21 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
 
     if (e.key !== "Enter") return;
 
+    if (navegacaoMobileVenda() && (e.target === quantidade || e.target === unidade)) {
+        e.preventDefault();
+        if (e.target === quantidade) {
+            if (produto.value.trim() && !quantidadeInformadaValida()) {
+                bloquearQuantidadeInvalida();
+                return;
+            }
+            if (!produtoAtualPermiteEscolhaUnidadeVenda() && !validarEstoqueItemVendaAtual(true)) return;
+            focarProximoCampo(unidade);
+        } else {
+            window.avancarSelectVendaMobile(unidade);
+        }
+        return;
+    }
+
     if (ativo === produto) {
     e.preventDefault();
     quantidade.focus();
@@ -8828,6 +8435,15 @@ produtoBusca.addEventListener("keydown", (e) => {
     else if (e.key === "Enter") {
     e.preventDefault();
     e.stopPropagation();
+    if (navegacaoMobileVenda()) {
+        if (e.repeat || e.isComposing) return;
+        const selecionado = produto.options[produto.selectedIndex];
+        if (sugestoesBox.style.display !== 'block' && selecionado?.dataset.produtoId
+            && selecionado.value.trim() === produtoBusca.value.trim()) {
+            if (!bloquearProdutoDuplicadoNoCampoProdutoVenda()) focarProximoCampo(quantidade);
+            return;
+        }
+    }
 
     if (sugestoesBox.style.display !== "block") {
         if (bloquearProdutoDuplicadoNoCampoProdutoVenda()) return;
@@ -8842,6 +8458,7 @@ produtoBusca.addEventListener("keydown", (e) => {
         return;
     }
 
+    if (navegacaoMobileVenda() && !(indexAtivo >= 0 && sugestoes[indexAtivo])) return;
     if (indexAtivo >= 0 && sugestoes[indexAtivo]) {
         selecionarProduto(sugestoes[indexAtivo]);
     } else if (produtoBusca.value.trim()) {
@@ -8925,6 +8542,7 @@ window.salesDraftBridge = {
         else limparClienteSelecionado();
         dataVenda.value = draft.data_venda;
         vencimentoVenda.value = draft.data_vencimento;
+        vencimentoAutomaticoMobile = null; // A data restaurada pertence ao rascunho.
         for (const [select, value] of [[operadorVenda, draft.operador], [tipoVenda, draft.tipo_venda]]) {
             if (value && !Array.from(select.options).some(o => o.value === value)) select.add(new Option(value + ' (referência local)', value));
             select.value = value;
@@ -9026,14 +8644,27 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
         select.insertAdjacentElement("afterend", botao);
 
         function atualizarBotao() {
+            botao.disabled = select.disabled;
             const texto = textoSelecionado(select) || select.getAttribute("placeholder") || tituloDoSelect(select);
             const span = botao.querySelector(".mobile-select-bonito-texto");
             if (span) span.textContent = texto;
         }
 
         botao.addEventListener("click", function () {
-            if (!ehMobileVenda()) return;
+            if (!ehMobileVenda() || select.disabled) return;
             abrirModalSelect(select, atualizarBotao);
+        });
+
+        botao.addEventListener('keydown', function (event) {
+            if (!ehMobileVenda() || event.key !== 'Enter') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.repeat || event.isComposing || select.disabled) return;
+            if (select.value && !select.selectedOptions[0]?.disabled) {
+                window.avancarSelectVendaMobile?.(select);
+            } else {
+                abrirModalSelect(select, atualizarBotao);
+            }
         });
 
         select.addEventListener("change", atualizarBotao);
@@ -9041,7 +8672,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
     }
 
     function abrirModalSelect(select, aoSelecionar) {
-        if (!select) return;
+        if (!select || select.disabled) return;
 
         let overlay = document.getElementById("mobileSelectOverlayVenda");
         if (!overlay) {
@@ -9052,8 +8683,9 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
         }
 
         const valorAtual = select.value;
+        overlay.dataset.selectId = select.id;
         const opcoes = Array.from(select.options).filter(function (option) {
-            return option.value !== "";
+            return option.value !== "" && !option.disabled;
         });
 
         overlay.innerHTML = "";
@@ -9074,11 +8706,20 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
             btn.className = "mobile-select-opcao" + (option.value === valorAtual ? " selecionada" : "");
             btn.textContent = option.textContent.trim();
 
-            btn.addEventListener("click", function () {
+            function selecionarOpcao(avancar = false) {
+                if (select.disabled || option.disabled) return;
                 select.value = option.value;
                 select.dispatchEvent(new Event("change", { bubbles: true }));
                 if (aoSelecionar) aoSelecionar();
                 fecharModalSelect();
+                if (avancar) window.avancarSelectVendaMobile?.(select);
+            }
+            btn.addEventListener("click", () => selecionarOpcao());
+            btn.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (!event.repeat && !event.isComposing) selecionarOpcao(true);
             });
 
             lista.appendChild(btn);
@@ -9096,6 +8737,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
         overlay.appendChild(card);
 
         overlay.classList.add("visivel");
+        (lista.querySelector('.selecionada') || lista.firstElementChild || cancelar).focus();
 
         overlay.addEventListener("click", function fecharFora(event) {
             if (event.target === overlay) {
@@ -9110,6 +8752,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
         if (overlay) {
             overlay.classList.remove("visivel");
             overlay.innerHTML = "";
+            document.querySelector('.mobile-select-bonito-btn[data-select-id="' + overlay.dataset.selectId + '"]')?.focus();
         }
     }
 
@@ -9132,6 +8775,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
                 return;
             }
             const span = botao.querySelector(".mobile-select-bonito-texto");
+            botao.disabled = select.disabled;
             if (span) span.textContent = textoSelecionado(select) || tituloDoSelect(select);
         });
     };
