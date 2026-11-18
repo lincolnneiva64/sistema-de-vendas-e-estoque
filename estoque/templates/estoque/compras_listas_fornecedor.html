@@ -1658,7 +1658,8 @@ td.listas-fornecedor-total {
 
 </style>
 
-<main class="listas-fornecedor-page">
+<main class="listas-fornecedor-page"{% if request.user.is_authenticated %} data-consulta-atalhos{% endif %}>
+  {% include 'estoque/includes/atalhos_consultas.html' %}
   {% for message in messages %}
     <p role="status" class="listas-fornecedor-mensagem {{ message.tags }}">{{ message }}</p>
   {% endfor %}

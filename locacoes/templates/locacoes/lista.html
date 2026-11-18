@@ -454,7 +454,8 @@
 </head>
 <body>
   {% include 'estoque/includes/sessao_usuario.html' %}
-  <main class="page">
+  <main class="page"{% if request.user.is_authenticated %} data-consulta-atalhos{% endif %}>
+    {% include 'estoque/includes/atalhos_consultas.html' %}
     <header class="top">
       <div>
         <h1>Consulta de locações</h1>

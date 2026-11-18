@@ -1,0 +1,11 @@
+{% if not em_vendas %}<a href="{% url 'estoque:vendas' %}" class="acao-venda-btn secundaria">Vendas</a>{% endif %}
+<a href="{% url 'inventario:lista' %}"{% if em_vendas %} id="btnConferenciaEstoqueVendas"{% endif %} class="acao-venda-btn secundaria">Conferência de Estoque</a>
+<a href="{% url 'estoque:pedidos' %}" class="acao-venda-btn secundaria">Consultar Pedidos</a>
+<a href="{% url 'estoque:compras_lista' %}" class="acao-venda-btn secundaria">Consultar Compras</a>
+<a href="{% url 'estoque:receber_cliente_escolher' %}"{% if em_vendas %} id="btnContasReceberVenda"{% endif %} class="acao-venda-btn secundaria">Receber contas do cliente</a>
+<a href="{% url 'estoque:central_pix' %}?next={{ request.get_full_path|urlencode }}" class="acao-venda-btn secundaria {% if tem_pix_em_atencao %}pix-alerta{% endif %}">Central de Pix{% if tem_pix_em_atencao %} (pendente){% endif %}</a>
+<a href="{% url 'estoque:entregas_dia' %}" class="acao-venda-btn secundaria">Ir para Entregas</a>
+<a href="{% url 'locacoes:lista' %}" class="acao-venda-btn secundaria">Locações</a>
+<a href="{% url 'estoque:painel_financeiro' %}" class="acao-venda-btn secundaria">Central Financeira</a>
+<a href="{% url 'estoque:despesas_diarias' %}" class="acao-venda-btn secundaria">Despesa Diária</a>
+<a href="{% url 'estoque:home' %}" class="acao-venda-btn secundaria">Voltar para Painel</a>

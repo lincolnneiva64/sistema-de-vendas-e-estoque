@@ -1,0 +1,16 @@
+{% load static %}
+{% if request.user.is_authenticated %}
+<link rel="stylesheet" href="{% static 'estoque/atalhos-consultas.css' %}">
+<div class="consulta-atalhos-faixa" data-consulta-atalhos-faixa>
+<aside class="rc-atalhos-lateral" data-atalhos-cabecalho>
+  <button type="button" class="rc-atalhos-toggle" aria-expanded="false" aria-controls="atalhosConsultaPainel">Atalhos</button>
+  <nav id="atalhosConsultaPainel" class="atalhos-cabecalho-painel rc-atalhos-painel" aria-label="Atalhos do sistema">
+    <h2 class="rc-atalhos-titulo">Atalhos</h2>
+    <div class="rc-atalhos-lista">
+    {% include 'estoque/includes/atalhos_destinos.html' with em_vendas=False %}
+    </div>
+  </nav>
+</aside>
+</div><!-- fim-atalhos-consultas -->
+<script src="{% static 'estoque/atalhos-consultas.js' %}" defer></script>
+{% endif %}
