@@ -2421,6 +2421,97 @@ td:first-child {
     .grade-itens { flex: none; min-height: 0; }
     .bloco-itens-scroll { flex: none; max-height: min(55dvh, 440px); }
     #contadorItens { position: static; white-space: normal; }
+    /* O aviso compartilhado possui min-width inline de 420px no desktop. */
+    #aviso-validacao {
+        min-width: 0 !important;
+        width: max-content !important;
+        max-width: calc(100vw - 24px) !important;
+        max-height: calc(100dvh - 44px);
+        box-sizing: border-box;
+        padding: 12px !important;
+        font-size: 16px !important;
+        line-height: 1.4;
+        flex-wrap: wrap;
+        gap: 8px !important;
+        overflow-y: auto;
+    }
+    #aviso-validacao-texto {
+        flex: 1 1 180px;
+        min-width: 0;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    #aviso-validacao > button {
+        flex: 0 0 auto;
+        min-height: 44px;
+        max-width: 100%;
+        margin-left: auto;
+    }
+    #venda-linha-produto-pendente.editando {
+        margin-top: 6px;
+        border-color: #93c5fd;
+        background: #eff6ff;
+        color: #1e3a8a;
+    }
+    #venda-linha-produto-pendente.editando > button { font-size: 12px; }
+    #venda-linha-produto-pendente.editando > span {
+        flex: 1 1 auto;
+        font-size: 0;
+    }
+    #venda-linha-produto-pendente.editando > span::before {
+        content: "Editando item";
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    #venda-linha-produto-pendente.editando > .produto-pendente-confirmar { display: none; }
+    #sales-draft-status[data-draft-mobile] {
+        display: flex !important;
+        flex-wrap: wrap;
+        align-items: center;
+        min-width: 0;
+        padding: 0 !important;
+        gap: 6px !important;
+        margin-bottom: 6px;
+    }
+    #sales-draft-status[data-draft-mobile] > * {
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        overflow-wrap: anywhere;
+    }
+    #sales-draft-mobile-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        min-height: 36px;
+        padding: 6px 8px;
+        border: 1px solid #dbe3ed;
+        border-radius: 7px;
+        background: #f8fafc;
+        color: #475569;
+        font: 12px/1.4 "Segoe UI", Arial, sans-serif;
+        text-align: left;
+    }
+    #sales-draft-mobile-toggle::after { content: "▸"; margin-left: 8px; }
+    #sales-draft-mobile-toggle[aria-expanded="true"]::after { content: "▾"; }
+    #sales-draft-status[data-draft-mobile] > details,
+    #sales-draft-status[data-draft-mobile] > [role] { width: 100%; }
+    #sales-draft-status[data-draft-mobile] select { font-size: 16px; }
+    #sales-draft-status[data-draft-mobile] :is(button, select, a, summary) {
+        max-width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    #sales-draft-status[data-draft-mobile] button:not(#sales-draft-mobile-toggle) { min-height: 44px; }
+    #sales-draft-status[data-draft-mobile-open="false"] > [data-draft-mobile-item]:not([data-draft-mobile-alert]) {
+        display: none !important;
+    }
+    #sales-draft-status[data-draft-mobile][hidden],
+    #sales-draft-status[data-draft-mobile] [hidden] { display: none !important; }
     #resumoVenda {
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
         gap: 8px !important;
@@ -3153,6 +3244,7 @@ const restorePendingProduct = document.createElement("button");
 restorePendingProduct.type = "button"; restorePendingProduct.textContent = "Restaurar"; restorePendingProduct.setAttribute("aria-label", "Restaurar produto selecionado");
 const commitPendingProduct = document.createElement("button");
 commitPendingProduct.type = "button";
+commitPendingProduct.className = "produto-pendente-confirmar";
 const cancelPendingProduct = document.createElement("button");
 cancelPendingProduct.type = "button"; cancelPendingProduct.textContent = "Cancelar"; cancelPendingProduct.setAttribute("aria-label", "Cancelar linha em montagem");
 pendingProductLine.append(pendingProductMessage, restorePendingProduct, commitPendingProduct, cancelPendingProduct);
@@ -4917,6 +5009,7 @@ let preenchendoEdicaoProdutoVenda = false;
 function atualizarBotaoEdicaoItemVenda() {
     if (!btnAdicionarItemVenda) return;
     btnAdicionarItemVenda.textContent = linhaSelecionada ? "Atualizar Item" : "Adicionar Item";
+    pendingProductLine.classList.toggle("editando", Boolean(linhaSelecionada));
 }
 
 function limparEstadoEdicaoItemVenda() {
@@ -5120,6 +5213,20 @@ function bloquearProdutoDuplicadoNoCampoProdutoVenda(produtoOption = null) {
     return true;
 }
 
+function mostrarFaixaEdicaoItemMobile() {
+    if (!navegacaoMobileVenda() || !linhaSelecionada || document.activeElement !== produtoBusca || pendingProductLine.hidden) return;
+    const bloco = produtoBusca.parentElement.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const inicio = (viewport?.offsetTop || 0) + 8;
+    const fim = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight) - 8;
+    if (bloco.bottom > fim) {
+        window.scrollBy({ top: bloco.bottom - fim, behavior: "auto" });
+    } else if (bloco.top < inicio) {
+        window.scrollBy({ top: bloco.top - inicio, behavior: "auto" });
+    }
+}
+(window.visualViewport || window).addEventListener("resize", () => requestAnimationFrame(mostrarFaixaEdicaoItemMobile));
+
 tabelaBody.addEventListener("click", function (e) {
   if (vendaEdicaoBloqueada) {
       e.preventDefault();
@@ -5176,11 +5283,17 @@ try {
     window.atualizarSelectsBonitosVenda?.();
     refreshPendingProductLine();
 }
-setTimeout(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-}, 50);
-produtoBusca.focus();
-produtoBusca.select();
+if (navegacaoMobileVenda()) {
+    produtoBusca.focus({ preventScroll: true });
+    produtoBusca.select();
+    requestAnimationFrame(mostrarFaixaEdicaoItemMobile);
+} else {
+    setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }, 50);
+    produtoBusca.focus();
+    produtoBusca.select();
+}
 
 });
 function mostrarAviso(mensagem, campo = null, selecionar = false) {
@@ -9410,5 +9523,9 @@ const operador = buscarCampoOperadorVenda();
 <script type="module" src="/offline/assets/2-8f-fix/commercial-ui.js"></script>
 {% endif %}
 <script src="{% static 'locacoes/recolhimento-envio.js' %}" defer></script>
+<style>
+@media (min-width: 981px) { #sales-draft-mobile-toggle { display: none; } }
+</style>
+<script src="{% static 'estoque/vendas-rascunhos-mobile.js' %}" defer></script>
 </body>
 </html>
