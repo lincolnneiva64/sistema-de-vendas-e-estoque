@@ -4951,17 +4951,17 @@ clienteBusca.addEventListener("keydown", (e) => {
         }
         const listaAberta = clienteSugestoesBox.style.display === "block";
         if (navegacaoMobileVenda() && !listaAberta && !clienteBusca.value.trim()) {
-            focarProximoCampo(dataVenda);
+            focarProximoCampo(clienteBusca);
             return;
         }
         if (listaAberta && clienteIndexAtivo >= 0 && clientesSugestoes[clienteIndexAtivo]) {
             preencherResumoCliente(clientesSugestoes[clienteIndexAtivo], true);
-            focarProximoCampo(navegacaoMobileVenda() ? dataVenda : tipoVenda);
+            focarProximoCampo(navegacaoMobileVenda() ? vencimentoVenda : tipoVenda);
             return;
         }
 
         if (!listaAberta && clienteSelecionadoValido()) {
-            focarProximoCampo(navegacaoMobileVenda() ? dataVenda : tipoVenda);
+            focarProximoCampo(navegacaoMobileVenda() ? vencimentoVenda : tipoVenda);
             return;
         }
 
@@ -6665,8 +6665,12 @@ function preencherProximoProdutoDepoisDeAdicionar(produtoValorAtual, produtoNome
     produtoAutoPreenchidoVenda = true;
 
     quantidade.value = "";
-    setTimeout(selecionarTextoProdutoBuscaSugerido, 100);
-    setTimeout(selecionarTextoProdutoBuscaSugerido, 180);
+    if (navegacaoMobileVenda()) {
+        selecionarTextoProdutoBuscaSugerido();
+    } else {
+        setTimeout(selecionarTextoProdutoBuscaSugerido, 100);
+        setTimeout(selecionarTextoProdutoBuscaSugerido, 180);
+    }
 
     return true;
 }
@@ -6829,7 +6833,8 @@ preco.addEventListener("keydown", (e) => {
         if (document.getElementById('aviso-validacao')) e.stopPropagation();
 
         if (adicionou) {
-            fecharTecladoVendaMobile();
+            if (navegacaoMobileVenda()) focarProximoCampo(produtoBusca);
+            else fecharTecladoVendaMobile();
         }
     }
 });
@@ -7543,6 +7548,17 @@ document.addEventListener("keydown", (e) => {
 });
 
 quantidade.addEventListener("keydown", (e) => {
+    if (navegacaoMobileVenda() && e.key === "Enter") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.repeat || e.isComposing) return;
+        if (!quantidadeInformadaValida()) {
+            bloquearQuantidadeInvalida();
+            return;
+        }
+        focarProximoCampo(unidade);
+        return;
+    }
     if (e.key !== "Tab") return;
 
     if (produto.value.trim() && !quantidadeInformadaValida()) {
@@ -7557,6 +7573,12 @@ quantidade.addEventListener("keydown", (e) => {
 });
 
 unidade.addEventListener("keydown", (e) => {
+    if (navegacaoMobileVenda() && e.key === "Enter") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (!e.repeat && !e.isComposing) window.avancarSelectVendaMobile(unidade);
+        return;
+    }
     if (e.key !== "Tab") return;
 
     if (!validarEstoqueItemVendaAtual(true)) {
@@ -7801,21 +7823,7 @@ console.log("LINHAS RESTANTES:", tabelaBody.querySelectorAll("tr").length);
     const ativo = document.activeElement;
 
     if (e.key !== "Enter") return;
-
-    if (navegacaoMobileVenda() && (e.target === quantidade || e.target === unidade)) {
-        e.preventDefault();
-        if (e.target === quantidade) {
-            if (produto.value.trim() && !quantidadeInformadaValida()) {
-                bloquearQuantidadeInvalida();
-                return;
-            }
-            if (!produtoAtualPermiteEscolhaUnidadeVenda() && !validarEstoqueItemVendaAtual(true)) return;
-            focarProximoCampo(unidade);
-        } else {
-            window.avancarSelectVendaMobile(unidade);
-        }
-        return;
-    }
+    if (navegacaoMobileVenda()) return;
 
     if (ativo === produto) {
     e.preventDefault();
@@ -9141,6 +9149,9 @@ const operador = buscarCampoOperadorVenda();
     function ehCampoDepoisDoOperador(el) {
         if (!el) return false;
         if (el.closest('#revisaoPrecosPosterior')) return false;
+        if (window.matchMedia('(max-width: 980px)').matches) {
+            return el.matches('#produtoBusca, #produto, #quantidade, #unidade, #preco, #btnAdicionarItemVenda, #btnGravarVenda, .mobile-select-bonito-btn[data-select-id="unidade"]');
+        }
 
         const texto = (
             (el.placeholder || "") + " " +
@@ -9172,7 +9183,7 @@ const operador = buscarCampoOperadorVenda();
                 return false;
             }
 
-            if (e.key === "Enter" && operadorVazio() && ehCampoDepoisDoOperador(document.activeElement)) {
+            if (e.key === "Enter" && operadorVazio() && ehCampoDepoisDoOperador(window.matchMedia('(max-width: 980px)').matches ? e.target : document.activeElement)) {
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
