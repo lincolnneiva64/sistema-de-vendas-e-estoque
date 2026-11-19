@@ -16,6 +16,7 @@ class EnterMobileTests(AvisosEdicaoMobileTests):
             source = subprocess.check_output(['git', 'show', 'b7061e141ec4fab7117095caafad98699e80d644:estoque/templates/estoque/vendas_layout_teste.html'], cwd=TEMPLATE.parents[3]).decode('utf-8')
         self.evaluate('''document.body.insertAdjacentHTML('afterbegin', `<input id="clienteBusca"><input id="dataVenda" type="date"><input id="vencimentoVenda" type="date"><select id="tipoVenda"><option value="prazo">Prazo</option></select><select id="operadorVenda"><option value=""></option><option value="1">Operador</option></select><button id="btnGravarVenda">Gravar Venda</button><button id="btnConfirmarFechamentoVenda">Confirmar</button><button id="btnConfirmarConfirmacaoVenda">Confirmar</button><div id="clienteSugestoesBox"></div>`);
         ''')
+        self.evaluate("vencimentoVenda.insertAdjacentHTML('afterend','<button type=button id=btnProximoVencimentoVenda>Próximo</button>');")
         setup = '''
         const clienteBusca=document.getElementById('clienteBusca'),dataVenda=document.getElementById('dataVenda'),vencimentoVenda=document.getElementById('vencimentoVenda'),tipoVenda=document.getElementById('tipoVenda'),operadorVenda=document.getElementById('operadorVenda'),clienteSugestoesBox=document.getElementById('clienteSugestoesBox');
         let clientesSugestoes=[{id:1,nome:'Cliente teste'}],clienteIndexAtivo=0,clienteSelecionado={id:1};
@@ -37,6 +38,9 @@ class EnterMobileTests(AvisosEdicaoMobileTests):
         setup += function(source, 'focarProximoCampo') + function(source, 'configurarEnterCabecalho')
         start = source.index('configurarEnterCabecalho(dataVenda, clienteBusca);')
         setup += source[start:source.index('let vendaToastTimer', start)]
+        if not original:
+            start = source.index('let confirmacaoPrecoConsumida = false;')
+            setup += source[start:source.index('preco.addEventListener("keydown"', start)]
         for marker in ['clienteBusca.addEventListener("keydown", (e) => {', 'preco.addEventListener("keydown", (e) => {', 'quantidade.addEventListener("keydown", (e) => {', 'unidade.addEventListener("keydown", (e) => {']:
             start = source.index(marker)
             setup += source[start:source.index('\n});', start)+4]
@@ -147,6 +151,96 @@ class EnterMobileTests(AvisosEdicaoMobileTests):
             self.enter()
             self.assertEqual(self.evaluate('focused()'), 'vencimentoVenda')
         self.assertEqual(self.evaluate('operatorWarnings'),0)
+
+    def test_mobile_header_touch_and_prefilled_continue(self):
+        self.prepare_flow()
+        self.evaluate("btnProximoVencimentoVenda.click();")
+        self.assertEqual(self.evaluate('focused()'), 'tipoVenda')
+        self.evaluate("document.querySelector('[data-select-id=tipoVenda]').click();document.querySelector('.mobile-select-opcao').click();")
+        self.assertEqual(self.evaluate('focused()'), 'operadorVenda')
+        self.evaluate("document.querySelector('[data-select-id=operadorVenda]').click();document.querySelector('.mobile-select-opcao').click();")
+        self.assertEqual(self.evaluate('focused()'), 'produtoBusca')
+        for select_id, next_id in [('tipoVenda', 'operadorVenda'), ('operadorVenda', 'produtoBusca')]:
+            self.evaluate("document.querySelector('[data-select-id="+select_id+"]').click();document.querySelector('.mobile-select-continuar').click();")
+            self.assertEqual(self.evaluate('focused()'), next_id)
+        self.assertEqual(self.evaluate('[addCalls,gravacoes,operatorWarnings]'), [0, 0, 0])
+
+    def test_header_date_and_next_fit_mobile_and_hide_on_desktop(self):
+        source = TEMPLATE.read_text(encoding='utf-8')
+        start = source.index('<div class="linha linha-cabecalho-venda">')
+        header = source[start:source.index('<style>', start)]
+        header = re.sub(r'{%.*?%}|{{.*?}}', '', header, flags=re.S)
+        css = '\n'.join(re.findall(r'<style[^>]*>(.*?)</style>', source, re.S))
+        for width in (320, 400, 1366):
+            with self.subTest(width=width):
+                self.prepare_flow(width=width)
+                self.evaluate('document.body.innerHTML='+json.dumps('<div class="bloco-lancamento">'+header+'</div>')+';window.headerCss="";')
+                for offset in range(0, len(css), 8000):
+                    self.evaluate('headerCss+='+json.dumps(css[offset:offset+8000])+';')
+                self.evaluate("const headerStyle=document.createElement('style');headerStyle.textContent=headerCss;document.head.appendChild(headerStyle);")
+                result = self.evaluate('''(()=>{
+                    const date=document.getElementById('vencimentoVenda'),next=document.getElementById('btnProximoVencimentoVenda');
+                    const d=date.getBoundingClientRect(),n=next.getBoundingClientRect();
+                    return {dateWidth:d.width,nextWidth:n.width,right:n.right,topDifference:Math.abs(d.top-n.top),wrapper:getComputedStyle(date.parentElement).display};
+                })()''')
+                self.assertGreater(result['dateWidth'], 60)
+                if width < 980:
+                    self.assertGreater(result['nextWidth'], 30)
+                    self.assertLessEqual(result['right'], width)
+                    self.assertLess(result['topDifference'], 2)
+                else:
+                    self.assertEqual(result['nextWidth'], 0)
+                    self.assertEqual(result['wrapper'], 'contents')
+
+    def test_price_beforeinput_updates_existing_item_once(self):
+        self.prepare_flow()
+        self.evaluate("operadorVenda.value='1';seed();preco.focus();")
+        self.enter()
+        self.evaluate("linhaSelecionada=tabelaBody.rows[0];seed();quantidade.value='3';preco.focus();preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertParagraph',bubbles:true,cancelable:true}));")
+        self.assertEqual(self.evaluate('[updates,addCalls,tabelaBody.rows.length]'), [1, 2, 1])
+        self.assertEqual(self.evaluate('focused()'), 'produtoBusca')
+
+    def test_price_android_confirmation_and_duplicate_events(self):
+        for key in ('Enter', 'Unidentified'):
+            with self.subTest(key=key):
+                self.prepare_flow()
+                self.evaluate("operadorVenda.value='1';seed();preco.focus();preco.dispatchEvent(new KeyboardEvent('keydown',{key:"+json.dumps(key)+",isComposing:true,bubbles:true,cancelable:true}));")
+                self.evaluate("preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertParagraph',bubbles:true,cancelable:true}));")
+                self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length,gravacoes]'), [1, 1, 0])
+                self.assertEqual(self.evaluate('focused()'), 'produtoBusca')
+
+    def test_price_keydown_and_beforeinput_add_once(self):
+        self.prepare_flow()
+        self.evaluate("operadorVenda.value='1';seed();preco.focus();preco.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length]'), [1, 1])
+
+    def test_price_input_change_blur_never_confirm(self):
+        self.prepare_flow()
+        self.evaluate("operadorVenda.value='1';seed();preco.focus();preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertText',data:'1',bubbles:true,cancelable:true}));preco.dispatchEvent(new InputEvent('input',{inputType:'insertText',bubbles:true}));preco.dispatchEvent(new Event('change',{bubbles:true}));preco.blur();")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length]'), [0, 0])
+
+    def test_price_failed_confirmation_preserves_values_and_deduplicates(self):
+        self.prepare_flow()
+        self.evaluate("operadorVenda.value='1';seed();preco.value='0';preco.focus();window.previousValues=[produtoBusca.value,quantidade.value,unidade.value,preco.value];preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertParagraph',bubbles:true,cancelable:true}));preco.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length]'), [1, 0])
+        self.assertEqual(self.evaluate('[produtoBusca.value,quantidade.value,unidade.value,preco.value]'), self.evaluate('previousValues'))
+        self.assertEqual(self.evaluate('focused()'), 'preco')
+        self.assertTrue(self.evaluate('!!lastError'))
+        self.evaluate("preco.value='10';preco.dispatchEvent(new InputEvent('input',{inputType:'insertText',bubbles:true}));preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length]'), [2, 1])
+        self.assertEqual(self.evaluate('focused()'), 'produtoBusca')
+
+    def test_price_beforeinput_requires_operator(self):
+        self.prepare_flow()
+        self.evaluate("operadorVenda.value='1';seed();preco.focus();operadorVenda.value='';preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length,operatorWarnings]'), [0, 0, 1])
+        self.assertEqual(self.evaluate('focused()'), 'operadorVenda')
+
+    def test_desktop_beforeinput_does_not_add(self):
+        self.prepare_flow(width=1366)
+        self.evaluate("operadorVenda.value='1';seed();preco.focus();preco.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertLineBreak',bubbles:true,cancelable:true}));btnProximoVencimentoVenda.click();")
+        self.assertEqual(self.evaluate('[addCalls,tabelaBody.rows.length]'), [0, 0])
+        self.assertEqual(self.evaluate('focused()'), 'preco')
 
     def test_complete_sequence_units_and_single_add(self):
         self.prepare_flow()

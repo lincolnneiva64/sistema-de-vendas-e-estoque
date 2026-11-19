@@ -2069,7 +2069,10 @@ td:first-child {
                 <input type="hidden" id="clienteId" name="cliente_id">
                 <div id="clienteSugestoes" class="cliente-sugestoes"></div>
             </div>
-            <input type="date" id="vencimentoVenda" title="Vencimento">
+            <div class="venda-vencimento-avanco">
+                <input type="date" id="vencimentoVenda" title="Vencimento">
+                <button type="button" id="btnProximoVencimentoVenda" class="venda-proximo-mobile" aria-label="Continuar após Vencimento">Próximo</button>
+            </div>
             <select id="tipoVenda">
                 <option value="" selected>Tipo</option>
                 <option>À vista</option>
@@ -2088,6 +2091,13 @@ td:first-child {
         <style>
 .mobile-select-bonito-btn,
 .mobile-select-overlay { display: none; }
+.venda-proximo-mobile { display: none; }
+.venda-vencimento-avanco { display: contents; }
+@media (max-width: 980px) {
+    .venda-vencimento-avanco { display: flex; min-width: 0; gap: 4px; }
+    .venda-vencimento-avanco input { flex: 1; }
+    .venda-proximo-mobile { display: inline-flex; align-items: center; flex: none; min-height: 44px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; color: #334155; }
+}
 
 
 .modal-conferencia-estoque-backdrop {
@@ -4053,6 +4063,9 @@ configurarEnterCabecalho(dataVenda, clienteBusca);
 configurarEnterCabecalho(vencimentoVenda, tipoVenda);
 configurarEnterCabecalho(tipoVenda, operadorVenda);
 configurarEnterCabecalho(operadorVenda, produtoBusca);
+document.getElementById('btnProximoVencimentoVenda')?.addEventListener('click', () => {
+    if (navegacaoMobileVenda()) focarProximoCampo(tipoVenda);
+});
 
 // Os botoes mobile reutilizam o foco e as validacoes dos campos originais.
 window.avancarSelectVendaMobile = (campo) => {
@@ -6821,7 +6834,42 @@ if (btnAdicionarItemVenda) {
     });
 }
 
+let confirmacaoPrecoConsumida = false;
+function confirmarPrecoVendaMobile(evento) {
+    evento.preventDefault();
+    evento.stopPropagation();
+    if (document.activeElement !== preco || confirmacaoPrecoConsumida) return;
+    confirmacaoPrecoConsumida = true;
+    if (!operadorVenda.value) {
+        focarProximoCampo(operadorVenda);
+        mostrarModalOperadorObrigatorio('Operador obrigatório. Selecione o operador para continuar.');
+        return;
+    }
+    if (adicionarItemVendaAtual()) focarProximoCampo(produtoBusca);
+}
+
+preco.addEventListener('beforeinput', (evento) => {
+    if (!navegacaoMobileVenda() || !['insertLineBreak', 'insertParagraph'].includes(evento.inputType)) return;
+    confirmarPrecoVendaMobile(evento);
+});
+// Após sucesso, o keyup chega ao Produto, que já recebeu o foco.
+document.addEventListener('keyup', (evento) => {
+    if (evento.key === 'Enter' || evento.keyCode === 13) confirmacaoPrecoConsumida = false;
+});
+preco.addEventListener('input', (evento) => {
+    if (!['insertLineBreak', 'insertParagraph'].includes(evento.inputType)) confirmacaoPrecoConsumida = false;
+});
+
 preco.addEventListener("keydown", (e) => {
+    if (navegacaoMobileVenda() && (e.key === 'Enter' || e.keyCode === 13)) {
+        e.stopPropagation();
+        // A composição pode ser seguida da confirmação semântica em beforeinput.
+        if (e.isComposing) return;
+        e.preventDefault();
+        if (e.repeat) return;
+        confirmarPrecoVendaMobile(e);
+        return;
+    }
     if (e.key === "Enter") {
         e.preventDefault();
         if (navegacaoMobileVenda()) {
@@ -8827,7 +8875,7 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
                 fecharModalSelect();
                 if (avancar) window.avancarSelectVendaMobile?.(select);
             }
-            btn.addEventListener("click", () => selecionarOpcao());
+            btn.addEventListener("click", () => selecionarOpcao(select.id === 'tipoVenda' || select.id === 'operadorVenda'));
             btn.addEventListener('keydown', function (event) {
                 if (event.key !== 'Enter') return;
                 event.preventDefault();
@@ -8846,6 +8894,17 @@ document.dispatchEvent(new Event('sales-draft-bridge-ready'));
 
         card.appendChild(titulo);
         card.appendChild(lista);
+        if ((select.id === 'tipoVenda' || select.id === 'operadorVenda') && select.value && !select.selectedOptions[0]?.disabled) {
+            const continuar = document.createElement('button');
+            continuar.type = 'button';
+            continuar.className = 'mobile-select-cancelar mobile-select-continuar';
+            continuar.textContent = 'Continuar';
+            continuar.addEventListener('click', () => {
+                fecharModalSelect();
+                window.avancarSelectVendaMobile?.(select);
+            });
+            card.appendChild(continuar);
+        }
         card.appendChild(cancelar);
         overlay.appendChild(card);
 
