@@ -4583,6 +4583,7 @@ function renderizarSugestoesClientes() {
             e.stopPropagation();
             preencherResumoCliente(cliente, true);
             clienteSugestoesBox.style.display = "none";
+            if (navegacaoMobileVenda()) focarProximoCampo(vencimentoVenda);
         };
 
         item.addEventListener("touchstart", (evento) => {

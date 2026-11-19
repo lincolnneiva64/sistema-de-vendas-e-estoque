@@ -64,6 +64,78 @@ class EnterMobileTests(AvisosEdicaoMobileTests):
         '''
         self.evaluate(setup)
 
+    def prepare_client_selection(self, width=400):
+        self.prepare_flow(width=width)
+        source = TEMPLATE.read_text(encoding='utf-8')
+        self.evaluate('''
+        const clienteId=document.createElement('input');
+        const clientesAutocompleteUrl='/autocomplete-teste';
+        let clienteBuscaTimer=null,clienteBuscaAbortController=null;
+        let clienteResumoSuspenso=false,clienteDetalheRequisicao=0,condicoesPagamentoRevisao=0;
+        function guardarClienteSelecionado(){}
+        function atualizarCabecalhoCliente(){}
+        function atualizarPrazoEVencimentoCliente(){}
+        function atualizarHistoricoProdutoCliente(){}
+        function normalizarStatusCliente(){return '';}
+        window.pendingClientResponses=[];
+        window.fetch=()=>new Promise(resolve=>pendingClientResponses.push(resolve));
+        clienteBusca.focus();
+        window.focusCalls=[];
+        const originalFocus=HTMLElement.prototype.focus;
+        HTMLElement.prototype.focus=function(...args){focusCalls.push(this.id);return originalFocus.apply(this,args);};
+        ''')
+        self.evaluate(function(source, 'preencherResumoCliente')
+                      + 'async ' + function(source, 'atualizarClienteSelecionadoDoServidor')
+                      + function(source, 'renderizarSugestoesClientes'))
+        self.evaluate('renderizarSugestoesClientes();')
+
+    def select_client_touch(self, swipe=False):
+        self.evaluate('''
+        window.clientOption=clienteSugestoesBox.querySelector('.cliente-sugestao-item');
+        const start=new Event('touchstart',{bubbles:true});
+        start.touches=[{clientX:10,clientY:10}];clientOption.dispatchEvent(start);
+        ''' + ('''
+        const move=new Event('touchmove',{bubbles:true});
+        move.touches=[{clientX:10,clientY:40}];clientOption.dispatchEvent(move);
+        ''' if swipe else '') + '''
+        clientOption.dispatchEvent(new Event('touchend',{bubbles:true,cancelable:true}));
+        ''')
+
+    def test_mobile_client_touch_and_compatibility_click_focus_once(self):
+        self.prepare_client_selection()
+        self.select_client_touch()
+        self.evaluate('clientOption.click();')
+        self.assertEqual(self.evaluate('focused()'), 'vencimentoVenda')
+        self.assertEqual(self.evaluate('focusCalls'), ['vencimentoVenda'])
+        self.assertEqual(self.evaluate('pendingClientResponses.length'), 1)
+        self.assertEqual(self.evaluate('[addCalls,gravacoes,operatorWarnings]'), [0, 0, 0])
+
+    def test_client_click_focus_changes_only_on_mobile(self):
+        for width in (400, 1366):
+            with self.subTest(width=width):
+                self.prepare_client_selection(width=width)
+                self.evaluate("clienteSugestoesBox.querySelector('.cliente-sugestao-item').click();")
+                self.assertEqual(self.evaluate('focused()'), 'vencimentoVenda' if width == 400 else 'clienteBusca')
+                self.assertEqual(self.evaluate('focusCalls'), ['vencimentoVenda'] if width == 400 else [])
+
+    def test_client_swipe_does_not_select_or_advance(self):
+        self.prepare_client_selection()
+        self.select_client_touch(swipe=True)
+        self.assertEqual(self.evaluate('focused()'), 'clienteBusca')
+        self.assertEqual(self.evaluate('pendingClientResponses.length'), 0)
+
+    def test_client_async_refresh_and_summary_do_not_steal_focus(self):
+        self.prepare_client_selection()
+        self.select_client_touch()
+        self.evaluate('focarProximoCampo(tipoVenda);')
+        self.assertEqual(self.evaluate('focused()'), 'tipoVenda')
+        self.evaluate("pendingClientResponses[0]({json:async()=>({clientes:[{id:1,nome:'Cliente atualizado'}]})});")
+        self.tab.wait("clienteSelecionado.nome==='Cliente atualizado'")
+        self.assertEqual(self.evaluate('focused()'), 'tipoVenda')
+        self.evaluate("preencherResumoCliente({id:1,nome:'Cliente restaurado'});")
+        self.assertEqual(self.evaluate('focused()'), 'tipoVenda')
+        self.assertEqual(self.evaluate("focusCalls.filter(id=>id==='vencimentoVenda').length"), 1)
+
     def enter(self):
         self.tab.call('Input.dispatchKeyEvent', {'type':'keyDown','key':'Enter','code':'Enter','windowsVirtualKeyCode':13})
         self.tab.call('Input.dispatchKeyEvent', {'type':'keyUp','key':'Enter','code':'Enter','windowsVirtualKeyCode':13})
