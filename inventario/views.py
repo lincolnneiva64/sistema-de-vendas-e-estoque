@@ -380,6 +380,9 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
         acesso.expirado = acesso.expira_em <= timezone.now()
     encerramento_previa, encerramento_erro = None, ""
     if (not inventario.finalizada_em and not inventario.cancelada_em
+            # Missing OKs are normal while counting, not a refused closure.
+            # Reuse the current rounds; previa/POST retain full validation.
+            and linhas and all(l['rodada'].ok_em and not l['rodada'].encerrada_em for l in linhas)
             and request.user.has_perm("inventario.gerenciar_inventario")
             and request.user.has_perm("inventario.revisar_inventario")):
         from . import encerramento
