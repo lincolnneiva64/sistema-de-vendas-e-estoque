@@ -2,10 +2,13 @@ from django.urls import path
 from . import autorizacao_estoque
 from . import views
 from . import views_grupos_produtos
+from . import views_relatorios
 
 app_name = "estoque"
 
 urlpatterns = [
+    path("relatorios/", views_relatorios.inicio, name="relatorios_inicio"),
+    path("relatorios/vendas/", views_relatorios.vendas, name="relatorios_vendas"),
     path("produtos/<int:produto_id>/historico-estoque-manual/", views.historico_estoque_manual, name="historico_estoque_manual"),
     path("conferencia-estoque/autorizar/", autorizacao_estoque.autorizar, name="conferencia_estoque_autorizar"),
     path("conferencia-estoque/autorizada/", autorizacao_estoque.autorizada, name="conferencia_estoque_autorizada"),

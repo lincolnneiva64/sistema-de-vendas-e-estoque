@@ -1879,6 +1879,9 @@ align-items: center;
         >
           Resultado Gerencial
         </a>
+        {% if request.user.is_active and request.user.is_staff and request.user.is_superuser %}
+        <a href="{% url 'estoque:relatorios_inicio' %}" class="btn-acao-principal-painel">Relatórios Gerenciais</a>
+        {% endif %}
         <a
           href="{% url 'estoque:contas_pagar' %}"
           class="btn-acao-principal-painel"

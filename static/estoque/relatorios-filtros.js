@@ -1,0 +1,317 @@
+/* Sincroniza campos locais; a consulta continua exclusiva do botão Consultar. */
+(() => {
+    const form = document.getElementById('relatorios-filtros-vendas');
+    const dados = document.getElementById('relatorios-periodos-datas');
+    if (!form || !dados) return;
+    const periodos = JSON.parse(dados.textContent);
+    const periodo = form.elements.periodo;
+    const inicio = form.elements.data_inicial;
+    const fim = form.elements.data_final;
+    periodo.addEventListener('change', () => {
+        const intervalo = periodos[periodo.value];
+        if (!intervalo) return;
+        inicio.value = intervalo.inicio;
+        fim.value = intervalo.fim;
+    });
+    for (const campo of [inicio, fim]) {
+        for (const evento of ['input', 'change']) {
+            campo.addEventListener(evento, () => { periodo.value = 'personalizado'; });
+        }
+    }
+})();
+
+/* Barras nativas: no máximo 31 dias no DOM, sem fetch nem biblioteca gráfica. */
+(() => {
+    const fonte = document.getElementById('relatorios-barras-dados');
+    const raiz = document.getElementById('relatorios-barras');
+    if (!fonte || !raiz) return;
+    const dados = JSON.parse(fonte.textContent);
+    raiz.classList.toggle('grafico-barras-semanal', dados.modo === 'semanal');
+    raiz.classList.toggle('grafico-barras-comparacao', dados.itens.some(p => p.comparacao));
+    raiz.classList.toggle('grafico-barras-par-mensal', Boolean(dados.par_mensal));
+    raiz.classList.toggle('grafico-barras-mensal', dados.modo === 'mensal');
+    const lista = raiz.querySelector('ol');
+    const plot = raiz.querySelector('.grafico-barras-plot');
+    const janela = raiz.querySelector('.grafico-barras-janela');
+    const anterior = raiz.querySelector('[data-barras-anterior]');
+    const proximo = raiz.querySelector('[data-barras-proximo]');
+    let deslocamento = 0;
+    const tamanhoBloco = dados.modo === 'mensal' && dados.itens.some(p => p.indicadores) ? 6 : 31;
+    // Números binários servem somente à geometria; textos mantêm os centavos
+    // decimais enviados pelo servidor, sem recalcular faturamento ou média.
+    const fantasmaDoPeriodo = periodo => {
+        if (dados.modo !== 'mensal') return null;
+        const indicadores = periodo.indicadores;
+        if (indicadores?.previsao?.valor !== null && indicadores?.previsao?.valor !== undefined)
+            return {valor: indicadores.previsao.valor, rotulo: 'Previsão de fechamento'};
+        return indicadores?.equivalente_teorico || null;
+    };
+    // All pages share one zero-based scale, including every valid estimate.
+    const estimativas = dados.itens.map(fantasmaDoPeriodo).filter(Boolean).map(p => Number(p.valor));
+    const minimo = Math.min(0, Number(dados.minimo), ...estimativas), maximo = Math.max(0, Number(dados.maximo), ...estimativas);
+    const amplitude = maximo - minimo || 1;
+    let alturaBarras = 180;
+    const y = valor => maximo === minimo ? alturaBarras + 28 : (maximo - Number(valor)) / amplitude * alturaBarras + 28;
+    const moeda = valor => {
+        const [inteiro, centavos = '00'] = String(valor).split('.');
+        return 'R$ ' + inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + centavos.padEnd(2, '0');
+    };
+    const dataCurta = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4);
+    const dinheiroSinal = valor => (String(valor).startsWith('-') ? '-' : Number(valor) > 0 ? '+' : '') + moeda(String(valor).replace(/^-/, ''));
+    function indicadoresMensais(dadosMes) {
+        const bloco = document.createElement('div');
+        bloco.className = 'grafico-barra-indicadores';
+        const linha = (rotulo, valor, classe = '') => {
+            const p = document.createElement('p');
+            p.className = classe;
+            p.append(document.createTextNode(rotulo + ' '));
+            const numero = document.createElement('strong');
+            numero.textContent = valor;
+            p.append(numero); bloco.append(p);
+            return p;
+        };
+        linha('Ticket médio:', dadosMes.ticket_medio === null ? 'não calculável' : moeda(dadosMes.ticket_medio));
+        linha('Média diária:', dadosMes.media_diaria === null ? 'indisponível' : moeda(dadosMes.media_diaria));
+        const base = document.createElement('p');
+        base.className = 'comparacao-nota';
+        base.textContent = dadosMes.dias_media ? dadosMes.dias_media + (dadosMes.dias_encerrados ? ' dias encerrados' : ' dias comprovados') +
+            ' · ' + dataCurta(dadosMes.media_inicio) + ' a ' + dataCurta(dadosMes.media_fim) : 'Sem base diária comprovada.';
+        bloco.append(base);
+        const situacao = document.createElement('p');
+        situacao.className = 'indicadores-situacao';
+        situacao.textContent = dadosMes.situacao;
+        bloco.append(situacao);
+        const prev = dadosMes.previsao;
+        if (prev) {
+            if (prev.valor === null) {
+                const indisponivel = document.createElement('p');
+                indisponivel.className = 'comparacao-nota';
+                indisponivel.textContent = 'Previsão indisponível: ' + prev.motivo;
+                bloco.append(indisponivel);
+            } else {
+                linha('Previsão de fechamento:', moeda(prev.valor), 'indicadores-previsao');
+                if (prev.diferenca !== null) {
+                    const percentual = prev.variacao === null ? '% não calculável' :
+                        (Number(prev.variacao) > 0 ? '+' : '') + String(prev.variacao).replace('.', ',') + '%';
+                    const delta = linha('Previsto vs mês anterior completo:', dinheiroSinal(prev.diferenca) + ' (' + percentual + ')', 'indicadores-previsao');
+                    delta.title = dataCurta(prev.anterior_inicio) + ' a ' + dataCurta(prev.anterior_fim) + ': ' + moeda(prev.anterior);
+                } else {
+                    const semReferencia = document.createElement('p');
+                    semReferencia.className = 'comparacao-nota';
+                    semReferencia.textContent = prev.motivo_comparacao;
+                    bloco.append(semReferencia);
+                }
+                const detalhe = document.createElement('details');
+                detalhe.className = 'indicadores-metodo';
+                const resumo = document.createElement('summary');
+                resumo.textContent = 'Como foi estimada';
+                const texto = document.createElement('p');
+                texto.textContent = prev.metodologia + ' ' + prev.dias_restantes + ' dias após hoje. Realizado: ' + moeda(prev.realizado) +
+                    '. Hoje: ' + (prev.hoje === null ? 'sem registros até agora' : moeda(prev.hoje) + ' (parcial)') + '.' +
+                    (prev.anterior !== null ? ' Mês anterior completo: ' + dataCurta(prev.anterior_inicio) + ' a ' + dataCurta(prev.anterior_fim) + ', ' + moeda(prev.anterior) + '.' : '');
+                detalhe.append(resumo, texto); bloco.append(detalhe);
+            }
+        }
+        const teorico = dadosMes.equivalente_teorico;
+        if (teorico) {
+            const p = linha('Equivalente teórico:', moeda(teorico.valor), 'indicadores-teorico');
+            p.title = teorico.metodologia + ' ' + teorico.dias_base + ' dias comprovados; calendário de ' + teorico.dias_calendario + ' dias.';
+            const nota = document.createElement('p');
+            nota.className = 'comparacao-nota';
+            nota.textContent = 'Média diária de ' + teorico.dias_base + ' dias × ' + teorico.dias_calendario + ' dias de calendário. Não realizado.';
+            bloco.append(nota);
+        }
+        return bloco;
+    }
+    function ajustarAltura() {
+        if (!raiz.isConnected) return;
+        const figura = raiz.closest('.grafico-evolucao');
+        const itens = [...lista.children];
+        if (!figura || !itens.length) return;
+        const alturaData = Math.max(...itens.map(i => i.querySelector('.grafico-barra-data').getBoundingClientRect().height));
+        const alturaVariacao = Math.max(...itens.map(i => i.querySelector('.grafico-barra-variacao').getBoundingClientRect().height));
+        const alturaIndicadores = Math.max(0, ...itens.map(i => i.querySelector('.grafico-barra-indicadores')?.getBoundingClientRect().height || 0));
+        const antes = janela.getBoundingClientRect().top - figura.getBoundingClientRect().top;
+        const navegacao = raiz.querySelector('.grafico-barras-controles').getBoundingClientRect().height;
+        const alturaTela = window.visualViewport ? window.visualViewport.height : innerHeight;
+        const disponivel = alturaTela - antes - navegacao - 36;
+        // Only geometry changes: reserve readable dates/percentages first.
+        const rodape = 28 + 32 + alturaData + 12 + alturaVariacao + 12 + (alturaIndicadores ? alturaIndicadores + 10 : 0);
+        // Monthly bars must not collapse to make room for the financial notes.
+        // Keep the chart readable and let the page scroll naturally below it.
+        alturaBarras = dados.modo === 'mensal' ? Math.max(180, Math.min(260, alturaTela * .28)) :
+            Math.max(40, Math.min(180, disponivel - rodape));
+        const topoData = 28 + alturaBarras + 32;
+        const topoVariacao = topoData + alturaData + 12;
+        for (const [indice, item] of itens.entries()) {
+            const valor = dados.itens[deslocamento + indice].valor;
+            const barra = item.querySelector('.grafico-barra');
+            barra.style.top = Math.min(y(valor), y(0)) + 'px';
+            barra.style.height = Math.max(dados.modo === 'mensal' ? 0 : 1, Math.abs(y(valor) - y(0))) + 'px';
+            const fantasma = item.querySelector('.grafico-barra-fantasma');
+            if (fantasma) {
+                const estimado = fantasmaDoPeriodo(dados.itens[deslocamento + indice]).valor;
+                fantasma.style.top = Math.min(y(estimado), y(0)) + 'px';
+                fantasma.style.height = Math.abs(y(estimado) - y(0)) + 'px';
+                const legenda = item.querySelector('.grafico-barra-fantasma-valor');
+                const caixa = item.getBoundingClientRect();
+                const contorno = fantasma.getBoundingClientRect();
+                const alturaLegenda = legenda.getBoundingClientRect().height;
+                legenda.style.left = (contorno.right - caixa.left + 4) + 'px';
+                legenda.style.top = Math.max(28, Math.min(28 + alturaBarras - alturaLegenda,
+                    contorno.top - caixa.top + contorno.height / 2 - alturaLegenda / 2)) + 'px';
+            }
+            const rotulo = item.querySelector('.grafico-barra-valor');
+            rotulo.style.top = (valor === null ? 6 : Number(valor) < 0 ? y(valor) + 4 : y(valor) - 22) + 'px';
+            if (dados.modo === 'mensal') {
+                const caixa = item.getBoundingClientRect();
+                const solida = barra.getBoundingClientRect();
+                rotulo.style.left = valor === null ? '50%' : (solida.left + solida.width / 2 - caixa.left) + 'px';
+            }
+            item.querySelector('.grafico-barra-data').style.top = topoData + 'px';
+            item.querySelector('.grafico-barra-variacao').style.top = topoVariacao + 'px';
+            const metricas = item.querySelector('.grafico-barra-indicadores');
+            if (metricas) metricas.style.top = (topoVariacao + alturaVariacao + 10) + 'px';
+            item.style.height = (topoVariacao + alturaVariacao + 12 + (alturaIndicadores ? alturaIndicadores + 10 : 0)) + 'px';
+        }
+        if (dados.media !== null) raiz.querySelector('.grafico-media-linha').style.top = y(dados.media) + 'px';
+        const zero = raiz.querySelector('.grafico-zero-linha');
+        if (zero) {
+            zero.hidden = dados.modo !== 'mensal';
+            zero.style.top = y(0) + 'px';
+        }
+    }
+    function desenhar() {
+        const fim = Math.min(deslocamento + tamanhoBloco, dados.itens.length);
+        const fragmento = document.createDocumentFragment();
+        for (let i = deslocamento; i < fim; i++) {
+            const periodo = dados.itens[i], valor = periodo.valor;
+            const parcial = periodo.parcial;
+            const item = document.createElement('li');
+            item.className = 'grafico-barra-dia';
+            if (!dados.par_mensal) item.style.width = Math.max(periodo.indicadores ? 240 : 180, moeda(valor).length * 8 + 20) + 'px';
+            item.dataset.data = periodo.inicio;
+            const barra = document.createElement('span');
+            barra.className = 'grafico-barra' + (parcial ? ' grafico-barra-parcial' : '');
+            barra.style.top = Math.min(y(valor), y(0)) + 'px';
+            barra.style.height = Math.max(1, Math.abs(y(valor) - y(0))) + 'px';
+            barra.setAttribute('aria-hidden', 'true');
+            const rotulo = document.createElement('strong');
+            rotulo.className = 'grafico-barra-valor';
+            rotulo.textContent = valor === null ? 'Sem histórico' : moeda(valor);
+            barra.hidden = valor === null;
+            rotulo.style.top = (Number(valor) < 0 ? y(valor) + 4 : y(valor) - 22) + 'px';
+            const data = document.createElement('span');
+            data.className = 'grafico-barra-data';
+            data.textContent = periodo.indicadores ? periodo.inicio.slice(5, 7) + '/' + periodo.inicio.slice(0, 4) +
+                ' · ' + periodo.inicio.slice(8, 10) + '/' + periodo.inicio.slice(5, 7) + '–' + periodo.fim.slice(8, 10) + '/' + periodo.fim.slice(5, 7) :
+                periodo.rotulo + (parcial ? ' · ' + periodo.status : '');
+            data.title = periodo.rotulo;
+            const variacao = document.createElement('span');
+            variacao.className = 'grafico-barra-variacao';
+            variacao.textContent = periodo.variacao === null ? 'Sem período comparável' :
+                (Number(periodo.variacao) > 0 ? '+' : '') + String(periodo.variacao).replace('.', ',') + '% vs anterior';
+            variacao.title = periodo.motivo || 'Comparação com o período anterior completo.';
+            if ((dados.historico || dados.cobertura_mensal) && periodo.variacao === null) variacao.textContent = periodo.motivo;
+            if (dados.cobertura_mensal && periodo.motivo.startsWith('Períodos não equivalentes')) {
+                variacao.textContent = 'Períodos não equivalentes' +
+                    (periodo.motivo.toLowerCase().includes('sem histórico') ? ' · sem histórico anterior' : '');
+                variacao.setAttribute('aria-label', periodo.motivo);
+            }
+            if (periodo.referencia) variacao.textContent = 'Mês anterior · referência';
+            const tendencia = Number(periodo.comparacao ? periodo.diferenca : periodo.variacao);
+            if (tendencia > 0) variacao.classList.add('crescimento');
+            if (tendencia < 0) variacao.classList.add('queda');
+            if (!periodo.comparacao && periodo.variacao !== null) variacao.classList.add('comparacao-valor');
+            if (periodo.comparacao) {
+                const comp = periodo.comparacao;
+                const dataCurta = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4);
+                const sinal = v => String(v).startsWith('-') || Number(v) === 0 ? '' : '+';
+                variacao.replaceChildren();
+                const diferenca = String(periodo.diferenca);
+                const textos = [(diferenca.startsWith('-') ? '-' : sinal(diferenca)) + moeda(diferenca.replace(/^-/, '')),
+                    periodo.variacao === null ? '% não calculável' :
+                        sinal(periodo.variacao) + String(periodo.variacao).replace('.', ',') + '%',
+                    dados.par_mensal ? 'vs mês anterior' : comp.rotulo];
+                if (!dados.par_mensal) textos.push('vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
+                for (const [indice, texto] of textos.entries()) {
+                    const linha = document.createElement('span');
+                    linha.className = indice === 0 || indice === 1 && periodo.variacao !== null ? 'comparacao-valor' : 'comparacao-nota';
+                    linha.textContent = texto;
+                    variacao.appendChild(linha);
+                }
+                variacao.title = 'Atual: ' + moeda(comp.atual) + '; anterior: ' + moeda(comp.anterior) +
+                    '. ' + (periodo.motivo || 'Comparação entre as datas equivalentes indicadas.') +
+                    (comp.inclui_hoje ? ' Hoje ainda está em andamento.' : '');
+            }
+            item.append(barra, rotulo, data, variacao);
+            const estimativa = fantasmaDoPeriodo(periodo);
+            if (estimativa) {
+                item.classList.add('tem-fantasma');
+                const fantasma = document.createElement('span');
+                fantasma.className = 'grafico-barra-fantasma';
+                fantasma.setAttribute('role', 'img');
+                fantasma.setAttribute('aria-label', estimativa.rotulo + ': ' + moeda(estimativa.valor) + '. Valor estimado; não realizado.');
+                fantasma.title = estimativa.rotulo + ': ' + moeda(estimativa.valor);
+                if (Number(estimativa.valor) === 0) fantasma.style.borderWidth = '0';
+                const valorEstimado = document.createElement('strong');
+                valorEstimado.className = 'grafico-barra-fantasma-valor';
+                valorEstimado.textContent = moeda(estimativa.valor);
+                valorEstimado.setAttribute('aria-hidden', 'true');
+                item.append(fantasma, valorEstimado);
+            }
+            if (periodo.indicadores) item.append(indicadoresMensais(periodo.indicadores));
+            fragmento.appendChild(item);
+        }
+        lista.replaceChildren(fragmento);
+        const media = raiz.querySelector('.grafico-media-linha');
+        media.hidden = dados.media === null;
+        if (dados.media !== null) media.style.top = y(dados.media) + 'px';
+        plot.style.minWidth = dados.par_mensal ? '100%' : 'max-content';
+        anterior.disabled = deslocamento === 0;
+        proximo.disabled = fim === dados.itens.length;
+        raiz.querySelector('[data-barras-intervalo]').textContent = fim ?
+            (deslocamento + 1) + '–' + fim + ' de ' + dados.itens.length + ' períodos' : 'Sem período comparável';
+        janela.scrollLeft = 0;
+        ajustarAltura();
+    }
+    anterior.addEventListener('click', () => { deslocamento = Math.max(0, deslocamento - tamanhoBloco); desenhar(); });
+    proximo.addEventListener('click', () => { deslocamento += tamanhoBloco; desenhar(); });
+    raiz.addEventListener('toggle', ajustarAltura, true);
+    raiz.hidden = false;
+    desenhar();
+    window.addEventListener('resize', ajustarAltura, {passive: true});
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', ajustarAltura, {passive: true});
+    const controles = document.getElementById('evolucao-controles');
+    if (controles) controles.addEventListener('change', ajustarAltura);
+    const enquadrar = () => {
+        if (!raiz.isConnected) return;
+        ajustarAltura();
+        if (location.hash === '#evolucao-vendas') {
+            const figura = raiz.closest('.grafico-evolucao');
+            window.scrollTo({top: Math.max(0, scrollY + figura.getBoundingClientRect().top - 12), behavior: 'instant'});
+        }
+    };
+    // One initial positioning after drawing/loading; never scroll on resize.
+    if (document.readyState === 'complete') requestAnimationFrame(enquadrar);
+    else window.addEventListener('load', () => requestAnimationFrame(enquadrar), {once: true});
+})();
+
+(() => {
+    const form = document.getElementById('evolucao-controles');
+    if (!form) return;
+    const atualizar = () => {
+        form.querySelector('[data-evolucao-dia]').hidden = form.elements.modo.value !== 'diario';
+        const alcance = form.elements.alcance?.value || 'principal';
+        const mensal = form.elements.modo.value === 'mensal';
+        const datas = form.querySelector('[data-historico-datas]');
+        if (datas) datas.hidden = alcance !== 'personalizado';
+        const comparacao = form.querySelector('[data-historico-comparacao]');
+        if (comparacao) comparacao.hidden = !mensal || alcance === 'principal' && form.elements.comparacao?.value !== 'ano_anterior';
+        form.querySelector('[data-evolucao-equivalente]').hidden = !mensal || alcance !== 'principal' || form.elements.comparacao?.value === 'ano_anterior';
+    };
+    for (const nome of ['modo', 'alcance', 'comparacao']) {
+        if (form.elements[nome]) form.elements[nome].addEventListener('change', atualizar);
+    }
+    atualizar();
+})();

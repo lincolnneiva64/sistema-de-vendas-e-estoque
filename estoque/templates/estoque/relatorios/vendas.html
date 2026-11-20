@@ -1,0 +1,50 @@
+{% extends 'estoque/relatorios/base.html' %}
+{% load l10n static relatorios %}
+{% block classe_relatorios %}relatorios-resumo{% endblock %}
+{% block relatorio %}
+<h1>Resumo de vendas</h1>
+<form method="get" action="{% url 'estoque:relatorios_vendas' %}" class="relatorios-filtros" id="relatorios-filtros-vendas">
+  {{ form.non_field_errors }}
+  {% for campo in evolucao_form %}{% if campo.name == 'alcance' or campo.name == 'historico_inicio' or campo.name == 'historico_fim' or campo.name == 'comparacao' %}<input type="hidden" name="{{ campo.name }}" value="{{ campo.value|default_if_none:'' }}">{% endif %}{% endfor %}
+  {% if resumo %}<input type="hidden" name="modo" value="{{ resumo.analise_evolucao.modo }}"><input type="hidden" name="dia_semana" value="{{ resumo.analise_evolucao.dia_semana }}">{% if evolucao_form.equivalente.value %}<input type="hidden" name="equivalente" value="on">{% endif %}{% endif %}
+  {% for campo in form %}<div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}
+  <button type="submit">Consultar</button>
+  <p>Escolha um período ou edite as datas e pressione Consultar. Os meses de calendário incluem o mês atual até hoje; o mês anterior é completo.</p>
+</form>
+{{ periodos_datas|json_script:'relatorios-periodos-datas' }}
+<script defer src="{% static 'estoque/relatorios-filtros.js' %}"></script>
+{% if resumo %}
+<p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong> · Datas de Belém</p>
+<p>Valores pela data da venda. Faturamento não representa recebimento nem lucro. Vendas canceladas estão excluídas.</p>
+{% if resumo.sem_valor %}<p role="status" class="relatorios-aviso">Há {{ resumo.sem_valor }} venda(s) sem total registrado. Faturamento e ticket médio podem estar incompletos.</p>{% endif %}
+<dl class="relatorios-indicadores">
+  <div class="indicador-faturamento"><dt>Faturamento comercial</dt><dd>{{ resumo.faturamento|moeda_br }}</dd></div>
+  <div class="indicador-quantidade"><dt>Quantidade de vendas</dt><dd>{{ resumo.quantidade }}</dd></div>
+  <div class="indicador-ticket"><dt>Ticket médio</dt><dd>{{ resumo.ticket_medio|moeda_br }}</dd></div>
+  <div class="indicador-vista"><dt>Vendas à vista</dt><dd>{{ resumo.vista.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.vista.percentual|numero_br }}% do faturamento</span><span>{{ resumo.vista.quantidade }} venda(s)</span></dd></div>
+  <div class="indicador-prazo"><dt>Vendas a prazo</dt><dd>{{ resumo.prazo.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.prazo.percentual|numero_br }}% do faturamento</span><span>{{ resumo.prazo.quantidade }} venda(s)</span></dd></div>
+</dl>
+{% if resumo.nao_classificado.quantidade %}<p class="relatorios-aviso">Pagamento não classificado: {{ resumo.nao_classificado.valor|moeda_br }} em {{ resumo.nao_classificado.quantidade }} venda(s). Incluído no faturamento comercial, separado de à vista e a prazo.</p>{% endif %}
+{% include 'estoque/relatorios/graficos.html' %}
+<section class="relatorios-consumo"><h2>Consumo próprio — separado das vendas comerciais</h2>
+<div class="consumo-composicao" aria-label="Composição do total de registros da consulta">
+  <div><span>Faturamento comercial</span><strong>{{ resumo.faturamento|moeda_br }}</strong></div>
+  <span class="consumo-operador" aria-hidden="true">+</span>
+  <div><span>Consumo próprio</span><strong>{{ resumo.consumo.valor|moeda_br }}</strong></div>
+  <span class="consumo-operador" aria-hidden="true">=</span>
+  <div><span>Total de registros da consulta</span><strong>{{ resumo.total_registros_consulta|moeda_br }}</strong></div>
+</div>
+<p>{{ resumo.consumo.quantidade }} registro(s) de consumo próprio no período. Consumo próprio <strong>não integra o faturamento comercial nem o ticket médio</strong>, não compõe a quantidade de vendas comerciais e não representa recebimento financeiro.</p>
+<p class="grafico-nota">A composição concilia os registros não cancelados do período selecionado; o total da consulta também não comprova entrada em caixa.</p>
+{% if resumo.consumo.sem_valor %}<p>Há registro de consumo próprio sem total informado.</p>{% endif %}</section>
+<h2 id="evolucao-diaria">Evolução diária</h2>
+<p>Dias com vendas comerciais, do mais recente para o mais antigo.</p>
+<div class="relatorios-tabela" role="region" aria-labelledby="evolucao-diaria" tabindex="0"><table><caption>Faturamento comercial diário</caption><thead><tr><th scope="col">Data</th><th scope="col">Vendas</th><th scope="col">À vista</th><th scope="col">A prazo</th>{% if resumo.nao_classificado.quantidade %}<th scope="col">Não classificado</th>{% endif %}<th scope="col">Faturamento</th></tr></thead>
+<tbody>{% for dia in resumo.evolucao %}<tr><th scope="row">{{ dia.data_venda|date:'d/m/Y' }}</th><td>{{ dia.quantidade }}</td><td>{{ dia.vista|moeda_br }}</td><td>{{ dia.prazo|moeda_br }}</td>{% if resumo.nao_classificado.quantidade %}<td>{{ dia.nao_classificado|moeda_br }}</td>{% endif %}<td class="relatorios-total-dia">{{ dia.faturamento|moeda_br }}</td></tr>{% empty %}<tr><td colspan="{% if resumo.nao_classificado.quantidade %}6{% else %}5{% endif %}">Nenhuma venda comercial neste período.</td></tr>{% endfor %}</tbody></table></div>
+{% if resumo.evolucao.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Páginas da evolução diária">
+  {% if resumo.evolucao.has_previous %}<a href="?{{ filtros_query }}&amp;pagina={{ resumo.evolucao.previous_page_number|unlocalize }}">Anterior</a>{% endif %}
+  <span>Página {{ resumo.evolucao.number }} de {{ resumo.evolucao.paginator.num_pages }}</span>
+  {% if resumo.evolucao.has_next %}<a href="?{{ filtros_query }}&amp;pagina={{ resumo.evolucao.next_page_number|unlocalize }}">Próxima</a>{% endif %}
+</nav>{% endif %}
+{% endif %}
+{% endblock %}

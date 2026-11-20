@@ -1,0 +1,16 @@
+<form method="get" action="{% url 'estoque:relatorios_vendas' %}#evolucao-vendas" class="evolucao-controles" id="evolucao-controles">
+  <input type="hidden" name="periodo" value="{{ form.periodo.value }}">
+  <input type="hidden" name="data_inicial" value="{{ form.data_inicial.value }}">
+  <input type="hidden" name="data_final" value="{{ form.data_final.value }}">
+  <input type="hidden" name="pagina" value="{{ resumo.evolucao.number }}">
+  <div><label for="{{ evolucao_form.modo.id_for_label }}">Evolução</label>{{ evolucao_form.modo }}{{ evolucao_form.modo.errors }}</div>
+  <div><label for="{{ evolucao_form.alcance.id_for_label }}">Alcance histórico</label>{{ evolucao_form.alcance }}{{ evolucao_form.alcance.errors }}</div>
+  <div data-historico-datas {% if evolucao_form.alcance.value != 'personalizado' %}hidden{% endif %}>
+    <div><label for="{{ evolucao_form.historico_inicio.id_for_label }}">Histórico de</label>{{ evolucao_form.historico_inicio }}{{ evolucao_form.historico_inicio.errors }}</div>
+    <div><label for="{{ evolucao_form.historico_fim.id_for_label }}">Histórico até</label>{{ evolucao_form.historico_fim }}{{ evolucao_form.historico_fim.errors }}</div>
+  </div>
+  <div data-evolucao-dia {% if resumo.analise_evolucao.modo != 'diario' %}hidden{% endif %}><label for="{{ evolucao_form.dia_semana.id_for_label }}">Dia da semana</label>{{ evolucao_form.dia_semana }}{{ evolucao_form.dia_semana.errors }}</div>
+  <div data-historico-comparacao {% if resumo.analise_evolucao.modo != 'mensal' or not resumo.analise_evolucao.historico %}hidden{% endif %}><label for="{{ evolucao_form.comparacao.id_for_label }}">Comparação mensal</label>{{ evolucao_form.comparacao }}{{ evolucao_form.comparacao.errors }}</div>
+  <div data-evolucao-equivalente {% if resumo.analise_evolucao.modo != 'mensal' or resumo.analise_evolucao.historico %}hidden{% endif %}><label>{{ evolucao_form.equivalente }} {{ evolucao_form.equivalente.label }}</label></div>
+  <button type="submit">Comparar</button>
+</form>

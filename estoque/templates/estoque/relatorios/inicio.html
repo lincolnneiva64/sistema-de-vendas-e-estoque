@@ -1,0 +1,13 @@
+{% extends 'estoque/relatorios/base.html' %}
+{% block relatorio %}
+<h1>Relatórios e Análises Gerenciais</h1>
+<p>Escolha o relatório que deseja consultar.</p>
+<div class="relatorios-opcoes">
+  <a class="relatorios-card" href="{% url 'estoque:relatorios_vendas' %}"><h2>Resumo de vendas</h2><p>Faturamento, quantidade de vendas, ticket médio e evolução diária.</p></a>
+  <section class="relatorios-card"><h2>Vendas por produto</h2><p>Em preparação</p></section>
+  <section class="relatorios-card"><h2>Vendas por grupo</h2><p>Em preparação</p></section>
+  <section class="relatorios-card"><h2>Vendas por cliente</h2><p>Em preparação</p></section>
+  <section class="relatorios-card"><h2>Recebimentos e atrasos</h2><p>Em preparação</p></section>
+  <section class="relatorios-card"><h2>Compras por fornecedor</h2><p>Em preparação</p></section>
+</div>
+{% endblock %}
