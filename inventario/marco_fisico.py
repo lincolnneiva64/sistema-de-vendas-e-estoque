@@ -237,35 +237,37 @@ def recibos(propostas):
     eventos = {e.proposta_id: e for e in EventoAjuste.objects.filter(
         proposta__in=propostas, acao='marco_sem_ajuste').select_related(
             'proposta__confirmacao', 'proposta__rodada__item', 'usuario')}
-    resultado = []
-    for p in propostas:
-        if p.pk in aplicacoes:
-            a = aplicacoes[p.pk]
-            from .ajustes import assinatura
-            if (p.estado != 'aplicado' or assinatura(p.evidencia) != p.assinatura
-                    or a.evidencia.get('preparacao') != p.evidencia
-                    or a.decisao.rodada_id != p.rodada_id
-                    or a.decisao.item_id != a.proposta.rodada.item_id
-                    or a.antes + a.diferenca != a.depois
-                    or a.unidade != p.evidencia.get('cadastro', {}).get('base')):
-                raise ValueError('Auditoria da referência física aplicada incompatível.')
-            resultado.append(a)
-        elif p.pk in eventos:
-            e = eventos[p.pk]
-            from .ajustes import assinatura
-            dados = e.dados
-            if (p.estado != 'aplicado' or p.evidencia.get('regra') != REGRA
-                    or assinatura(p.evidencia) != p.assinatura
-                    or assinatura(dados.get('preparacao')) != p.assinatura
-                    or Decimal(p.evidencia['diferenca']) != 0
-                    or Decimal(p.evidencia['atual']) != Decimal(p.evidencia['resultante'])):
-                raise ValueError('Auditoria do marco sem ajuste incompatível.')
-            resultado.append(SimpleNamespace(pk=e.pk, proposta=e.proposta, proposta_id=p.pk,
-                usuario_id=e.usuario_id, usuario=e.usuario, aplicado_em=e.criado_em,
-                antes=Decimal(p.evidencia['atual']), depois=Decimal(p.evidencia['resultante']),
-                diferenca=Decimal(0), unidade=p.evidencia['cadastro']['base'],
-                evidencia=dados, sem_ajuste=True))
-    return resultado
+    return [r for p in propostas
+            if (r := normalizar_recibo(p, aplicacoes.get(p.pk), eventos.get(p.pk))) is not None]
+
+
+def normalizar_recibo(p, a=None, e=None):
+    """Validate a preloaded receipt with the same rules used by application readers."""
+    if a is not None:
+        from .ajustes import assinatura
+        if (p.estado != 'aplicado' or assinatura(p.evidencia) != p.assinatura
+                or a.evidencia.get('preparacao') != p.evidencia
+                or a.decisao.rodada_id != p.rodada_id
+                or a.decisao.item_id != a.proposta.rodada.item_id
+                or a.antes + a.diferenca != a.depois
+                or a.unidade != p.evidencia.get('cadastro', {}).get('base')):
+            raise ValueError('Auditoria da referência física aplicada incompatível.')
+        return a
+    elif e is not None:
+        from .ajustes import assinatura
+        dados = e.dados
+        if (p.estado != 'aplicado' or p.evidencia.get('regra') != REGRA
+                or assinatura(p.evidencia) != p.assinatura
+                or assinatura(dados.get('preparacao')) != p.assinatura
+                or Decimal(p.evidencia['diferenca']) != 0
+                or Decimal(p.evidencia['atual']) != Decimal(p.evidencia['resultante'])):
+            raise ValueError('Auditoria do marco sem ajuste incompatível.')
+        return SimpleNamespace(pk=e.pk, proposta=e.proposta, proposta_id=p.pk,
+            usuario_id=e.usuario_id, usuario=e.usuario, aplicado_em=e.criado_em,
+            antes=Decimal(p.evidencia['atual']), depois=Decimal(p.evidencia['resultante']),
+            diferenca=Decimal(0), unidade=p.evidencia['cadastro']['base'],
+            evidencia=dados, sem_ajuste=True)
+    return None
 
 
 def registrar_sem_ajuste(usuario, proposta, rodada, atual):

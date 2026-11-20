@@ -5,6 +5,7 @@ by approximate time, and current product conversions are never used.
 """
 import re
 from datetime import timedelta
+from itertools import islice
 
 from django.core.paginator import Paginator
 from django.db.models import (BooleanField, CharField,
@@ -16,8 +17,9 @@ from estoque.models import ItemVenda, ItemVendaRemovido, MovimentacaoEstoqueManu
 
 from .rastreabilidade import ORIGENS
 from .saldos_historicos import analisar
-from .saldo_documental import aplicar_saldos_documentais, unidade as unidade_documental, quantidade_historica
-from .models import AplicacaoAjuste, DetalheMovimentoEstoque, MovimentoObservado
+from .saldo_documental import aplicar_saldos_documentais, unidade as unidade_documental, quantidade_historica, avaliar_evidencia
+from .models import AplicacaoAjuste, DetalheMovimentoEstoque, MovimentoObservado, RodadaContagem
+from .referencias_historicas import preparar as preparar_referencias, limite_anterior
 from .extrato_apresentacao import (identificar_vendas, tecnicos_das_vendas,
     associar_documentos, evidencias_documentais, apresentar_operacoes, edicoes_do_produto, preparar_fluxos_historicos)
 
@@ -35,18 +37,18 @@ def evidencia_inicial(pagina, inicio):
     """
     if pagina.number != 1 or not inicio:
         return None
-    linhas = list(pagina)
+    linhas = [r for r in pagina if r['fonte'] != 'conferencia']
     if not linhas:
         return None
     r = linhas[0]
-    tipos = {'compra': 'Reconstruído e corroborado', 'venda': 'Snapshot registrado'}
+    e = avaliar_evidencia(r)
+    saldo = e['operacional'] or e['ancora']
     if (r['instante'] != inicio or sum(l['instante'] == inicio for l in linhas) != 1
-            or r.get('saldo_tipo') != tipos.get(r['fonte']) or r.get('saldo_tipo') is None
-            or r.get('saldo') is None or r.get('saldo_antes') is None
-            or r['saldo_antes'] < 0 or not r.get('saldo_unidade')):
+            or e['sem_efeito'] or e['certificado'] or not saldo
+            or saldo.get('antes') is None or saldo['antes'] < 0 or not saldo['unidade']):
         return None
-    return dict(valor=r['saldo_antes'], unidade=r['saldo_unidade'], tipo=r['saldo_tipo'],
-        origem=r.get('saldo_evidencia', ''), aviso=r.get('saldo_aviso', ''),
+    return dict(valor=saldo['antes'], unidade=saldo['unidade'], tipo='Saldo registrado na abertura',
+        origem=saldo['origem'], aviso='Saldo anterior comprovado no primeiro evento do intervalo.',
         documento=r['titulo'], url=r['url'])
 
 
@@ -181,9 +183,10 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     movimentos = comerciais
     tecnicos = None
     regularizacoes_q = None
-    if timeline:
-        tecnicos = identificar_vendas(movimentos, vendas)
-        movimentos = tecnicos  # Association below is the only operational grouping rule.
+    if produto_id and inicio:
+        if timeline:
+            tecnicos = identificar_vendas(movimentos, vendas)
+            movimentos = tecnicos  # Association below is the only operational grouping rule.
         # Only a persisted application with the actual manual-movement FK proves
         # an applied regularization. Neither a title nor an observation is proof.
         aplicacao = AplicacaoAjuste.objects.filter(
@@ -253,6 +256,17 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     fontes = [vendas_q, removidos_q, devolvidos_removidos_q, devolucoes_q, manuais_q]
     if regularizacoes_q is not None:
         fontes.append(regularizacoes_q)
+    # A zero-effect receipt certifies stock without creating a manual movement.
+    # Keep integer round IDs in the UNION; the proposal UUID identifies the receipt.
+    if produto_id and inicio:
+        zeros = RodadaContagem.objects.filter(item__produto_id=produto_id,
+            propostas__estado='aplicado', propostas__aplicacao__isnull=True,
+            propostas__eventos_ajuste__acao='marco_sem_ajuste',
+            **periodo('propostas__eventos_ajuste__criado_em'))
+        fontes.append(normalizar(zeros.values('pk'), 'referencia_fisica',
+            TruncDate('propostas__eventos_ajuste__criado_em', tzinfo=FUSO_DOCUMENTOS),
+            F('propostas__eventos_ajuste__criado_em'),
+            documento=F('item__inventario_id'), referencia=Cast('propostas__pk', CharField())))
     if params.get('visual') != 'a' and rodada and rodada.ok_em and inicio and inicio < fim:
         # Include exactly this historical OK, even outside the selected interval.
         # UNION keeps chronological pagination in SQL, without loading all events.
@@ -269,10 +283,6 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
     pagina = Paginator(operacional, 50).get_page(params.get('extrato_pagina'))
     pagina.devolucao_sem_data = sem_data
     tecnicos_por_item = tecnicos_das_vendas(tecnicos, pagina) if timeline else {}
-    registros_aplicados = [l['pk'] for l in pagina if l['fonte'] == 'regularizacao']
-    aplicadas = {a.decisao.movimentacao_id: a for a in AplicacaoAjuste.objects.filter(
-        decisao__movimentacao_id__in=registros_aplicados).select_related(
-            'decisao__movimentacao', 'decisao__item')}
     for linha in pagina:
         fonte = linha['fonte']
         linha.update(entrada=None, saida=None, saldo=None, url='', classe='pendente', fonte_texto='Documento atual')
@@ -288,20 +298,10 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
                 nota='Quantidade documental · Responsável: ' + (linha['pessoa'] or 'Não disponível'),
                 url=reverse('estoque:venda_detalhe', args=[linha['documento']]))
             linha['registros_tecnicos'] = tecnicos_por_item.get(linha['pk'], [])
-        elif fonte == 'regularizacao':
-            aplicada = aplicadas[linha['pk']]
-            conferencia_id = aplicada.decisao.item.inventario_id
-            linha.update(titulo=f'Regularização — Conferência nº {conferencia_id}', classe='manual',
-                fonte_texto='Regularização de conferência efetivamente aplicada',
-                nota=f'Ajuste manual #{linha["pk"]} · Aplicação {aplicada.pk} · Lote {aplicada.lote}',
-                saldo=aplicada.depois, saldo_antes=aplicada.antes, saldo_unidade=aplicada.unidade,
-                saldo_tipo='Saldo registrado na aplicação',
-                saldo_evidencia=f'Aplicação vinculada à conferência. Registro manual original #{linha["pk"]}: {linha["antes"]} → {linha["depois"]}.',
-                saldo_aviso='Saldo histórico da aplicação; não representa o saldo atual.',
-                diferenca_aplicada=aplicada.diferenca, unidade=aplicada.unidade,
-                url=reverse('inventario:movimento_manual',
-                    args=[conferencia_id, aplicada.decisao.rodada_id, linha['pk']]),
-                movimentacao_em=aplicada.decisao.movimentacao.criado_em, aplicacao_registrada=aplicada)
+        elif fonte in ('regularizacao', 'referencia_fisica'):
+            linha.update(titulo='Referência física aplicada', classe='manual',
+                         fonte_texto='Referência física efetivamente aplicada',
+                         nota='Aplicação auditada; não é uma nova entrada ou saída.')
         elif fonte == 'manual':
             linha.update(titulo=f"Ajuste manual #{linha['documento']}" if linha['origem']=='ajuste' else f"Conferência manual #{linha['documento']}",
                 classe='manual', fonte_texto='Registro manual documentado',
@@ -333,30 +333,47 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
         if linha['cancelada']:
             linha['nota'] += ' · Cancelada atualmente'
         linha['detalhe_id'] = f"registro-{fonte}-{linha['pk']}"
-    if produto_id:
-        analisar(produto_id, pagina, fim)
-    if produto_id:
-        from .extrato_edicoes import apresentar_edicoes
-        apresentar_edicoes(pagina, produto_id)
-        from .extrato_unidades import apresentar_unidades
-        apresentar_unidades(pagina, produto_id)
-    apresentar_ajustes_manuais(pagina, produto_id)
-    pagina.saldo_inicial = evidencia_inicial(pagina, inicio)
-    evidencias = evidencias_documentais(comerciais, pagina)
-    apresentar_operacoes(pagina, evidencias)
-    def preparar(linhas):
-        if any(r['fonte'] == 'compra' for r in linhas):
+    from .extrato_edicoes import apresentar_edicoes
+    from .extrato_unidades import apresentar_unidades
+    # A receipt's identified observer may precede its effective document timestamp.
+    # Evidence is selected by document identity, never clipped to the visible
+    # interval. Use the same product-scoped source for visible and auxiliary rows.
+    associados_historicos = (associar_documentos(MovimentoObservado.objects.filter(produto_id=produto_id),
+        compras.model.objects.filter(produto_id=produto_id), vendas.model.objects.filter(produto_id=produto_id))
+        if produto_id else comerciais)
+    evidencias = evidencias_documentais(associados_historicos, pagina)
+    def preparar(linhas, evidencia=None):
+        if not linhas:
+            return
+        for r in linhas:
+            r.setdefault('saldo', None)
+            r.setdefault('entrada', None)
+            r.setdefault('saida', None)
+            r.setdefault('nota', '')
+            r.setdefault('titulo', f'{r["fonte"]} #{r.get("documento") or r["pk"]}')
+        if produto_id:
             analisar(produto_id, linhas, fim)
+            apresentar_edicoes(linhas, produto_id)
+            apresentar_unidades(linhas, produto_id)
         apresentar_ajustes_manuais(linhas, produto_id)
-        preparar_fluxos_historicos(linhas, produto_id)
+        if evidencia is None:
+            evidencia = evidencias_documentais(associados_historicos, linhas)
+        apresentar_operacoes(linhas, evidencia)
+        preparar_fluxos_historicos(linhas, produto_id, evidencia)
+        preparar_referencias(linhas, produto_id)
+    preparar(pagina, evidencias)
+    pagina.saldo_inicial = evidencia_inicial(pagina, inicio)
 
-    def consulta(de, ate, prefixo=False):
+    def consulta(de, ate, prefixo=False, corte_ate=None):
         # The same raw UNION is retained for balance continuity. Hiding evidence
         # must never turn an unknown operation into an assumed zero movement.
+        corte = limite_anterior(produto_id, corte_ate or ate) if prefixo else None
+        if corte:
+            de = corte
         vendas_consulta = vendas.model.objects.filter(produto_id=produto_id, venda__criado_em__lt=ate)
         removidos_consulta = removidos.model.objects.filter(produto_id=produto_id, criado_em__lt=ate)
         movimentos_consulta = movimentos.model.objects.filter(produto_id=produto_id, registrado_em__lt=ate)
-        if not prefixo:
+        if not prefixo or corte:
             vendas_consulta = vendas_consulta.filter(venda__criado_em__gte=de)
             removidos_consulta = removidos_consulta.filter(criado_em__gte=de)
             movimentos_consulta = movimentos_consulta.filter(registrado_em__gte=de)
@@ -364,29 +381,40 @@ def cronologia(compras, vendas, removidos, movimentos, params, selecionada, inic
             compras.model.objects.filter(produto_id=produto_id,
                 compra__estoque_entrada_realizada=True, compra__estoque_entrada_realizada_em__lt=ate),
             vendas_consulta, removidos_consulta, movimentos_consulta,
-            params, None, de, ate, produto_id=produto_id, _consulta=True if prefixo else 'intervalo')
+            params, None, de, ate, produto_id=produto_id,
+            _consulta=True if prefixo and not corte else 'intervalo')
 
     def chave(r):
         return (r['dia'], r['instante'], r['fonte'], r['ordem'], r['pk'])
 
-    linhas = list(pagina)
+    # The selected OK may be displayed outside the interval for information.
+    # It must never widen the documentary range or replace its opening boundary.
+    linhas = [r for r in pagina if r['fonte'] != 'conferencia' and inicio <= r['instante'] < fim]
     if linhas:
         primeira, ultima = chave(linhas[0]), chave(linhas[-1])
         visiveis = {chave(r): r for r in linhas}
         def anteriores_pagina():
-            anteriores = consulta(inicio, linhas[0]['instante'] + timedelta(microseconds=1), prefixo=True)
+            anteriores = consulta(inicio, linhas[0]['instante'] + timedelta(microseconds=1),
+                prefixo=True, corte_ate=linhas[0]['instante'])
             for r in anteriores.reverse().iterator(chunk_size=100):
                 if chave(r) < primeira:
                     yield r
         def registros_pagina():
             trecho = consulta(linhas[0]['instante'], linhas[-1]['instante'] + timedelta(microseconds=1))
-            for r in trecho.iterator(chunk_size=100):
-                k = chave(r)
-                if primeira <= k <= ultima:
-                    yield visiveis.get(k, r)
-        preparar_fluxos_historicos(pagina, produto_id, evidencias)
+            registros = trecho.iterator(chunk_size=100)
+            while lote := list(islice(registros, 100)):
+                selecionadas = [r for r in lote if primeira <= chave(r) <= ultima]
+                auxiliares = [r for r in selecionadas if chave(r) not in visiveis]
+                if auxiliares:
+                    preparar(auxiliares)
+                for r in selecionadas:
+                    yield visiveis.get(chave(r), r)
         aplicar_saldos_documentais(pagina, unificada, preparar_linhas=preparar,
             anteriores_pagina=anteriores_pagina, registros_pagina=registros_pagina)
+    elif inicio:
+        # An empty interval may still have a known opening balance.
+        aplicar_saldos_documentais(pagina, unificada, preparar_linhas=preparar,
+            anteriores_intervalo=lambda: consulta(inicio, inicio, prefixo=True))
     if timeline and rodada:
         from .saldos_apresentacao import apresentar, projetar_contagem
         apresentar(pagina, rodada)

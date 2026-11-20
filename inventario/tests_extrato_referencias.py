@@ -1,6 +1,7 @@
 """General extract rules with synthetic examples; never operational documents."""
 from datetime import timedelta
 from decimal import Decimal as D
+from fractions import Fraction
 from uuid import uuid4
 
 from django.db.models import F
@@ -80,15 +81,16 @@ class ReferenciasExtratoTests(CronologiaFixture, TestCase):
             self.assertEqual(venda['saldo_calculado']['valor'], 104-i)
         self.assertEqual(len({r['detalhe_id'] for r in linhas}), len(linhas))
 
-    def test_referencia_registrada_sobrevive_a_conversao_nao_correspondente(self):
+    def test_conversao_historica_preserva_fracao_e_baixa_arredondada(self):
         self.compra_com_referencia(1, 'UN', D('.083'), 12)
         linhas = list(self.resposta().context['extrato'])
         compra = next(r for r in linhas if r['fonte']=='compra')
-        self.assertIsNone(compra['saldo_calculado'])
+        self.assertEqual(compra['saldo_calculado']['_exato'], 5 + Fraction(1, 12))
+        self.assertEqual(compra['saldo_operacional_calculado']['valor'], D('5.083'))
         self.assertEqual(compra['registro_original']['depois'], D('5.083'))
         primeira = next(r for r in linhas if r['fonte']=='venda' and r['pk']==self.anterior.pk)
-        self.assertEqual(primeira['saldo_calculado']['valor'], D('4.083'))
-        self.assertIn('compra #', primeira['saldo_calculado']['origem'])
+        self.assertEqual(primeira['saldo_calculado']['_exato'], 4 + Fraction(1, 12))
+        self.assertIn('Registro #', primeira['saldo_calculado']['origem'])
 
     def test_observacoes_ambiguas_continuam_separadas(self):
         ItemVenda.objects.filter(pk=self.posterior.pk).update(quantidade=10, unidade='UN',

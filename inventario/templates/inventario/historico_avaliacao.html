@@ -1,0 +1,9 @@
+{% if registro.operacao_historica %}{% with prova=registro.operacao_historica %}
+<p>Quantidade documental: {{ prova.quantidade }} {{ prova.unidade_entrada }}.
+{% if prova.fator %}Conversão histórica comprovada pelo fator {{ prova.fator }}.
+Quantidade exata na unidade-base: {{ prova.exato }} {{ prova.unidade }}.
+Variação operacional registrada: {{ prova.operacional }} {{ prova.unidade }}.
+O cálculo documental preserva a fração; a operação registrada usa três casas decimais.{% endif %}</p>
+{% endwith %}{% elif registro.avaliacao_historica.operacional %}
+<p>Saldo operacional comprovado pelo registro. A baixa registrada não comprova, por si só, o fator de conversão documental.</p>
+{% endif %}

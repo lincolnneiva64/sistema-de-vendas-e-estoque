@@ -4,9 +4,9 @@ import re
 from django.db.models import BooleanField, Case, When, CharField, Exists, F, OuterRef, Subquery, Value, Q
 from django.db.models.functions import Cast, Coalesce, Concat
 
-from estoque.models import EventoVenda, ItemCompra, ItemVenda
+from estoque.models import EdicaoCompra, EventoVenda, ItemCompra, ItemVenda
 from .models import MovimentoObservado, DetalheMovimentoEstoque
-from .saldo_documental import unidade as unidade_documental, quantidade_historica, saida_realizada
+from .saldo_documental import unidade as unidade_documental, saida_realizada, provar_atribuicao, provar_entrada_legada, decimal_fracao
 
 
 
@@ -106,7 +106,9 @@ def associar_documentos(movimentos, compras, vendas):
         pk=OuterRef('item_venda_operacional'), estoque_antes=OuterRef('antes'),
         estoque_depois=OuterRef('depois'), estoque_movimentado__gt=0).filter(
         estoque_depois=F('estoque_antes') - F('estoque_movimentado'),
-        venda__cancelada=False, venda__estoque_devolvido_cancelamento=False)
+        venda__cancelada=False, venda__estoque_devolvido_cancelamento=False).annotate(
+            edicao_alvo=Exists(edicoes_do_produto(OuterRef('produto__nome'), venda_id=OuterRef('venda_id')))
+        ).filter(edicao_alvo=False)
     compras_coerentes = compras.filter(produto_id=OuterRef('produto_id'),
         pk=OuterRef('item_compra_operacional'), quantidade__gt=0).filter(
         quantidade=OuterRef('detalhe__quantidade_entrada')
@@ -114,12 +116,18 @@ def associar_documentos(movimentos, compras, vendas):
     compras_legadas = compras.filter(produto_id=OuterRef('produto_id'),
         pk=OuterRef('item_compra_operacional'), quantidade__gt=0).annotate(
         variacao=OuterRef('depois') - OuterRef('antes')).filter(quantidade=F('variacao'))
+    vendas_atuais = vendas.filter(pk=OuterRef('item_venda_operacional'),
+        produto_id=OuterRef('produto_id'), venda__cancelada=False,
+        venda__estoque_devolvido_cancelamento=False,
+        quantidade=OuterRef('detalhe__quantidade_entrada'), unidade=OuterRef('detalhe__unidade_entrada')).annotate(
+            edicao_alvo=Exists(edicoes_do_produto(OuterRef('produto__nome'), venda_id=OuterRef('venda_id')))
+        ).filter(edicao_alvo=False)
     documento = (
         Q(origem='compra', detalhe__acao='entrada') & Exists(compras_coerentes)
         | Q(origem='compra', detalhe__isnull=True) & Exists(compras_legadas)
         | (Q(origem__in=('venda', 'consumo_proprio'), detalhe__acao='saida',
-             detalhe__documento_tipo='venda', item_venda_operacional__isnull=False) & ~Q(item_atribuido=''))
-        | Q(origem__in=('venda', 'consumo_proprio')) & Exists(vendas_coerentes))
+             detalhe__documento_tipo='venda', item_venda_operacional__isnull=False) & ~Q(item_atribuido='') & Exists(vendas_atuais))
+        | Q(origem__in=('venda', 'consumo_proprio'), detalhe__isnull=True) & Exists(vendas_coerentes))
     return movimentos.annotate(operacao_ambigua=Case(
         When(origem='devolucao_venda', detalhe__acao__in=('devolucao', 'cancelamento'),
              depois__gt=F('antes'), then=Value(True)),
@@ -166,7 +174,7 @@ def apresentar_operacoes(pagina, evidencias):
             if detalhe and m.depois is not None and unidade_documental(detalhe.unidade_base):
                 r['saldo_registrado_documento'] = dict(valor=m.depois,
                     unidade=unidade_documental(detalhe.unidade_base), origem=f'Registro #{m.pk}')
-        if (fonte == 'digital' and not r.get('independente') and r['origem'] in ('compra', 'venda', 'consumo_proprio', 'devolucao_venda')
+        if (fonte == 'digital' and not r.get('independente') and not r.get('unidade_comprovada') and r['origem'] in ('compra', 'venda', 'consumo_proprio', 'devolucao_venda')
                 and re.fullmatch(r'(Compra|Venda) #\d+', r['referencia'])):
             # An unpaired observer is evidence, not another documentary sale/receipt.
             r['evidencia_comercial_nao_consolidada'] = True
@@ -193,12 +201,13 @@ def preparar_fluxos_historicos(linhas, produto_id, evidencias=None):
                 unidade=r.get('saldo_unidade', ''))
     docs = {(r['fonte'], str(r['documento']), str(r['pk'])): r for r in linhas
             if r['fonte'] in ('compra', 'venda') and not r.get('cancelada')}
-    if not docs:
-        return
     if evidencias is None:
         associados = associar_documentos(MovimentoObservado.objects.filter(produto_id=produto_id),
             ItemCompra.objects.filter(produto_id=produto_id), ItemVenda.objects.filter(produto_id=produto_id))
         evidencias = evidencias_documentais(associados, linhas)
+    compras_legadas = [r['documento'] for r in linhas if r['fonte'] == 'compra'
+        and evidencias.get(('compra', r['pk']))]
+    editadas = set(EdicaoCompra.objects.filter(compra_id__in=compras_legadas).values_list('compra_id', flat=True))
     for r in linhas:
         if r['fonte'] == 'venda':
             r['registro_original'] = dict(antes=r.get('referencia_antes'), depois=r.get('referencia_depois'),
@@ -207,11 +216,16 @@ def preparar_fluxos_historicos(linhas, produto_id, evidencias=None):
         if len(vinculados) == 1:
             m = vinculados[0]
             d = getattr(m, 'detalhe', None)
+            if r['fonte'] == 'compra' and not d and r['documento'] not in editadas and not r.get('cancelada'):
+                prova = provar_entrada_legada(r, m)
+                if prova:
+                    r.update(operacao_historica=prova, fluxo_documental_exato=prova['exato'])
             if r['fonte'] == 'compra' or (r['fonte'] == 'venda' and
                     r.get('referencia_antes') is None and r.get('referencia_depois') is None):
                 r['registro_original'] = dict(antes=m.antes, depois=m.depois,
                     movimentado=abs(m.depois-m.antes) if m.antes is not None and m.depois is not None else None,
-                    unidade=unidade_documental(d.unidade_base) if d else '')
+                    unidade=unidade_documental(d.unidade_base) if d else
+                        r.get('operacao_historica', {}).get('unidade', ''))
             elif r['fonte'] == 'venda':
                 original = r['registro_original']
                 for campo in ('antes', 'depois'):
@@ -224,27 +238,75 @@ def preparar_fluxos_historicos(linhas, produto_id, evidencias=None):
         if r.get('saldo_tipo') == 'Reconstruído e corroborado':
             r['referencia_historica'] = dict(antes=r['saldo_antes'], valor=r['saldo'],
                 unidade=r['saldo_unidade'], origem=r['saldo_evidencia'])
+    digitais = {r['pk']: r for r in linhas if r['fonte'] == 'digital'}
+    retornos = [r for r in linhas if r['fonte'] == 'cancelamento']
+    filtro = (Q(documento_tipo__in=('compra', 'venda'), documento_id__in={k[1] for k in docs},
+                item_referencia__in={k[2] for k in docs}) | Q(movimento_id__in=digitais) |
+              Q(documento_tipo='venda', documento_id__in={str(r['documento']) for r in retornos},
+                movimento__registrado_em__in={r['instante'] for r in retornos},
+                acao__in=('cancelamento', 'devolucao')))
+    detalhes = list(DetalheMovimentoEstoque.objects.filter(filtro,
+        movimento__produto_id=produto_id).select_related('movimento'))
+    digitais_detalhados = [d for d in detalhes if d.movimento_id in digitais or retornos]
+    vinculos = set()
+    for tipo, modelo, campo in (('compra', ItemCompra, 'compra_id'), ('venda', ItemVenda, 'venda_id')):
+        ids = [int(d.item_referencia) for d in digitais_detalhados
+               if d.documento_tipo == tipo and d.item_referencia.isdigit()]
+        if ids:
+            vinculos.update((tipo, str(pk), str(doc)) for pk, doc in modelo.objects.filter(
+                produto_id=produto_id, pk__in=ids).values_list('pk', campo))
     encontrados = {}
-    for d in DetalheMovimentoEstoque.objects.filter(
-            movimento__produto_id=produto_id,
-            documento_tipo__in=('compra', 'venda'),
-            documento_id__in={k[1] for k in docs},
-            item_referencia__in={k[2] for k in docs}).select_related('movimento'):
+    for d in detalhes:
         encontrados.setdefault((d.documento_tipo, d.documento_id, d.item_referencia), []).append(d)
     for chave, r in docs.items():
         candidatos = encontrados.get(chave, [])
+        if candidatos and not evidencias.get((r['fonte'], r['pk'])):
+            # A document is not an event ID. Its attributed observers remain
+            # separate when edited, repeated or outside this display interval.
+            # Never apply the mutable document operand on top of those events.
+            r.update(documento_atual=True, informacao_sem_efeito=True)
         if len(candidatos) != 1:
             continue
         d = candidatos[0]
         direcao = 1 if r['fonte'] == 'compra' else -1
         if d.acao != ('entrada' if direcao == 1 else 'saida'):
             continue
-        valor = quantidade_historica(d, r['quantidade'], r['unidade'])
         m = d.movimento
-        if (valor is not None and valor >= 0 and d.quantidade_entrada == r['quantidade']
-                and m.antes is not None and m.depois is not None
-                and m.depois - m.antes == direcao * valor):
-            r['fluxo_historico'] = (direcao * valor, unidade_documental(d.unidade_base))
+        prova = provar_atribuicao(d)
+        if prova is None:
+            r['fluxo_invalido'] = True
+        if (prova and d.quantidade_entrada == r['quantidade']
+                and unidade_documental(r['unidade']) == unidade_documental(d.unidade_entrada)
+                and m.origem == ('compra' if direcao == 1 else 'consumo_proprio'
+                    if r.get('origem') == 'consumo_proprio' else 'venda')):
+            r['fluxo_historico'] = (decimal_fracao(prova['exato']), prova['unidade'])
+            r['fluxo_documental_exato'] = prova['exato']
+            r['operacao_historica'] = prova
             if len(evidencias.get((r['fonte'], r['pk']), [])) == 1:
                 r['referencia_historica'] = dict(antes=m.antes, valor=m.depois,
                     unidade=unidade_documental(d.unidade_base), origem=f'Registro #{m.pk} · {r["fonte"]} #{r["documento"]}')
+    # Each immutable attributed observer is a separate event, including returns.
+    # A current edited/cancelled note is information, never another stock debit.
+    for r in linhas:
+        if r.get('documento_atual') and not evidencias.get((r['fonte'], r['pk'])):
+            r['informacao_sem_efeito'] = True
+    for d in detalhes:
+        m = d.movimento
+        r = digitais.get(m.pk)
+        prova = (provar_atribuicao(d) if (d.documento_tipo, d.item_referencia, d.documento_id) in vinculos else None)
+        if (r and prova and d.documento_tipo in ('compra', 'venda')
+                and m.origem in ('compra', 'venda', 'consumo_proprio', 'devolucao_venda')
+                and ((m.origem == 'compra' and d.acao == 'entrada')
+                     or (m.origem in ('venda', 'consumo_proprio') and d.acao == 'saida')
+                     or (m.origem == 'devolucao_venda' and d.acao in ('devolucao', 'cancelamento')))):
+            r.update(operacao_historica=prova, fluxo_documental_exato=prova['exato'],
+                fluxo_historico=(decimal_fracao(prova['exato']), prova['unidade']),
+                referencia_historica=dict(antes=m.antes, valor=m.depois, unidade=prova['unidade'], origem=f'Registro #{m.pk}'))
+            r['registro_original']['unidade'] = prova['unidade']
+            r['evidencia_comercial_nao_consolidada'] = False
+        if prova and m.origem == 'devolucao_venda' and d.acao in ('cancelamento', 'devolucao'):
+            for resumo in retornos:
+                if str(resumo['documento']) == d.documento_id and resumo['instante'] == m.registrado_em:
+                    resumo['informacao_sem_efeito'] = True
+                    resumo.update(saldo_aviso='Cancelamento representado pelo movimento identificado no mesmo instante.',
+                                  saldo_continuidade='')

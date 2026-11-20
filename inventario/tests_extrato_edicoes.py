@@ -221,7 +221,9 @@ class EdicoesTests(fixtures.CronologiaFixture, TestCase):
         with CaptureQueriesContext(connection) as consultas:
             self.resposta()
         self.assertLessEqual(len(consultas), total+1)
-        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT', '(SELECT')) for q in consultas))
+        # PostgreSQL streams the same read-only SELECT through a named cursor.
+        self.assertTrue(all(q['sql'].lstrip().upper().startswith(
+            ('SELECT', '(SELECT', 'DECLARE ', 'FETCH ', 'CLOSE ')) for q in consultas))
 
     def test_atual_mais_devolucao_nao_prova_original(self):
         self.preparar()

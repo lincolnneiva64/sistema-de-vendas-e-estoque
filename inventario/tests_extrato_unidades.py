@@ -260,7 +260,9 @@ class UnidadesTests(UnidadesFixture, TestCase):
             r = self.resposta_unidades()
         self.assertEqual(len(r.context['extrato']), 50)
         self.assertLessEqual(len(muitas), len(poucas)+1)
-        self.assertTrue(all(q['sql'].lstrip().upper().startswith(('SELECT', '(SELECT')) for q in muitas))
+        # Server-side cursor statements are reads, not stock writes.
+        self.assertTrue(all(q['sql'].lstrip().upper().startswith(
+            ('SELECT', '(SELECT', 'DECLARE ', 'FETCH ', 'CLOSE ')) for q in muitas))
         r2 = self.resposta_unidades(extrato_pagina=2)
         self.assertEqual(r.context['extrato'].paginator.count,
             len(r.context['extrato'])+len(r2.context['extrato']))

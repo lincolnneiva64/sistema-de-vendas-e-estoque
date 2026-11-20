@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_date
 
 from estoque.documentos_horarios import FUSO_DOCUMENTOS
 from estoque.models import ItemVenda, ItemVendaRemovido, MovimentacaoEstoqueManual
-from .models import MovimentoObservado
+from .models import MovimentoObservado, EventoAjuste, AplicacaoAjuste
 
 
 MODOS = ('ultima', 'tres_compras', 'personalizado', 'completo', 'compra')
@@ -50,7 +50,11 @@ def selecionar(params, referencia, selecionada, documentos, produto_id, limite=N
             (ItemVenda.objects.filter(produto_id=produto_id), 'venda__estoque_devolvido_cancelamento_em'),
             (ItemVendaRemovido.objects.filter(produto_id=produto_id), 'criado_em'),
             (MovimentoObservado.objects.filter(produto_id=produto_id), 'registrado_em'),
-            (MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id), 'criado_em'))
+            (MovimentacaoEstoqueManual.objects.filter(produto_id=produto_id), 'criado_em'),
+            (EventoAjuste.objects.filter(proposta__rodada__item__produto_id=produto_id,
+                proposta__estado='aplicado', acao='marco_sem_ajuste'), 'criado_em'),
+            (AplicacaoAjuste.objects.filter(proposta__rodada__item__produto_id=produto_id,
+                proposta__estado='aplicado'), 'aplicado_em'))
         for qs, campo in fontes:
             valor = qs.filter(**{campo+'__lte': limite}).aggregate(inicio=Min(campo))['inicio']
             if valor:

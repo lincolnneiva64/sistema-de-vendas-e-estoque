@@ -199,12 +199,14 @@ class VisibilidadeDivergenciasTests(CronologiaFixture, TestCase):
         resposta = self.resposta()
         linha = next(r for r in resposta.context['extrato']
                      if r['fonte']=='venda' and r['pk']==self.posterior.pk)
-        self.assertEqual(linha['saldo_calculado']['valor'], 19)
+        # Conflicting observer and current snapshot do not prove the original
+        # operand. The current note is informational; keep the genuine gap.
+        self.assertIsNone(linha['saldo_calculado'])
         self.assertEqual(linha['saldo_registrado_operacional']['valor'], 9)
-        self.assertTrue(linha['saldo_divergente'])
+        self.assertFalse(linha['saldo_divergente'])
         self.assertContains(resposta, 'Documental calculado')
         self.assertContains(resposta, 'Saldo registrado')
-        self.assertContains(resposta, 'Divergência entre saldo documental e registrado')
+        self.assertContains(resposta, 'Não determinável neste trecho')
 
     def test_compra_com_observacao_divergente_permanece_visivel(self):
         MovimentoObservado.objects.filter(pk=self.tecnico.pk).update(origem='compra',
