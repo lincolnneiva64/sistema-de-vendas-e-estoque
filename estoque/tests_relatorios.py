@@ -384,7 +384,8 @@ class ResumoVendasTests(PostgreSQLIsoladoTests, TestCase):
         with self.assertNumQueries(0):
             resposta = self.request('/relatorios/', {}, views_relatorios.inicio)
         self.assertContains(resposta, 'Resumo de vendas')
-        self.assertContains(resposta, 'Em preparação', count=5)
+        self.assertContains(resposta, 'Em preparação', count=4)
+        self.assertContains(resposta, '/relatorios/produtos/')
         self.assertNotContains(resposta, 'relatorios-graficos')
         with self.assertNumQueries(0):
             resposta = self.request(params={'periodo': 'personalizado', 'data_inicial': 'erro'})

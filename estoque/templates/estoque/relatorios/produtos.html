@@ -1,0 +1,60 @@
+{% extends 'estoque/relatorios/base.html' %}
+{% load static l10n relatorios %}
+{% block classe_relatorios %}relatorios-produtos{% endblock %}
+{% block relatorio %}
+<h1>Vendas por produto</h1>
+<p>Itens das notas comerciais atuais, pela data da venda. Cancelamentos e consumo próprio estão excluídos. Faturamento não representa recebimento.</p>
+<form method="get" action="{% url 'estoque:relatorios_produtos' %}#resultados-produtos" class="relatorios-filtros" id="relatorios-filtros-vendas" data-produtos-sugestoes="{% url 'estoque:relatorios_produtos_sugestoes' %}" data-ranking-pagina="{{ ranking.linhas.number|default:1 }}" data-produto-analise-base="{% url 'estoque:relatorios_produtos' %}">
+  {{ form.non_field_errors }}
+  {% for campo in form %}<div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}
+  {% for campo in busca %}{% if campo.is_hidden %}{{ campo }}{{ campo.errors }}{% else %}<div {% if campo.name == 'q' %}class="relatorios-produto-busca"{% endif %}><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}
+    {% if campo.name == 'q' %}<div id="relatorios-produtos-sugestoes" class="relatorios-produto-sugestoes" role="listbox" aria-label="Produtos cadastrados" hidden></div>{% endif %}
+  </div>{% endif %}{% endfor %}
+  {% for nome, valor in opcoes_grafico.items %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}
+  <button type="submit">Consultar</button>
+  <a class="relatorios-produto-analisar" data-produto-analisar {% if analise_url %}href="{{ analise_url }}"{% else %}hidden{% endif %}>Abrir análise individual</a>
+  <p id="relatorios-produto-pesquisa-ajuda" data-produto-pesquisa-status role="status">Selecione uma sugestão para analisar um produto ou clique em Consultar para pesquisar pelo nome no ranking.</p>
+</form>
+{{ periodos_datas|json_script:'relatorios-periodos-datas' }}
+<script defer src="{% static 'estoque/relatorios-filtros.js' %}"></script>
+<script defer src="{% static 'estoque/relatorios-produtos-pesquisa.js' %}"></script>
+{% if ranking %}
+<p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong></p>
+<p data-produto-filtro-aplicado><strong>Última consulta:</strong> {% if produto_selecionado %}{{ produto_selecionado.nome }} · produto selecionado.{% elif busca.q.value %}Nomes contendo “{{ busca.q.value }}”.{% else %}Todos os produtos.{% endif %} {{ ranking.linhas.paginator.count }} resultado(s) por produto e unidade.</p>
+<p>Cada linha corresponde a um produto e uma unidade registrada. Não convertemos embalagens em avulsos. Quantidades e preços médios de unidades diferentes ficam separados. Vendas distintas são contadas uma vez por produto e unidade em cada nota.</p>
+{% if busca.ordem.value == 'quantidade' %}<p class="relatorios-aviso">Quantidades ordenadas da maior para a menor dentro de cada unidade. Unidades diferentes não são comparáveis.</p>{% endif %}
+<form method="get" action="{% url 'estoque:relatorios_produtos' %}#resultados-produtos" class="relatorios-filtro-rapido" id="relatorios-filtrar-produtos">
+  {% for nome, valor in filtro_rapido_campos %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}
+  <label for="filtrar-produtos">Filtrar produtos</label>
+  <input type="search" id="filtrar-produtos" name="q" value="{{ busca.q.value|default_if_none:'' }}" maxlength="120" placeholder="Nome ou parte do nome">
+  <button type="submit">Filtrar</button>
+</form>
+<div id="resultados-produtos" class="relatorios-tabela ranking-produtos" role="region" aria-label="Ranking dos produtos" tabindex="0">
+<table><caption>Participação sobre o faturamento comercial de todas as notas do período, mesmo com pesquisa.</caption>
+<thead><tr><th scope="col">Produto</th><th scope="col">Quantidade</th><th scope="col">Unidade</th><th scope="col">Faturamento</th><th scope="col">Participação</th><th scope="col">Vendas distintas</th><th scope="col">Preço médio efetivo</th></tr></thead>
+<tbody>{% for linha in ranking.linhas %}<tr>
+  <th scope="row">{% if linha.produto_id %}<a href="{% url 'estoque:relatorios_produto' linha.produto_id %}?{{ filtros_query }}&amp;unidade={{ linha.unidade_comercial|urlencode }}&amp;ranking={{ ranking_query|urlencode }}">{{ linha.produto__nome }}</a>{% else %}Produto não identificado{% endif %}</th>
+  <td data-label="Quantidade">{% if linha.quantidade != None %}{{ linha.quantidade|quantidade_br }}{% else %}Não comparável{% endif %}</td>
+  <td data-label="Unidade">{{ linha.unidade_comercial|default:'Não informada' }}</td>
+  <td data-label="Faturamento">{{ linha.faturamento|moeda_br }}</td>
+  <td data-label="Participação">{% if linha.participacao != None %}{{ linha.participacao|numero_br }}%{% else %}Não calculável{% endif %}</td>
+  <td data-label="Vendas distintas">{{ linha.vendas }}</td>
+  <td data-label="Preço médio efetivo">{% if linha.preco_medio != None %}{{ linha.preco_medio|moeda_br }} / {{ linha.unidade_comercial }}{% else %}Não comparável{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="7">Nenhum item comercial encontrado neste período e pesquisa.</td></tr>{% endfor %}</tbody></table></div>
+{% if ranking.linhas.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Páginas do ranking">
+{% if ranking.linhas.has_previous %}<a href="?{{ filtros_query }}&amp;pagina={{ ranking.linhas.previous_page_number|unlocalize }}#resultados-produtos">Anterior</a>{% endif %}
+<span>Página {{ ranking.linhas.number }} de {{ ranking.linhas.paginator.num_pages }}</span>
+{% if ranking.linhas.has_next %}<a href="?{{ filtros_query }}&amp;pagina={{ ranking.linhas.next_page_number|unlocalize }}#resultados-produtos">Próxima</a>{% endif %}
+</nav>{% endif %}
+<section class="relatorios-conciliacao" aria-labelledby="conciliacao-produtos"><h2 id="conciliacao-produtos">Conferência com o Resumo de Vendas</h2>
+<p><strong>Total geral do período: não muda com a pesquisa de produto.</strong></p>
+<dl><div><dt>Itens com produto identificado</dt><dd>{{ ranking.identificados|moeda_br }}</dd></div>
+<div><dt>Itens sem produto identificado</dt><dd>{{ ranking.nao_identificados|moeda_br }}</dd></div>
+<div><dt>Total de todos os itens comerciais</dt><dd>{{ ranking.total_itens|moeda_br }}</dd></div>
+<div><dt>Diferença entre totais das notas e itens</dt><dd>{{ ranking.diferenca|moeda_sinal_br }}</dd></div>
+<div><dt>Faturamento comercial do Resumo de Vendas</dt><dd>{{ ranking.comercial|moeda_br }}</dd></div></dl>
+<p>A conferência inclui todos os produtos do período, independentemente da pesquisa e da página. Usamos o valor total registrado em cada item, sem refazer quantidade × preço. Eventuais diferenças não são distribuídas artificialmente entre produtos; os documentos devem comprovar sua origem.</p>
+{% if ranking.sem_total %}<p class="relatorios-aviso">Há notas sem total registrado. A reconciliação está incompleta.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

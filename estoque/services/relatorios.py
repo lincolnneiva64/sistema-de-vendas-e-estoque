@@ -25,10 +25,10 @@ VISTA = ('avista', 'dinheiro', 'especie', 'pix', 'banco', 'transferencia',
          'cartao', 'debito', 'credito', 'boleto', 'deposito')
 
 
-def _grupo_pagamento():
+def _grupo_pagamento(campo='tipo_pagamento'):
     # Normalização no banco: não transfere vendas individuais ao Python.
     # Traduz também maiúsculas antes de Lower: funciona inclusive em collation C.
-    sem_acentos = Func(Coalesce(F('tipo_pagamento'), Value('')),
+    sem_acentos = Func(Coalesce(F(campo), Value('')),
                        Value('áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ'),
                        Value('aaaaaeeeeiiiiooooouuuucaaaaaeeeeiiiiooooouuuuc'), function='TRANSLATE', output_field=CharField())
     return Func(Lower(sem_acentos), Value(r'[\s_]'), Value(''), Value('g'),

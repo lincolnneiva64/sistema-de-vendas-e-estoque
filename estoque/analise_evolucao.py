@@ -45,14 +45,17 @@ def referencia_historica(a, b, parcial, modo, dia_semana, comparacao):
         return None
 
 
-def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao='anterior', *, inicio_registros=None):
+def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao='anterior', *, inicio_registros=None, precisao=Decimal(".01"), rotulo_valor='faturamento', dias_cobertos=None):
     """One daily aggregate, prefix sums and bounded visible DOM; no sales fetched.
 
     No documents is unknown, not certified zero. Null totals also interrupt
     comparisons. A documented zero remains a valid numeric reference.
+    Product series may supply independent commercial coverage dates: a day
+    covered by valid commercial documents certifies zero product activity.
     """
     periodos = list(periodos_historicos(inicio, fim, hoje, modo, dia_semana))
     linhas = sorted(dias, key=lambda d: d['data_venda'])
+    cobertura_datas = sorted(set(dias_cobertos)) if dias_cobertos is not None else None
     datas, valores, registros, ausentes = [], [ZERO], [0], [0]
     for d in linhas:
         datas.append(d['data_venda'])
@@ -62,10 +65,10 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
 
     def total(a, b):
         i, j = bisect_left(datas, a), bisect_right(datas, b)
-        if registros[j] == registros[i]:
+        if registros[j] == registros[i] and not (cobertura_datas is not None and cobertura(a, b)):
             return None, 'Sem histórico registrado neste período.'
         if ausentes[j] != ausentes[i]:
-            return None, 'Há documentos sem total: faturamento incompleto.'
+            return None, f'Há documentos sem total: {rotulo_valor} incompleto.'
         return valores[j]-valores[i], ''
 
     def cobertura(a, b):
@@ -73,12 +76,15 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
         # Only explicit daily records (with valid totals) support equivalence;
         # a day without documents may be closed or missing, never assumed zero.
         i, j = bisect_left(datas, a), bisect_right(datas, b)
+        if cobertura_datas is not None:
+            cobertos = bisect_right(cobertura_datas, b)-bisect_left(cobertura_datas, a)
+            return cobertos == (b-a).days+1 and ausentes[j] == ausentes[i]
         return j-i == (b-a).days+1 and ausentes[j] == ausentes[i]
 
     def indicadores(a, b, valor, situacao):
         i, j = bisect_left(datas, a), bisect_right(datas, b)
         quantidade = registros[j]-registros[i]
-        if not quantidade:
+        if not quantidade and not (cobertura_datas is not None and cobertura(a, b)):
             return None
         corrente = a.year == hoje.year and a.month == hoje.month and b == hoje
         base_a = max(a, inicio_registros) if inicio_registros else a
@@ -88,8 +94,8 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
         encerrados = total(base_a, base_b)[0] if base_valida else None
         media = encerrados/dias_base if base_valida else None
         dados = dict(quantidade=quantidade,
-            ticket_medio=(valor/quantidade).quantize(Decimal('.01')) if valor is not None else None,
-            media_diaria=media.quantize(Decimal('.01')) if media is not None else None,
+            ticket_medio=(valor/quantidade).quantize(precisao) if valor is not None and quantidade else None,
+            media_diaria=media.quantize(precisao) if media is not None else None,
             dias_media=dias_base if base_valida else 0,
             media_inicio=base_a.isoformat() if base_valida else None,
             media_fim=base_b.isoformat() if base_valida else None,
@@ -103,7 +109,7 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
                     a.replace(day=1) < inicio_registros <= b and a <= inicio_registros and
                     base_valida and valor is not None):
                 dados['equivalente_teorico'] = dict(
-                    valor=(media*ultimo.day).quantize(Decimal('.01')),
+                    valor=(media*ultimo.day).quantize(precisao),
                     rotulo='Equivalente teórico', dias_calendario=ultimo.day, dias_base=dias_base,
                     inicio=base_a.isoformat(), fim=base_b.isoformat(),
                     metodologia='Ritmo diário do intervalo comprovado × dias do calendário do mês. Equivalência matemática; não representa vendas realizadas nem previsão de um mês já encerrado.')
@@ -120,7 +126,7 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
             previsao['motivo'] = 'Há documentos sem total registrado.'
         else:
             restantes = monthrange(hoje.year, hoje.month)[1]-hoje.day
-            previsao.update(valor=(valor+media*restantes).quantize(Decimal('.01')),
+            previsao.update(valor=(valor+media*restantes).quantize(precisao),
                 realizado=valor, encerrados=encerrados, hoje=total(hoje, hoje)[0], dias_restantes=restantes)
             if a > date.min:
                 anterior_b = a-timedelta(days=1)
@@ -129,7 +135,7 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
                 anterior = total(anterior_a, anterior_b)[0]
                 if anterior is not None and cobertura(anterior_a, anterior_b):
                     previsao.update(anterior=anterior,
-                        diferenca=(previsao['valor']-anterior).quantize(Decimal('.01')),
+                        diferenca=(previsao['valor']-anterior).quantize(precisao),
                         variacao=variacao(previsao['valor'], anterior))
                 else:
                     previsao['motivo_comparacao'] = 'Períodos não equivalentes: mês anterior completo sem cobertura comprovada.'
@@ -165,9 +171,9 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
                 elif modo == 'mensal' and not cobertura(anterior_a, anterior_b):
                     item['motivo'] = 'Períodos não equivalentes — cobertura diária da referência não comprovada.'
                 else:
-                    item.update(diferenca=(valor-anterior).quantize(Decimal('.01')),
+                    item.update(diferenca=(valor-anterior).quantize(precisao),
                         variacao=variacao(valor, anterior),
-                        motivo='Percentual não calculável: faturamento anterior zero ou negativo.' if anterior <= ZERO else '',
+                        motivo=f'Percentual não calculável: {rotulo_valor} anterior zero ou negativo.' if anterior <= ZERO else '',
                         comparacao=dict(tipo='parcial' if parcial else 'completa',
                             rotulo='Parcial equivalente' if parcial else 'Completa vs completa',
                             inicio=a.isoformat(), fim=b.isoformat(), atual=valor, anterior=anterior,
@@ -186,7 +192,7 @@ def analisar_historico(dias, inicio, fim, hoje, modo, dia_semana=-1, comparacao=
         titulo='Todos os dias' if modo == 'diario' and dia_semana == -1 else DIAS[dia_semana] if modo == 'diario' else
             'Semanas' if modo == 'semanal' else 'Meses', itens=itens,
         comparacao_mensal=comparacao, inicio_registros=inicio_registros, cobertura_mensal=modo == 'mensal',
-        media=(sum(completos, ZERO)/len(completos)).quantize(Decimal('.01')) if completos else None,
+        media=(sum(completos, ZERO)/len(completos)).quantize(precisao) if completos else None,
         quantidade_completos=len(completos), minimo=min(numeros), maximo=max(numeros),
         comparavel=any(i['variacao'] is not None for i in itens),
         comparacao_disponivel=any(i['comparacao'] for i in itens))

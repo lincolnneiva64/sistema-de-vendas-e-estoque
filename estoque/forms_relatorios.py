@@ -7,6 +7,43 @@ from django.utils import timezone
 
 
 BELEM = ZoneInfo('America/Belem')
+
+
+class RankingProdutosForm(forms.Form):
+    q = forms.CharField(label='Nome do produto', required=False, max_length=120,
+                        widget=forms.TextInput(attrs={'type': 'search', 'placeholder': 'Pesquisar produto'}))
+    produto_id = forms.IntegerField(required=False, min_value=1, widget=forms.HiddenInput)
+    ordem = forms.ChoiceField(label='Ordenar por', choices=(('faturamento', 'Maior faturamento'),
+        ('quantidade', 'Quantidade: maior primeiro, por unidade comercial'), ('vendas', 'Mais vendas'),
+        ('nome_az', 'Nome do produto (A–Z)'), ('nome_za', 'Nome do produto (Z–A)')))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['q'].error_messages['max_length'] = 'Use até 120 caracteres no nome do produto.'
+        self.fields['produto_id'].error_messages.update(
+            invalid='Escolha um produto válido.', min_value='Escolha um produto válido.')
+        self.fields['ordem'].error_messages.update(
+            required='Escolha a ordenação.', invalid_choice='Escolha uma ordenação válida.')
+
+
+class MedidaProdutoForm(forms.Form):
+    medida = forms.ChoiceField(label='Mostrar no gráfico', choices=(('faturamento', 'Faturamento em reais'),
+        ('quantidade', 'Quantidade vendida'), ('vendas', 'Número de vendas')))
+    unidade = forms.ChoiceField(label='Unidade comercial da quantidade', required=False)
+
+    def __init__(self, data=None, *, unidades=(), **kwargs):
+        if data is not None:
+            data = data.copy()
+            if not data.get('unidade') and len(unidades) == 1:
+                data['unidade'] = unidades[0]
+        super().__init__(data, **kwargs)
+        self.fields['unidade'].choices = [('', 'Escolha a unidade'), *((u, u) for u in unidades)]
+
+    def clean(self):
+        dados = super().clean()
+        if dados.get('medida') == 'quantidade' and not dados.get('unidade'):
+            self.add_error('unidade', 'Escolha a unidade para comparar quantidades sem misturar embalagens e avulsos.')
+        return dados
 PERIODOS = (
     ('hoje', 'Hoje'), ('dias_7', 'Últimos 7 dias'),
     ('dias_30', 'Últimos 30 dias'), ('dias_60', 'Últimos 60 dias'),
@@ -106,3 +143,23 @@ class PeriodoRelatorioForm(forms.Form):
             self.add_error('data_final', 'A data final deve ser igual ou posterior à inicial.')
         dados['inicio'], dados['fim'] = inicio, fim
         return dados
+
+
+class PeriodoRankingProdutosForm(PeriodoRelatorioForm):
+    """Normalize omitted URL defaults, never an explicitly invalid selection.
+
+    A bound select without an empty choice visually picks its first option
+    even when the query omitted the required value. Keep errors and displayed
+    selection consistent, without changing other reports' form behavior.
+    """
+    def __init__(self, data=None, *args, **kwargs):
+        if data is not None and 'periodo' not in data:
+            data = data.copy()
+            data['periodo'] = ('personalizado' if data.get('data_inicial') or data.get('data_final')
+                               else 'mes_atual')
+        super().__init__(data, *args, **kwargs)
+        self.fields['periodo'].choices = [('', 'Escolha o período'), *PERIODOS]
+        self.fields['periodo'].error_messages.update(
+            required='Escolha o período.', invalid_choice='Escolha um período válido.')
+        for nome in ('data_inicial', 'data_final'):
+            self.fields[nome].error_messages['invalid'] = 'Informe uma data válida.'

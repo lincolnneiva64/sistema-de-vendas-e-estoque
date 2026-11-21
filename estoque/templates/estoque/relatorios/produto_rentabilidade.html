@@ -1,0 +1,17 @@
+{% load relatorios %}
+{% with indicadores=resumo.indicadores_produto %}
+<section class="produto-rentabilidade" aria-labelledby="titulo-rentabilidade">
+<h2 id="titulo-rentabilidade">Preço médio e rentabilidade estimada</h2>
+<p>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }} · {% if indicadores.unidade_recorte %}Somente {{ indicadores.unidade_recorte }}{% else %}Todas as unidades do produto{% endif %}. Quantidades e médias de unidades diferentes permanecem separadas.</p>
+<dl class="produto-rentabilidade-indicadores">
+  <div class="produto-indicador-efetivo"><dt>Preço médio efetivo de venda</dt><dd>{% for linha in indicadores.linhas %}<span>{% if linha.preco_medio != None %}{{ linha.preco_medio|moeda_br }} / {{ linha.unidade|default:'unidade não informada' }}{% else %}Não comparável · unidade não informada{% endif %}</span>{% empty %}Sem vendas no período{% endfor %}</dd><small>Valor dos itens dividido pela quantidade comercial da mesma unidade.</small></div>
+  <div><dt>Custo médio histórico estimado</dt><dd>{% for linha in indicadores.linhas %}<span>{% if linha.custo_medio != None %}{{ linha.custo_medio|moeda_br }} / {{ linha.unidade }}{% else %}Custo histórico não disponível{% if linha.unidade %} / {{ linha.unidade }}{% endif %}{% endif %}</span>{% empty %}Custo histórico não disponível{% endfor %}</dd><small>Calculado somente com cobertura completa de custo na unidade.</small></div>
+  <div><dt>Custo estimado das mercadorias vendidas</dt><dd>{% if indicadores.cmv != None %}{{ indicadores.cmv|moeda_br }}{% else %}Custo histórico não disponível{% endif %}</dd><small>Soma dos custos congelados compatíveis com os itens.</small></div>
+  <div><dt>Lucro bruto estimado</dt><dd>{% if indicadores.lucro != None %}{{ indicadores.lucro|moeda_br }}{% else %}Não disponível{% endif %}</dd><small>Faturamento dos itens menos o custo estimado. Não é lucro líquido.</small></div>
+  <div><dt>Margem bruta estimada</dt><dd>{% if indicadores.margem != None %}{{ indicadores.margem|numero_br }}%{% else %}Não disponível{% endif %}</dd><small>Lucro bruto estimado sobre o faturamento dos itens do recorte.</small></div>
+</dl>
+<p>{{ indicadores.com_custo }} de {{ indicadores.itens }} item(ns) com custo histórico compatível no recorte.</p>
+{% if indicadores.motivos %}<div class="relatorios-aviso"><strong>Custo histórico não disponível para todo o recorte.</strong><ul>{% for motivo, quantidade in indicadores.motivos.items %}<li>{{ quantidade }} item(ns): {{ motivo }}</li>{% endfor %}</ul><p>Custo conhecido nos itens comprovados: {{ indicadores.custo_conhecido|moeda_br }}. O custo dos demais itens não foi presumido; lucro e margem totais ficam indisponíveis.</p></div>{% endif %}
+<details><summary>Origem e limites da estimativa</summary><p>O custo usado é o que ficou congelado no registro da venda, com sua unidade e origem. Ele não é substituído pelo custo atual do produto. Quando as unidades diferem, a conversão precisa estar comprovada no item.</p><p>Não há vínculo entre cada item vendido e um lote de compra. O custo congelado não comprova o custo de aquisição por lote nem, em lançamentos retroativos, o custo da data comercial. Sem esses registros não apuramos FIFO ou custo médio histórico por compras.</p><p>Esta é uma estimativa de lucro bruto. Despesas e demais encargos não estão apurados aqui; não representa lucro líquido nem recebimento financeiro.</p></details>
+</section>
+{% endwith %}

@@ -1,0 +1,43 @@
+{% extends 'estoque/relatorios/base.html' %}
+{% load static l10n relatorios %}
+{% block classe_relatorios %}relatorios-produto{% endblock %}
+{% block relatorio %}
+<p><a href="{% url 'estoque:relatorios_produtos' %}?{{ retorno_ranking }}#resultados-produtos">Voltar ao ranking de produtos</a></p>
+<h1>{{ produto.nome }}</h1>
+{% if produto.excluido %}<p class="relatorios-aviso"><strong>Cadastro excluído</strong></p>{% endif %}
+<p>Evolução comercial do produto. Somente itens atuais de notas não canceladas, sem consumo próprio. Não representa recebimento nem movimentação de estoque.</p>
+<form method="get" action="{{ relatorio_url }}" class="relatorios-filtros" id="relatorios-filtros-vendas">
+  {{ form.non_field_errors }}
+  {% for campo in form %}<div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}
+  {% for campo in evolucao_form %}<input type="hidden" name="{{ campo.name }}" value="{{ campo.value|default_if_none:'' }}">{% endfor %}
+  <input type="hidden" name="medida" value="{{ medida_form.medida.value }}"><input type="hidden" name="unidade" value="{{ medida_form.unidade.value }}">
+  <input type="hidden" name="ranking" value="{{ retorno_ranking }}">
+  <button type="submit">Consultar</button>
+</form>
+{{ periodos_datas|json_script:'relatorios-periodos-datas' }}
+<script defer src="{% static 'estoque/relatorios-filtros.js' %}"></script>
+<script defer src="{% static 'estoque/relatorios-produto-dias.js' %}"></script>
+{% if resumo %}
+<p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong>{% if medida == 'quantidade' %} · Gráfico e indicadores de valor: somente {{ unidade }}{% else %} · Gráfico e indicadores de valor: todas as unidades comerciais{% endif %}</p>
+<dl class="produto-indicadores">
+  <div><dt>Faturamento dos itens do produto</dt><dd>{{ resumo.faturamento|moeda_br }}</dd><small>{% if medida == 'quantidade' %}Somente {{ unidade }}{% else %}Todas as unidades{% endif %} · efetivo no período.</small></div>
+  <div><dt>Quantidade vendida</dt><dd>{% with fisica=resumo.indicadores_produto.fisica %}{% if fisica %}<span class="produto-quantidade-linha">{{ fisica.embalagens|quantidade_br }} {{ fisica.unidade }} + {{ fisica.avulsas|quantidade_br }} UN</span><small class="produto-quantidade-linha">Equivalente decimal: {{ fisica.equivalente|numero_br }} {{ fisica.unidade }}</small><small class="produto-quantidade-linha">Total em unidades: {{ fisica.total_un|quantidade_br }} UN</small>{% else %}{% for linha in resumo.quantidades_vendidas %}<span class="produto-quantidade-linha">{% if linha.quantidade != None %}{{ linha.quantidade|quantidade_br }} {{ linha.unidade_comercial }}{% else %}<small>Unidade não informada · quantidade não comparável</small>{% endif %}</span>{% empty %}<span>Sem vendas no período</span>{% endfor %}{% endif %}{% endwith %}</dd><small>Todas as unidades do período selecionado.</small>{% if resumo.indicadores_produto.fisica %}<small class="produto-quantidade-linha">Fator histórico comprovado: {{ resumo.indicadores_produto.fisica.fator }} UN / {{ resumo.indicadores_produto.fisica.unidade }}. Apenas o equivalente decimal é arredondado.</small>{% elif resumo.quantidades_vendidas %}<small class="produto-quantidade-linha">Sem equivalência física calculada: falta fator histórico compatível em todos os itens ou a quantidade não corresponde a unidades inteiras.</small>{% endif %}</div>
+  <div><dt>Vendas distintas com o produto</dt><dd>{{ resumo.quantidade }}</dd><small>{% if medida == 'quantidade' %}Somente {{ unidade }}{% else %}Todas as unidades{% endif %} · efetivo no período.</small></div>
+</dl>
+{% include 'estoque/relatorios/produto_rentabilidade.html' %}
+{% include 'estoque/relatorios/graficos.html' %}
+{% elif evolucao_form %}<section id="evolucao-vendas"><h2>Escolha a medida e a unidade</h2>{% include 'estoque/relatorios/evolucao_controles.html' %}</section>{% endif %}
+{% if resumo %}
+
+<h2 id="evolucao-diaria">Detalhamento diário</h2>
+<p>Clique em uma data para conferir as notas desse dia.</p>
+<div class="relatorios-tabela" role="region" aria-labelledby="evolucao-diaria" tabindex="0"><table><caption>{% if medida == 'faturamento' %}Faturamento em reais{% elif medida == 'quantidade' %}Quantidade em {{ unidade }}{% else %}Número de vendas{% endif %} · dias com documentos do produto</caption>
+<thead><tr><th scope="col">Data</th><th scope="col">Vendas distintas</th><th scope="col">{% if medida == 'faturamento' %}Faturamento{% elif medida == 'quantidade' %}Quantidade ({{ unidade }}){% else %}Número de vendas{% endif %}</th></tr></thead>
+<tbody>{% for dia in resumo.evolucao %}<tr><th scope="row"><a data-produto-dia aria-expanded="false" aria-controls="notas-dia-{{ dia.data_venda|date:'Ymd' }}" href="{% url 'estoque:relatorios_produto_dia' produto.pk %}?{{ documentos_query }}&amp;dia={{ dia.data_venda|date:'Y-m-d' }}">{{ dia.data_venda|date:'d/m/Y' }}</a></th><td>{{ dia.quantidade }}</td><td>{% if medida == 'faturamento' %}{{ dia.faturamento|moeda_br }}{% elif medida == 'quantidade' %}{{ dia.faturamento|quantidade_br }} {{ unidade }}{% else %}{{ dia.faturamento }}{% endif %}</td></tr><tr id="notas-dia-{{ dia.data_venda|date:'Ymd' }}" class="produto-dia-notas" hidden><td colspan="3"><div data-dia-conteudo role="region" aria-label="Notas do dia {{ dia.data_venda|date:'d/m/Y' }}" aria-live="polite"></div></td></tr>{% empty %}<tr><td colspan="3">Nenhum item comercial deste produto no período.</td></tr>{% endfor %}</tbody></table></div>
+{% if resumo.evolucao.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Páginas do detalhamento diário">
+{% if resumo.evolucao.has_previous %}<a href="?{{ filtros_query }}&amp;pagina={{ resumo.evolucao.previous_page_number|unlocalize }}#evolucao-diaria">Anterior</a>{% endif %}
+<span>Página {{ resumo.evolucao.number }} de {{ resumo.evolucao.paginator.num_pages }}</span>
+{% if resumo.evolucao.has_next %}<a href="?{{ filtros_query }}&amp;pagina={{ resumo.evolucao.next_page_number|unlocalize }}#evolucao-diaria">Próxima</a>{% endif %}</nav>{% endif %}
+
+{% endif %}
+{% endblock %}

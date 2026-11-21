@@ -138,3 +138,64 @@ a.relatorios-card:hover { border-color: #167347; background: #f2faf5; }
 }
 @media (max-width: 559px) { .relatorios-indicadores { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 800px) { .relatorios-graficos { grid-template-columns: minmax(0, 1fr); } }
+.relatorios-produto .produto-graficos { grid-template-columns: minmax(0, 1fr); }
+#resultados-produtos { scroll-margin-top: 12px; }
+.relatorios-filtro-rapido { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 8px; }
+.relatorios-filtro-rapido label { font-size: .9rem; font-weight: 600; }
+.relatorios-filtro-rapido input[type=search] { width: 260px; max-width: 100%; min-width: 0; flex: 0 1 260px; }
+.relatorios-filtro-rapido input[type=search], .relatorios-filtro-rapido button { min-height: 40px; padding: 6px 9px; border: 1px solid #82929d; border-radius: 5px; font-size: 16px; }
+.relatorios-filtro-rapido button { background: #167347; color: white; }
+.produto-dia-detalhe td.produto-dia-cliente { white-space: normal; min-width: 140px; max-width: 240px; overflow-wrap: anywhere; }
+.produto-dia-notas > td { background: #f4f8f6; padding: 12px; }
+.produto-dia-detalhe { min-width: 0; width: min(100%, calc(100vw - 64px)); text-align: left; white-space: normal; }
+.produto-dia-detalhe h3 { font-size: 1rem; margin-top: 0; }
+.produto-dia-detalhe p, .produto-dia-detalhe small { line-height: 1.4; white-space: normal; }
+.produto-dia-detalhe .produto-dia-total { margin-bottom: 4px; }
+.produto-indicadores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.produto-indicadores > div { min-width: 0; padding: 16px; background: #eaf4ef; border-top: 3px solid #397460; }
+.produto-indicadores dt { min-height: 2.8em; line-height: 1.4; }
+.produto-indicadores dd { margin: 8px 0 0; font-size: 1.4rem; font-weight: 700; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.produto-quantidade-linha { display: block; }
+.relatorios-conciliacao { margin-top: 28px; padding: 18px; border: 1px solid #d6dfe5; background: white; }
+.relatorios-conciliacao dl { display: grid; gap: 10px; }
+.relatorios-conciliacao dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.relatorios-conciliacao dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ranking-produtos tbody th { white-space: normal; min-width: 180px; max-width: 320px; overflow-wrap: anywhere; }
+.produto-documentos { margin-top: 24px; }
+body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-produto) .atalho-despesa-global { position: static !important; margin: 0 16px 96px; }
+.relatorios-produto #titulo-evolucao-vendas:focus { outline: none; }
+@media (max-width: 700px) {
+  .produto-indicadores { grid-template-columns: minmax(0, 1fr); }
+  .produto-indicadores dt { min-height: 0; }
+  .ranking-produtos caption { display: block; width: 100%; padding: 12px; text-align: left; box-sizing: border-box; }
+  .ranking-produtos thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ranking-produtos table, .ranking-produtos tbody, .ranking-produtos tr { display: block; width: 100%; }
+  .ranking-produtos tr { padding: 12px; border-bottom: 2px solid #d6dfe5; box-sizing: border-box; }
+  .ranking-produtos tbody th { display: block; min-width: 0; max-width: none; padding: 8px 0; }
+  .ranking-produtos td[data-label] { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; white-space: normal; text-align: right; overflow-wrap: anywhere; }
+  .ranking-produtos td[data-label]::before { content: attr(data-label); text-align: left; color: #526575; }
+  .relatorios-produtos .relatorios-paginacao, .relatorios-produto .relatorios-paginacao { flex-wrap: wrap; }
+  .relatorios-produto .produto-medida { grid-column: 1 / -1; }
+  .relatorios-produto .relatorios-tabela th, .relatorios-produto .relatorios-tabela td { padding: 10px 8px; font-size: .875rem; }
+  .relatorios-produto .relatorios-tabela caption { white-space: normal; }
+}
+.relatorios-produto-busca { position: relative; flex: 1 1 260px; }
+.relatorios-produto-busca input { width: 100%; }
+.relatorios-produto-sugestoes { position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; max-height: 280px; overflow-y: auto; background: white; border: 1px solid #d0d7e2; border-radius: 14px; box-shadow: 0 20px 40px #0f172a2e; }
+.relatorios-produto-sugestoes button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; text-align: left; min-height: 36px; padding: 6px 12px; font-size: 14px; line-height: 1.4; border: 0; border-bottom: 1px solid #f1f5f9; border-radius: 0; background: white; color: #172b3a; }
+.relatorios-sugestao-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.relatorios-sugestao-codigo { font-size: 11px; white-space: nowrap; }
+.relatorios-produto-sugestoes button:hover, .relatorios-produto-sugestoes [aria-selected=true] { background: linear-gradient(90deg, #2563eb, #1d4ed8); color: white; }
+@media (max-width: 700px) { .relatorios-produto-sugestoes button { min-height: 44px; } }
+.relatorios .relatorios-produto-analisar { padding: 10px 14px; min-height: 44px; border: 1px solid #167347; border-radius: 6px; color: #125c39; font-weight: 600; text-decoration: none; }
+.relatorios-produto-analisar[hidden], .relatorios-produto-sugestoes[hidden] { display: none; }
+.produto-indicadores > div > small { display: block; margin-top: 8px; color: #526575; font-size: .8rem; line-height: 1.4; }
+.produto-indicadores dd > small { font-size: .85rem; font-weight: 500; margin-top: 6px; }
+.produto-rentabilidade { margin: 24px 0; }
+.produto-rentabilidade-indicadores { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.produto-rentabilidade-indicadores > div { min-width: 0; padding: 16px; background: #fff9ed; border-top: 3px solid #b79a58; }
+.produto-rentabilidade-indicadores .produto-indicador-efetivo { background: #eaf4ef; border-color: #397460; }
+.produto-rentabilidade-indicadores dd { margin: 10px 0; font-weight: 700; font-size: 1.1rem; overflow-wrap: anywhere; }
+.produto-rentabilidade-indicadores dd > span { display: block; margin-bottom: 5px; }
+.produto-rentabilidade-indicadores small { display: block; color: #526575; line-height: 1.4; }
+@media (max-width: 700px) { .produto-rentabilidade-indicadores { grid-template-columns: minmax(0, 1fr); } }

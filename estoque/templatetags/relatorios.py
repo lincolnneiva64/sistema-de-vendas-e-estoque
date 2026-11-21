@@ -8,6 +8,14 @@ from django.utils.html import json_script
 register = template.Library()
 
 
+@register.filter
+def quantidade_br(valor):
+    numero = format(Decimal(valor or 0), ',f')
+    if '.' in numero:
+        numero = numero.rstrip('0').rstrip('.')
+    return numero.translate(str.maketrans(',.', '.,'))
+
+
 class _JSONCompacto(DjangoJSONEncoder):
     def __init__(self, *args, **kwargs):
         kwargs['separators'] = (',', ':')
@@ -16,9 +24,26 @@ class _JSONCompacto(DjangoJSONEncoder):
 
 @register.filter
 def json_grafico(valor, identificador):
-    # Preserve Django's script escaping and Decimal/date encoding, removing
-    # only redundant JSON whitespace from long comparison series.
     return json_script(valor, identificador, encoder=_JSONCompacto)
+
+
+@register.filter
+def valor_evolucao(valor, analise):
+    if not analise or analise.get('medida', 'faturamento') == 'faturamento':
+        return moeda_br(valor)
+    if analise.get('medida') == 'quantidade':
+        return quantidade_br(valor) + ' ' + analise.get('unidade', '')
+    casas = analise.get('casas', 3)
+    if analise.get('medida') == 'vendas' and Decimal(valor or 0) % 1:
+        casas = 2
+    numero = format(Decimal(valor or 0), f',.{casas}f').translate(str.maketrans(',.', '.,'))
+    return numero + ' ' + analise.get('unidade', '')
+
+
+@register.filter
+def valor_sinal_evolucao(valor, analise):
+    valor = Decimal(valor or 0)
+    return ('+' if valor > 0 else '-' if valor < 0 else '') + valor_evolucao(abs(valor), analise)
 
 
 @register.filter

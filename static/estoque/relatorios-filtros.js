@@ -26,6 +26,15 @@
     const raiz = document.getElementById('relatorios-barras');
     if (!fonte || !raiz) return;
     const dados = JSON.parse(fonte.textContent);
+    const produto = Boolean(dados.medida);
+    let posicaoComparar = null;
+    if (produto) {
+        try {
+            const chave = 'relatorios-comparar:' + location.pathname;
+            posicaoComparar = JSON.parse(sessionStorage.getItem(chave));
+            sessionStorage.removeItem(chave);
+        } catch (_) { /* Navigation remains usable when browser storage is blocked. */ }
+    }
     raiz.classList.toggle('grafico-barras-semanal', dados.modo === 'semanal');
     raiz.classList.toggle('grafico-barras-comparacao', dados.itens.some(p => p.comparacao));
     raiz.classList.toggle('grafico-barras-par-mensal', Boolean(dados.par_mensal));
@@ -53,12 +62,27 @@
     let alturaBarras = 180;
     const y = valor => maximo === minimo ? alturaBarras + 28 : (maximo - Number(valor)) / amplitude * alturaBarras + 28;
     const moeda = valor => {
+        if (dados.medida && dados.medida !== 'faturamento') {
+            const [inteiro, fracao = ''] = String(valor ?? 0).split('.');
+            const significativa = fracao.replace(/0+$/, '');
+            return inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.') +
+                (significativa ? ',' + significativa : '') + ' ' + (dados.unidade || '');
+        }
         const [inteiro, centavos = '00'] = String(valor).split('.');
         return 'R$ ' + inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + centavos.padEnd(2, '0');
     };
+    // Round only estimated display strings; source decimals and geometry stay intact.
+    const estimativaFormatada = valor => {
+        if (!produto || dados.medida === 'faturamento') return moeda(valor);
+        const negativo = String(valor).startsWith('-');
+        const [inteiro, fracao = ''] = String(valor).replace(/^-/, '').split('.');
+        let centesimos = BigInt(inteiro) * 100n + BigInt(fracao.padEnd(2, '0').slice(0, 2));
+        if ((fracao[2] || '0') >= '5') centesimos += 1n;
+        return moeda((negativo && centesimos ? '-' : '') + (centesimos / 100n) + '.' + String(centesimos % 100n).padStart(2, '0'));
+    };
     const dataCurta = iso => iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4);
     const dinheiroSinal = valor => (String(valor).startsWith('-') ? '-' : Number(valor) > 0 ? '+' : '') + moeda(String(valor).replace(/^-/, ''));
-    function indicadoresMensais(dadosMes) {
+    function indicadoresMensais(dadosMes, periodo) {
         const bloco = document.createElement('div');
         bloco.className = 'grafico-barra-indicadores';
         const linha = (rotulo, valor, classe = '') => {
@@ -70,7 +94,7 @@
             p.append(numero); bloco.append(p);
             return p;
         };
-        linha('Ticket médio:', dadosMes.ticket_medio === null ? 'não calculável' : moeda(dadosMes.ticket_medio));
+        if (dados.medida !== 'vendas') linha(dados.medida === 'quantidade' ? 'Média por venda:' : 'Ticket médio:', dadosMes.ticket_medio === null ? 'não calculável' : moeda(dadosMes.ticket_medio));
         linha('Média diária:', dadosMes.media_diaria === null ? 'indisponível' : moeda(dadosMes.media_diaria));
         const base = document.createElement('p');
         base.className = 'comparacao-nota';
@@ -81,6 +105,19 @@
         situacao.className = 'indicadores-situacao';
         situacao.textContent = dadosMes.situacao;
         bloco.append(situacao);
+        const metodo = document.createElement('details');
+        metodo.className = 'indicadores-metodo';
+        const tituloMetodo = document.createElement('summary');
+        tituloMetodo.textContent = 'Como foi calculado';
+        metodo.append(tituloMetodo);
+        if (produto) {
+            metodo.append(base, situacao);
+            if (periodo.motivo) {
+                const motivo = document.createElement('p');
+                motivo.textContent = periodo.motivo;
+                metodo.append(motivo);
+            }
+        }
         const prev = dadosMes.previsao;
         if (prev) {
             if (prev.valor === null) {
@@ -89,12 +126,26 @@
                 indisponivel.textContent = 'Previsão indisponível: ' + prev.motivo;
                 bloco.append(indisponivel);
             } else {
-                linha('Previsão de fechamento:', moeda(prev.valor), 'indicadores-previsao');
+                linha(produto ? 'Previsão de fechamento do mês · projeção:' : 'Previsão de fechamento:', estimativaFormatada(prev.valor), 'indicadores-previsao');
+                if (produto) {
+                    const prazo = document.createElement('p');
+                    prazo.className = 'comparacao-nota';
+                    const fimMes = new Date(Date.UTC(Number(dados.fim.slice(0, 4)), Number(dados.fim.slice(5, 7)), 0));
+                    prazo.textContent = 'Estimado até ' + String(fimMes.getUTCDate()).padStart(2, '0') + '/' + dados.fim.slice(5, 7) + '/' + dados.fim.slice(0, 4);
+                    bloco.append(prazo);
+                }
                 if (prev.diferenca !== null) {
                     const percentual = prev.variacao === null ? '% não calculável' :
                         (Number(prev.variacao) > 0 ? '+' : '') + String(prev.variacao).replace('.', ',') + '%';
-                    const delta = linha('Previsto vs mês anterior completo:', dinheiroSinal(prev.diferenca) + ' (' + percentual + ')', 'indicadores-previsao');
+                    const diferencaPrevista = produto ? (Number(prev.diferenca) > 0 ? '+' : '') + estimativaFormatada(prev.diferenca) : dinheiroSinal(prev.diferenca);
+                    const delta = linha('Previsto vs mês anterior completo:', diferencaPrevista + ' (' + percentual + ')', 'indicadores-previsao');
                     delta.title = dataCurta(prev.anterior_inicio) + ' a ' + dataCurta(prev.anterior_fim) + ': ' + moeda(prev.anterior);
+                    if (produto) {
+                        const referencia = document.createElement('p');
+                        referencia.className = 'comparacao-nota';
+                        referencia.textContent = 'Mês anterior completo: ' + dataCurta(prev.anterior_inicio) + ' a ' + dataCurta(prev.anterior_fim);
+                        bloco.append(referencia);
+                    }
                 } else {
                     const semReferencia = document.createElement('p');
                     semReferencia.className = 'comparacao-nota';
@@ -109,18 +160,25 @@
                 texto.textContent = prev.metodologia + ' ' + prev.dias_restantes + ' dias após hoje. Realizado: ' + moeda(prev.realizado) +
                     '. Hoje: ' + (prev.hoje === null ? 'sem registros até agora' : moeda(prev.hoje) + ' (parcial)') + '.' +
                     (prev.anterior !== null ? ' Mês anterior completo: ' + dataCurta(prev.anterior_inicio) + ' a ' + dataCurta(prev.anterior_fim) + ', ' + moeda(prev.anterior) + '.' : '');
-                detalhe.append(resumo, texto); bloco.append(detalhe);
+                if (produto) metodo.append(texto);
+                else { detalhe.append(resumo, texto); bloco.append(detalhe); }
             }
         }
         const teorico = dadosMes.equivalente_teorico;
         if (teorico) {
-            const p = linha('Equivalente teórico:', moeda(teorico.valor), 'indicadores-teorico');
+            const p = linha('Equivalente teórico:', estimativaFormatada(teorico.valor), 'indicadores-teorico');
             p.title = teorico.metodologia + ' ' + teorico.dias_base + ' dias comprovados; calendário de ' + teorico.dias_calendario + ' dias.';
             const nota = document.createElement('p');
             nota.className = 'comparacao-nota';
-            nota.textContent = 'Média diária de ' + teorico.dias_base + ' dias × ' + teorico.dias_calendario + ' dias de calendário. Não realizado.';
+            nota.textContent = produto ? 'Estimativa teórica · não realizado.' : 'Média diária de ' + teorico.dias_base + ' dias × ' + teorico.dias_calendario + ' dias de calendário. Não realizado.';
             bloco.append(nota);
+            if (produto) {
+                const explicacao = document.createElement('p');
+                explicacao.textContent = p.title;
+                metodo.append(explicacao);
+            }
         }
+        if (produto) bloco.append(metodo);
         return bloco;
     }
     function ajustarAltura() {
@@ -234,9 +292,12 @@
                         sinal(periodo.variacao) + String(periodo.variacao).replace('.', ',') + '%',
                     dados.par_mensal ? 'vs mês anterior' : comp.rotulo];
                 if (!dados.par_mensal) textos.push('vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
+                if (produto) textos.splice(0, textos.length, 'Comparação do período realizado', textos[0] + ' · ' + textos[1],
+                    dataCurta(comp.inicio) + ' a ' + dataCurta(comp.fim),
+                    'vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
                 for (const [indice, texto] of textos.entries()) {
                     const linha = document.createElement('span');
-                    linha.className = indice === 0 || indice === 1 && periodo.variacao !== null ? 'comparacao-valor' : 'comparacao-nota';
+                    linha.className = (produto ? indice === 1 : indice === 0 || indice === 1 && periodo.variacao !== null) ? 'comparacao-valor' : 'comparacao-nota';
                     linha.textContent = texto;
                     variacao.appendChild(linha);
                 }
@@ -251,16 +312,16 @@
                 const fantasma = document.createElement('span');
                 fantasma.className = 'grafico-barra-fantasma';
                 fantasma.setAttribute('role', 'img');
-                fantasma.setAttribute('aria-label', estimativa.rotulo + ': ' + moeda(estimativa.valor) + '. Valor estimado; não realizado.');
-                fantasma.title = estimativa.rotulo + ': ' + moeda(estimativa.valor);
+                fantasma.setAttribute('aria-label', estimativa.rotulo + ': ' + estimativaFormatada(estimativa.valor) + '. Valor estimado; não realizado.');
+                fantasma.title = estimativa.rotulo + ': ' + estimativaFormatada(estimativa.valor);
                 if (Number(estimativa.valor) === 0) fantasma.style.borderWidth = '0';
                 const valorEstimado = document.createElement('strong');
                 valorEstimado.className = 'grafico-barra-fantasma-valor';
-                valorEstimado.textContent = moeda(estimativa.valor);
+                valorEstimado.textContent = estimativaFormatada(estimativa.valor);
                 valorEstimado.setAttribute('aria-hidden', 'true');
                 item.append(fantasma, valorEstimado);
             }
-            if (periodo.indicadores) item.append(indicadoresMensais(periodo.indicadores));
+            if (periodo.indicadores) item.append(indicadoresMensais(periodo.indicadores, periodo));
             fragmento.appendChild(item);
         }
         lista.replaceChildren(fragmento);
@@ -287,8 +348,17 @@
     const enquadrar = () => {
         if (!raiz.isConnected) return;
         ajustarAltura();
+        if (posicaoComparar) {
+            const controle = document.getElementById('evolucao-controles');
+            const alvo = posicaoComparar.campo ? controle?.elements.namedItem(posicaoComparar.campo) : controle?.querySelector('button[type="submit"]');
+            alvo?.focus({preventScroll: true});
+            window.scrollTo({top: posicaoComparar.y, left: posicaoComparar.x, behavior: 'instant'});
+            posicaoComparar = null;
+            return;
+        }
         if (location.hash === '#evolucao-vendas') {
             const figura = raiz.closest('.grafico-evolucao');
+            if (dados.medida) figura.querySelector('h2')?.focus({preventScroll: true});
             window.scrollTo({top: Math.max(0, scrollY + figura.getBoundingClientRect().top - 12), behavior: 'instant'});
         }
     };
@@ -300,17 +370,26 @@
 (() => {
     const form = document.getElementById('evolucao-controles');
     if (!form) return;
+    if (form.dataset.produto) form.addEventListener('submit', () => {
+        try {
+            sessionStorage.setItem('relatorios-comparar:' + location.pathname, JSON.stringify({
+                x: scrollX, y: scrollY, campo: form.contains(document.activeElement) ? document.activeElement.name : ''
+            }));
+        } catch (_) { /* Keep the standard GET submission available. */ }
+    });
     const atualizar = () => {
+        const unidadeProduto = form.querySelector('[data-produto-unidade]');
+        if (unidadeProduto) unidadeProduto.hidden = form.elements.medida.value !== 'quantidade';
         form.querySelector('[data-evolucao-dia]').hidden = form.elements.modo.value !== 'diario';
         const alcance = form.elements.alcance?.value || 'principal';
         const mensal = form.elements.modo.value === 'mensal';
         const datas = form.querySelector('[data-historico-datas]');
         if (datas) datas.hidden = alcance !== 'personalizado';
         const comparacao = form.querySelector('[data-historico-comparacao]');
-        if (comparacao) comparacao.hidden = !mensal || alcance === 'principal' && form.elements.comparacao?.value !== 'ano_anterior';
-        form.querySelector('[data-evolucao-equivalente]').hidden = !mensal || alcance !== 'principal' || form.elements.comparacao?.value === 'ano_anterior';
+        if (comparacao) comparacao.hidden = !mensal || !form.dataset.produto && alcance === 'principal' && form.elements.comparacao?.value !== 'ano_anterior';
+        form.querySelector('[data-evolucao-equivalente]').hidden = Boolean(form.dataset.produto) || !mensal || alcance !== 'principal' || form.elements.comparacao?.value === 'ano_anterior';
     };
-    for (const nome of ['modo', 'alcance', 'comparacao']) {
+    for (const nome of ['modo', 'alcance', 'comparacao', 'medida']) {
         if (form.elements[nome]) form.elements[nome].addEventListener('change', atualizar);
     }
     atualizar();

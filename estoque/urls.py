@@ -7,6 +7,10 @@ from . import views_relatorios
 app_name = "estoque"
 
 urlpatterns = [
+    path("relatorios/produtos/sugestoes/", views_relatorios.produtos_sugestoes, name="relatorios_produtos_sugestoes"),
+    path("relatorios/produtos/", views_relatorios.produtos, name="relatorios_produtos"),
+    path("relatorios/produtos/<int:produto_id>/", views_relatorios.produto, name="relatorios_produto"),
+    path("relatorios/produtos/<int:produto_id>/dia/", views_relatorios.produto_dia, name="relatorios_produto_dia"),
     path("relatorios/", views_relatorios.inicio, name="relatorios_inicio"),
     path("relatorios/vendas/", views_relatorios.vendas, name="relatorios_vendas"),
     path("produtos/<int:produto_id>/historico-estoque-manual/", views.historico_estoque_manual, name="historico_estoque_manual"),

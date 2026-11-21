@@ -1,0 +1,24 @@
+{% load l10n relatorios %}
+<section class="produto-dia-detalhe" aria-label="Notas comerciais de {{ dia|date:'d/m/Y' }}">
+<h3>Notas de {{ dia|date:'d/m/Y' }}</h3>
+<p>{{ produto.nome }}{% if unidade %} · somente {{ unidade }}{% endif %}. Cada venda é contada uma vez. Itens da mesma venda e unidade são reunidos; o preço efetivo usa o valor registrado dividido pela quantidade.</p>
+<div class="relatorios-tabela"><table>
+<caption>Produto nas notas comerciais do dia</caption>
+<thead><tr><th scope="col">Venda</th><th scope="col">Cliente</th><th scope="col">Quantidade</th><th scope="col">Unidade</th><th scope="col">Preço unitário efetivo</th><th scope="col">Valor do produto</th></tr></thead>
+<tbody>{% for nota in dia_notas.documentos %}<tr>
+<th scope="row"><a href="{% url 'estoque:venda_detalhe' nota.venda_id %}">Venda #{{ nota.venda_id }}</a></th>
+<td class="produto-dia-cliente">{{ nota.venda__cliente__nome|default:'Cliente não identificado' }}</td>
+<td>{{ nota.quantidade|quantidade_br }}</td><td>{{ nota.unidade_comercial|default:'Não informada' }}</td>
+<td>{% if nota.preco_efetivo != None %}{{ nota.preco_efetivo|moeda_br }}{% else %}Não comparável{% endif %}</td>
+<td>{{ nota.valor_total|moeda_br }}</td>
+</tr>{% empty %}<tr><td colspan="6">Nenhum item comercial encontrado neste dia e unidade.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% if dia_notas.documentos.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Notas deste dia">
+{% if dia_notas.documentos.has_previous %}<a data-dia-pagina href="?{{ filtros_query }}&amp;pagina={{ dia_notas.documentos.previous_page_number|unlocalize }}">Anterior</a>{% endif %}
+<span>Página {{ dia_notas.documentos.number }} de {{ dia_notas.documentos.paginator.num_pages }}</span>
+{% if dia_notas.documentos.has_next %}<a data-dia-pagina href="?{{ filtros_query }}&amp;pagina={{ dia_notas.documentos.next_page_number|unlocalize }}">Próxima</a>{% endif %}
+</nav>{% endif %}
+<p class="produto-dia-total"><strong>Total do dia: {{ dia_notas.faturamento|moeda_br }} · {{ dia_notas.vendas }} venda{{ dia_notas.vendas|pluralize:'s' }}</strong></p>
+<p>{% for quantidade in dia_notas.quantidades %}{{ quantidade.quantidade|quantidade_br }} {{ quantidade.unidade_comercial|default:'(unidade não informada)' }}{% if not forloop.last %} + {% endif %}{% endfor %}</p>
+<small>Totais de todas as páginas deste dia, nas mesmas notas e unidade da linha diária. Unidades diferentes permanecem separadas. Notas editadas usam os itens atuais.</small>
+</section>

@@ -1,8 +1,9 @@
-<form method="get" action="{% url 'estoque:relatorios_vendas' %}#evolucao-vendas" class="evolucao-controles" id="evolucao-controles">
+<form method="get" action="{% if relatorio_url %}{{ relatorio_url }}{% else %}{% url 'estoque:relatorios_vendas' %}{% endif %}#evolucao-vendas" class="evolucao-controles" id="evolucao-controles" {% if produto_relatorio %}data-produto="true"{% endif %}>
   <input type="hidden" name="periodo" value="{{ form.periodo.value }}">
   <input type="hidden" name="data_inicial" value="{{ form.data_inicial.value }}">
   <input type="hidden" name="data_final" value="{{ form.data_final.value }}">
   <input type="hidden" name="pagina" value="{{ resumo.evolucao.number }}">
+  {% if produto_relatorio %}<input type="hidden" name="ranking" value="{{ retorno_ranking }}">{% for campo in medida_form %}<div class="produto-medida" {% if campo.name == 'unidade' %}data-produto-unidade {% if medida_form.medida.value != 'quantidade' %}hidden{% endif %}{% endif %}><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}{% endif %}
   <div><label for="{{ evolucao_form.modo.id_for_label }}">Evolução</label>{{ evolucao_form.modo }}{{ evolucao_form.modo.errors }}</div>
   <div><label for="{{ evolucao_form.alcance.id_for_label }}">Alcance histórico</label>{{ evolucao_form.alcance }}{{ evolucao_form.alcance.errors }}</div>
   <div data-historico-datas {% if evolucao_form.alcance.value != 'personalizado' %}hidden{% endif %}>
@@ -11,6 +12,6 @@
   </div>
   <div data-evolucao-dia {% if resumo.analise_evolucao.modo != 'diario' %}hidden{% endif %}><label for="{{ evolucao_form.dia_semana.id_for_label }}">Dia da semana</label>{{ evolucao_form.dia_semana }}{{ evolucao_form.dia_semana.errors }}</div>
   <div data-historico-comparacao {% if resumo.analise_evolucao.modo != 'mensal' or not resumo.analise_evolucao.historico %}hidden{% endif %}><label for="{{ evolucao_form.comparacao.id_for_label }}">Comparação mensal</label>{{ evolucao_form.comparacao }}{{ evolucao_form.comparacao.errors }}</div>
-  <div data-evolucao-equivalente {% if resumo.analise_evolucao.modo != 'mensal' or resumo.analise_evolucao.historico %}hidden{% endif %}><label>{{ evolucao_form.equivalente }} {{ evolucao_form.equivalente.label }}</label></div>
+  <div data-evolucao-equivalente {% if produto_relatorio or resumo.analise_evolucao.modo != 'mensal' or resumo.analise_evolucao.historico %}hidden{% endif %}><label>{{ evolucao_form.equivalente }} {{ evolucao_form.equivalente.label }}</label></div>
   <button type="submit">Comparar</button>
 </form>
