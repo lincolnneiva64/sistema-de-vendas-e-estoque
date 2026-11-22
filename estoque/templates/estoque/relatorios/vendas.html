@@ -26,18 +26,64 @@
 </dl>
 
 <dl class="relatorios-indicadores relatorios-rentabilidade">
-  <div><dt>CMV registrado</dt>
-    <dd>{% if resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.cmv|moeda_br }}{% else %}Indisponível{% endif %}</dd>
+  <div><dt>CMV gerencial</dt>
+    <dd>{% if resumo.rentabilidade.estimativa_setembro %}{{ resumo.rentabilidade.estimativa_setembro.cmv_parcial|moeda_br }} (parcial){% elif resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.cmv|moeda_br }}{% else %}Indisponível{% endif %}</dd>
   </div>
   <div><dt>Lucro bruto gerencial</dt>
-    <dd>{% if resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.lucro|moeda_br }}{% else %}Indisponível{% endif %}</dd>
+    <dd>{% if resumo.rentabilidade.estimativa_setembro %}{{ resumo.rentabilidade.estimativa_setembro.lucro_parcial|moeda_br }} (parcial){% elif resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.lucro|moeda_br }}{% else %}Indisponível{% endif %}</dd>
   </div>
   <div><dt>Margem bruta</dt>
-    <dd>{% if resumo.rentabilidade.margem != None %}{{ resumo.rentabilidade.margem|numero_br }}%{% else %}Indisponível{% endif %}</dd>
+    <dd>{% if resumo.rentabilidade.estimativa_setembro %}{% if resumo.rentabilidade.estimativa_setembro.margem_parcial != None %}{{ resumo.rentabilidade.estimativa_setembro.margem_parcial|numero_br }}% (parcial){% else %}Indisponível{% endif %}{% elif resumo.rentabilidade.margem != None %}{{ resumo.rentabilidade.margem|numero_br }}%{% else %}Indisponível{% endif %}</dd>
   </div>
 </dl>
+
+{% if resumo.rentabilidade.estimativa_setembro %}
+{% if resumo.rentabilidade.estimativa_setembro.periodo_misto %}
+<div class="relatorios-aviso" role="status">
+  <strong>Resultado parcialmente estimado.</strong>
+  Este período inclui setembro/2026, quando algumas vendas
+  ficaram sem custo registrado. Parte desses custos foi estimada
+  usando compras posteriores.
+
+  <p>
+    Custo estimado de setembro:
+    {{ resumo.rentabilidade.estimativa_setembro.custo_estimado|moeda_br }}.
+    Itens ainda sem custo:
+    {{ resumo.rentabilidade.estimativa_setembro.pendentes }}.
+    Faturamento desses itens:
+    {{ resumo.rentabilidade.estimativa_setembro.receita_pendente|moeda_br }}.
+  </p>
+
+  <p>
+    O lucro e a margem são parciais e consideram somente
+    as vendas com custos identificados ou estimados.
+    Os valores podem diferir dos custos efetivos da época.
+  </p>
+</div>
+{% else %}
+<div class="relatorios-aviso" role="status">
+  <strong>Setembro/2026 — resultado parcialmente estimado.</strong>
+  No início da operação, algumas vendas ficaram sem custo registrado.
+  Parte dos custos foi reconstruída com preços de compras posteriores
+  e fatores de conversão cadastrados. Os valores são aproximados,
+  não comprovam o custo efetivo da época e não representam
+  o lucro bruto total do mês.
+  <p>
+    Custo histórico: {{ resumo.rentabilidade.estimativa_setembro.custo_historico|moeda_br }}.
+    Custo estimado: {{ resumo.rentabilidade.estimativa_setembro.custo_estimado|moeda_br }}.
+    Itens estimados: {{ resumo.rentabilidade.estimativa_setembro.estimados }}.
+    Itens ainda sem custo: {{ resumo.rentabilidade.estimativa_setembro.pendentes }}.
+    Faturamento desses itens: {{ resumo.rentabilidade.estimativa_setembro.receita_pendente|moeda_br }}.
+  </p>
+  <p>
+    O lucro e a margem parciais consideram somente as vendas
+    cujo custo foi identificado ou estimado.
+  </p>
+</div>
+{% endif %}
+{% endif %}
 <p class="grafico-nota">Rentabilidade gerencial baseada nos custos registrados no momento das vendas. Não representa lucro líquido nem custo contábil auditado.</p>
-{% if not resumo.rentabilidade.disponivel %}
+{% if not resumo.rentabilidade.disponivel and not resumo.rentabilidade.estimativa_setembro %}
 <p role="status" class="relatorios-aviso">
   Cálculo completo indisponível: {{ resumo.rentabilidade.com_custo }}
   de {{ resumo.rentabilidade.quantidade }} itens com custo registrado.

@@ -94,7 +94,6 @@
             p.append(numero); bloco.append(p);
             return p;
         };
-
         if (dados.medida !== 'vendas') linha(dados.medida === 'quantidade' ? 'Média por venda:' : 'Ticket médio:', dadosMes.ticket_medio === null ? 'não calculável' : moeda(dadosMes.ticket_medio));
         linha('Média diária:', dadosMes.media_diaria === null ? 'indisponível' : moeda(dadosMes.media_diaria));
         const base = document.createElement('p');
@@ -108,7 +107,6 @@
         bloco.append(situacao);
 
         // Fechamento real de meses completos.
-        // Nao confundir com previsoes ou equivalentes teoricos.
         if (!produto &&
             dados.modo === 'mensal' &&
             dados.medida !== 'vendas' &&
@@ -124,7 +122,7 @@
 
             const notaFechamento = document.createElement('p');
             notaFechamento.className = 'comparacao-nota';
-            notaFechamento.textContent = 'M\u00eas encerrado.';
+            notaFechamento.textContent = 'Mês encerrado.';
             bloco.append(notaFechamento);
         }
 
@@ -194,10 +192,6 @@
             const nota = document.createElement('p');
             nota.className = 'comparacao-nota';
             nota.textContent = produto ? 'Estimativa teórica · não realizado.' : 'Média diária de ' + teorico.dias_base + ' dias × ' + teorico.dias_calendario + ' dias de calendário. Não realizado.';
-            if (!produto) {
-                nota.textContent =
-                    'Hist\u00f3rico incompleto. Estimativa, n\u00e3o realizado.';
-            }
             bloco.append(nota);
             if (produto) {
                 const explicacao = document.createElement('p');
@@ -292,9 +286,12 @@
                 ' · ' + periodo.inicio.slice(8, 10) + '/' + periodo.inicio.slice(5, 7) + '–' + periodo.fim.slice(8, 10) + '/' + periodo.fim.slice(5, 7) :
                 periodo.rotulo + (parcial ? ' · ' + periodo.status : '');
             data.title = periodo.rotulo;
-
             // COMPARACAO ABAIXO DAS BARRAS V2
             if (dados.modo === 'mensal') {
+                const dataCurta = iso =>
+                    iso.slice(8, 10) + '/' +
+                    iso.slice(5, 7) + '/' +
+                    iso.slice(0, 4);
                 const origem = dados.itens.find(p =>
                     p.comparacao?.anterior_inicio &&
                     p.comparacao?.anterior_fim &&
@@ -330,6 +327,16 @@
                 }
             }
 
+
+            // Identifica semanas incompletas no inicio do filtro.
+            if (!periodo.indicadores && parcial && periodo.rotulo.includes(' a ')) {
+                const inicioSemana = Date.parse(periodo.inicio + 'T00:00:00Z');
+                const fimSemana = Date.parse(periodo.fim + 'T00:00:00Z');
+                const dias = Math.round((fimSemana - inicioSemana) / 86400000) + 1;
+                if (dias >= 1 && dias < 7) {
+                    data.textContent += ' · Semana parcial (' + dias + ' dias)';
+                }
+            }
             const variacao = document.createElement('span');
             variacao.className = 'grafico-barra-variacao';
             variacao.textContent = periodo.variacao === null ? 'Sem período comparável' :
@@ -342,6 +349,14 @@
                 variacao.setAttribute('aria-label', periodo.motivo);
             }
             if (periodo.referencia) variacao.textContent = 'Mês anterior · referência';
+            // Mostra o faturamento real mesmo sem mes anterior comparavel.
+            if (dados.cobertura_mensal && !produto && periodo.variacao === null &&
+                    periodo.valor !== null && !periodo.referencia) {
+                const realizado = document.createElement('span');
+                realizado.className = 'comparacao-nota';
+                realizado.textContent = 'Faturamento realizado: ' + moeda(periodo.valor);
+                variacao.appendChild(realizado);
+            }
             const tendencia = Number(periodo.comparacao ? periodo.diferenca : periodo.variacao);
             if (tendencia > 0) variacao.classList.add('crescimento');
             if (tendencia < 0) variacao.classList.add('queda');
@@ -357,9 +372,6 @@
                         sinal(periodo.variacao) + String(periodo.variacao).replace('.', ',') + '%',
                     dados.par_mensal ? 'vs mês anterior' : comp.rotulo];
                 if (!dados.par_mensal) textos.push('vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
-                if (!produto && dados.modo === 'mensal' && dados.cobertura_mensal) {
-                    textos.splice(2, textos.length - 2, 'Vendas parciais equivalentes');
-                }
                 if (produto) textos.splice(0, textos.length, 'Comparação do período realizado', textos[0] + ' · ' + textos[1],
                     dataCurta(comp.inicio) + ' a ' + dataCurta(comp.fim),
                     'vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
@@ -375,7 +387,7 @@
             }
 
             // COMPARACAO ESPELHADA V3
-            // Percentuais usam a mesma base: periodo anterior.
+            // Preserva a base percentual usada na comparacao original.
             if (dados.modo === 'mensal' && dados.cobertura_mensal) {
                 const origem = dados.itens.find(p =>
                     p.comparacao?.anterior_inicio &&
@@ -395,14 +407,16 @@
                     const valorOriginal = String(origem.diferenca);
                     const negativo = valorOriginal.startsWith('-');
                     const absoluto = valorOriginal.replace(/^[+-]/, '');
-                    const invertido = negativo ? '+' : Number(absoluto) > 0 ? '-' : '';
+                    const invertido = negativo ? '+' :
+                        Number(absoluto) > 0 ? '-' : '';
 
                     const percentualOriginal = origem.variacao;
                     const percentual = percentualOriginal === null
                         ? '% nao calculavel'
                         : (Number(percentualOriginal) < 0 ? '+' :
                            Number(percentualOriginal) > 0 ? '-' : '') +
-                          String(percentualOriginal).replace(/^[+-]/, '').replace('.', ',') + '%';
+                          String(percentualOriginal)
+                            .replace(/^[+-]/, '').replace('.', ',') + '%';
 
                     variacao.replaceChildren();
 
@@ -422,7 +436,8 @@
                     variacao.classList.remove('crescimento', 'queda');
 
                     if (negativo) variacao.classList.add('crescimento');
-                    else if (Number(absoluto) > 0) variacao.classList.add('queda');
+                    else if (Number(absoluto) > 0)
+                        variacao.classList.add('queda');
 
                     variacao.title =
                         'Comparacao parcial; percentual calculado sobre o periodo anterior.';

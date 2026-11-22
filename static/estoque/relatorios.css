@@ -200,8 +200,430 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
 .produto-rentabilidade-indicadores small { display: block; color: #526575; line-height: 1.4; }
 @media (max-width: 700px) { .produto-rentabilidade-indicadores { grid-template-columns: minmax(0, 1fr); } }
 
+/* MELHORIA VISUAL DOS RELATORIOS - 21/11/2026 */
 
-/* COMPARACAO COMPACTA FINAL - 20261122 */
+/* Cabecalhos mais legiveis */
+.relatorios .relatorios-tabela thead {
+    background: #e4ebf2;
+    color: #223f59;
+}
+
+.relatorios .relatorios-tabela thead th {
+    font-weight: 700;
+    border-bottom: 2px solid #9aabba;
+}
+
+/* Destacar nomes e documentos clicaveis */
+.relatorios .relatorios-tabela a {
+    color: #175d99;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.relatorios .relatorios-tabela a:hover {
+    color: #0b416e;
+}
+
+/* Facilitar o acompanhamento das linhas */
+@media (hover: hover) {
+    .relatorios .relatorios-tabela tbody tr:hover > th,
+    .relatorios .relatorios-tabela tbody tr:hover > td {
+        background-color: #edf4fa;
+    }
+}
+
+/* Destacar totais ja identificados */
+.relatorios .relatorios-total-dia {
+    color: #17613e;
+    font-weight: 750;
+}
+
+
+/* RELATORIOS - DESTAQUES FINANCEIROS V2 - 21/11/2026 */
+
+/* Faturamento no ranking */
+.relatorios .ranking-produtos tbody tr > :nth-child(4) {
+    color: #245b88;
+    font-weight: 700;
+}
+
+/* Participacao comercial */
+.relatorios .ranking-produtos tbody tr > :nth-child(5) {
+    color: #526575;
+    font-weight: 600;
+}
+
+/* Custo historico: destaque vermelho, sem indicar prejuizo */
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(2),
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(3) {
+    border-top-color: #b64b4b;
+    background-color: #fff4f1;
+}
+
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(2) dd,
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(3) dd {
+    color: #a12e35;
+}
+
+/* Lucro bruto e margem */
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(4),
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(5) {
+    border-top-color: #397460;
+    background-color: #edf7f0;
+}
+
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(4) dd,
+.relatorios .produto-rentabilidade-indicadores > div:nth-child(5) dd {
+    color: #17613e;
+}
+
+/* Valores indisponiveis permanecem neutros */
+.relatorios .produto-rentabilidade-indicadores > div dd {
+    font-variant-numeric: tabular-nums;
+}
+
+
+
+/* QUADRO FINANCEIRO COMPACTO - 20261121 */
+
+.relatorios .financeiro-compacto .produto-rentabilidade-indicadores {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.relatorios .financeiro-compacto .produto-rentabilidade-indicadores > div {
+    padding: 12px;
+    border: 1px solid #d4dfe7;
+    border-top: 4px solid #64798c;
+    background: #f4f7fa;
+}
+
+.relatorios .financeiro-compacto .produto-rentabilidade-indicadores dt {
+    font-size: .86rem;
+    min-height: 2.7em;
+    font-weight: 700;
+}
+
+.relatorios .financeiro-compacto .produto-rentabilidade-indicadores dd {
+    font-size: 1.13rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.relatorios .financeiro-compacto .financeiro-venda {
+    border-top-color: #24628e !important;
+    background: #eaf2f9 !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-venda dd {
+    color: #175782;
+}
+
+.relatorios .financeiro-compacto .financeiro-custo {
+    border-top-color: #b14a4a !important;
+    background: #fff2ef !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-custo dd {
+    color: #a12e35;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--positivo {
+    border-top-color: #26744e !important;
+    background: #eaf5ee !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--positivo dd {
+    color: #17613e !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--negativo {
+    border-top-color: #b14a4a !important;
+    background: #fff2ef !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--negativo dd {
+    color: #a12e35 !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--indisponivel {
+    border-top-color: #87919d !important;
+    background: #f0f2f4 !important;
+}
+
+.relatorios .financeiro-compacto .financeiro-resultado--indisponivel dd {
+    color: #596674 !important;
+}
+
+@media (max-width: 1100px) {
+    .relatorios .financeiro-compacto .produto-rentabilidade-indicadores {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .relatorios .financeiro-compacto .produto-rentabilidade-indicadores {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+
+/* Expansao discreta de compradores */
+.comprador-expandir {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    color: #135b92;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+}
+.comprador-expandir:hover {
+    text-decoration: underline;
+}
+.comprador-expandir [data-seta] {
+    display: inline-block;
+    font-size: 0;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform .15s ease;
+}
+.comprador-expandir[aria-expanded="true"] [data-seta] {
+    transform: rotate(45deg);
+}
+.comprador-notas-linha > td {
+    background: #edf4fa;
+    padding: 12px 16px;
+}
+
+
+/* VISUAL GERENCIAL V3 - 20261121 */
+
+/* Hierarquia dos titulos */
+.relatorios-produto h1 {
+    color: #153c58;
+    letter-spacing: -0.6px;
+}
+
+.relatorios-produto h2 {
+    color: #173d57;
+    border-left: 4px solid #226c9a;
+    padding-left: 12px;
+    margin-top: 28px;
+}
+
+/* Explicacoes recolhiveis */
+.relatorios-produto .relatorio-saiba-mais {
+    margin: 12px 0 18px;
+    padding: 0;
+    border: 1px solid #d3e0e9;
+    border-radius: 5px;
+    background: #f5f9fc;
+    overflow: hidden;
+}
+
+.relatorios-produto .relatorio-saiba-mais summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    color: #205c86;
+    font-size: 0.92rem;
+    font-weight: 600;
+}
+
+.relatorios-produto .relatorio-saiba-mais summary:hover {
+    background: #e6f0f7;
+}
+
+.relatorios-produto .relatorio-ajuda-conteudo {
+    border-top: 1px solid #d3e0e9;
+    padding: 10px 15px;
+    color: #40576a;
+    font-size: 0.91rem;
+    line-height: 1.5;
+}
+
+.relatorios-produto .relatorio-ajuda-conteudo p {
+    margin: 5px 0 9px;
+}
+
+/* Tabela gerencial de compradores */
+.relatorios-produto #compradores-produto {
+    margin-top: 26px;
+    margin-bottom: 28px;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela {
+    border: 1px solid #c7d7e3;
+    border-radius: 5px;
+    overflow-x: auto;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela > table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela > table > thead {
+    background: #dce9f2;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela > table > tbody > tr:not(.comprador-notas-linha):hover {
+    background: #e9f3fb;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela > table > tbody > tr:not(.comprador-notas-linha) > td:last-child {
+    color: #176093;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.relatorios-produto #compradores-produto .comprador-expandir {
+    color: #155d8e;
+    font-weight: 600;
+}
+
+.relatorios-produto #compradores-produto .comprador-expandir:focus-visible {
+    outline: 2px solid #176093;
+    outline-offset: 3px;
+}
+
+.relatorios-produto #compradores-produto .comprador-expandir[aria-expanded="true"] {
+    color: #0a7252;
+}
+
+/* Notas abertas integradas a tabela */
+.relatorios-produto #compradores-produto .comprador-notas-linha > td {
+    background: #edf5fa;
+    border-top: 2px solid #aac9de;
+    border-bottom: 2px solid #aac9de;
+    padding: 12px 16px;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela {
+    border: 1px solid #c8d8e4;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha th {
+    color: #244a68;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha tbody td:last-child {
+    color: #176093;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Tabelas do detalhamento diario */
+.relatorios-produto #evolucao-diaria .relatorios-tabela {
+    border-radius: 5px;
+}
+
+.relatorios-produto .produto-dia-notas:not([hidden]) > td {
+    background: #edf5fa;
+}
+
+/* Melhor leitura em telas menores */
+@media (max-width: 700px) {
+    .relatorios-produto #compradores-produto .relatorios-tabela {
+        overflow-x: auto;
+    }
+
+    .relatorios-produto #compradores-produto table {
+        min-width: 560px;
+    }
+
+    .relatorios-produto #compradores-produto .comprador-notas-linha > td {
+        padding: 8px;
+    }
+}
+
+/* Cards do resumo de vendas - contraste reforcado */
+.relatorios-indicadores > div {
+    border: 1px solid #b7c7d4;
+    border-top: 5px solid #58748b;
+    box-shadow: 0 2px 5px rgba(20, 45, 65, .09);
+}
+
+.relatorios-indicadores > div dt {
+    font-weight: 700;
+    color: #26425b;
+}
+
+.relatorios-indicadores > div dd:first-of-type {
+    font-weight: 800;
+    color: #17334d;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(1) {
+    background: #d0eadd;
+    border-top-color: #167347;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(1) dd:first-of-type {
+    color: #115535;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(2) {
+    background: #d8e2ee;
+    border-top-color: #496c90;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(3) {
+    background: #cfe0f5;
+    border-top-color: #316ebc;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(3) dd:first-of-type {
+    color: #194e8a;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(4) {
+    background: #d2e9e0;
+    border-top-color: #25836b;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(4) dd:first-of-type {
+    color: #175b49;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(5) {
+    background: #ede0c8;
+    border-top-color: #a47932;
+}
+
+.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(5) dd:first-of-type {
+    color: #75501c;
+}
+
+/* Rentabilidade - contraste sem competir com faturamento */
+.relatorios-rentabilidade > div:nth-child(1) {
+    background: #e0e7ef;
+    border-top-color: #607a95;
+}
+
+.relatorios-rentabilidade > div:nth-child(2) {
+    background: #d8e8df;
+    border-top-color: #32815d;
+}
+
+.relatorios-rentabilidade > div:nth-child(3) {
+    background: #dce7f4;
+    border-top-color: #477db3;
+}
+
+/* Comparacao mensal restaurada */
 .grafico-barra-data .comparacao-abaixo-barra {
     display: block;
     margin-top: 5px;
@@ -226,25 +648,7 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     font-variant-numeric: tabular-nums;
 }
 
-.grafico-barra-variacao.queda .comparacao-valor {
-    color: #b42332;
-}
-
-.grafico-barra-variacao.crescimento .comparacao-valor {
-    color: #13734c;
-}
-
-
-/* AJUSTE VISUAL FECHAMENTO REAL V2 */
-
-.grafico-barra-indicadores > .indicadores-situacao {
-    font-weight: 800;
-    font-size: 0.95rem;
-    color: #24435b;
-    margin-top: 12px;
-    margin-bottom: 12px;
-}
-
+/* Estilos recuperados da versao publicada */
 .grafico-barra-indicadores .indicadores-fechamento {
     color: #167047;
     text-align: center;
@@ -259,4 +663,29 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     line-height: 1.45;
+}
+
+.grafico-barra-variacao.crescimento .comparacao-valor {
+    color: #13734c;
+}
+
+.grafico-barra-variacao.queda .comparacao-valor {
+    color: #b42332;
+}
+
+/* Preservacao dos destaques mensais - 20261122 */
+.grafico-barra-variacao.queda .comparacao-valor {
+    color: #b42332;
+}
+
+.grafico-barra-variacao.crescimento .comparacao-valor {
+    color: #13734c;
+}
+
+.grafico-barra-indicadores > .indicadores-situacao {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #24435b;
+    margin-top: 12px;
+    margin-bottom: 12px;
 }

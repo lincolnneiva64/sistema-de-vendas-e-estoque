@@ -156,6 +156,175 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
         and sem_valor == 0
         and divergencia == ZERO
     )
+
+    # ESTIMATIVA EXCLUSIVA SETEMBRO 2026
+    estimativa_setembro = None
+    from datetime import date as _date
+    from django.db.models import OuterRef as _OuterRef, Subquery as _Subquery
+    from estoque.models import Compra as _Compra, ItemCompra as _ItemCompra
+
+    if inicio <= _date(2026, 9, 30) and fim >= _date(2026, 9, 1):
+        compras_ref = _ItemCompra.objects.filter(
+            produto_id=_OuterRef("produto_id"),
+            compra__status=_Compra.STATUS_FINALIZADA,
+            compra__data_compra__gt=_OuterRef("venda__data_venda"),
+            quantidade__gt=0,
+            preco_unitario__gt=0,
+        ).order_by("compra__data_compra", "pk")
+
+        itens_ref = itens.filter(
+            venda__data_venda__range=(
+                _date(2026, 9, 1), _date(2026, 9, 30)
+            )
+        ).annotate(
+            data_ref=_Subquery(compras_ref.values("compra__data_compra")[:1]),
+            unidade_ref=_Subquery(compras_ref.values("unidade")[:1]),
+            preco_ref=_Subquery(compras_ref.values("preco_unitario")[:1]),
+            quantidade_ref=_Subquery(compras_ref.values("quantidade")[:1]),
+            total_ref=_Subquery(compras_ref.values("valor_total")[:1]),
+        ).select_related("produto", "venda")
+
+        estimados = pendentes = registrados = 0
+        custo_estimado = ZERO
+        custo_historico = ZERO
+        receita_coberta = ZERO
+        receita_pendente = ZERO
+
+        for item in itens_ref.iterator(chunk_size=500):
+            receita = item.valor_total or ZERO
+            custo = item.custo_total_snapshot
+
+            historico_valido = (
+                custo is not None
+                and custo >= ZERO
+                and item.custo_unitario_snapshot is not None
+                and item.custo_unitario_snapshot > ZERO
+                and item.custo_origem_snapshot == "preco_compra_atual"
+                and item.quantidade > ZERO
+                and bool(item.custo_unidade_snapshot)
+            )
+
+            if historico_valido:
+                registrados += 1
+                custo_historico += custo
+                receita_coberta += receita
+                continue
+
+            valor = None
+            data = item.data_ref
+            preco = item.preco_ref
+            quantidade_item = item.quantidade
+
+            if (
+                data is not None
+                and preco is not None
+                and preco > ZERO
+                and quantidade_item is not None
+                and quantidade_item > ZERO
+                and 0 < (data - item.venda.data_venda).days <= 30
+                and item.quantidade_ref is not None
+                and item.quantidade_ref > ZERO
+                and item.total_ref is not None
+                and abs(item.quantidade_ref * preco - item.total_ref) <= CENTAVO
+            ):
+                unidade_venda = (item.unidade or "").strip().upper()
+                unidade_compra = (item.unidade_ref or "").strip().upper()
+
+                if unidade_venda and unidade_venda == unidade_compra:
+                    valor = quantidade_item * preco
+                elif item.produto:
+                    produto = item.produto
+                    base = (produto.unidade_venda_1 or "").strip().upper()
+                    fracionada = (produto.unidade_venda_2 or "").strip().upper()
+                    fator = produto.fator_conversao or ZERO
+
+                    if (
+                        produto.vende_fracionado
+                        and unidade_compra == base
+                        and unidade_venda == fracionada
+                        and fator > ZERO
+                    ):
+                        valor = quantidade_item * preco / fator
+
+            if valor is None:
+                pendentes += 1
+                receita_pendente += receita
+            else:
+                estimados += 1
+                receita_coberta += receita
+                custo_estimado += valor.quantize(CENTAVO)
+
+        cmv_parcial = custo_historico + custo_estimado
+        lucro_parcial = receita_coberta - cmv_parcial
+
+        estimativa_setembro = {
+            "registrados": registrados,
+            "estimados": estimados,
+            "pendentes": pendentes,
+            "custo_historico": custo_historico,
+            "custo_estimado": custo_estimado,
+            "cmv_parcial": cmv_parcial,
+            "receita_coberta": receita_coberta,
+            "receita_pendente": receita_pendente,
+            "lucro_parcial": lucro_parcial,
+            "margem_parcial": (
+                (lucro_parcial / receita_coberta * 100).quantize(CENTAVO)
+                if receita_coberta > ZERO else None
+            ),
+        }
+
+        # Combina os custos de outros meses, somente quando completos.
+        outros = itens.exclude(
+            venda__data_venda__range=(
+                _date(2026, 9, 1), _date(2026, 9, 30)
+            )
+        )
+        outros_resumo = outros.aggregate(
+            total_itens=Count("pk"),
+            com_custo=Count("pk", filter=custo_ok),
+            custo=Sum("custo_total_snapshot", filter=custo_ok),
+            receita=Sum("valor_total"),
+            sem_valor=Count("pk") - Count("valor_total"),
+        )
+
+        outros_completos = (
+            outros_resumo["total_itens"] == outros_resumo["com_custo"]
+            and outros_resumo["sem_valor"] == 0
+            and custos["itens_sem_valor"] == 0
+            and sem_valor == 0
+            and divergencia == ZERO
+        )
+
+        if outros_completos:
+            custo_outros = outros_resumo["custo"] or ZERO
+            receita_outros = outros_resumo["receita"] or ZERO
+
+            estimativa_setembro["registrados"] += outros_resumo["com_custo"]
+            estimativa_setembro["custo_historico"] += custo_outros
+            estimativa_setembro["receita_coberta"] += receita_outros
+            estimativa_setembro["cmv_parcial"] += custo_outros
+
+            lucro_combinado = (
+                estimativa_setembro["receita_coberta"]
+                - estimativa_setembro["cmv_parcial"]
+            )
+            estimativa_setembro["lucro_parcial"] = lucro_combinado
+            estimativa_setembro["margem_parcial"] = (
+                (
+                    lucro_combinado
+                    / estimativa_setembro["receita_coberta"]
+                    * 100
+                ).quantize(CENTAVO)
+                if estimativa_setembro["receita_coberta"] > ZERO
+                else None
+            )
+            estimativa_setembro["periodo_misto"] = (
+                outros_resumo["total_itens"] > 0
+            )
+        else:
+            # Nao ocultar custos desconhecidos de outros meses.
+            estimativa_setembro = None
+
     rentabilidade = {
         'disponivel': completo,
         'cmv': cmv,
@@ -165,6 +334,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
         'quantidade': custos['total_itens'],
         'com_custo': custos['com_custo'],
         'divergencia': divergencia,
+        'estimativa_setembro': estimativa_setembro,
     }
 
     return {
