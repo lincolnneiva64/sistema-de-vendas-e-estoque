@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Case, CharField, Count, F, Func, Min, Q, Sum, Value, When
 from django.db.models.functions import Coalesce, Lower
 
-from estoque.models import Venda
+from estoque.models import Venda, ItemVenda
 from estoque.graficos_relatorios import evolucao_diaria, barras_evolucao
 from estoque.analise_evolucao import (analisar, analisar_historico, modo_padrao,
     periodos_historicos, referencia_historica, referencia_equivalente)
@@ -126,8 +126,50 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
         grupo['percentual'] = (grupo['valor']/total*100).quantize(CENTAVO) if total > ZERO else ZERO
         if chave != 'nao_classificado' or grupo['quantidade']:
             participacoes.append({'chave': chave, 'rotulo': rotulo, **grupo})
+
+    # CMV gerencial: custos congelados na venda, sem alterar estoque.
+    itens = ItemVenda.objects.filter(
+        venda__in=base.exclude(grupo='consumo').values('pk')
+    )
+    custo_ok = (
+        Q(custo_total_snapshot__isnull=False)
+        & Q(custo_total_snapshot__gte=ZERO)
+        & Q(custo_unitario_snapshot__gt=ZERO)
+        & Q(custo_origem_snapshot='preco_compra_atual')
+        & Q(quantidade__gt=ZERO)
+        & ~Q(custo_unidade_snapshot='')
+    )
+    custos = itens.aggregate(
+        total_itens=Count('pk'),
+        com_custo=Count('pk', filter=custo_ok),
+        faturamento_itens=Sum('valor_total'),
+        itens_sem_valor=Count('pk') - Count('valor_total'),
+        custo_registrado=Sum('custo_total_snapshot', filter=custo_ok),
+    )
+    receita_itens = custos['faturamento_itens'] or ZERO
+    cmv = custos['custo_registrado'] or ZERO
+    divergencia = receita_itens - total
+    completo = (
+        custos['total_itens'] > 0
+        and custos['total_itens'] == custos['com_custo']
+        and custos['itens_sem_valor'] == 0
+        and sem_valor == 0
+        and divergencia == ZERO
+    )
+    rentabilidade = {
+        'disponivel': completo,
+        'cmv': cmv,
+        'lucro': total - cmv if completo else None,
+        'margem': ((total - cmv) / total * 100).quantize(CENTAVO)
+                  if completo and total > ZERO else None,
+        'quantidade': custos['total_itens'],
+        'com_custo': custos['com_custo'],
+        'divergencia': divergencia,
+    }
+
     return {
         'faturamento': total, 'quantidade': quantidade,
+        'rentabilidade': rentabilidade,
         'ticket_medio': (total / quantidade).quantize(CENTAVO) if quantidade else ZERO,
         'vista': grupos['vista'], 'prazo': grupos['prazo'], 'consumo': grupos['consumo'],
         'total_registros_consulta': total + grupos['consumo']['valor'],

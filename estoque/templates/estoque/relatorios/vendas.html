@@ -24,6 +24,27 @@
   <div class="indicador-vista"><dt>Vendas à vista</dt><dd>{{ resumo.vista.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.vista.percentual|numero_br }}% do faturamento</span><span>{{ resumo.vista.quantidade }} venda(s)</span></dd></div>
   <div class="indicador-prazo"><dt>Vendas a prazo</dt><dd>{{ resumo.prazo.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.prazo.percentual|numero_br }}% do faturamento</span><span>{{ resumo.prazo.quantidade }} venda(s)</span></dd></div>
 </dl>
+
+<dl class="relatorios-indicadores relatorios-rentabilidade">
+  <div><dt>CMV registrado</dt>
+    <dd>{% if resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.cmv|moeda_br }}{% else %}Indisponível{% endif %}</dd>
+  </div>
+  <div><dt>Lucro bruto gerencial</dt>
+    <dd>{% if resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.lucro|moeda_br }}{% else %}Indisponível{% endif %}</dd>
+  </div>
+  <div><dt>Margem bruta</dt>
+    <dd>{% if resumo.rentabilidade.margem != None %}{{ resumo.rentabilidade.margem|numero_br }}%{% else %}Indisponível{% endif %}</dd>
+  </div>
+</dl>
+<p class="grafico-nota">Rentabilidade gerencial baseada nos custos registrados no momento das vendas. Não representa lucro líquido nem custo contábil auditado.</p>
+{% if not resumo.rentabilidade.disponivel %}
+<p role="status" class="relatorios-aviso">
+  Cálculo completo indisponível: {{ resumo.rentabilidade.com_custo }}
+  de {{ resumo.rentabilidade.quantidade }} itens com custo registrado.
+  Diferença entre faturamento das vendas e dos itens:
+  {{ resumo.rentabilidade.divergencia|moeda_br }}.
+</p>
+{% endif %}
 {% if resumo.nao_classificado.quantidade %}<p class="relatorios-aviso">Pagamento não classificado: {{ resumo.nao_classificado.valor|moeda_br }} em {{ resumo.nao_classificado.quantidade }} venda(s). Incluído no faturamento comercial, separado de à vista e a prazo.</p>{% endif %}
 {% include 'estoque/relatorios/graficos.html' %}
 <section class="relatorios-consumo"><h2>Consumo próprio — separado das vendas comerciais</h2>
