@@ -106,6 +106,28 @@
         situacao.className = 'indicadores-situacao';
         situacao.textContent = dadosMes.situacao;
         bloco.append(situacao);
+
+        // Fechamento real de meses completos.
+        // Nao confundir com previsoes ou equivalentes teoricos.
+        if (!produto &&
+            dados.modo === 'mensal' &&
+            dados.medida !== 'vendas' &&
+            dados.medida !== 'quantidade' &&
+            dadosMes.situacao === 'Completo' &&
+            !dadosMes.previsao &&
+            !dadosMes.equivalente_teorico &&
+            periodo.valor !== null &&
+            periodo.valor !== undefined) {
+
+            linha('Fechamento real:', moeda(periodo.valor),
+                'indicadores-fechamento');
+
+            const notaFechamento = document.createElement('p');
+            notaFechamento.className = 'comparacao-nota';
+            notaFechamento.textContent = 'M\u00eas encerrado.';
+            bloco.append(notaFechamento);
+        }
+
         const metodo = document.createElement('details');
         metodo.className = 'indicadores-metodo';
         const tituloMetodo = document.createElement('summary');
@@ -172,6 +194,10 @@
             const nota = document.createElement('p');
             nota.className = 'comparacao-nota';
             nota.textContent = produto ? 'Estimativa teórica · não realizado.' : 'Média diária de ' + teorico.dias_base + ' dias × ' + teorico.dias_calendario + ' dias de calendário. Não realizado.';
+            if (!produto) {
+                nota.textContent =
+                    'Hist\u00f3rico incompleto. Estimativa, n\u00e3o realizado.';
+            }
             bloco.append(nota);
             if (produto) {
                 const explicacao = document.createElement('p');

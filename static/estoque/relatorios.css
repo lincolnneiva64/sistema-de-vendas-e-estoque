@@ -233,3 +233,30 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
 .grafico-barra-variacao.crescimento .comparacao-valor {
     color: #13734c;
 }
+
+
+/* AJUSTE VISUAL FECHAMENTO REAL V2 */
+
+.grafico-barra-indicadores > .indicadores-situacao {
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #24435b;
+    margin-top: 12px;
+    margin-bottom: 12px;
+}
+
+.grafico-barra-indicadores .indicadores-fechamento {
+    color: #167047;
+    text-align: center;
+    margin-top: 9px;
+    line-height: 1.5;
+}
+
+.grafico-barra-indicadores .indicadores-fechamento strong {
+    display: block;
+    color: #167047;
+    font-size: 1.15rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+}
