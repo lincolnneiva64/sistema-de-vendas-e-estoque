@@ -94,6 +94,7 @@
             p.append(numero); bloco.append(p);
             return p;
         };
+
         if (dados.medida !== 'vendas') linha(dados.medida === 'quantidade' ? 'Média por venda:' : 'Ticket médio:', dadosMes.ticket_medio === null ? 'não calculável' : moeda(dadosMes.ticket_medio));
         linha('Média diária:', dadosMes.media_diaria === null ? 'indisponível' : moeda(dadosMes.media_diaria));
         const base = document.createElement('p');
@@ -265,6 +266,44 @@
                 ' · ' + periodo.inicio.slice(8, 10) + '/' + periodo.inicio.slice(5, 7) + '–' + periodo.fim.slice(8, 10) + '/' + periodo.fim.slice(5, 7) :
                 periodo.rotulo + (parcial ? ' · ' + periodo.status : '');
             data.title = periodo.rotulo;
+
+            // COMPARACAO ABAIXO DAS BARRAS V2
+            if (dados.modo === 'mensal') {
+                const origem = dados.itens.find(p =>
+                    p.comparacao?.anterior_inicio &&
+                    p.comparacao?.anterior_fim &&
+                    p.comparacao?.inicio &&
+                    p.comparacao?.fim
+                );
+                const comp = origem?.comparacao;
+
+                if (comp) {
+                    const mesBarra = periodo.inicio.slice(0, 7);
+                    const anterior = mesBarra === comp.anterior_inicio.slice(0, 7);
+                    const atual = mesBarra === comp.inicio.slice(0, 7);
+
+                    if (anterior || atual) {
+                        const ini = anterior ? comp.anterior_inicio : comp.inicio;
+                        const fim = anterior ? comp.anterior_fim : comp.fim;
+                        const valor = anterior ? comp.anterior : comp.atual;
+
+                        if (valor !== null && valor !== undefined) {
+                            const detalhe = document.createElement('span');
+                            detalhe.className = 'comparacao-abaixo-barra';
+
+                            const datas = document.createElement('span');
+                            datas.textContent = dataCurta(ini) + ' a ' + dataCurta(fim);
+
+                            const numero = document.createElement('strong');
+                            numero.textContent = moeda(valor);
+
+                            detalhe.append(datas, numero);
+                            data.append(detalhe);
+                        }
+                    }
+                }
+            }
+
             const variacao = document.createElement('span');
             variacao.className = 'grafico-barra-variacao';
             variacao.textContent = periodo.variacao === null ? 'Sem período comparável' :
@@ -292,6 +331,9 @@
                         sinal(periodo.variacao) + String(periodo.variacao).replace('.', ',') + '%',
                     dados.par_mensal ? 'vs mês anterior' : comp.rotulo];
                 if (!dados.par_mensal) textos.push('vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
+                if (!produto && dados.modo === 'mensal' && dados.cobertura_mensal) {
+                    textos.splice(2, textos.length - 2, 'Vendas parciais equivalentes');
+                }
                 if (produto) textos.splice(0, textos.length, 'Comparação do período realizado', textos[0] + ' · ' + textos[1],
                     dataCurta(comp.inicio) + ' a ' + dataCurta(comp.fim),
                     'vs ' + dataCurta(comp.anterior_inicio) + ' a ' + dataCurta(comp.anterior_fim));
@@ -305,6 +347,62 @@
                     '. ' + (periodo.motivo || 'Comparação entre as datas equivalentes indicadas.') +
                     (comp.inclui_hoje ? ' Hoje ainda está em andamento.' : '');
             }
+
+            // COMPARACAO ESPELHADA V3
+            // Percentuais usam a mesma base: periodo anterior.
+            if (dados.modo === 'mensal' && dados.cobertura_mensal) {
+                const origem = dados.itens.find(p =>
+                    p.comparacao?.anterior_inicio &&
+                    p.comparacao?.inicio &&
+                    p.diferenca !== null &&
+                    p.diferenca !== undefined
+                );
+
+                const comp = origem?.comparacao;
+
+                if (comp &&
+                    periodo.inicio.slice(0, 7) ===
+                    comp.anterior_inicio.slice(0, 7) &&
+                    comp.inicio.slice(0, 7) !==
+                    comp.anterior_inicio.slice(0, 7)) {
+
+                    const valorOriginal = String(origem.diferenca);
+                    const negativo = valorOriginal.startsWith('-');
+                    const absoluto = valorOriginal.replace(/^[+-]/, '');
+                    const invertido = negativo ? '+' : Number(absoluto) > 0 ? '-' : '';
+
+                    const percentualOriginal = origem.variacao;
+                    const percentual = percentualOriginal === null
+                        ? '% nao calculavel'
+                        : (Number(percentualOriginal) < 0 ? '+' :
+                           Number(percentualOriginal) > 0 ? '-' : '') +
+                          String(percentualOriginal).replace(/^[+-]/, '').replace('.', ',') + '%';
+
+                    variacao.replaceChildren();
+
+                    const valor = document.createElement('span');
+                    valor.className = 'comparacao-valor';
+                    valor.textContent = invertido + moeda(absoluto);
+
+                    const taxa = document.createElement('span');
+                    taxa.className = 'comparacao-valor';
+                    taxa.textContent = percentual;
+
+                    const referencia = document.createElement('span');
+                    referencia.className = 'comparacao-nota';
+                    referencia.textContent = 'Vendas parciais equivalentes';
+
+                    variacao.append(valor, taxa, referencia);
+                    variacao.classList.remove('crescimento', 'queda');
+
+                    if (negativo) variacao.classList.add('crescimento');
+                    else if (Number(absoluto) > 0) variacao.classList.add('queda');
+
+                    variacao.title =
+                        'Comparacao parcial; percentual calculado sobre o periodo anterior.';
+                }
+            }
+
             item.append(barra, rotulo, data, variacao);
             const estimativa = fantasmaDoPeriodo(periodo);
             if (estimativa) {
