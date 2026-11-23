@@ -270,6 +270,11 @@
             item.className = 'grafico-barra-dia';
             if (!dados.par_mensal) item.style.width = Math.max(periodo.indicadores ? 240 : 180, moeda(valor).length * 8 + 20) + 'px';
             item.dataset.data = periodo.inicio;
+            if (!produto && dados.modo === 'semanal' && dados.semana_atual) {
+                item.tabIndex = 0;
+                item.setAttribute('role', 'button');
+                item.title = 'Selecionar esta semana para comparar no gráfico diário';
+            }
             const barra = document.createElement('span');
             barra.className = 'grafico-barra' + (parcial ? ' grafico-barra-parcial' : '');
             barra.style.top = Math.min(y(valor), y(0)) + 'px';
@@ -384,6 +389,27 @@
                 variacao.title = 'Atual: ' + moeda(comp.atual) + '; anterior: ' + moeda(comp.anterior) +
                     '. ' + (periodo.motivo || 'Comparação entre as datas equivalentes indicadas.') +
                     (comp.inclui_hoje ? ' Hoje ainda está em andamento.' : '');
+            }
+
+            // EVOLUCAO_SEMANAL_DUPLO_PAINEL_20261123
+            if (!produto && dados.modo === 'semanal' && dados.semana_atual &&
+                periodo.inicio === dados.semana_atual.inicio) {
+                const dia = dados.semana_atual.dias_transcorridos;
+                data.textContent = 'Semana ' + periodo.inicio.slice(8, 10) + '/' +
+                    periodo.inicio.slice(5, 7) + ' a ' +
+                    dados.semana_atual.fim.slice(8, 10) + '/' +
+                    dados.semana_atual.fim.slice(5, 7);
+                const notaDia = document.createElement('span');
+                notaDia.className = 'semana-dia-atual';
+                notaDia.textContent = dia + ' de 7 dias · Em andamento';
+                data.append(notaDia);
+                variacao.replaceChildren();
+                variacao.classList.remove('crescimento', 'queda');
+                const nota = document.createElement('span');
+                nota.className = 'comparacao-nota';
+                nota.textContent = 'Faturamento acumulado até agora · Dia atual não encerrado';
+                variacao.append(nota);
+                variacao.title = 'Compare os dias equivalentes no painel de evolução diária.';
             }
 
             // COMPARACAO ESPELHADA V3
@@ -532,4 +558,137 @@
         if (form.elements[nome]) form.elements[nome].addEventListener('change', atualizar);
     }
     atualizar();
+})();
+
+/* EVOLUCAO_SEMANAL_MULTIPLAS_SEMANAS_20261123 — gráfico SVG, somente leitura. */
+(() => {
+    const fonte = document.getElementById('relatorios-semana-diaria-dados');
+    const destino = document.getElementById('semana-diaria-grafico');
+    if (!fonte || !destino) return;
+    const dados = JSON.parse(fonte.textContent);
+    const semanas = dados.semanas || [];
+    const seletor = document.getElementById('semana-selecionada');
+    const quantidadeBotoes = [...document.querySelectorAll('[data-semana-quantidade]')];
+    const visaoBotoes = [...document.querySelectorAll('[data-semana-visao]')];
+    const painel = document.getElementById('semana-painel-diario');
+    const graficoSemanal = document.querySelector('.grafico-barras-janela');
+    const controlesSemanais = document.querySelector('.grafico-barras-controles');
+    const legenda = document.getElementById('semana-legenda');
+    const periodos = document.getElementById('semana-comparacao-periodos');
+    const aviso = document.getElementById('semana-aviso-parcial');
+    const lista = document.querySelector('.grafico-barras-lista');
+    if (!seletor || !legenda || !periodos || !aviso || !painel || !semanas.length) return;
+    const cores = ['#16734f', '#2459c5', '#c15b05', '#8b3fae'];
+    const nomes = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+    const NS = 'http://www.w3.org/2000/svg';
+    const dinheiro = n => Number(n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+    const abreviar = iso => iso.slice(8,10) + '/' + iso.slice(5,7);
+    const rotulo = s => abreviar(s.inicio) + ' a ' + abreviar(s.fim) + (s.parcial ? ' · em andamento' : '');
+    let semanaEscolhida = dados.selecionada;
+    let quantidade = 2;
+    const criar = (tag, attrs, parent) => {
+        const el = document.createElementNS(NS, tag);
+        for (const [chave, valor] of Object.entries(attrs || {})) el.setAttribute(chave, String(valor));
+        if (parent) parent.appendChild(el);
+        return el;
+    };
+    for (const s of semanas.slice(1)) {
+        const option = document.createElement('option');
+        option.value = s.inicio;
+        option.textContent = rotulo(s);
+        seletor.appendChild(option);
+    }
+    if (![...seletor.options].some(o => o.value === semanaEscolhida)) {
+        semanaEscolhida = seletor.options[seletor.options.length - 1]?.value;
+    }
+    seletor.value = semanaEscolhida;
+    function selecionadas() {
+        const pos = semanas.findIndex(s => s.inicio === semanaEscolhida);
+        // A primeira série é referência; as outras 16 são selecionáveis.
+        return semanas.slice(Math.max(0, pos - quantidade + 1), pos + 1).reverse();
+    }
+    function desenhar() {
+        const series = selecionadas();
+        quantidadeBotoes.forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.semanaQuantidade) === quantidade)));
+        legenda.replaceChildren();
+        for (let i=0;i<series.length;i++) {
+            const item = document.createElement('span');
+            item.className = 'semana-chave';
+            item.style.setProperty('--cor-semana', cores[i]);
+            item.textContent = rotulo(series[i]);
+            legenda.appendChild(item);
+        }
+        periodos.textContent = series.length === 1 ? 'Semana selecionada: ' + rotulo(series[0]) :
+            'Comparando ' + series.length + ' semanas: ' + series.map(rotulo).join(' • ');
+        aviso.textContent = series.some(s => s.parcial) ?
+            'A semana atual e o dia de hoje ainda estão em andamento. Não compare o acumulado parcial com o fechamento de semanas completas.' :
+            'Semanas encerradas. Passe o mouse sobre os pontos para consultar os valores acumulados.';
+        const largura=740, altura=315, margemEsq=88, margemDir=24, topo=25, rodape=50;
+        const utilX=largura-margemEsq-margemDir, utilY=altura-topo-rodape;
+        const valores = series.flatMap(s => s.pontos.map(p => p.valor)).filter(v => v !== null).map(Number);
+        const max = Math.max(1, ...valores)*1.1;
+        const x = i => margemEsq + utilX*i/6;
+        const y = v => topo + utilY - Number(v)*utilY/max;
+        const svg=criar('svg',{viewBox:`0 0 ${largura} ${altura}`,role:'img',
+            'aria-label':'Faturamento acumulado de '+series.map(rotulo).join(' versus '),class:'semana-diaria-svg'});
+        for (let t=0;t<=4;t++) {
+            const v=max*t/4, yy=y(v);
+            criar('line',{x1:margemEsq,x2:largura-margemDir,y1:yy,y2:yy,stroke:'#dbe4ea','stroke-dasharray':'3 4'},svg);
+            const tx=criar('text',{x:margemEsq-10,y:yy+4,'text-anchor':'end',fill:'#526575','font-size':12},svg);
+            tx.textContent=v>=1000?'R$ '+(v/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil':'R$ '+Math.round(v);
+        }
+        for (let i=0;i<7;i++) {
+            const tx=criar('text',{x:x(i),y:altura-18,'text-anchor':'middle',fill:'#354657','font-size':13},svg);
+            tx.textContent=nomes[i];
+        }
+        series.forEach((serie,k) => {
+            let grupo=[], grupos=[];
+            serie.pontos.forEach((p,i) => {
+                if (p.valor === null || p.valor === undefined) {
+                    if (grupo.length) grupos.push(grupo);
+                    grupo=[];
+                } else grupo.push([i,Number(p.valor),p]);
+            });
+            if (grupo.length) grupos.push(grupo);
+            for (const trecho of grupos) {
+                if (trecho.length>1) criar('polyline', {points:trecho.map(([i,v])=>x(i)+','+y(v)).join(' '),
+                    fill:'none',stroke:cores[k],'stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'},svg);
+                for (const [i,v,p] of trecho) {
+                    const c=criar('circle',{cx:x(i),cy:y(v),r:5,fill:cores[k],stroke:'#fff','stroke-width':1.5},svg);
+                    const tt=criar('title',{},c);
+                    tt.textContent=rotulo(serie)+' — '+nomes[i]+': '+dinheiro(v)+(p.em_andamento?' · dia em andamento':'');
+                }
+            }
+        });
+        destino.replaceChildren(svg);
+        destino.setAttribute('aria-label', series.map(s=>rotulo(s)+': '+s.pontos.map((p,i)=>
+            nomes[i]+' '+(p.valor===null?'sem dado comprovado':dinheiro(p.valor))).join(', ')).join('. '));
+    }
+    function visao(tipo) {
+        if (graficoSemanal) graficoSemanal.hidden=tipo==='diario';
+        if (controlesSemanais) controlesSemanais.hidden=tipo==='diario';
+        painel.hidden=tipo==='semanal';
+        visaoBotoes.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.semanaVisao===tipo)));
+    }
+    function escolher(inicio) {
+        if (!semanas.some(s=>s.inicio===inicio)) return;
+        semanaEscolhida=inicio;
+        seletor.value=inicio;
+        desenhar();
+    }
+    quantidadeBotoes.forEach(b=>b.addEventListener('click',()=>{quantidade=Number(b.dataset.semanaQuantidade);desenhar();}));
+    visaoBotoes.forEach(b=>b.addEventListener('click',()=>visao(b.dataset.semanaVisao)));
+    seletor.addEventListener('change',()=>escolher(seletor.value));
+    if (lista) {
+        const acionar = e => {
+            const li=e.target.closest('li[data-data]');
+            if (li && lista.contains(li)) {escolher(li.dataset.data);visao('ambos');}
+        };
+        lista.addEventListener('click',acionar);
+        lista.addEventListener('keydown',e=>{
+            if (e.key==='Enter'||e.key===' ') {e.preventDefault();acionar(e);}
+        });
+    }
+    desenhar();
+    visao('ambos');
 })();

@@ -19,12 +19,45 @@
       <div class="grafico-barras-janela" role="region" aria-label="{% if produto_relatorio %}Evolução comercial do produto{% else %}Faturamento{% endif %} por período em barras; use a rolagem horizontal para ler os períodos" tabindex="0">
         <div class="grafico-barras-plot"><ol class="grafico-barras-lista"></ol><div class="grafico-media-linha" aria-hidden="true"></div><div class="grafico-zero-linha" hidden aria-hidden="true"></div></div>
       </div>
+      <!-- EVOLUCAO_SEMANAL_DUPLO_PAINEL_20261123 -->
+      {% if not produto_relatorio and analise.modo == 'semanal' and resumo.semana_diaria %}
+      <div class="semana-visoes" role="group" aria-label="Visualização da evolução semanal">
+        <button type="button" data-semana-visao="ambos" aria-pressed="true">Ver os dois</button>
+        <button type="button" data-semana-visao="semanal" aria-pressed="false">Semanal</button>
+        <button type="button" data-semana-visao="diario" aria-pressed="false">Diário</button>
+      </div>
+      {% endif %}
       <nav class="grafico-barras-controles" aria-label="Períodos do gráfico">
         <button type="button" data-barras-anterior>Anterior</button>
         <span data-barras-intervalo role="status"></span>
         <button type="button" data-barras-proximo>Próximos períodos</button>
       </nav>
     </div>
+    {% if not produto_relatorio and analise.modo == 'semanal' and resumo.semana_diaria %}
+    {% with dados_semana=resumo.semana_diaria %}
+    {{ dados_semana|json_grafico:'relatorios-semana-diaria-dados' }}
+    <!-- EVOLUCAO_SEMANAL_MULTIPLAS_SEMANAS_20261123 -->
+    <section class="semana-painel-diario" id="semana-painel-diario" aria-label="Comparação do faturamento semanal acumulado">
+      <h3>Comparação das vendas por semana</h3>
+      <p class="semana-diaria-subtitulo">Escolha 2, 3 ou 4 semanas. Cada linha acompanha o faturamento acumulado de segunda a domingo.</p>
+      <div class="semana-filtros">
+        <label for="semana-selecionada">Semana de referência</label>
+        <select id="semana-selecionada" aria-label="Semana de referência para a comparação"></select>
+        <fieldset class="semana-quantidade" aria-label="Quantidade de semanas">
+          <legend>Comparar</legend>
+          <button type="button" data-semana-quantidade="2" aria-pressed="true">2 semanas</button>
+          <button type="button" data-semana-quantidade="3" aria-pressed="false">3 semanas</button>
+          <button type="button" data-semana-quantidade="4" aria-pressed="false">4 semanas</button>
+        </fieldset>
+      </div>
+      <p id="semana-comparacao-periodos" class="semana-diaria-subtitulo" role="status"></p>
+      <div class="semana-diaria-legenda" id="semana-legenda" aria-label="Legenda das semanas"></div>
+      <div id="semana-diaria-grafico" role="img" aria-label="Faturamento acumulado das semanas selecionadas"></div>
+      <p id="semana-aviso-parcial" class="semana-diaria-nota"></p>
+      <p class="semana-diaria-nota">Cada ponto acumula os documentos desde segunda-feira. Dias futuros não são zeros; dias encerrados sem registros suficientes aparecem como indisponíveis. Clique em uma barra semanal para investigar aquela semana.</p>
+    </section>
+    {% endwith %}
+    {% endif %}
     {% if produto_relatorio %}<details class="indicadores-metodo"><summary>Como foi calculado</summary>{% endif %}
     {% if analise.historico or analise.cobertura_mensal %}<p class="grafico-nota">{% if analise.cobertura_comercial %}Cobertura baseada nos documentos comerciais de todos os produtos, com totais completos. Dias cobertos sem venda deste produto ou unidade entram como zero; dias sem cobertura permanecem desconhecidos. {% endif %}Sem registros: sem histórico suficiente, nunca zero presumido. Totais ausentes interrompem a comparação. Os documentos disponíveis não certificam a completude de arquivos antigos. {% if analise.inicio_registros %}Primeiro registro preservado: {{ analise.inicio_registros|date:'d/m/Y' }}; isso não comprova a data real de início do sistema. A comparação mensal exige registros válidos em todos os dias dos dois intervalos; dias sem registro não são presumidos como zero.{% endif %} {% if analise.comparacao_mensal == 'ano_anterior' %}Meses comparados ao mesmo mês do ano anterior.{% endif %}</p>{% endif %}
     {% if not resumo.grafico_evolucao.par_mensal and not analise.historico and not analise.cobertura_mensal %}<p class="grafico-nota"><strong>{{ analise.titulo }}</strong>. {% if analise.media != None %}<span class="grafico-media-legenda" aria-hidden="true"></span>Média dos períodos completos: <strong>{{ analise.media|valor_evolucao:analise }}</strong> ({{ analise.quantidade_completos }}).{% else %}Sem períodos completos para calcular a média.{% endif %} Inclui ocorrências sem vendas como zero; períodos parciais ficam fora da média{% if analise.modo != 'semanal' and not analise.equivalente %} e da variação{% endif %}.</p>{% endif %}

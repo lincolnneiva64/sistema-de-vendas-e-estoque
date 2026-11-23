@@ -325,6 +325,74 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
             # Nao ocultar custos desconhecidos de outros meses.
             estimativa_setembro = None
 
+    # EVOLUCAO_SEMANAL_MULTIPLAS_SEMANAS_20261123
+    # Até 16 semanas para escolher; mais 1 para a referência anterior.
+    # Nenhuma venda individual é carregada, apenas totais agregados por dia.
+    semana_diaria = None
+    if modo == 'semanal':
+        intervalo_inicio, intervalo_fim = historico or (inicio, fim)
+        ultima_data = min(intervalo_fim, hoje)
+        if intervalo_inicio <= ultima_data:
+            ultima_segunda = ultima_data - timedelta(days=ultima_data.weekday())
+            semanas = [ultima_segunda - timedelta(weeks=k) for k in range(16)]
+            semanas = sorted(s for s in semanas if s >= intervalo_inicio)
+            if semanas:
+                consulta_inicio = semanas[0] - timedelta(days=7)
+                consulta_fim = min(hoje, semanas[-1] + timedelta(days=6))
+                linhas = list(
+                    todas.exclude(_forma='consumoproprio')
+                    .filter(data_venda__range=(consulta_inicio, consulta_fim))
+                    .values('data_venda')
+                    .annotate(valor=Sum('total'), sem_total=Count('pk') - Count('total'))
+                    .order_by('data_venda')
+                )
+                por_dia = {r['data_venda']: r for r in linhas}
+                series = []
+                for segunda in [semanas[0] - timedelta(days=7), *semanas]:
+                    acumulado = ZERO
+                    documentacao_valida = True
+                    pontos = []
+                    for indice in range(7):
+                        dia = segunda + timedelta(days=indice)
+                        linha = por_dia.get(dia)
+                        if dia > hoje:
+                            valor = None
+                        elif linha and not linha['sem_total'] and documentacao_valida:
+                            acumulado += linha['valor'] or ZERO
+                            valor = acumulado
+                        elif dia == hoje and not linha and documentacao_valida:
+                            # Hoje está aberto: zero apenas dos registros até agora.
+                            valor = acumulado
+                        else:
+                            # Não presumir zero em dia encerrado sem documentação.
+                            documentacao_valida = False
+                            valor = None
+                        pontos.append({
+                            'dia': dia.isoformat(),
+                            'valor': str(valor) if valor is not None else None,
+                            'em_andamento': dia == hoje,
+                        })
+                    series.append({
+                        'inicio': segunda.isoformat(),
+                        'fim': (segunda + timedelta(days=6)).isoformat(),
+                        'parcial': segunda <= hoje <= segunda + timedelta(days=6),
+                        'pontos': pontos,
+                    })
+                # Preferir duas semanas encerradas ao abrir o painel.
+                encerradas = [s for s in semanas if s + timedelta(days=6) < hoje]
+                selecionada = (encerradas[-1] if encerradas else semanas[-1])
+                semana_diaria = {
+                    'semanas': series,
+                    'selecionada': selecionada.isoformat(),
+                    'quantidade_inicial': 2,
+                    'hoje': hoje.isoformat(),
+                }
+                analise['semana_atual'] = {
+                    'inicio': (hoje - timedelta(days=hoje.weekday())).isoformat(),
+                    'fim': (hoje - timedelta(days=hoje.weekday()) + timedelta(days=6)).isoformat(),
+                    'dias_transcorridos': hoje.weekday() + 1,
+                }
+
     rentabilidade = {
         'disponivel': completo,
         'cmv': cmv,
@@ -340,6 +408,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
     return {
         'faturamento': total, 'quantidade': quantidade,
         'rentabilidade': rentabilidade,
+        'semana_diaria': semana_diaria,
         'ticket_medio': (total / quantidade).quantize(CENTAVO) if quantidade else ZERO,
         'vista': grupos['vista'], 'prazo': grupos['prazo'], 'consumo': grupos['consumo'],
         'total_registros_consulta': total + grupos['consumo']['valor'],

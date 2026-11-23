@@ -689,3 +689,29 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     margin-top: 12px;
     margin-bottom: 12px;
 }
+
+/* EVOLUCAO_SEMANAL_DUPLO_PAINEL_20261123 */
+.semana-dia-atual { display:block; color:#1b735c; font-weight:700; margin-top:6px; }
+.semana-visoes { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.semana-visoes button { min-height:42px; padding:8px 14px; background:#fff; color:#23445b; border:1px solid #b7c7d2; border-radius:4px; cursor:pointer; }
+.semana-visoes button[aria-pressed="true"] { background:#176b53; color:#fff; border-color:#176b53; font-weight:700; }
+.semana-painel-diario { margin:24px 0 10px; padding:18px; border:1px solid #d1dbe3; border-radius:6px; background:#fff; }
+.semana-painel-diario h3 { margin:0 0 8px; font-size:1.05rem; }
+.semana-diaria-subtitulo, .semana-diaria-nota { color:#526575; font-size:.85rem; line-height:1.5; }
+.semana-diaria-legenda { display:flex; flex-wrap:wrap; gap:18px; margin:12px 0; font-size:.83rem; }
+.semana-chave::before { content:""; display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:6px; background:#64748b; }
+.semana-chave-atual::before { background:#187b60; }
+.semana-diaria-svg { display:block; width:100%; height:auto; max-height:350px; }
+.grafico-barras-janela[hidden], .grafico-barras-controles[hidden], .semana-painel-diario[hidden] { display:none !important; }
+
+/* EVOLUCAO_SEMANAL_MULTIPLAS_SEMANAS_20261123 */
+.semana-filtros { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:14px 0; }
+.semana-filtros label { font-weight:650; font-size:.86rem; }
+.semana-filtros select { padding:10px; min-height:42px; background:#fff; color:#253c4c; border:1px solid #b7c7d2; border-radius:4px; max-width:100%; }
+.semana-quantidade { display:flex; gap:5px; align-items:center; border:0; margin:0; padding:0; flex-wrap:wrap; }
+.semana-quantidade legend { float:left; padding:7px 6px 7px 0; font-size:.82rem; }
+.semana-quantidade button { min-height:42px; padding:7px 12px; border:1px solid #b7c7d2; border-radius:4px; color:#23445b; background:#fff; cursor:pointer; }
+.semana-quantidade button[aria-pressed="true"] { background:#176b53; border-color:#176b53; color:#fff; font-weight:700; }
+.semana-diaria-legenda .semana-chave::before { background:var(--cor-semana,#64748b); }
+.grafico-barras-semanal .grafico-barra-dia[role="button"] { cursor:pointer; }
+.grafico-barras-semanal .grafico-barra-dia[role="button"]:focus-visible { outline:3px solid #176b53; outline-offset:-3px; }
