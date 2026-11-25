@@ -41,14 +41,9 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
-    if (self.OFFLINE_SUSPENDED) {
-        if (url.origin === self.location.origin && event.request.method === 'GET') {
-            event.respondWith(fetch(event.request, {cache:'no-store'}).catch(() =>
-                event.request.mode === 'navigate' ? new Response('Offline. Conecte-se ao servidor para continuar. Nenhuma gravação local disponível.',
-                    {status:503, headers:{'Content-Type':'text/plain; charset=utf-8'}}) : Response.error()));
-        }
-        return;
-    }
+    // Suspended means native networking: preserve redirects, tokens, HTTP errors
+    // and the browser's reconnection behavior. Never synthesize a terminal page.
+    if (self.OFFLINE_SUSPENDED) return;
     if (event.request.method === 'GET' && url.origin === self.location.origin && event.request.mode === 'navigate' && url.pathname === '/offline/revisao/') {
         event.respondWith(fetch(event.request, {cache:'no-store'}).catch(() => caches.match('/offline/revisao/', {cacheName:CACHE})));
         return;

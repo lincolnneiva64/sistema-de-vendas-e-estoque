@@ -9,14 +9,15 @@ let connected = false, probing = null;
 function showConnection(ok) {
     connected = ok;
     if (indicator) {
-        indicator.dataset.connection = indicator.dataset.state = ok ? 'online' : 'offline';
+        const offline = !ok && navigator.onLine === false;
+        indicator.dataset.connection = indicator.dataset.state = ok ? 'online' : offline ? 'offline' : 'checking';
         const label = document.getElementById('offline-status');
-        if (label) label.textContent = ok ? 'Online' : 'Offline';
+        if (label) label.textContent = ok ? 'Online' : offline ? 'Offline' : 'Servidor indisponível';
     }
 }
 async function request(url, options = {}) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.method === 'POST' ? 15000 : 5000);
+    const timer = setTimeout(() => controller.abort(), options.method === 'POST' || url === '/api/offline/health/' ? 15000 : 5000);
     try {
         return await fetch(url, {...options, credentials:'same-origin', cache:'no-store', signal:controller.signal});
     } catch (error) {
@@ -109,7 +110,9 @@ if (document.getElementById('layout-vendas')) {
             if (busy || pending) throw Error('Consulte o resultado do envio desta montagem antes de repetir.');
             busy = true;
             try {
-                if (!await probe()) throw Error('Offline. Conecte-se ao servidor para gravar. Nenhuma venda foi salva localmente.');
+                if (!await probe()) throw Error(navigator.onLine === false
+                    ? 'Offline. Conecte-se ao servidor para gravar. Nenhuma venda foi salva localmente.'
+                    : 'Servidor indisponível no momento. Tente novamente; nenhum envio desta venda foi iniciado.');
                 await identity();
                 await ensureSaleCosts(data.itens);
                 const current = bridge.getData();
