@@ -135,7 +135,7 @@ return true;
         core = (ROOT / 'static/offline/core.js').read_text(encoding='utf-8').replace('export ', '')
         module = re.sub(r'^import .*?;\s*', '', (ROOT / 'static/offline/online-only.js').read_text(encoding='utf-8'), flags=re.M)
         fixture = r'''
-const listeners={},timeouts=[],nodes={'offline-global':{dataset:{environment:'test-env'}},'offline-status':{}};
+const listeners={},timeouts=[],nodes={'offline-global':{dataset:{environment:'test-env'}},'offline-status':{},'offline-tab-label':{},'offline-toggle':{setAttribute(name,value){this[name]=value}}};
 const document={getElementById:id=>nodes[id]||null,addEventListener(){}};
 const window={addEventListener:(event,fn)=>listeners[event]=fn};
 const navigator={onLine:true};const setInterval=()=>0;
@@ -146,10 +146,12 @@ const fetch=async()=>({ok:available,json:async()=>({ok:available,environment:'te
         tests = r'''
 await probe();
 if(nodes['offline-status'].textContent==='Offline'||connected)throw Error('server failure misclassified as offline');
+if(nodes['offline-tab-label'].textContent!=='Offline'||nodes['offline-global'].dataset.state!=='offline')throw Error('server failure not red offline');
 if(timeouts.some(ms=>ms!==15000))throw Error('health still uses short timeout');
 navigator.onLine=false;listeners.offline();
 if(nodes['offline-status'].textContent!=='Offline')throw Error('real offline not indicated');
 navigator.onLine=true;available=true;await listeners.online();
+if(nodes['offline-tab-label'].textContent!=='Online'||nodes['offline-global'].dataset.state!=='online')throw Error('green online not restored');
 if(nodes['offline-status'].textContent!=='Online'||!connected)throw Error('reconnection did not recover immediately');
 return true;
 '''

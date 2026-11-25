@@ -1,6 +1,7 @@
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from .consumo_proprio import CLIENTES_CONSUMO_PROPRIO_IDS
 
 from .environment import (
     current_environment_label,
@@ -48,6 +49,7 @@ def ambiente_sistema(request):
         local_aviso = LOCAL_LINK_HINT
 
     return {
+        "clientes_consumo_proprio_ids": sorted(CLIENTES_CONSUMO_PROPRIO_IDS),
         "offline_environment_id": getattr(settings, "OFFLINE_ENVIRONMENT_ID", "") or host.lower(),
         "offline_suspended": getattr(settings, "OFFLINE_SUSPENDED", False),
         "ambiente_atual": ambiente,

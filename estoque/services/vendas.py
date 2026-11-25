@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from inventario.rastreabilidade import contexto_venda, identificar
 
+from ..consumo_proprio import CLIENTES_CONSUMO_PROPRIO_IDS
 from ..models import Cliente, ItemVenda, ItemVendaRemovido, Produto, SeparacaoVenda, Venda
 
 
@@ -133,6 +134,12 @@ def criar_ou_atualizar_venda(*, usuario, dados):
         cliente = Cliente.objects.filter(pk=cliente_id, ativo=True).first()
         if not cliente:
             raise ErroGravarVenda("Cliente selecionado nao foi encontrado.")
+
+    if (
+        _tipo_pagamento_consumo_proprio_texto(dados.get("tipo_pagamento"))
+        and (cliente is None or cliente.pk not in CLIENTES_CONSUMO_PROPRIO_IDS)
+    ):
+        raise ErroGravarVenda("Consumo próprio é permitido somente para os quatro clientes familiares autorizados.")
 
     itens_validados = []
     total_calculado = Decimal("0.00")

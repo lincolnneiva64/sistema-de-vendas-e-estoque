@@ -10,9 +10,13 @@ function showConnection(ok) {
     connected = ok;
     if (indicator) {
         const offline = !ok && navigator.onLine === false;
-        indicator.dataset.connection = indicator.dataset.state = ok ? 'online' : offline ? 'offline' : 'checking';
+        indicator.dataset.connection = indicator.dataset.state = ok ? 'online' : 'offline';
         const label = document.getElementById('offline-status');
         if (label) label.textContent = ok ? 'Online' : offline ? 'Offline' : 'Servidor indisponível';
+        const tab = document.getElementById('offline-tab-label');
+        if (tab) tab.textContent = ok ? 'Online' : 'Offline';
+        const toggle = document.getElementById('offline-toggle');
+        if (toggle) toggle.setAttribute('aria-label', 'Conexão: ' + (ok ? 'Online' : offline ? 'Offline' : 'Offline, servidor indisponível'));
     }
 }
 async function request(url, options = {}) {
