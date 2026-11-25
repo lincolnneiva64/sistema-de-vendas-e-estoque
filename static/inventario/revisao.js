@@ -15,7 +15,7 @@ let processando = false;
 
 function atualizarSelecao() {
     if (!formularioAtribuicao) return;
-    const campos = [...formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled)')];
+    const campos = [...formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled):not([data-aguarda-inclusao])')];
     const selecionados = [...formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:checked')].length;
     selecionarTodos.disabled = processando || campos.length === 0;
     const editaveisMarcados = campos.filter(campo => campo.checked).length;
@@ -26,7 +26,7 @@ function atualizarSelecao() {
 }
 
 selecionarTodos?.addEventListener('change', event => {
-    formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled)').forEach(campo => { campo.checked = event.target.checked; });
+    formularioAtribuicao.querySelectorAll('input[type=checkbox][name=rodadas]:not(:disabled):not([data-aguarda-inclusao])').forEach(campo => { campo.checked = event.target.checked; });
     atualizarSelecao();
 });
 formularioAtribuicao?.addEventListener('change', atualizarSelecao);
@@ -101,3 +101,16 @@ document.querySelectorAll('[data-copiar-adicional]').forEach(botao => botao.addE
         cartao.querySelector('[data-feedback-copia]').textContent = 'Selecione e copie o link exibido.';
     }
 }));
+
+document.querySelectorAll('[data-recente]').forEach(linha => {
+    const campo = linha.querySelector('input[type=checkbox]');
+    if (!campo.checked) campo.dataset.aguardaInclusao = '1';
+    linha.querySelector('[data-incluir-contagem]').addEventListener('click', event => {
+        delete campo.dataset.aguardaInclusao;
+        campo.checked = true;
+        document.querySelector('#produtos-principais').append(linha);
+        event.currentTarget.remove();
+        campo.dispatchEvent(new Event('change', {bubbles: true}));
+        campo.focus();
+    });
+});

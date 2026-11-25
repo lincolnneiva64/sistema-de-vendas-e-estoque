@@ -1,8 +1,11 @@
 """Conference display only: never change counts or authorize adjustments."""
 from django import template
+from inventario.estoque_selecao import apresentar_estoque
 from django.utils.html import format_html_join
 
 register = template.Library()
+
+register.filter('estoque_selecao', apresentar_estoque)
 
 
 @register.filter

@@ -31,7 +31,7 @@ from .erros import ErroAcesso
 from .models import Inventario, RodadaContagem, AcessoInventario, DecisaoAjuste, SinalizacaoFisica, ConfirmacaoContagem
 from .apresentacao import entrada, quantidade
 from .painel import resumo_painel
-from .selecao import itens_incluidos, rodadas_incluidas, salvar_selecao
+from .selecao import itens_incluidos, rodadas_incluidas, salvar_selecao, conferidos_recentes
 from .rastreabilidade import ORIGENS
 from .titulos import preparar_titulos
 from .ordenacao import chave_produto
@@ -85,6 +85,10 @@ def lista(request):
         except (ValueError, ObjectDoesNotExist) as exc:
             erro = str(exc)
     produtos = services.produtos_disponiveis_para_inventario().order_by("nome")
+    produtos_lista = list(produtos)
+    recentes = conferidos_recentes([p.pk for p in produtos_lista])
+    for produto in produtos_lista:
+        produto.conferido_recente = recentes.get(produto.pk)
     inventarios = Inventario.objects.order_by('-criado_em', '-pk')
     em_andamento = list(inventarios.filter(finalizada_em__isnull=True, cancelada_em__isnull=True))
     finalizados = list(inventarios.filter(finalizada_em__isnull=False, cancelada_em__isnull=True))
@@ -94,7 +98,7 @@ def lista(request):
         "finalizados": finalizados, "erro": erro,
         "categorias": produtos.exclude(categoria__isnull=True).exclude(categoria="").values_list("categoria", flat=True).distinct().order_by("categoria"),
         "fornecedores": Fornecedor.objects.filter(produtos_vinculados__ativo=True).distinct().order_by("nome"),
-        "produtos": produtos, "resumo": resumo_inicial(), "pode_criar": request.user.has_perm("inventario.gerenciar_inventario")})
+        "produtos": produtos_lista, "resumo": resumo_inicial(), "pode_criar": request.user.has_perm("inventario.gerenciar_inventario")})
 
 
 def linhas_revisao(inventario):
@@ -340,6 +344,7 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
     resumo = resumo_painel(linhas)
     from . import contagem_admin
     pode_editar_contagem = request.user.has_perm('inventario.revisar_inventario') and not inventario.cancelada_em
+    recentes = conferidos_recentes([l["item"].produto_id for l in linhas], excluir_inventario=inventario.pk)
     for linha in linhas:
         rodada = linha["rodada"]
         registro_admin = next((e for e in reversed(linha['eventos'])
@@ -360,6 +365,11 @@ def detalhe(request, inventario_id, *, consulta_auditoria=False):
             or rodada.revisada_em or linha["decisao"] or linha["sinalizacoes"]
             or any(getattr(rodada, campo) is not None for campo in ("embalagens", "avulsos", "contado", "contado_base", "esperado")))
         linha["participa_marcado"] = not erro or request.POST.get("acao") != "acesso" or linha["participante_protegido"] or str(rodada.pk) in request.POST.getlist("rodadas")
+        linha["conferido_recente"] = recentes.get(linha["item"].produto_id) if not linha["participante_protegido"] else None
+        if erro and linha["participa_marcado"]:
+            linha["conferido_recente"] = None
+        if linha["conferido_recente"] and not erro:
+            linha["participa_marcado"] = False
         linha["funcionario_escolhido"] = request.POST.get("funcionario_" + str(rodada.pk), "") if erro else ""
     prever = (request.method == "GET" and request.GET.get("atualizar") == "prever"
               and not inventario.finalizada_em and not inventario.cancelada_em

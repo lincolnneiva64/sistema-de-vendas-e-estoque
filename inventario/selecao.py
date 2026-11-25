@@ -89,3 +89,26 @@ def salvar_selecao(usuario, inventario_id, selecionados, versao, motivo):
         inventario.pendencias_conclusao = services.concluir_se_pronta(
             inventario, usuario=usuario, origem="retirada_explicita")
     return inventario
+
+
+def conferidos_recentes(produto_ids, agora=None, excluir_inventario=None):
+    """Somente leitura: última rodada concluída, sem pendências em outra conferência."""
+    from datetime import timedelta
+    from django.db.models import F, Q, Max
+    from django.utils import timezone
+    agora = agora or timezone.now()
+    ultima = RodadaContagem.objects.filter(item_id=OuterRef("item_id")).order_by("-numero").values("pk")[:1]
+    atuais = rodadas_incluidas().filter(item__produto_id__in=produto_ids,
+        item__inventario__cancelada_em__isnull=True, pk=Subquery(ultima))
+    if excluir_inventario is not None:
+        atuais = atuais.exclude(item__inventario_id=excluir_inventario)
+    pendentes = atuais.filter(item__decisao__isnull=True).exclude(propostas__estado="aplicado").filter(
+        Q(ok_em__isnull=False) & (Q(contado_base__isnull=True) | Q(esperado__isnull=True)
+        | ~Q(contado_base=F("esperado"))) | Q(numero__gt=1, ok_em__isnull=True)
+        | Q(sinalizacoes__resolvida_em__isnull=True, sinalizacoes__isnull=False)
+    ).values("item__produto_id")
+    return dict(atuais.filter(ok_em__gte=agora-timedelta(hours=24), ok_em__lte=agora,
+        item__inventario__finalizada_em__isnull=False, contado_base__isnull=False,
+        esperado__isnull=False).exclude(item__produto_id__in=pendentes)
+        .values("item__produto_id").annotate(data=Max("ok_em"))
+        .values_list("item__produto_id", "data"))

@@ -15,13 +15,14 @@
 <div class="grid"><label>Categoria<select name="categoria"><option value="">Selecione</option>{% for categoria in categorias %}<option>{{ categoria }}</option>{% endfor %}</select></label>
 <label>Fornecedor<select name="fornecedor"><option value="">Selecione</option>{% for fornecedor in fornecedores %}<option value="{{ fornecedor.pk }}">{{ fornecedor.nome }}</option>{% endfor %}</select></label></div>
 <details><summary>Seleção manual de produtos</summary><label>Filtrar produtos<input type="search" id="busca-produtos" placeholder="Nome ou código"></label>
-{% for produto in produtos %}<label class="produto-selecao"><input type="checkbox" name="produtos" value="{{ produto.pk }}"> {{ produto.nome }} · {{ produto.codigo|default:'' }}</label>{% endfor %}</details>
+<div id="produtos-manuais">{% for produto in produtos %}{% if not produto.conferido_recente %}{% include "inventario/produto_manual.html" %}{% endif %}{% endfor %}</div>
+<details><summary>Conferidos nas últimas 24 horas</summary>{% for produto in produtos %}{% if produto.conferido_recente %}{% include "inventario/produto_manual.html" %}{% endif %}{% endfor %}</details></details>
 <p class="muted">Será usado apenas o critério escolhido. A seleção e as regras de conversão ficam congeladas.</p><button>Criar conferência</button></form></details>{% endif %}
 <section aria-labelledby="titulo-em-andamento" id="conferencias-em-andamento"><h2 id="titulo-em-andamento">Conferências em andamento</h2>
 {% for inventario in em_andamento %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência em andamento.</p>{% endfor %}</section>
 <section aria-labelledby="titulo-historico" id="historico-conferencias"><h2 id="titulo-historico">Histórico de conferências finalizadas</h2>
 {% for inventario in finalizados %}{% include 'inventario/lista_conferencia.html' %}{% empty %}<p class="muted">Nenhuma conferência finalizada.</p>{% endfor %}</section>
-{% endtimezone %}{% endlanguage %}{% endblock %}{% block head %}<style>
+{% endtimezone %}{% endlanguage %}{% endblock %}{% block head %}{% load static %}<link rel="stylesheet" href="{% static 'inventario/selecao-saldos.css' %}"><style>
 #resumo-conferencias{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0 8px}#resumo-conferencias .card{margin:0;padding:12px 14px}#resumo-conferencias span{font-size:.9rem}
 .conferencia-lista{overflow-wrap:anywhere}.conferencia-lista h3{font-size:1.15rem;margin:8px 0 12px}.conferencia-lista p{margin:6px 0}.conferencia-andamento{border-left:4px solid #18796c}.conferencia-lista .situacao{font-weight:650;color:#17634f}#historico-conferencias{margin-top:36px;border-top:1px solid #c4d5da;padding-top:16px}
 .conferencia-cancelada{border-left:4px solid #87969b}.conferencia-cancelada .situacao{color:#52696f}

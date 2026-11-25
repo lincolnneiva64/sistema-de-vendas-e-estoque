@@ -1,0 +1,9 @@
+{% load l10n %}
+<div class="participante-selecao" {% if linha.conferido_recente %}data-recente{% endif %}>
+<label class="participante-nome"><input type="checkbox" {% if linha.conferido_recente %}data-aguarda-inclusao="1"{% endif %} name="rodadas" value="{{ linha.rodada.pk|unlocalize }}" {% if linha.participa_marcado %}checked{% endif %} {% if linha.participante_protegido %}disabled{% endif %}><span>{{ linha.item.cadastro.nome }}</span></label>
+{% include 'inventario/estoque_selecao.html' with produto=linha.item.produto %}
+{% if linha.conferido_recente %}<p>Conferido em {{ linha.conferido_recente|date:"d/m/Y H:i" }}</p><button type="button" data-incluir-contagem>Incluir na contagem</button>{% endif %}
+{% if linha.participante_protegido %}<input type="hidden" {% if linha.conferido_recente %}data-aguarda-inclusao="1"{% endif %} name="rodadas" value="{{ linha.rodada.pk|unlocalize }}"><p class="muted">Participação protegida: atribuição ou histórico existente.</p>{% endif %}
+{% if linha.rodada.atribuicao %}<p class="participante-funcionario">Funcionário: {{ linha.rodada.atribuicao.acesso.funcionario_nome }} · Link preservado</p>
+{% else %}<label class="participante-funcionario">Funcionário deste produto<select name="funcionario_{{ linha.rodada.pk|unlocalize }}"><option value="">Usar funcionário padrão</option>{% for funcionario in funcionarios %}<option value="{{ funcionario.pk|unlocalize }}" {% if linha.funcionario_escolhido == funcionario.pk|stringformat:'s' %}selected{% endif %}>{{ funcionario.nome }}</option>{% endfor %}</select></label>{% endif %}
+</div>

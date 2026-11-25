@@ -1,0 +1,3 @@
+{% load conferencia_visual %}{% with saldo=produto|estoque_selecao %}
+<p class="estoque-selecao"><span class="estoque-selecao-rotulo">Estoque registrado:</span> <strong>{{ saldo.principal }}</strong>{% if saldo.equivalencia %}<span class="estoque-selecao-equivalencia">= {{ saldo.equivalencia }}</span>{% endif %}</p>
+{% endwith %}

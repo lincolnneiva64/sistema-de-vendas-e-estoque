@@ -1,0 +1,5 @@
+.estoque-selecao{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;width:fit-content;max-width:100%;box-sizing:border-box;margin:10px 0;padding:9px 12px;border-left:4px solid #18796c;border-radius:5px;background:#eaf5f1;color:#173f35;line-height:1.45;overflow-wrap:anywhere}
+.estoque-selecao-rotulo{font-size:.9rem;font-weight:650}
+.estoque-selecao strong{font-size:1.2rem;font-weight:800;font-variant-numeric:tabular-nums}
+.estoque-selecao-equivalencia{font-size:1rem;font-weight:650;font-variant-numeric:tabular-nums}
+.produto-selecao{padding:8px 0}
