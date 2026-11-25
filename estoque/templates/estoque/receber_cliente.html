@@ -1272,8 +1272,19 @@
 .receber-cliente-page #formReceberCliente > .mt-3.mb-3 > div {
   grid-column: 1 / -1; margin-bottom: 0 !important;
 }
-.receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+.receber-cliente-page .rc-dividas-lista {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rc-dividas-linhas, 1), auto);
+  grid-auto-flow: column; gap: 4px 12px;
+}
+.receber-cliente-page .rc-dividas-lista > label {
   margin-bottom: 0 !important; min-width: 0; overflow-wrap: anywhere;
+}
+.receber-cliente-page .rc-divida-ordem {
+  flex: 0 0 auto; min-width: 1.65rem; padding: 1px 4px;
+  border: 1px solid #cbd5e1; border-radius: 5px; background: #f1f5f9;
+  color: #334155; text-align: center; font-size: .75rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; line-height: 1.4;
 }
 .receber-cliente-page .rc-historico { margin-top: 6px; padding: 8px; border-radius: 9px; }
 .receber-cliente-page .rc-historico-subtitle { margin-bottom: 5px; }
@@ -1339,7 +1350,7 @@
   .receber-cliente-page .rc-btn { min-height: 44px; }
   .receber-cliente-page .rc-field input,
   .receber-cliente-page .rc-forma-pagamento-btn { padding-inline: 7px; }
-  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+  .receber-cliente-page .rc-dividas-lista > label {
     min-height: 44px; padding-block: 4px; align-items: center !important;
   }
   .receber-cliente-page #formReceberCliente input[name="dividas"] {
@@ -1404,7 +1415,11 @@ body:has(.receber-cliente-page) .botao-voltar-topo.recolhido {
   .receber-cliente-page #formReceberCliente > .mt-3.mb-3 {
     grid-template-columns: minmax(0, 1fr); gap: 3px;
   }
-  .receber-cliente-page #formReceberCliente > .mt-3.mb-3 > label {
+  .receber-cliente-page .rc-dividas-lista {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+    grid-auto-flow: row; gap: 3px;
+  }
+  .receber-cliente-page .rc-dividas-lista > label {
     min-height: 48px; padding: 7px 8px; border-bottom: 1px solid #e2e8f0;
     font-size: .875rem; line-height: 1.45;
   }
@@ -2041,8 +2056,10 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
 
           <div class="small text-muted mb-2">
             Marque somente as d&iacute;vidas que deseja incluir neste recebimento.
+            Ordem de abatimento: de cima para baixo, primeiro à esquerda e depois à direita
           </div>
 
+          <div class="rc-dividas-lista" style="--rc-dividas-linhas: {% if not contas %}1{% elif contas|length|divisibleby:2 %}{% widthratio contas|length 2 1 %}{% else %}{% widthratio contas|length|add:1 2 1 %}{% endif %};">
           {% for conta in contas %}
             <label class="d-flex align-items-start gap-2 mb-2">
               <input
@@ -2052,6 +2069,7 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
 
                 class="mt-1"
               >
+              <span class="rc-divida-ordem" aria-label="Ordem de abatimento {{ forloop.counter }}">{{ forloop.counter }}</span>
               <span>
                 <strong>
                   {% if conta.venda_id %}
@@ -2064,7 +2082,7 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
               </span>
             </label>
           {% endfor %}
-
+          </div>
 
         </div>
 
