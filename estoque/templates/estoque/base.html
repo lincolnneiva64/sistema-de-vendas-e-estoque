@@ -196,6 +196,10 @@
             recolherBotaoMobile();
         })();
     </script>
+{% if offline_suspended %}
+<script type="module" src="/offline/assets/online-only-v1/online-only.js"></script>
+{% else %}
 <script type="module" src="/offline/assets/local-controlled-v1/app.js"></script>
+{% endif %}
 </body>
 </html>

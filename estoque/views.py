@@ -22207,8 +22207,10 @@ def _quantidade_valida_para_produto_unidade(produto, unidade, quantidade):
         unidade_fracionada = _normalizar_unidade_estoque(produto.unidade_venda_2)
         fator = Decimal(produto.fator_conversao or 0)
         if unidade_fracionada and unidade_normalizada == unidade_fracionada:
+            if unidade_base == "CT" and unidade_fracionada == "UN":
+                return False  # A fração de cento deve continuar representando unidades inteiras.
             return True
-        if unidade_normalizada == unidade_base and (unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA or unidade_normalizada == "SC"):
+        if unidade_normalizada == unidade_base and (unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA or unidade_normalizada in {"SC", "CT"}):
             return _quantidade_decimal_corresponde_inteiro(quantidade_decimal * fator)
 
     if unidade_normalizada in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
@@ -22226,13 +22228,13 @@ def _validar_quantidade_produto_unidade(produto, quantidade, unidade=None):
     if unidade_normalizada not in UNIDADES_EMBALAGEM_COM_FRACAO_CONTROLADA:
         orientacao = ""
         if (
-            unidade_normalizada == "SC"
+            unidade_normalizada in {"SC", "CT"}
             and _produto_tem_conversao_fracionada_confiavel(produto)
             and unidade_normalizada == _normalizar_unidade_estoque(produto.unidade_venda_1 or produto.unidade_compra)
             and _normalizar_unidade_estoque(produto.unidade_venda_2) != unidade_normalizada
         ):
             orientacao = (
-                f" Informe uma quantidade em SC equivalente a uma quantidade inteira em {produto.unidade_venda_2}, "
+                f" Informe uma quantidade em {unidade_normalizada} equivalente a uma quantidade inteira em {produto.unidade_venda_2}, "
                 f"ou selecione {produto.unidade_venda_2}, conforme o cadastro."
             )
             raise ValueError(f"Produto {produto.nome} nao permite esta quantidade fracionada.{orientacao}")

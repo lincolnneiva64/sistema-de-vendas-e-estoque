@@ -49,6 +49,7 @@ def ambiente_sistema(request):
 
     return {
         "offline_environment_id": getattr(settings, "OFFLINE_ENVIRONMENT_ID", "") or host.lower(),
+        "offline_suspended": getattr(settings, "OFFLINE_SUSPENDED", False),
         "ambiente_atual": ambiente,
         "ambiente_host_atual": hostname,
         "ambiente_is_online": is_online_host(host),

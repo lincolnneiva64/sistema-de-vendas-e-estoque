@@ -1,5 +1,5 @@
 // Refresh modules inherited from upstream, including independent sales drafts.
-const CACHE = 'offline-pilot-shell-v51-sale-price-notice';
+const CACHE = 'offline-pilot-shell-v52-cento-fraction';
 const ASSETS = ['/offline/', '/static/offline/core.js', '/static/offline/app.js', '/static/offline/pilot.css', '/static/offline/indicator.css', '/static/offline/presentation.js', '/static/offline/checklist.html', '/static/offline/checklist.js', '/static/offline/checklist-restore.js', '/static/offline/commercial.js', '/static/offline/commercial-ui.js'];
 ASSETS.push('/offline/assets/2-8h-pickup/checklist.js');
 ASSETS.push('/offline/revisao/', '/offline/vendas-shell/', '/static/offline/sales.js', '/static/offline/sales-drafts.js', '/static/offline/sales-draft-ui.js');
@@ -21,6 +21,7 @@ ASSETS.push(...['sales-draft-ui.js', 'sales-drafts.js', 'sales-stock.js'].map(fi
 ASSETS.push(...['sales-draft-ui.js', 'local-sales.js'].map(file => '/offline/assets/sale-button-feedback-v1/' + file));
 ASSETS.push(...['sales-costs.js', 'sales-drafts.js', 'sales-draft-ui.js', 'local-sales.js', 'sales-revisions.js', 'sales-revision-ui.js'].map(file => '/offline/assets/sale-cost-check-v1/' + file));
 self.addEventListener('install', event => {
+    if (self.OFFLINE_SUSPENDED) { event.waitUntil(self.skipWaiting()); return; }
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);
         for (const url of ASSETS) {
@@ -34,12 +35,20 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
     event.waitUntil((async () => {
-        for (const key of await caches.keys()) if (key.startsWith('offline-pilot-shell-') && key !== CACHE) await caches.delete(key);
+        if (!self.OFFLINE_SUSPENDED) for (const key of await caches.keys()) if (key.startsWith('offline-pilot-shell-') && key !== CACHE) await caches.delete(key);
         await self.clients.claim();
     })());
 });
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
+    if (self.OFFLINE_SUSPENDED) {
+        if (url.origin === self.location.origin && event.request.method === 'GET') {
+            event.respondWith(fetch(event.request, {cache:'no-store'}).catch(() =>
+                event.request.mode === 'navigate' ? new Response('Offline. Conecte-se ao servidor para continuar. Nenhuma gravação local disponível.',
+                    {status:503, headers:{'Content-Type':'text/plain; charset=utf-8'}}) : Response.error()));
+        }
+        return;
+    }
     if (event.request.method === 'GET' && url.origin === self.location.origin && event.request.mode === 'navigate' && url.pathname === '/offline/revisao/') {
         event.respondWith(fetch(event.request, {cache:'no-store'}).catch(() => caches.match('/offline/revisao/', {cacheName:CACHE})));
         return;

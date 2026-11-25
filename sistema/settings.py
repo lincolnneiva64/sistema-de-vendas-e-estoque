@@ -126,6 +126,7 @@ SESSION_SAVE_EVERY_REQUEST = config('SESSION_SAVE_EVERY_REQUEST', default=False,
 OPERACIONAL_LINK_MAX_AGE = config('OPERACIONAL_LINK_MAX_AGE', default=86400, cast=int)
 CSRF_FAILURE_VIEW = 'locacoes.pickup_security.csrf_failure'
 OFFLINE_ENVIRONMENT_ID = config("OFFLINE_ENVIRONMENT_ID", default="").strip()
+OFFLINE_SUSPENDED = config("OFFLINE_SUSPENDED", default=True, cast=bool)
 
 TEMPLATES = [
     {

@@ -22,8 +22,10 @@ from .models import EncerramentoVendaOffline
 @require_GET
 @never_cache
 def versioned_asset(request, filename):
+    if getattr(settings, "OFFLINE_SUSPENDED", False) and filename not in {"online-only.js", "core.js", "sales-costs.js", "presentation.js"}:
+        return HttpResponse("Modo offline suspenso. Reabra a página online.", status=503)
     # A distinct path bypasses older workers that ignore static query versions.
-    allowed = {"local-sales.js", "app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
+    allowed = {"online-only.js", "local-sales.js", "app.js", "core.js", "presentation.js", "sales.js", "sales-drafts.js",
                "sales-draft-ui.js", "operation-details.js", "commercial.js",
                "commercial-ui.js", "checklist.js", "checklist-restore.js",
                "sales-revisions.js", "sales-revision-ui.js", "sales-stock.js", "sales-closures.js", "sales-costs.js"}
@@ -35,6 +37,8 @@ def versioned_asset(request, filename):
 
 @require_GET
 def sales_shell(request):
+    if getattr(settings, "OFFLINE_SUSPENDED", False):
+        return HttpResponse("Modo offline suspenso. Conecte-se ao servidor e reabra Vendas.", status=503)
     # Deliberately render without request/context processors: no session, CSRF,
     # customer, financial or user data may enter the shared worker cache.
     from django.template.loader import get_template
@@ -48,6 +52,8 @@ def sales_shell(request):
 @require_GET
 @never_cache
 def revision_shell(request):
+    if getattr(settings, "OFFLINE_SUSPENDED", False):
+        return HttpResponse("Modo offline suspenso. Operações anteriores preservadas.", status=503)
     # Shared shell contains no actor, token, operation or commercial data.
     from django.template.loader import get_template
     return HttpResponse(get_template('offline/sale_revision.html').render({
@@ -77,6 +83,8 @@ def session(request):
     authenticated = request.user.is_authenticated
     return JsonResponse({
         "authenticated": authenticated,
+        "local_sales_owner": getattr(request, "local_sales_owner", None),
+        "environment_id": environment_id(request),
         "actor_id": str(request.user.pk) if authenticated else "",
         "can_prepare": authenticated and request.user.has_perm("offline.registrar_observacao"),
         "username": request.user.get_username() if authenticated else "",
@@ -92,7 +100,8 @@ def health(request):
             ok = cursor.fetchone()[0] == 1
     except DatabaseError:
         ok = False
-    return JsonResponse({"ok": ok, "environment": environment_id(request), "protocol_version": PROTOCOL_VERSION}, status=200 if ok else 503)
+    return JsonResponse({"ok": ok, "environment": environment_id(request), "protocol_version": PROTOCOL_VERSION,
+                         "offline_suspended": getattr(settings, "OFFLINE_SUSPENDED", False)}, status=200 if ok else 503)
 
 
 @require_GET
@@ -132,6 +141,8 @@ def snapshot(request):
 @require_POST
 @authorized
 def synchronize(request):
+    if getattr(settings, "OFFLINE_SUSPENDED", False):
+        return JsonResponse({"erro": "Modo offline suspenso. Operações preservadas.", "code": "offline_suspenso"}, status=503)
     if len(request.body) > 20000:
         return JsonResponse({"erro": "Operacao muito grande."}, status=413)
     try:
@@ -216,6 +227,8 @@ def sale_cost_preflight(request):
 @require_POST
 @never_cache
 def online_sale(request):
+    if getattr(settings, "OFFLINE_SUSPENDED", False) and request.headers.get("X-Online-Only") != "1":
+        return JsonResponse({"erro": "Reabra Vendas para usar o modo exclusivamente online.", "code": "offline_suspenso"}, status=503)
     if request.headers.get("X-Local-Sales") == "1":
         from .local_sales import submit
         return submit(request)
@@ -314,6 +327,8 @@ def commercial_snapshot(request):
 @require_GET
 @never_cache
 def shell(request):
+    if getattr(settings, "OFFLINE_SUSPENDED", False):
+        return HttpResponse("Modo offline suspenso. Operações anteriores preservadas. Reabra o sistema online.", status=503)
     from django.template import engines
     # Resolve navigation routes without request/context processors or user data
     # in this shared offline shell.
@@ -324,6 +339,7 @@ def shell(request):
 @require_GET
 @never_cache
 def service_worker(request):
-    response = HttpResponse((settings.BASE_DIR / "static/offline/service-worker.js").read_bytes(), content_type="application/javascript")
+    policy = "self.OFFLINE_SUSPENDED = " + ("true" if getattr(settings, "OFFLINE_SUSPENDED", False) else "false") + ";\n"
+    response = HttpResponse(policy.encode() + (settings.BASE_DIR / "static/offline/service-worker.js").read_bytes(), content_type="application/javascript")
     response["Service-Worker-Allowed"] = "/"
     return response

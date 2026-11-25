@@ -50,7 +50,7 @@ class LocalSalesMiddleware:
     def __call__(self, request):
         request.local_sales_owner = None
         new_cookie = None
-        relevant = request.path in {"/vendas/", "/api/vendas/online/"} or request.path.startswith("/api/vendas/online/")
+        relevant = request.path in {"/vendas/", "/api/vendas/online/", "/api/offline/session/"} or request.path.startswith("/api/vendas/online/")
         if relevant and permitted(request):
             try:
                 principal = signing.loads(request.COOKIES.get(COOKIE, ""), salt=SALT, max_age=AGE)
