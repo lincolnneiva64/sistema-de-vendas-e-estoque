@@ -35,6 +35,19 @@ def _grupo_pagamento(campo='tipo_pagamento'):
                 function='REGEXP_REPLACE', output_field=CharField())
 
 
+def faturamento_medio_diario(serie, inicio, fim, hoje):
+    """Reutiliza os totais comerciais diários; o divisor inclui dias sem vendas."""
+    fim_encerrado = min(fim, hoje - timedelta(days=1))
+    dias = max(0, (fim_encerrado - inicio).days + 1)
+    total = sum((dia['faturamento'] for dia in serie
+                 if inicio <= dia['data_venda'] <= fim_encerrado), ZERO)
+    return {
+        'valor': (total / dias).quantize(CENTAVO) if dias else None,
+        'dias': dias,
+        'inclui_hoje': inicio <= hoje <= fim,
+    }
+
+
 def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivalente=False, hoje=None,
                  historico=None, comparacao='anterior'):
     hoje = hoje or timezone.localdate(timezone=BELEM)
@@ -326,7 +339,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
             estimativa_setembro = None
 
     # EVOLUCAO_SEMANAL_MULTIPLAS_SEMANAS_20261123
-    # Até 16 semanas para escolher; mais 1 para a referência anterior.
+    # Até 16 semanas para escolher; mais 3 para comparar até a primeira com outras 3.
     # Nenhuma venda individual é carregada, apenas totais agregados por dia.
     semana_diaria = None
     if modo == 'semanal':
@@ -337,7 +350,8 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
             semanas = [ultima_segunda - timedelta(weeks=k) for k in range(16)]
             semanas = sorted(s for s in semanas if s >= intervalo_inicio)
             if semanas:
-                consulta_inicio = semanas[0] - timedelta(days=7)
+                referencias = [semanas[0] - timedelta(weeks=k) for k in (3, 2, 1)]
+                consulta_inicio = referencias[0]
                 consulta_fim = min(hoje, semanas[-1] + timedelta(days=6))
                 linhas = list(
                     todas.exclude(_forma='consumoproprio')
@@ -348,7 +362,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
                 )
                 por_dia = {r['data_venda']: r for r in linhas}
                 series = []
-                for segunda in [semanas[0] - timedelta(days=7), *semanas]:
+                for segunda in [*referencias, *semanas]:
                     acumulado = ZERO
                     documentacao_valida = True
                     pontos = []
@@ -383,6 +397,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
                 selecionada = (encerradas[-1] if encerradas else semanas[-1])
                 semana_diaria = {
                     'semanas': series,
+                    'primeira_selecionavel': semanas[0].isoformat(),
                     'selecionada': selecionada.isoformat(),
                     'quantidade_inicial': 2,
                     'hoje': hoje.isoformat(),
@@ -407,6 +422,7 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
 
     return {
         'faturamento': total, 'quantidade': quantidade,
+        'media_diaria': faturamento_medio_diario(serie, inicio, fim, hoje),
         'rentabilidade': rentabilidade,
         'semana_diaria': semana_diaria,
         'ticket_medio': (total / quantidade).quantize(CENTAVO) if quantidade else ZERO,

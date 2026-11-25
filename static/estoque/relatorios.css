@@ -29,6 +29,8 @@ a.relatorios-card:hover { border-color: #167347; background: #f2faf5; }
 .indicador-prazo dd { color: #65553c; }
 .relatorios-indicadores dd.indicador-legenda { margin: 0; font-size: .8rem; font-weight: 400; line-height: 16px; white-space: normal; color: #46596a; }
 .indicador-legenda span { display: block; }
+.relatorios-indicadores .indicador-media-diaria { background: #edf2f8; border-color: #667e9b; }
+.relatorios-indicadores .indicador-media-diaria .indicador-sem-periodo { white-space: normal; font-size: 1rem; line-height: 1.3; }
 .relatorios-consumo { margin-bottom: 24px; }
 .relatorios-aviso, .relatorios .errorlist { color: #754900; background: #fff4d6; padding: 12px; }
 .relatorios-tabela { overflow-x: auto; border: 1px solid #d6dfe5; border-radius: 4px; }
@@ -566,44 +568,44 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     color: #17334d;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(1) {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-faturamento {
     background: #d0eadd;
     border-top-color: #167347;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(1) dd:first-of-type {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-faturamento dd:first-of-type {
     color: #115535;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(2) {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-quantidade {
     background: #d8e2ee;
     border-top-color: #496c90;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(3) {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-ticket {
     background: #cfe0f5;
     border-top-color: #316ebc;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(3) dd:first-of-type {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-ticket dd:first-of-type {
     color: #194e8a;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(4) {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-vista {
     background: #d2e9e0;
     border-top-color: #25836b;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(4) dd:first-of-type {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-vista dd:first-of-type {
     color: #175b49;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(5) {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-prazo {
     background: #ede0c8;
     border-top-color: #a47932;
 }
 
-.relatorios-indicadores:not(.relatorios-rentabilidade) > div:nth-child(5) dd:first-of-type {
+.relatorios-indicadores:not(.relatorios-rentabilidade) > .indicador-prazo dd:first-of-type {
     color: #75501c;
 }
 
@@ -715,3 +717,8 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
 .semana-diaria-legenda .semana-chave::before { background:var(--cor-semana,#64748b); }
 .grafico-barras-semanal .grafico-barra-dia[role="button"] { cursor:pointer; }
 .grafico-barras-semanal .grafico-barra-dia[role="button"]:focus-visible { outline:3px solid #176b53; outline-offset:-3px; }
+
+/* Seis indicadores na primeira linha do resumo desktop; mant?m as quebras existentes. */
+@media (min-width: 1100px) {
+  .relatorios-resumo .relatorios-indicadores:not(.relatorios-rentabilidade) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}

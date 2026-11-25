@@ -584,31 +584,57 @@
     const dinheiro = n => Number(n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
     const abreviar = iso => iso.slice(8,10) + '/' + iso.slice(5,7);
     const rotulo = s => abreviar(s.inicio) + ' a ' + abreviar(s.fim) + (s.parcial ? ' · em andamento' : '');
-    let semanaEscolhida = dados.selecionada;
-    let quantidade = 2;
+    const parametros = new URLSearchParams(location.search);
+    let semanaEscolhida = parametros.get('semana_referencia') || dados.selecionada;
+    const quantidadeURL = Number(parametros.get('semanas_comparacao'));
+    let quantidade = [2, 3, 4].includes(quantidadeURL) ? quantidadeURL : 2;
     const criar = (tag, attrs, parent) => {
         const el = document.createElementNS(NS, tag);
         for (const [chave, valor] of Object.entries(attrs || {})) el.setAttribute(chave, String(valor));
         if (parent) parent.appendChild(el);
         return el;
     };
-    for (const s of semanas.slice(1)) {
+    const selecionaveis = dados.primeira_selecionavel ?
+        semanas.filter(s => s.inicio >= dados.primeira_selecionavel) : semanas.slice(1);
+    for (const s of selecionaveis) {
         const option = document.createElement('option');
         option.value = s.inicio;
         option.textContent = rotulo(s);
         seletor.appendChild(option);
     }
     if (![...seletor.options].some(o => o.value === semanaEscolhida)) {
-        semanaEscolhida = seletor.options[seletor.options.length - 1]?.value;
+        semanaEscolhida = selecionaveis.some(s => s.inicio === dados.selecionada) ?
+            dados.selecionada : seletor.options[seletor.options.length - 1]?.value;
     }
     seletor.value = semanaEscolhida;
     function selecionadas() {
         const pos = semanas.findIndex(s => s.inicio === semanaEscolhida);
-        // A primeira série é referência; as outras 16 são selecionáveis.
+        // As três séries anteriores ao filtro permitem comparar até quatro semanas.
         return semanas.slice(Math.max(0, pos - quantidade + 1), pos + 1).reverse();
+    }
+    function guardarSelecao() {
+        const url = new URL(location.href);
+        url.searchParams.set('semanas_comparacao', quantidade);
+        url.searchParams.set('semana_referencia', semanaEscolhida);
+        history.replaceState(history.state, '', url);
+        for (const id of ['relatorios-filtros-vendas', 'evolucao-controles']) {
+            const form = document.getElementById(id);
+            if (!form) continue;
+            for (const [nome, valor] of [['semanas_comparacao', quantidade], ['semana_referencia', semanaEscolhida]]) {
+                let campo = form.elements.namedItem(nome);
+                if (!campo) {
+                    campo = document.createElement('input');
+                    campo.type = 'hidden';
+                    campo.name = nome;
+                    form.appendChild(campo);
+                }
+                campo.value = valor;
+            }
+        }
     }
     function desenhar() {
         const series = selecionadas();
+        guardarSelecao();
         quantidadeBotoes.forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.semanaQuantidade) === quantidade)));
         legenda.replaceChildren();
         for (let i=0;i<series.length;i++) {

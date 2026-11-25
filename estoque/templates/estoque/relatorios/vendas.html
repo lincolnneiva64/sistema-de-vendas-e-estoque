@@ -12,7 +12,7 @@
   <p>Escolha um período ou edite as datas e pressione Consultar. Os meses de calendário incluem o mês atual até hoje; o mês anterior é completo.</p>
 </form>
 {{ periodos_datas|json_script:'relatorios-periodos-datas' }}
-<script defer src="{% static 'estoque/relatorios-filtros.js' %}"></script>
+<script defer src="{% static 'estoque/relatorios-filtros.js' %}?v=semanas-20261125"></script>
 {% if resumo %}
 <p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong> · Datas de Belém</p>
 <p>Valores pela data da venda. Faturamento não representa recebimento nem lucro. Vendas canceladas estão excluídas.</p>
@@ -21,6 +21,10 @@
   <div class="indicador-faturamento"><dt>Faturamento comercial</dt><dd>{{ resumo.faturamento|moeda_br }}</dd></div>
   <div class="indicador-quantidade"><dt>Quantidade de vendas</dt><dd>{{ resumo.quantidade }}</dd></div>
   <div class="indicador-ticket"><dt>Ticket médio</dt><dd>{{ resumo.ticket_medio|moeda_br }}</dd></div>
+  <div class="indicador-media-diaria"><dt>Faturamento médio diário</dt>
+    <dd{% if resumo.media_diaria.valor == None %} class="indicador-sem-periodo"{% endif %}>{% if resumo.media_diaria.valor != None %}{{ resumo.media_diaria.valor|moeda_br }}{% else %}Sem período encerrado{% endif %}</dd>
+    {% if resumo.media_diaria.inclui_hoje %}<dd class="indicador-legenda">Média calculada até ontem. O dia atual não entra no cálculo</dd>{% endif %}
+  </div>
   <div class="indicador-vista"><dt>Vendas à vista</dt><dd>{{ resumo.vista.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.vista.percentual|numero_br }}% do faturamento</span><span>{{ resumo.vista.quantidade }} venda(s)</span></dd></div>
   <div class="indicador-prazo"><dt>Vendas a prazo</dt><dd>{{ resumo.prazo.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.prazo.percentual|numero_br }}% do faturamento</span><span>{{ resumo.prazo.quantidade }} venda(s)</span></dd></div>
 </dl>

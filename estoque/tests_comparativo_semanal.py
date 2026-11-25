@@ -9,12 +9,41 @@ from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 
 from .analise_evolucao import analisar
-from .models import Venda
+from .models import Venda, ItemVenda
 from .services.relatorios import resumo_vendas
 from .tests_relatorios import PostgreSQLIsoladoTests
 
 
 HOJE = date(2026, 11, 19)  # quinta-feira
+
+
+class ReferenciasSemanaisTests(SimpleTestCase):
+    """Exercita o serviço real sem abrir conexão ou modificar bancos."""
+
+    def test_quatro_series_disponiveis_ate_na_primeira_semana_do_filtro(self):
+        for inicio, fim in ((date(2026, 11, 16), HOJE),
+                            (date(2026, 11, 1), HOJE),
+                            (date(2026, 10, 26), date(2026, 11, 8))):
+            with self.subTest(inicio=inicio, fim=fim):
+                vendas_vazias = Venda.objects.none()
+                itens_vazios = ItemVenda.objects.none()
+                with patch.object(Venda.objects, 'filter', return_value=vendas_vazias), \
+                     patch.object(ItemVenda.objects, 'filter', return_value=itens_vazios), \
+                     patch.object(itens_vazios, 'aggregate', return_value={
+                         'total_itens': 0, 'com_custo': 0, 'faturamento_itens': None,
+                         'itens_sem_valor': 0, 'custo_registrado': None}):
+                    resumo = resumo_vendas(inicio, fim, modo='semanal', hoje=HOJE)
+                dados = resumo['semana_diaria']
+                semanas = dados['semanas']
+                primeira = dados['primeira_selecionavel']
+                self.assertEqual(semanas[3]['inicio'], primeira)
+                self.assertGreaterEqual(date.fromisoformat(primeira), inicio)
+                self.assertEqual(date.fromisoformat(semanas[0]['inicio']),
+                                 date.fromisoformat(primeira) - timedelta(weeks=3))
+                for pos in range(3, len(semanas)):
+                    self.assertEqual(len(semanas[pos - 3:pos + 1]), 4)
+                # Ausência de documentos encerrados continua desconhecida, não zero.
+                self.assertTrue(all(p['valor'] is None for p in semanas[0]['pontos']))
 
 
 class ComparativoSemanalTests(SimpleTestCase):
