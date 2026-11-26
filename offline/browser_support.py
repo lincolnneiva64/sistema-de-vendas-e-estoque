@@ -38,8 +38,11 @@ class DevTools:
         payload = json.dumps({'id': self.sequence, 'method': method, 'params': params or {}}).encode()
         mask = os.urandom(4)
         length = len(payload)
-        header = bytes([0x81, 0x80 | length]) if length < 126 else bytes([0x81, 0xfe]) + struct.pack('!H', length)
-        if length > 65535:
+        if length < 126:
+            header = bytes([0x81, 0x80 | length])
+        elif length <= 65535:
+            header = bytes([0x81, 0xfe]) + struct.pack('!H', length)
+        else:
             header = bytes([0x81, 0xff]) + struct.pack('!Q', length)
         self.socket.sendall(header + mask + bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload)))
         fragments = b''

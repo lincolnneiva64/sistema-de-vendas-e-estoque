@@ -29,13 +29,13 @@
   <input type="search" id="filtrar-produtos" name="q" value="{{ busca.q.value|default_if_none:'' }}" maxlength="120" placeholder="Nome ou parte do nome">
   <button type="submit">Filtrar</button>
 </form>
-<div id="resultados-produtos" class="relatorios-tabela ranking-produtos" role="region" aria-label="Ranking dos produtos" tabindex="0">
+<div id="resultados-produtos" class="relatorios-tabela tabela-comercial ranking-produtos" role="region" aria-label="Ranking dos produtos" tabindex="0">
 <table><caption>Participação sobre o faturamento comercial de todas as notas do período, mesmo com pesquisa.</caption>
-<thead><tr><th scope="col">Produto</th><th scope="col">Quantidade</th><th scope="col">Unidade</th><th scope="col">Faturamento</th><th scope="col">Participação</th><th scope="col">Vendas distintas</th><th scope="col">Preço médio efetivo</th></tr></thead>
+<thead><tr><th scope="col">Produto</th><th scope="col">Quantidade</th><th scope="col" class="coluna-texto">Unidade</th><th scope="col">Faturamento</th><th scope="col">Participação</th><th scope="col">Vendas distintas</th><th scope="col">Preço médio efetivo</th></tr></thead>
 <tbody>{% for linha in ranking.linhas %}<tr>
   <th scope="row">{% if linha.produto_id %}<a href="{% url 'estoque:relatorios_produto' linha.produto_id %}?{{ filtros_query }}&amp;unidade={{ linha.unidade_comercial|urlencode }}&amp;ranking={{ ranking_query|urlencode }}">{{ linha.produto__nome }}</a>{% else %}Produto não identificado{% endif %}</th>
   <td data-label="Quantidade">{% if linha.quantidade != None %}{{ linha.quantidade|quantidade_br }}{% else %}Não comparável{% endif %}</td>
-  <td data-label="Unidade">{{ linha.unidade_comercial|default:'Não informada' }}</td>
+  <td class="coluna-texto" data-label="Unidade">{{ linha.unidade_comercial|default:'Não informada' }}</td>
   <td data-label="Faturamento">{{ linha.faturamento|moeda_br }}</td>
   <td data-label="Participação">{% if linha.participacao != None %}{{ linha.participacao|numero_br }}%{% else %}Não calculável{% endif %}</td>
   <td data-label="Vendas distintas">{{ linha.vendas }}</td>

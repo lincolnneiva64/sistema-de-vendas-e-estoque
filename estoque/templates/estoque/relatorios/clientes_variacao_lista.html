@@ -1,0 +1,13 @@
+{% load relatorios l10n %}
+<div class="relatorios-tabela tabela-comercial tabela-comercial--clientes clientes-tabela" role="region" aria-label="{{ titulo }}" tabindex="0">
+<table>
+  <colgroup><col class="col-cliente"><col class="col-antes"><col class="col-agora"><col class="col-variacao"><col class="col-notas"><col class="col-dias"><col class="col-diferenca"></colgroup>
+  <caption>{{ titulo }} · valores e compras antes → agora</caption>
+  <thead><tr><th scope="col">Cliente</th><th scope="col">Antes</th><th scope="col">Agora</th><th scope="col">Variação (%)</th><th scope="col">Notas</th><th scope="col">Dias</th><th scope="col">Diferença (R$)</th></tr></thead>
+  <tbody>{% for cadastro in lista %}<tr>
+    <th scope="row">#{{ cadastro.id|unlocalize }} · {{ cadastro.nome|default:'Nome não informado' }}{% if cadastro.id == 1126 %}<small>Vendas ocasionais de balcão</small>{% elif cadastro.classificacao == 'Coletivo confirmado' %}<small>Cadastro coletivo confirmado</small>{% endif %}{% if cadastro.leitura_comercial %}<small class="cliente-comportamento">{{ cadastro.leitura_comercial }}</small>{% endif %}
+    {% if mostrar_historico and cadastro.historico %}<details class="cliente-historico"><summary>Histórico de compras</summary><small><strong>{{ cadastro.historico.descricao }}.</strong> {{ cadastro.historico.dias }} dia{{ cadastro.historico.dias|pluralize }} em {{ cadastro.historico.meses }} {% if cadastro.historico.meses == 1 %}mês{% else %}meses{% endif %}.<br>Compras anteriores: {{ cadastro.historico.primeira|date:'d/m/Y'|default:'—' }} a {{ cadastro.historico.ultima|date:'d/m/Y'|default:'—' }}. Antes do recorte: {{ cadastro.historico.anterior_recorte|date:'d/m/Y'|default:'Sem registro' }}.<br>{% if cadastro.historico.posterior %}Compra posterior: {{ cadastro.historico.posterior|date:'d/m/Y' }}.{% else %}Sem compra posterior até {{ clientes_variacao.historico_ausencias.limite_posterior|date:'d/m/Y' }}.{% endif %}</small></details>{% endif %}</th>
+    <td data-label="Antes">{{ cadastro.anterior|moeda_br }}</td><td data-label="Agora">{{ cadastro.atual|moeda_br }}</td><td data-label="Variação (%)">{% if cadastro.variacao_percentual != None %}{{ cadastro.variacao_percentual|numero_sinal_br }}%{% else %}Sem base para calcular{% endif %}</td><td data-label="Notas: antes → agora">{{ cadastro.notas_anterior }} → {{ cadastro.notas_atual }}</td><td data-label="Dias: antes → agora">{{ cadastro.dias_anterior }} → {{ cadastro.dias_atual }}</td><td data-label="Diferença (R$)">{{ cadastro.diferenca|moeda_sinal_br }}</td>
+  </tr>{% empty %}<tr><td colspan="7">{{ vazio }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>

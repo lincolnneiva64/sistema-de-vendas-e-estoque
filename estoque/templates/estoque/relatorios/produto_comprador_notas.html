@@ -1,0 +1,43 @@
+{% load relatorios l10n %}
+<div class="relatorios-tabela tabela-comercial{% if investigacao_notas %} clientes-tabela investigacao-tabela{% endif %}" role="region" aria-label="Notas do comprador" tabindex="0">
+  <table>
+    <caption>Notas deste comprador para o produto selecionado</caption>
+    <thead>
+      <tr>
+        <th scope="col">Data</th>
+        <th scope="col" class="coluna-texto">Venda</th>
+        <th scope="col">Quantidade</th>
+        <th scope="col" class="coluna-texto">Unidade</th>
+        <th scope="col">Valor do produto</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for nota in notas %}
+      <tr>
+        <td data-label="Data">{{ nota.venda__data_venda|date:"d/m/Y" }}</td>
+        <th scope="row" class="coluna-texto">
+          <a href="{% url 'estoque:venda_detalhe' nota.venda_id %}">
+            Venda #{{ nota.venda_id }}
+          </a>
+        </th>
+        <td data-label="Quantidade">{{ nota.quantidade|quantidade_br }}</td>
+        <td class="coluna-texto" data-label="Unidade">{{ nota.unidade_comercial|default:"Nao informada" }}</td>
+        <td data-label="Valor do produto">{{ nota.valor|moeda_br }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">Nenhuma nota encontrada.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if notas.has_other_pages %}
+<nav class="relatorios-paginacao" aria-label="Paginas das notas do comprador">
+  {% if notas.has_previous %}
+    <a {% if not investigacao_notas %}data-comprador-pagina{% endif %} href="?{{ parametros_notas }}&amp;{{ campo_pagina|default:'pagina_notas' }}={{ notas.previous_page_number|unlocalize }}{% if investigacao_notas %}#evidencias-cliente{% endif %}">Anterior</a>
+  {% endif %}
+  <span>Pagina {{ notas.number }} de {{ notas.paginator.num_pages }}</span>
+  {% if notas.has_next %}
+    <a {% if not investigacao_notas %}data-comprador-pagina{% endif %} href="?{{ parametros_notas }}&amp;{{ campo_pagina|default:'pagina_notas' }}={{ notas.next_page_number|unlocalize }}{% if investigacao_notas %}#evidencias-cliente{% endif %}">Proxima</a>
+  {% endif %}
+</nav>
+{% endif %}

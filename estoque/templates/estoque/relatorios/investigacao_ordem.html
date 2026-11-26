@@ -1,0 +1,3 @@
+<nav class="investigacao-ordem" aria-label="Ordem dos resultados">
+{% for ordem in ordens_investigacao %}<a href="{{ ordem.url }}" {% if cabecalhos_ordenacao %}data-ordenacao-link{% endif %} {% if ordem.selecionada %}aria-current="true"{% endif %}>{{ ordem.nome }}</a>{% endfor %}
+</nav>

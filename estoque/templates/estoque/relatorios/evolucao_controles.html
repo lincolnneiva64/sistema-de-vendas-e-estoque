@@ -3,6 +3,7 @@
   <input type="hidden" name="data_inicial" value="{{ form.data_inicial.value }}">
   <input type="hidden" name="data_final" value="{{ form.data_final.value }}">
   <input type="hidden" name="pagina" value="{{ resumo.evolucao.number }}">
+  {% for nome, valor in campos_investigacao_produto %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}
   {% if produto_relatorio %}<input type="hidden" name="ranking" value="{{ retorno_ranking }}">{% for campo in medida_form %}<div class="produto-medida" {% if campo.name == 'unidade' %}data-produto-unidade {% if medida_form.medida.value != 'quantidade' %}hidden{% endif %}{% endif %}><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}{% endif %}
   <div><label for="{{ evolucao_form.modo.id_for_label }}">Evolução</label>{{ evolucao_form.modo }}{{ evolucao_form.modo.errors }}</div>
   <div><label for="{{ evolucao_form.alcance.id_for_label }}">Alcance histórico</label>{{ evolucao_form.alcance }}{{ evolucao_form.alcance.errors }}</div>

@@ -1,0 +1,426 @@
+
+/* REDESENHO GERENCIAL V4 - LOCAL */
+
+.relatorios-produto {
+    --rg-azul: #12619a;
+    --rg-vermelho: #b53c46;
+    --rg-verde: #13794e;
+    --rg-marinho: #102d45;
+    --rg-borda: #cbd9e5;
+}
+
+/* CABECALHO: MUDANCA ESTRUTURAL */
+.relatorios-produto .rg-hero {
+    background: linear-gradient(125deg, #102d45 0%, #174967 65%, #126b85 100%);
+    color: #fff;
+    border-radius: 8px;
+    padding: 26px 30px;
+    margin: 20px 0 14px;
+    box-shadow: 0 5px 16px rgba(14,45,69,.14);
+}
+
+.relatorios-produto .rg-hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 19px;
+}
+
+.relatorios-produto .rg-eyebrow,
+.relatorios-produto .rg-hero-tag {
+    font-size: .75rem;
+    font-weight: 800;
+    letter-spacing: 1.4px;
+    color: #bad8ea;
+}
+
+.relatorios-produto .rg-hero-tag {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.22);
+    color: white;
+    padding: 7px 11px;
+    border-radius: 4px;
+}
+
+.relatorios-produto .rg-hero h1 {
+    color: #fff !important;
+    font-size: clamp(1.8rem,3vw,2.7rem) !important;
+    line-height: 1.15;
+    letter-spacing: -.8px;
+    margin: 0 0 12px !important;
+}
+
+.relatorios-produto .rg-hero p {
+    color: #d7e5ef !important;
+    max-width: 900px;
+    font-size: .94rem;
+    line-height: 1.55;
+    margin: 0 !important;
+}
+
+.relatorios-produto .rg-hero-periodo {
+    display: inline-block;
+    margin-top: 17px;
+    padding-top: 13px;
+    border-top: 1px solid rgba(255,255,255,.25);
+    color: #cae3ee;
+    font-size: .9rem;
+}
+
+.relatorios-produto .rg-hero-periodo strong {
+    color: #fff;
+}
+
+/* FILTROS MAIS COMPACTOS */
+.relatorios-produto .relatorios-filtros {
+    background: #fff !important;
+    border: 1px solid var(--rg-borda) !important;
+    border-top: 4px solid #2476a9 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 3px 10px rgba(21,58,86,.06);
+    padding: 17px 21px !important;
+}
+
+/* BLOCO UNICO DE INDICADORES */
+.relatorios-produto .rg-overview {
+    margin: 24px 0 28px;
+    background: #e9eff5;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #d4e0ea;
+}
+
+.relatorios-produto .rg-overview-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 19px;
+    border-bottom: 1px solid #c9d7e2;
+    padding-bottom: 15px;
+}
+
+.relatorios-produto .rg-section-kicker {
+    display: block;
+    color: #42728f;
+    font-size: .73rem;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    margin-bottom: 4px;
+}
+
+.relatorios-produto .rg-overview-head h2 {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    color: var(--rg-marinho);
+    font-size: 1.5rem;
+}
+
+.relatorios-produto .rg-overview-periodo {
+    font-size: .83rem;
+    font-weight: 700;
+    color: #42627a;
+    background: #fff;
+    padding: 8px 11px;
+    border-radius: 4px;
+}
+
+/* TRES INDICADORES DE DESEMPENHO */
+.relatorios-produto .rg-overview .produto-indicadores {
+    display: grid !important;
+    grid-template-columns: repeat(3,minmax(0,1fr)) !important;
+    gap: 12px !important;
+    margin: 0 0 18px !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores > div {
+    min-width: 0;
+    background: #fff !important;
+    border: 1px solid #d5e1eb !important;
+    border-left: 5px solid #2477aa !important;
+    border-top: 0 !important;
+    padding: 19px 20px !important;
+    border-radius: 5px !important;
+    box-shadow: 0 2px 5px rgba(24,62,88,.045);
+}
+
+.relatorios-produto .rg-overview .produto-indicadores > div:nth-child(2) {
+    border-left-color: #687f9c !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores > div:nth-child(3) {
+    border-left-color: #357c83 !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores dt {
+    font-size: .9rem !important;
+    color: #49677b !important;
+    font-weight: 700 !important;
+    margin-bottom: 14px !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores dd {
+    font-size: clamp(1.4rem,2.2vw,2.15rem) !important;
+    line-height: 1.18;
+    color: #175b89 !important;
+    font-weight: 850 !important;
+    margin: 0 0 9px !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores > div:nth-child(2) dd {
+    color: #283f58 !important;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores small {
+    color: #647a8b;
+    font-size: .77rem !important;
+    line-height: 1.4;
+}
+
+/* RESULTADO FINANCEIRO */
+.relatorios-produto .rg-overview .produto-rentabilidade {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.relatorios-produto .rg-overview .produto-rentabilidade h2 {
+    font-size: 1.2rem;
+    margin-top: 16px !important;
+}
+
+.relatorios-produto .rg-overview .financeiro-compacto dl > div {
+    border-radius: 5px !important;
+    box-shadow: 0 2px 6px rgba(15,45,65,.07);
+}
+
+.relatorios-produto .rg-overview .financeiro-compacto dd {
+    font-weight: 850 !important;
+    font-size: clamp(1.12rem,1.6vw,1.65rem) !important;
+}
+
+/* EXPLICACOES DISCRETAS, SEM FAIXAS GIGANTES */
+.relatorios-produto .relatorio-saiba-mais {
+    display: table !important;
+    width: auto !important;
+    max-width: 100%;
+    border: 0 !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    margin: 9px 0 15px !important;
+    overflow: visible !important;
+}
+
+.relatorios-produto .relatorio-saiba-mais summary {
+    display: list-item;
+    padding: 5px 8px !important;
+    font-size: .83rem !important;
+    color: #25658c !important;
+}
+
+.relatorios-produto .relatorio-saiba-mais[open] {
+    display: block !important;
+    background: #edf4f9 !important;
+    border: 1px solid #d2e2ed !important;
+    padding: 5px 12px !important;
+}
+
+/* TABELA COMERCIAL: CONTRASTE E LEITURA RAPIDA */
+.relatorios-produto #compradores-produto {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #ccdce7;
+    border-radius: 7px;
+    box-shadow: 0 3px 12px rgba(20,54,76,.06);
+}
+
+.relatorios-produto #compradores-produto h2 {
+    margin-top: 0 !important;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) {
+    border: 1px solid #b9cfdf !important;
+    border-radius: 5px !important;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > thead {
+    background: #173e5a !important;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > thead th {
+    background: #173e5a !important;
+    color: #fff !important;
+    font-size: .85rem !important;
+    padding: 13px 14px !important;
+    border-bottom: 3px solid #3182ac !important;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha) > td,
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha) > th {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
+.relatorios-produto #compradores-produto .comprador-expandir {
+    color: #155d8e !important;
+    font-weight: 750 !important;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha > td {
+    background: #e9f2f8 !important;
+    padding: 12px !important;
+}
+
+/* VALORES DE VENDA EM AZUL */
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha) > td:last-child,
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody td:last-child {
+    color: #12619a !important;
+    font-weight: 800 !important;
+    font-variant-numeric: tabular-nums;
+}
+
+/* GRAFICOS E DETALHAMENTO COM A MESMA IDENTIDADE */
+.relatorios-produto #evolucao-vendas,
+.relatorios-produto #evolucao-diaria {
+    margin-top: 24px;
+}
+
+.relatorios-produto #evolucao-diaria .relatorios-tabela {
+    border: 1px solid #c5d6e4 !important;
+    border-radius: 6px !important;
+}
+
+.relatorios-produto #evolucao-diaria thead th {
+    background: #dbe8f1 !important;
+    color: #163e59 !important;
+    border-bottom: 2px solid #9ab7ca;
+}
+
+.relatorios-produto #evolucao-diaria tbody td:last-child {
+    color: #176093;
+    font-weight: 700;
+}
+
+@media (max-width: 850px) {
+    .relatorios-produto .rg-hero { padding: 20px; }
+    .relatorios-produto .rg-overview { padding: 12px; }
+    .relatorios-produto .rg-overview .produto-indicadores {
+        grid-template-columns: 1fr !important;
+    }
+    .relatorios-produto #compradores-produto { padding: 12px; }
+}
+
+
+/* POLIMENTO GERENCIAL V4.1 */
+
+/* Reduzir peso visual e deixar os blocos mais leves */
+.relatorios-produto .rg-hero {
+    background: linear-gradient(120deg, #193c55, #205773);
+    box-shadow: 0 3px 10px rgba(20, 50, 72, .10);
+}
+
+.relatorios-produto .relatorios-filtros {
+    border-top-width: 2px !important;
+    box-shadow: none;
+}
+
+.relatorios-produto .rg-overview {
+    background: #eef3f7;
+    border: 1px solid #dce5ec;
+    box-shadow: none;
+}
+
+.relatorios-produto .rg-overview .produto-indicadores > div {
+    border-left-width: 3px !important;
+    box-shadow: none !important;
+}
+
+.relatorios-produto .rg-overview .financeiro-compacto dl > div {
+    border-top-width: 2px !important;
+    box-shadow: none !important;
+}
+
+/* Recuperar contraste nos indicadores financeiros */
+.relatorios-produto .rg-overview .produto-rentabilidade dt,
+.relatorios-produto .rg-overview .produto-rentabilidade h2 {
+    color: #203d52 !important;
+}
+
+.relatorios-produto .rg-overview .produto-rentabilidade p,
+.relatorios-produto .rg-overview .produto-rentabilidade small {
+    color: #506779;
+}
+
+/* Compradores: destaque comercial mais suave */
+.relatorios-produto #compradores-produto {
+    border-color: #d6e1e9;
+    box-shadow: none;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > thead th {
+    background: #315e79 !important;
+    color: #fff !important;
+    border-bottom: 1px solid #a8bdca !important;
+}
+
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha):nth-child(4n+3) {
+    background: #f3f7fa;
+}
+
+/* Notas abertas: fundo claro, linhas finas, boa leitura */
+.relatorios-produto #compradores-produto .comprador-notas-linha > td {
+    background: #eef5f9 !important;
+    border-top: 1px solid #cbdde8 !important;
+    border-bottom: 1px solid #cbdde8 !important;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) thead th {
+    background: #dceaf3 !important;
+    color: #24465d !important;
+    border-bottom: 1px solid #b7cedd !important;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody tr:nth-child(even) {
+    background: #f5f9fc !important;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody td,
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody th {
+    color: #294459;
+}
+
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody td:last-child {
+    color: #176093 !important;
+}
+
+/* Detalhamento diario: preservar leitura e cores */
+.relatorios-produto #evolucao-diaria {
+    color: #173e59 !important;
+}
+
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela {
+    background: #fff;
+}
+
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela thead th {
+    background: #dceaf3 !important;
+    color: #24465d !important;
+    border-bottom: 1px solid #b7cedd !important;
+}
+
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela tbody td,
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela tbody th {
+    color: #263f52;
+}
+
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela tbody td:last-child {
+    color: #176093 !important;
+}
+
+/* Faixas alternadas muito discretas */
+.relatorios-produto #evolucao-diaria ~ .relatorios-tabela tbody tr:nth-child(4n+1) {
+    background: #f3f7fa;
+}

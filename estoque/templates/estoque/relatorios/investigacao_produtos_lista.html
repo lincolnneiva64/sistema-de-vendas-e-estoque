@@ -1,0 +1,17 @@
+{% load relatorios l10n %}
+<div class="relatorios-tabela tabela-comercial tabela-comercial--sintese tabela-ordenavel clientes-tabela investigacao-tabela" role="region" aria-label="{{ titulo }}" tabindex="0">
+<table>
+<colgroup><col class="col-nome"><col class="col-valor"><col class="col-valor"><col class="col-diferenca"><col class="col-percentual"></colgroup>
+<caption>{{ titulo }} · antes → agora</caption>
+{% include 'estoque/relatorios/investigacao_cabecalhos.html' %}
+<tbody>{% for linha in lista %}<tr data-registro="produto-{{ linha.id|unlocalize }}">
+<th scope="row">{% if linha.url %}<a href="{{ linha.url }}">{% endif %}{% if linha.id != None %}#{{ linha.id|unlocalize }} · {% endif %}{{ linha.nome }}{% if linha.url %}</a>{% endif %}
+<details class="produto-investigacao-detalhes"><summary>Quantidades, preços e notas</summary>
+<div class="produto-investigacao-evidencias">
+{% include 'estoque/relatorios/investigacao_unidades.html' with unidades=linha.unidades %}
+<p>Notas: {{ linha.notas_anterior }} → {{ linha.notas_atual }}<br>Clientes cadastrados: {{ linha.clientes_anterior }} → {{ linha.clientes_atual }}</p>
+{% if linha.url %}<a href="{{ linha.url }}">Investigar clientes e notas</a>{% endif %}
+</div></details></th>
+<td data-label="Antes">{{ linha.anterior|moeda_br }}</td><td data-label="Agora">{{ linha.atual|moeda_br }}</td><td data-label="Diferença (R$)">{{ linha.diferenca|moeda_sinal_br }}</td><td data-label="Variação (%)">{% if linha.percentual != None %}{{ linha.percentual|numero_sinal_br }}%{% else %}Sem base para calcular{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="5">Nenhum registro comercial nestes períodos.</td></tr>{% endfor %}</tbody>
+</table></div>

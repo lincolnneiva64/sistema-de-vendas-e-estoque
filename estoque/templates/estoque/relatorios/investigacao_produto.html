@@ -1,0 +1,34 @@
+{% load relatorios l10n %}
+<section id="compradores-produto" class="investigacao-produto">
+<h2>Quais clientes explicam a mudança deste produto?</h2>
+{% if investigacao.disponivel and clientes_produto_investigados.disponivel %}
+{% include 'estoque/relatorios/investigacao_periodos.html' %}
+{% with resultado=clientes_produto_investigados.resumo %}
+<p><strong>#{{ produto.pk|unlocalize }} · {{ produto.nome }}</strong>: {{ resultado.anterior|moeda_br }} → {{ resultado.atual|moeda_br }}. Mudança de <strong>{{ resultado.diferenca|moeda_sinal_br }}</strong>{% if resultado.percentual != None %} ({{ resultado.percentual|numero_sinal_br }}%){% else %}; sem base para calcular percentual{% endif %}.</p>
+<p>Notas: {{ resultado.notas_anterior }} → {{ resultado.notas_atual }}. Cadastros envolvidos: {{ resultado.clientes_anterior }} → {{ resultado.clientes_atual }}. {{ clientes_produto_investigados.ausentes }} cadastro{{ clientes_produto_investigados.ausentes|pluralize }} sem compras deste produto no período atual.</p>
+<div class="investigacao-evidencia">{% include 'estoque/relatorios/investigacao_unidades.html' with unidades=resultado.unidades %}</div>
+{% endwith %}
+{% if clientes_produto_investigados.unidade %}<p>Comparação somente em <strong>{{ clientes_produto_investigados.unidade }}</strong>, conforme a unidade selecionada no gráfico.</p>{% else %}<p>Valores de todas as unidades do produto; quantidades e preços ficam separados por unidade.</p>{% endif %}
+{% with destaque=clientes_produto_investigados.queda %}{% if destaque %}<p><strong>Maior redução:</strong> {% if destaque.id != None %}#{{ destaque.id|unlocalize }} · {% endif %}{{ destaque.nome }}, {{ destaque.diferenca|moeda_sinal_br }} neste produto.</p>{% endif %}{% endwith %}
+{% with destaque=clientes_produto_investigados.alta %}{% if destaque %}<p><strong>Maior aumento:</strong> {% if destaque.id != None %}#{{ destaque.id|unlocalize }} · {% endif %}{{ destaque.nome }}, {{ destaque.diferenca|moeda_sinal_br }} neste produto.</p>{% endif %}{% endwith %}
+{% include 'estoque/relatorios/investigacao_ordem.html' %}
+{% include 'estoque/relatorios/investigacao_lista.html' with lista=clientes_produto_investigados.linhas titulo='Compras deste produto por cliente' tipo='clientes' campo_pagina='pagina_clientes' ancora='compradores-produto' %}
+{% if cliente_investigado %}
+<section id="evidencias-cliente">
+<h3>Conferir {% if cliente_investigado.id != None %}#{{ cliente_investigado.id|unlocalize }} · {% endif %}{{ cliente_investigado.nome }}</h3>
+<h4>Notas anteriores — {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }}</h4>
+{% include 'estoque/relatorios/produto_comprador_notas.html' with notas=notas_antes parametros_notas=investigacao_query campo_pagina='notas_antes' investigacao_notas=True %}
+<h4>Notas atuais — {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}</h4>
+{% include 'estoque/relatorios/produto_comprador_notas.html' with notas=notas_agora parametros_notas=investigacao_query campo_pagina='notas_agora' investigacao_notas=True %}
+{% if cliente_investigado.id != None %}
+<h3 id="outros-produtos">Outros produtos comprados somente no período atual</h3>
+<p>Compras registradas apenas no período atual; não comprova substituição do produto analisado.</p>
+<div class="relatorios-tabela tabela-comercial clientes-tabela investigacao-tabela" role="region" aria-label="Outros produtos deste cadastro" tabindex="0"><table><caption>Abra o produto para conferir suas notas</caption><thead><tr><th scope="col">Produto</th><th scope="col">Valor antes</th><th scope="col">Valor agora</th><th scope="col">Notas antes → agora</th></tr></thead><tbody>
+{% for linha in outros_produtos_investigados %}<tr><th scope="row">{% if linha.url %}<a href="{{ linha.url }}">{% endif %}{% if linha.produto_id != None %}#{{ linha.produto_id|unlocalize }} · {% endif %}{{ linha.produto__nome|default:'Produto sem vínculo' }}{% if linha.url %}</a>{% endif %}</th><td data-label="Valor antes">{{ linha.anterior|moeda_br }}</td><td data-label="Valor agora">{{ linha.atual|moeda_br }}</td><td data-label="Notas antes → agora">{{ linha.notas_anterior }} → {{ linha.notas_atual }}</td></tr>{% empty %}<tr><td colspan="4">Nenhum outro produto apareceu somente no período atual nas compras deste cadastro.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if outros_produtos_investigados.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Páginas de outros produtos">{% if outros_produtos_investigados.has_previous %}<a href="?{{ investigacao_query }}&amp;pagina_outros={{ outros_produtos_investigados.previous_page_number|unlocalize }}#outros-produtos">Anterior</a>{% endif %}<span>Página {{ outros_produtos_investigados.number }} de {{ outros_produtos_investigados.paginator.num_pages }}</span>{% if outros_produtos_investigados.has_next %}<a href="?{{ investigacao_query }}&amp;pagina_outros={{ outros_produtos_investigados.next_page_number|unlocalize }}#outros-produtos">Próxima</a>{% endif %}</nav>{% endif %}
+{% else %}<p>Sem cliente vinculado: as notas não permitem atribuir outros produtos a uma pessoa identificada.</p>{% endif %}
+</section>
+{% endif %}
+{% else %}<p class="relatorios-aviso">{% if not investigacao.disponivel %}{{ investigacao.motivo }}{% else %}{{ clientes_produto_investigados.motivo }}{% endif %}</p>{% endif %}
+</section>

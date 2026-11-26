@@ -1,0 +1,2 @@
+<p><strong>Antes:</strong> {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }} · <strong>Agora:</strong> {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}.</p>
+{% if desempenho.inclui_hoje %}<p>Hoje está parcial e fica fora desta comparação. Os indicadores do resumo mantêm o filtro escolhido.</p>{% endif %}

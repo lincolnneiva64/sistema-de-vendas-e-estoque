@@ -1,0 +1,25 @@
+{% load relatorios %}
+{% if desempenho %}
+<section class="relatorios-aviso" aria-labelledby="analise-desempenho">
+  <h2 id="analise-desempenho">Análise do desempenho</h2>
+  <h3>O que aconteceu</h3>
+  {% if desempenho.inclui_hoje %}<p>Hoje está parcial. A análise considera somente dias encerrados, até ontem; os indicadores acima mantêm o filtro selecionado.</p>{% endif %}
+  {% if desempenho.inicio <= desempenho.fim %}
+  <p>Período analisado: {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}{% if desempenho.atual != None %} · Faturamento: <strong>{{ desempenho.atual|moeda_br }}</strong>{% endif %}.</p>
+  {% endif %}
+  {% if desempenho.referencia_inicio %}<p>Referência: {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }}{% if desempenho.anterior != None %} · Faturamento: <strong>{{ desempenho.anterior|moeda_br }}</strong>{% endif %}.</p>{% endif %}
+  {% if desempenho.comparavel %}
+  <p>Diferença de faturamento: <strong>{{ desempenho.diferenca|moeda_sinal_br }}</strong> · {% if desempenho.percentual != None %}{{ desempenho.percentual|numero_sinal_br }}% sobre o faturamento da referência{% else %}Percentual não calculável: referência zero ou negativa{% endif %}.</p>
+  {% for medida in desempenho.medidas %}
+  <p>{{ medida.rotulo }}: {% if medida.chave == 'quantidade' %}{{ medida.anterior }} → {{ medida.atual }} ({{ medida.diferenca|stringformat:'+d' }} venda(s)){% else %}{{ medida.anterior|moeda_br }} → {{ medida.atual|moeda_br }} ({{ medida.diferenca|moeda_sinal_br }}){% endif %} · {% if medida.percentual != None %}{{ medida.percentual|numero_sinal_br }}% sobre a referência{% else %}Percentual não calculável: referência zero ou negativa{% endif %}.</p>
+  {% endfor %}
+  {% else %}<p>Sem período comparável. {{ desempenho.motivo }} Valores disponíveis não comprovam cobertura completa.</p>{% endif %}
+  <h3>O que investigar</h3>
+  {% if desempenho.comparavel %}
+  <p>{% for medida in desempenho.medidas %}{{ medida.rotulo }} {{ medida.direcao }}{% if not forloop.last %}; {% else %}.{% endif %}{% endfor %}</p>
+  {% else %}<p>Confira as datas e a cobertura dos registros antes de concluir aumento ou queda.</p>{% endif %}
+  <h3>Próxima ação</h3>
+  <p><a href="?{{ filtros_query }}#evolucao-diaria">Conferir o detalhamento diário</a></p>
+  {% include 'estoque/relatorios/participacao_clientes.html' %}
+</section>
+{% endif %}

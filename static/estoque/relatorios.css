@@ -1,5 +1,23 @@
 .relatorios { max-width: 1100px; margin: 24px auto; padding: 0 16px 80px; color: #172b3a; }
 .relatorios.relatorios-resumo { max-width: 1240px; box-sizing: border-box; }
+.clientes-variacao { margin-top: 18px; padding: 12px; border: 1px solid #d6dfe5; border-radius: 5px; background: white; color: #172b3a; min-width: 0; }
+.clientes-variacao > summary { cursor: pointer; min-height: 44px; display: list-item; align-content: center; font-weight: 700; }
+.clientes-variacao > summary:focus-visible { outline: 2px solid #167347; outline-offset: 3px; }
+.relatorios .clientes-variacao th { white-space: normal; }
+.clientes-variacao th small { display: block; margin-top: 4px; font-weight: 400; }
+.clientes-variacao tfoot { font-weight: 700; }
+.investigacao-ordem { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
+.investigacao-ordem a { display: inline-flex; align-items: center; min-height: 44px; }
+.investigacao-ordem a[aria-current] { font-weight: 700; text-decoration-thickness: 3px; }
+.investigacao-tabela caption { padding: 12px; text-align: left; white-space: normal; }
+.investigacao-tabela .investigacao-unidade { display: block; margin: 0 0 10px; line-height: 1.4; }
+.investigacao-evidencia { padding: 12px; border-left: 3px solid #397460; margin: 12px 0; }
+.investigacao-evidencia .investigacao-unidade { display: block; margin-bottom: 8px; }
+.investigacao-produto { margin: 24px 0; min-width: 0; }
+body:has(.relatorios-investigacao) .atalho-despesa-global { position: static !important; margin: 0 16px 96px; }
+@media (max-width: 700px) {
+  .relatorios-produto #compradores-produto.investigacao-produto table { min-width: 0; }
+}
 .relatorios h1 { font-size: 1.8rem; margin: 24px 0 18px; font-weight: 700; letter-spacing: -.02em; }
 .relatorios h2 { font-size: 1.2rem; }
 .relatorios-opcoes, .relatorios-indicadores { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
@@ -163,19 +181,21 @@ a.relatorios-card:hover { border-color: #167347; background: #f2faf5; }
 .relatorios-conciliacao dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
 .relatorios-conciliacao dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ranking-produtos tbody th { white-space: normal; min-width: 180px; max-width: 320px; overflow-wrap: anywhere; }
+.clientes-tabela tbody th small { display: block; margin-top: 6px; font-weight: 400; line-height: 1.4; }
 .produto-documentos { margin-top: 24px; }
 body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-produto) .atalho-despesa-global { position: static !important; margin: 0 16px 96px; }
 .relatorios-produto #titulo-evolucao-vendas:focus { outline: none; }
 @media (max-width: 700px) {
   .produto-indicadores { grid-template-columns: minmax(0, 1fr); }
   .produto-indicadores dt { min-height: 0; }
-  .ranking-produtos caption { display: block; width: 100%; padding: 12px; text-align: left; box-sizing: border-box; }
-  .ranking-produtos thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .ranking-produtos table, .ranking-produtos tbody, .ranking-produtos tr { display: block; width: 100%; }
-  .ranking-produtos tr { padding: 12px; border-bottom: 2px solid #d6dfe5; box-sizing: border-box; }
-  .ranking-produtos tbody th { display: block; min-width: 0; max-width: none; padding: 8px 0; }
-  .ranking-produtos td[data-label] { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; white-space: normal; text-align: right; overflow-wrap: anywhere; }
-  .ranking-produtos td[data-label]::before { content: attr(data-label); text-align: left; color: #526575; }
+  .tabela-comercial caption { display: block; width: 100%; padding: 12px; text-align: left; box-sizing: border-box; }
+  .tabela-comercial thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .tabela-comercial table, .tabela-comercial tbody, .tabela-comercial tr { display: block; width: 100%; }
+  .tabela-comercial tr { padding: 12px; border-bottom: 2px solid #d6dfe5; box-sizing: border-box; }
+  .tabela-comercial tbody th { display: block; min-width: 0; max-width: none; padding: 8px 0; }
+  .tabela-comercial td[data-label] { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; white-space: normal; text-align: right; overflow-wrap: anywhere; }
+  .tabela-comercial td[data-label]::before { content: attr(data-label); text-align: left; color: #526575; }
+  .clientes-tabela tfoot, .clientes-tabela tfoot th { display: block; }
   .relatorios-produtos .relatorios-paginacao, .relatorios-produto .relatorios-paginacao { flex-wrap: wrap; }
   .relatorios-produto .produto-medida { grid-column: 1 / -1; }
   .relatorios-produto .relatorios-tabela th, .relatorios-produto .relatorios-tabela td { padding: 10px 8px; font-size: .875rem; }
@@ -464,26 +484,26 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     margin-bottom: 28px;
 }
 
-.relatorios-produto #compradores-produto > .relatorios-tabela {
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) {
     border: 1px solid #c7d7e3;
     border-radius: 5px;
     overflow-x: auto;
 }
 
-.relatorios-produto #compradores-produto > .relatorios-tabela > table {
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table {
     width: 100%;
     border-collapse: collapse;
 }
 
-.relatorios-produto #compradores-produto > .relatorios-tabela > table > thead {
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > thead {
     background: #dce9f2;
 }
 
-.relatorios-produto #compradores-produto > .relatorios-tabela > table > tbody > tr:not(.comprador-notas-linha):hover {
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha):hover {
     background: #e9f3fb;
 }
 
-.relatorios-produto #compradores-produto > .relatorios-tabela > table > tbody > tr:not(.comprador-notas-linha) > td:last-child {
+.relatorios-produto #compradores-produto > .relatorios-tabela:not(.tabela-comercial) > table > tbody > tr:not(.comprador-notas-linha) > td:last-child {
     color: #176093;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -521,7 +541,7 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
     color: #244a68;
 }
 
-.relatorios-produto #compradores-produto .comprador-notas-linha tbody td:last-child {
+.relatorios-produto #compradores-produto .comprador-notas-linha .relatorios-tabela:not(.tabela-comercial) tbody td:last-child {
     color: #176093;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -542,7 +562,7 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
         overflow-x: auto;
     }
 
-    .relatorios-produto #compradores-produto table {
+    .relatorios-produto #compradores-produto .relatorios-tabela:not(.tabela-comercial) table {
         min-width: 560px;
     }
 
@@ -721,4 +741,62 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
 /* Seis indicadores na primeira linha do resumo desktop; mant?m as quebras existentes. */
 @media (min-width: 1100px) {
   .relatorios-resumo .relatorios-indicadores:not(.relatorios-rentabilidade) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+/* Padrão compartilhado apenas pelas tabelas da investigação comercial. */
+.relatorios .tabela-comercial :is(th, td) { padding: 12px; font-size: .875rem; line-height: 1.5; vertical-align: top; text-align: right; white-space: normal; overflow-wrap: anywhere; }
+.relatorios .tabela-comercial tr > :first-child,
+.relatorios .tabela-comercial .coluna-texto { text-align: left; }
+.relatorios .tabela-comercial thead th { vertical-align: bottom; text-wrap: balance; }
+.relatorios .tabela-comercial caption { padding: 12px; text-align: left; line-height: 1.5; }
+.relatorios .tabela-comercial tbody th { min-width: 0; max-width: none; }
+.tabela-comercial--clientes table, .tabela-comercial--comparativo table { table-layout: fixed; }
+.tabela-comercial--clientes .col-cliente { width: 32%; }
+.tabela-comercial--clientes :is(.col-antes, .col-agora) { width: 13%; }
+.tabela-comercial--clientes .col-variacao { width: 11%; }
+.tabela-comercial--clientes :is(.col-notas, .col-dias) { width: 8%; }
+.tabela-comercial--clientes .col-diferenca { width: 15%; }
+.tabela-comercial--comparativo .col-nome { width: 24%; }
+.tabela-comercial--comparativo .col-valor { width: 11.5%; }
+.tabela-comercial--comparativo .col-percentual { width: 9%; }
+.tabela-comercial--comparativo .col-unidades { width: 19%; }
+.tabela-comercial--comparativo .col-contagens { width: 13.5%; }
+:is(.cliente-historico, .produto-investigacao-detalhes) { margin-top: 8px; font-weight: 400; }
+:is(.cliente-historico, .produto-investigacao-detalhes) summary { cursor: pointer; min-height: 32px; align-content: center; color: #175d99; text-decoration: underline; text-underline-offset: 2px; }
+:is(.cliente-historico, .produto-investigacao-detalhes) summary:focus-visible { outline: 3px solid #2473bd; outline-offset: 3px; }
+:is(.cliente-historico, .produto-investigacao-detalhes) small { padding: 4px 0; }
+@media (max-width: 700px) {
+  .tabela-comercial colgroup { display: none; }
+  .tabela-comercial--clientes table, .tabela-comercial--comparativo table { table-layout: auto; }
+  .relatorios .tabela-comercial tbody th { padding: 8px 0; }
+  .relatorios .tabela-comercial td[data-label] { padding: 8px 0; min-width: 0; align-items: flex-start; }
+  .tabela-comercial td[data-label]::before { flex: 0 1 45%; min-width: 0; }
+  .tabela-comercial .investigacao-valores { flex: 1 1 55%; min-width: 0; }
+  :is(.cliente-historico, .produto-investigacao-detalhes) summary { min-height: 44px; }
+}
+
+/* Resumo de classes e produtos: cinco colunas; evidências sob demanda. */
+.tabela-comercial--sintese table { table-layout: fixed; }
+.tabela-comercial--sintese .col-nome { width: 40%; }
+.tabela-comercial--sintese .col-valor { width: 15%; }
+.tabela-comercial--sintese .col-diferenca { width: 16%; }
+.tabela-comercial--sintese .col-percentual { width: 14%; }
+.produto-investigacao-evidencias { padding: 8px 0; font-size: .875rem; font-weight: 400; }
+.produto-investigacao-evidencias p { margin: 8px 0; }
+@media (min-width: 1000px) {
+  .relatorios .tabela-comercial--sintese thead th { white-space: nowrap; }
+}
+@media (max-width: 700px) {
+  .tabela-comercial--sintese table { table-layout: auto; }
+}
+
+/* Cabeçalhos de ordenação, restritos às duas tabelas da investigação. */
+.tabela-ordenavel thead a { display: inline-flex; gap: 4px; align-items: center; min-height: 32px; }
+.tabela-ordenavel thead th[aria-sort] { text-decoration-thickness: 2px; }
+.ordenacao-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 700px) {
+  .tabela-ordenavel thead { display: block; position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .tabela-ordenavel thead tr { display: flex; flex-wrap: wrap; gap: 0 12px; padding: 4px 12px; }
+  .relatorios .tabela-ordenavel thead th { display: block; padding: 0; border: 0; text-align: left; }
+  .tabela-ordenavel thead a { min-height: 44px; }
 }

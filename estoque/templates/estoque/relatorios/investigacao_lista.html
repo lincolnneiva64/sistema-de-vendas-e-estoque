@@ -1,0 +1,17 @@
+{% load relatorios l10n %}
+{% if tipo == 'produtos' %}
+{% include 'estoque/relatorios/investigacao_produtos_lista.html' %}
+{% else %}
+<div class="relatorios-tabela tabela-comercial tabela-comercial--comparativo clientes-tabela investigacao-tabela" role="region" aria-label="{{ titulo }}" tabindex="0">
+<table><colgroup><col class="col-nome"><col class="col-valor"><col class="col-valor"><col class="col-valor"><col class="col-percentual"><col class="col-unidades"><col class="col-contagens"></colgroup><caption>{{ titulo }} · antes → agora</caption>
+<thead><tr><th scope="col">{% if tipo == 'clientes' %}Cliente{% else %}Produto{% endif %}</th><th scope="col">Antes</th><th scope="col">Agora</th><th scope="col">Diferença (R$)</th><th scope="col">Variação (%)</th><th scope="col">Quantidade / preço</th><th scope="col">{% if tipo == 'clientes' %}Notas{% else %}Notas / cadastros{% endif %}</th></tr></thead>
+<tbody>{% for linha in lista %}<tr>
+<th scope="row">{% if linha.url %}<a href="{{ linha.url }}">{% endif %}{% if linha.id != None %}#{{ linha.id|unlocalize }} · {% endif %}{{ linha.nome }}{% if linha.url %}</a>{% endif %}
+{% if tipo == 'clientes' %}{% if not linha.notas_atual or not linha.notas_anterior %}<small>{{ linha.comportamento }}.</small>{% endif %}{% if linha.id == 1126 %}<small>Vendas ocasionais de balcão</small>{% elif linha.coletivo %}<small>Cadastro coletivo confirmado.</small>{% endif %}{% if linha.id == None %}<small>Sem cliente vinculado.</small>{% endif %}{% endif %}</th>
+<td data-label="Valor antes">{{ linha.anterior|moeda_br }}</td><td data-label="Valor agora">{{ linha.atual|moeda_br }}</td><td data-label="Diferença em reais">{{ linha.diferenca|moeda_sinal_br }}</td><td data-label="Aumento ou queda (%)">{% if linha.percentual != None %}{{ linha.percentual|numero_sinal_br }}%{% else %}Sem base para calcular{% endif %}</td>
+<td data-label="Quantidade e preço por unidade"><div class="investigacao-valores">{% include 'estoque/relatorios/investigacao_unidades.html' with unidades=linha.unidades %}</div></td>
+<td data-label="Notas{% if tipo != 'clientes' %} e cadastros{% endif %}: antes → agora"><div class="investigacao-valores"><span>Notas: {{ linha.notas_anterior }} → {{ linha.notas_atual }}</span>{% if tipo != 'clientes' %}<br><span>Cadastros: {{ linha.clientes_anterior }} → {{ linha.clientes_atual }}</span>{% endif %}</div></td>
+</tr>{% empty %}<tr><td colspan="7">Nenhum registro comercial nestes períodos.</td></tr>{% endfor %}</tbody></table></div>
+{% endif %}
+{% if lista.has_other_pages %}<nav class="relatorios-paginacao" aria-label="Páginas de {{ titulo }}">
+{% if lista.has_previous %}<a {% if tipo == 'produtos' %}data-ordenacao-link{% endif %} href="?{{ investigacao_query }}&amp;{{ campo_pagina }}={{ lista.previous_page_number|unlocalize }}#{{ ancora }}">Anterior</a>{% endif %}<span>Página {{ lista.number }} de {{ lista.paginator.num_pages }}</span>{% if lista.has_next %}<a {% if tipo == 'produtos' %}data-ordenacao-link{% endif %} href="?{{ investigacao_query }}&amp;{{ campo_pagina }}={{ lista.next_page_number|unlocalize }}#{{ ancora }}">Próxima</a>{% endif %}</nav>{% endif %}

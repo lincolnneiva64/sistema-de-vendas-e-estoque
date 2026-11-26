@@ -14,6 +14,9 @@
 {{ periodos_datas|json_script:'relatorios-periodos-datas' }}
 <script defer src="{% static 'estoque/relatorios-filtros.js' %}?v=semanas-20261125"></script>
 {% if resumo %}
+<nav class="relatorios-filtro-rapido" aria-label="Investigar vendas">
+  <a class="relatorios-produto-analisar" href="{% url 'estoque:relatorios_produtos' %}?{{ filtros_query }}&amp;investigar=classes">Investigar vendas por classes e produtos</a>
+</nav>
 <p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong> · Datas de Belém</p>
 <p>Valores pela data da venda. Faturamento não representa recebimento nem lucro. Vendas canceladas estão excluídas.</p>
 {% if resumo.sem_valor %}<p role="status" class="relatorios-aviso">Há {{ resumo.sem_valor }} venda(s) sem total registrado. Faturamento e ticket médio podem estar incompletos.</p>{% endif %}
@@ -96,6 +99,7 @@
 </p>
 {% endif %}
 {% if resumo.nao_classificado.quantidade %}<p class="relatorios-aviso">Pagamento não classificado: {{ resumo.nao_classificado.valor|moeda_br }} em {{ resumo.nao_classificado.quantidade }} venda(s). Incluído no faturamento comercial, separado de à vista e a prazo.</p>{% endif %}
+{% include 'estoque/relatorios/analise_desempenho.html' %}
 {% include 'estoque/relatorios/graficos.html' %}
 <section class="relatorios-consumo"><h2>Consumo próprio — separado das vendas comerciais</h2>
 <div class="consumo-composicao" aria-label="Composição do total de registros da consulta">

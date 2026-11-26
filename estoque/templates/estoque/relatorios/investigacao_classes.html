@@ -1,0 +1,45 @@
+{% extends 'estoque/relatorios/base.html' %}
+{% load static relatorios %}
+{% block classe_relatorios %}relatorios-investigacao{% endblock %}
+{% block relatorio %}
+<p><a href="{{ vendas_url }}">Voltar ao resumo de vendas</a>{% if classe_selecionada %} · <a href="{{ classes_url }}">Ver todas as classes</a>{% endif %}</p>
+<h1>{% if classe_selecionada %}{{ classe_selecionada.nome }} — investigar produtos{% else %}Quais classes mudaram as vendas?{% endif %}</h1>
+<form method="get" class="relatorios-filtros" id="relatorios-filtros-vendas">
+{{ form.non_field_errors }}{% for campo in form %}<div><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{{ campo.errors }}</div>{% endfor %}
+{% if evolucao_form %}<div><label for="{{ evolucao_form.comparacao.id_for_label }}">Comparar com</label>{{ evolucao_form.comparacao }}</div>{% endif %}
+{% for nome, valor in campos_investigacao %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}<button type="submit">Consultar</button>
+</form>
+{{ periodos_datas|json_script:'relatorios-periodos-datas' }}<script defer src="{% static 'estoque/relatorios-filtros.js' %}"></script>
+{% if investigacao %}{% if investigacao.disponivel %}
+{% include 'estoque/relatorios/investigacao_periodos.html' %}
+<p class="ordenacao-status" role="status" id="ordenacao-status"></p>
+<div id="investigacao-resultados">
+<p class="grafico-nota">Classes do cadastro atual; as notas não guardam a classe da época.</p>
+{% if classe_selecionada %}
+<p><strong>{{ classe_selecionada.nome }}</strong>: {{ classe_selecionada.anterior|moeda_br }} → {{ classe_selecionada.atual|moeda_br }}. Mudança de <strong>{{ classe_selecionada.diferenca|moeda_sinal_br }}</strong>{% if classe_selecionada.percentual != None %} ({{ classe_selecionada.percentual|numero_sinal_br }}%){% endif %}.</p>
+{% if produtos_investigados.disponivel %}
+{% with destaque=produtos_investigados.queda %}{% if destaque %}<p><strong>Uma das maiores reduções:</strong> {% if destaque.url %}<a href="{{ destaque.url }}">{% endif %}{{ destaque.nome }}{% if destaque.url %}</a>{% endif %}, de {{ destaque.anterior|moeda_br }} para {{ destaque.atual|moeda_br }} ({{ destaque.diferenca|moeda_sinal_br }}). Veja quais clientes reduziram suas compras.</p><div class="investigacao-evidencia">{% include 'estoque/relatorios/investigacao_unidades.html' with unidades=destaque.unidades %}</div>{% endif %}{% endwith %}
+{% with destaque=produtos_investigados.alta %}{% if destaque %}<p><strong>Maior crescimento:</strong> {% if destaque.url %}<a href="{{ destaque.url }}">{% endif %}{{ destaque.nome }}{% if destaque.url %}</a>{% endif %}, de {{ destaque.anterior|moeda_br }} para {{ destaque.atual|moeda_br }} ({{ destaque.diferenca|moeda_sinal_br }}). Confira quais compras sustentaram o aumento.</p>{% endif %}{% endwith %}
+<h2 id="produtos-investigados">Produtos que explicam a mudança</h2>
+<p>Quantidades e preços médios por unidade comercial, sem misturar embalagens.</p>
+{% include 'estoque/relatorios/investigacao_ordem.html' %}
+{% include 'estoque/relatorios/investigacao_lista.html' with lista=produtos_investigados.linhas titulo='Produtos da classe' tipo='produtos' campo_pagina='pagina_investigacao' ancora='produtos-investigados' %}
+{% else %}<p class="relatorios-aviso">{{ produtos_investigados.motivo }}</p>{% endif %}
+{% else %}
+<p>O faturamento passou de <strong>{{ investigacao.anterior|moeda_br }}</strong> para <strong>{{ investigacao.atual|moeda_br }}</strong>: <strong>{{ investigacao.diferenca|moeda_sinal_br }}</strong>{% if investigacao.percentual != None %} ({{ investigacao.percentual|numero_sinal_br }}%){% endif %}.</p>
+{% if investigacao.queda %}<p><strong>Maior redução:</strong> <a href="{{ investigacao.queda.url }}">{{ investigacao.queda.nome }}</a>, {{ investigacao.queda.diferenca|moeda_sinal_br }}.</p>{% endif %}
+{% if investigacao.alta %}<p><strong>Maior crescimento:</strong> <a href="{{ investigacao.alta.url }}">{{ investigacao.alta.nome }}</a>, {{ investigacao.alta.diferenca|moeda_sinal_br }}.</p>{% endif %}
+{% include 'estoque/relatorios/investigacao_ordem.html' %}
+<p>Na opção “Maior mudança em reais”, vale o tamanho da diferença, não a porcentagem.</p>
+<p><a href="{{ alternar_classes_sem_vendas_url }}">{% if mostrar_classes_sem_vendas %}Ocultar classes sem vendas{% else %}Mostrar classes sem vendas{% endif %}</a></p>
+<div id="classes-investigadas" class="relatorios-tabela tabela-comercial tabela-comercial--sintese tabela-ordenavel clientes-tabela investigacao-tabela" role="region" aria-label="Faturamento das classes" tabindex="0"><table>
+<colgroup><col class="col-nome"><col class="col-valor"><col class="col-valor"><col class="col-diferenca"><col class="col-percentual"></colgroup>
+<caption>Selecione uma classe para investigar seus produtos</caption>{% include 'estoque/relatorios/investigacao_cabecalhos.html' %}
+<tbody>{% for linha in classes_exibidas %}<tr><th scope="row"><a href="{{ linha.url }}">{{ linha.nome }}</a></th><td data-label="Antes">{{ linha.anterior|moeda_br }}</td><td data-label="Agora">{{ linha.atual|moeda_br }}</td><td data-label="Diferença (R$)">{{ linha.diferenca|moeda_sinal_br }}</td><td data-label="Variação (%)">{% if linha.percentual != None %}{{ linha.percentual|numero_sinal_br }}%{% else %}Sem base para calcular{% endif %}</td></tr>{% empty %}<tr><td colspan="5">Nenhuma classe com vendas nestes períodos.</td></tr>{% endfor %}</tbody>
+<tfoot><tr><th scope="row">Total — confere ao centavo</th><td data-label="Antes">{{ investigacao.anterior|moeda_br }}</td><td data-label="Agora">{{ investigacao.atual|moeda_br }}</td><td data-label="Diferença (R$)">{{ investigacao.diferenca|moeda_sinal_br }}</td><td data-label="Variação total">{% if investigacao.percentual != None %}{{ investigacao.percentual|numero_sinal_br }}%{% else %}Sem base para calcular{% endif %}</td></tr></tfoot></table></div>
+
+{% endif %}
+</div>
+{% else %}<p class="relatorios-aviso">{{ investigacao.motivo }}</p>{% endif %}{% endif %}
+<script defer src="{% static 'estoque/relatorios-ordenacao.js' %}?v=20261126"></script>
+{% endblock %}
