@@ -1,0 +1,6 @@
+{% load relatorios %}
+<div class="ac-investigacao-tabela{% if comparar %} ac-investigacao-quedas{% endif %}" tabindex="0" role="region" aria-label="Produtos e valores do alerta; role para consultar os demais valores">
+<table><thead><tr><th>Produto / Unidade</th>{% if comparar %}<th>Faturamento anterior → Faturamento atual | Queda no faturamento</th>{% else %}<th>Quantidade vendida</th><th>Faturamento</th><th>CMV</th><th>Lucro bruto</th><th>Margem bruta</th>{% endif %}<th>Consultar</th></tr></thead>
+<tbody>{% for linha in linhas %}<tr data-ac-alerta-alvo="{{ linha.alvo_atencao }}"><th scope="row">{% include 'estoque/relatorios/classes_produtos_atencao_link.html' %}{% if linha.itens and not linha.completa %}<small>Rentabilidade parcial</small>{% endif %}</th>
+{% if comparar %}<td class="ac-queda-celula">{% include 'estoque/relatorios/classes_produtos_queda_valores.html' %}</td>{% else %}<td>{{ linha.quantidade|quantidade_br }} {{ linha.unidade }}</td><td>{{ linha.faturamento|moeda_br }}</td><td>{{ linha.custo|moeda_br }}</td><td>{{ linha.lucro|moeda_br }}</td><td class="ac-negativo">{{ linha.margem|numero_br }}%</td>{% endif %}
+<td>{% if linha.url %}<a href="{{ linha.url }}#titulo-rentabilidade">Detalhar produto</a>{% else %}Sem produto vinculado{% endif %}</td></tr>{% endfor %}</tbody></table></div>

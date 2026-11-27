@@ -115,6 +115,15 @@ def classes_produtos(request):
                         destino['unidade'] = p['unidade']
                         destino.pop('investigar', None)
                         p['url'] = reverse('estoque:relatorios_produto',args=[p['produto_id']]) + '?' + destino.urlencode()
+            for p in analise['atencao']['quedas']:
+                if not p.get('alvo_atencao') and p['produto_id'] is not None:
+                    destino = parametros.copy()
+                    for campo in ('classe_de', 'classe_ate', 'q', 'ordem', 'investigar'):
+                        destino.pop(campo, None)
+                    destino['retorno_consolidado'] = retorno
+                    destino['medida'] = 'quantidade' if p['unidade'] else 'faturamento'
+                    destino['unidade'] = p['unidade']
+                    p['url'] = reverse('estoque:relatorios_produto', args=[p['produto_id']]) + '?' + destino.urlencode()
             contexto.update(analise=analise, inicio=inicio, fim=fim, filtros_query=retorno)
     return _resposta(request, 'estoque/relatorios/classes_produtos.html', contexto, comeco, sql)
 

@@ -1,0 +1,35 @@
+{% load relatorios %}
+<details class="ac-atencao-gerencial" aria-labelledby="ac-atencao-titulo">
+<summary id="ac-atencao-titulo"><strong>Atenção gerencial</strong><span class="ac-atencao-sintese">{{ analise.margens_reduzidas }} margens baixas · {% if analise.comparavel %}{{ analise.quedas }} quedas{% else %}Comparação indisponível{% endif %}{% if analise.prejuizos %} · {{ analise.prejuizos }} prejuízos{% endif %}</span></summary>
+<div class="ac-atencao-grade">
+<details data-ac-insight name="atencao-gerencial">
+<summary>Margens baixas ({{ analise.margens_reduzidas }})</summary>
+<p>De 0% a menos de 10% de margem bruta: faixa de atenção, não uma meta obrigatória.</p>
+{% for linha in analise.atencao.margens_principais %}{% include 'estoque/relatorios/classes_produtos_atencao_resumo.html' %}{% empty %}<p>Nenhuma apresentação nesta faixa.</p>{% endfor %}
+{% if analise.margens_reduzidas %}<details class="ac-atencao-completa"><summary>{% if analise.margens_reduzidas > 3 %}Ver todos{% else %}Consultar valores completos{% endif %} · {{ analise.margens_reduzidas }} produtos/apresentações com margem baixa</summary>
+<p>Menor margem primeiro. Os destaques acima priorizam faturamento, considerando também o lucro bruto.</p>
+{% include 'estoque/relatorios/classes_produtos_atencao_lista.html' with linhas=analise.atencao.margens %}
+</details>{% endif %}
+<button type="button" data-ac-fechar-insight hidden>Fechar detalhamento</button></details>
+<details data-ac-insight name="atencao-gerencial">
+<summary>Prejuízo bruto ({{ analise.prejuizos }})</summary>
+{% for linha in analise.atencao.prejuizos|slice:':3' %}{% include 'estoque/relatorios/classes_produtos_atencao_resumo.html' %}{% empty %}<p>Nenhuma apresentação com lucro bruto negativo.</p>{% endfor %}
+{% if analise.prejuizos %}<details class="ac-atencao-completa"><summary>Consultar {{ analise.prejuizos }} produtos/apresentações com prejuízo</summary>
+{% include 'estoque/relatorios/classes_produtos_atencao_lista.html' with linhas=analise.atencao.prejuizos %}
+</details>{% endif %}
+<button type="button" data-ac-fechar-insight hidden>Fechar detalhamento</button></details>
+<details data-ac-insight name="atencao-gerencial">
+<summary>Quedas de faturamento ({% if analise.comparavel %}{{ analise.quedas }}{% else %}indisponível{% endif %})</summary>
+<p>Maiores reduções em reais primeiro. Redução de receita, sozinha, não indica problema grave ou prejuízo.</p>
+{% if analise.comparavel %}
+<p class="ac-queda-datas">Anterior: {{ analise.desempenho.referencia_inicio|date:'d/m/Y' }} a {{ analise.desempenho.referencia_fim|date:'d/m/Y' }} → Atual: {{ analise.desempenho.inicio|date:'d/m/Y' }} a {{ analise.desempenho.fim|date:'d/m/Y' }}. Hoje fica fora da comparação.</p>
+{% for linha in analise.atencao.quedas|slice:':3' %}<div class="ac-atencao-resumo">{% include 'estoque/relatorios/classes_produtos_atencao_link.html' %}{% include 'estoque/relatorios/classes_produtos_queda_valores.html' %}</div>{% empty %}<p>Nenhuma redução no período comparável.</p>{% endfor %}
+{% if analise.quedas %}<details class="ac-atencao-completa"><summary>Consultar {% if analise.quedas > 3 %}todas as {% endif %}{{ analise.quedas }} reduções</summary>
+{% include 'estoque/relatorios/classes_produtos_atencao_lista.html' with linhas=analise.atencao.quedas comparar=True %}
+</details>{% endif %}
+{% else %}<p>{{ analise.desempenho.motivo|default:'Sem cobertura para comparar períodos equivalentes.' }}</p>{% endif %}
+<button type="button" data-ac-fechar-insight hidden>Fechar detalhamento</button></details>
+</div>
+<p class="ac-atencao-nota">Valores de rentabilidade usam somente itens com custo validado; coberturas parciais estão identificadas. Os atalhos localizam a apresentação na tabela, mantendo os filtros.</p>
+<details class="ac-periodos-comparados"><summary>Períodos comparados</summary>{% if analise.comparavel %}<p>{{ analise.desempenho.inicio|date:'d/m/Y' }} a {{ analise.desempenho.fim|date:'d/m/Y' }} com {{ analise.desempenho.referencia_inicio|date:'d/m/Y' }} a {{ analise.desempenho.referencia_fim|date:'d/m/Y' }}. Hoje fica fora da comparação e permanece nos totais quando selecionado.</p>{% else %}<p>{{ analise.desempenho.motivo }}</p>{% endif %}</details>
+</details>

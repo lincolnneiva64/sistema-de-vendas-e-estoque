@@ -222,3 +222,41 @@
     .ac-participacao {break-inside:avoid;}
     .ac-participacao-barra>span,.ac-participacao-amostra {print-color-adjust:exact; -webkit-print-color-adjust:exact;}
 }
+
+/* Collapsible attention preserves the existing computed presentations and links. */
+.ac-atencao-gerencial {margin:10px 0;padding:0 10px;border:1px solid #dbe3eb;border-radius:6px;background:#f8fafc;min-width:0}
+.ac-atencao-gerencial>summary {padding:10px 0;color:#20334a;line-height:1.5}
+.ac-atencao-sintese {margin-left:10px;font-size:.8rem;font-weight:400;color:#475569}
+.ac-atencao-grade {display:block;margin:0 0 6px}
+.ac-atencao-grade>[data-ac-insight] {border-top:1px solid #e2e8f0;padding:0 4px;min-width:0}
+.ac-atencao-grade>[data-ac-insight]>summary {font-weight:600;min-height:36px;align-content:center}
+.ac-atencao-grade p,.ac-atencao-nota,.ac-periodos-comparados {font-size:.8rem;color:#475569;margin:5px 0}
+.ac-atencao-resumo {padding:5px 0;font-size:.83rem;border-top:1px solid #e2e8f0;overflow-wrap:anywhere}
+.ac-atencao-resumo>a {font-weight:600}
+.ac-atencao-resumo>span,.ac-atencao-resumo>small {display:block;font-size:.78rem}
+.ac-atencao-gerencial summary {cursor:pointer;font-size:.83rem;color:#175f91;padding:6px 0}
+.ac-atencao-gerencial [data-ac-fechar-insight] {margin:6px 0;padding:7px 12px;border:1px solid #cbd5e1;border-radius:4px;background:white;color:#175f91;cursor:pointer}
+.ac-investigacao-tabela {overflow:auto;max-height:420px;margin:8px 0;background:white}
+.ac-investigacao-tabela table {width:100%;border-collapse:collapse;font-size:.82rem}
+.ac-investigacao-tabela th,.ac-investigacao-tabela td {padding:8px;text-align:right;white-space:nowrap;border-bottom:1px solid #e2e8f0}
+.ac-investigacao-tabela th:first-child {text-align:left;white-space:normal;min-width:180px}
+.ac-investigacao-tabela small {display:block;font-weight:400}
+.ac-alerta-icone {color:#a86100;font-size:.8em}
+.ac-queda-valores {display:flex;flex-wrap:wrap;align-items:center;gap:5px 14px;margin:3px 0;text-align:left;font-size:.78rem}
+.ac-queda-evolucao {display:flex;align-items:center;gap:8px}
+.ac-queda-valores small {display:block;color:#64748b;font-weight:400;font-size:.72rem;line-height:1.4}
+.ac-queda-valores b,.ac-queda-valores strong {white-space:nowrap;font-weight:600}
+.ac-queda-seta {color:#64748b}
+.ac-queda-reducao {border-left:1px solid #cbd5e1;padding-left:12px}
+.ac-queda-reducao strong {color:#ac1b30}
+.ac-investigacao-tabela td.ac-queda-celula {white-space:normal;min-width:390px}
+.ac-atencao-grade .ac-queda-datas {font-size:.74rem;color:#64748b}
+.ac-tabela tr.ac-localizado>th,.ac-tabela tr.ac-localizado>td {box-shadow:inset 0 2px #d69b19,inset 0 -2px #d69b19;background:#fff8dc}
+@media(max-width:767px) {.ac-atencao-sintese {display:block;margin-left:16px}.ac-investigacao-tabela {max-height:320px}}
+@media(max-width:767px) {
+    .ac-investigacao-quedas table,.ac-investigacao-quedas tbody {display:block}
+    .ac-investigacao-quedas thead {display:none}
+    .ac-investigacao-quedas tr {display:block;padding:5px 0;border-bottom:1px solid #e2e8f0}
+    .ac-investigacao-quedas th,.ac-investigacao-quedas td,.ac-investigacao-quedas td.ac-queda-celula {display:block;text-align:left;white-space:normal;min-width:0;padding:3px 6px;border:0}
+}
+@media(prefers-reduced-motion:reduce) {.ac-localizado {animation:none}}

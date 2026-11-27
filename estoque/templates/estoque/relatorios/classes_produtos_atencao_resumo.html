@@ -1,0 +1,1 @@
+{% load relatorios %}<div class="ac-atencao-resumo">{% include 'estoque/relatorios/classes_produtos_atencao_link.html' %}<span><strong class="ac-negativo">{{ linha.margem|numero_br }}%</strong> · faturamento {{ linha.faturamento|moeda_br }} · lucro bruto {{ linha.lucro|moeda_br }}{% if not linha.completa %} · parcial{% endif %}</span></div>

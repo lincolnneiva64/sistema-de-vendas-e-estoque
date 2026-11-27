@@ -64,6 +64,42 @@
             button.focus({preventScroll: true});
         });
     }
+    for (const detail of root.querySelectorAll('[data-ac-insight]')) {
+        detail.addEventListener('toggle', () => {
+            if (detail.open) for (const other of root.querySelectorAll('[data-ac-insight]')) {
+                if (other !== detail) other.open = false;
+            }
+        });
+        const close = detail.querySelector('[data-ac-fechar-insight]');
+        close.hidden = false;
+        close.addEventListener('click', () => {
+            detail.open = false;
+            detail.querySelector('summary').focus();
+        });
+    }
+    let highlightTimer;
+    for (const link of root.querySelectorAll('[data-ac-localizar]')) {
+        link.addEventListener('click', event => {
+            const target = document.getElementById(link.dataset.acLocalizar) ||
+                [...root.querySelectorAll('[data-ac-alvo]')].find(row => row.dataset.acAlvo === link.dataset.acLocalizar);
+            if (!target) return;
+            event.preventDefault();
+            const group = target.closest('[data-ac-produtos]');
+            const parent = buttons.find(button => button.getAttribute('aria-controls') === group?.id);
+            if (parent) toggle(parent, true);
+            if (target.matches('[data-ac-apresentacao]')) {
+                const disclosure = [...group.querySelectorAll('[data-ac-produto-botao]')].find(button =>
+                    button.getAttribute('aria-controls').trim().split(/\s+/).includes(target.id));
+                if (disclosure?.getAttribute('aria-expanded') !== 'true') disclosure?.click();
+            }
+            clearTimeout(highlightTimer);
+            for (const row of root.querySelectorAll('.ac-localizado')) row.classList.remove('ac-localizado');
+            target.classList.add('ac-localizado');
+            target.scrollIntoView({block: 'center', inline: 'start', behavior: 'auto'});
+            target.focus({preventScroll: true});
+            highlightTimer = setTimeout(() => target.classList.remove('ac-localizado'), 5000);
+        });
+    }
     const source = root.querySelector('a[href="#ac-origem-custos"]');
     if (source) source.addEventListener('click', () => {
         const details = document.getElementById('ac-origem-custos');

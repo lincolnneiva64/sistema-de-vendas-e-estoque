@@ -1,0 +1,5 @@
+{% load relatorios i18n %}
+<div class="ac-queda-valores">
+  <span class="ac-queda-evolucao"><span><small>Faturamento anterior</small><b>{{ linha.anterior|moeda_br }}</b></span><span class="ac-queda-seta" aria-hidden="true">→</span><span><small>Faturamento atual</small><b>{{ linha.atual_comparado|moeda_br }}</b></span></span>
+  <span class="ac-queda-reducao"><small>Queda no faturamento</small><strong>{{ linha.diferenca|moeda_sinal_br|cut:'-' }}{% if linha.variacao_faturamento != None %} ({% language 'pt-br' %}{{ linha.variacao_faturamento|floatformat:'1'|cut:'-' }}{% endlanguage %}%){% endif %}</strong>{% if linha.variacao_faturamento == None %}<small>Percentual sem base para calcular</small>{% endif %}</span>
+</div>

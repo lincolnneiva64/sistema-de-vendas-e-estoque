@@ -367,3 +367,129 @@ class AnaliseConsolidadaTests(PostgreSQLIsoladoTests, TestCase):
         response=self.client.get(reverse('estoque:relatorios_classes_produtos'),dict(periodo='mes_atual'))
         self.assertNotContains(response,'<img src=x onerror=alert(1)>')
         self.assertContains(response,escape(self.p.nome))
+
+
+class AtencaoGerencialTests(PostgreSQLIsoladoTests, TestCase):
+    setUpTestData = classmethod(AnaliseConsolidadaTests.setUpTestData.__func__)
+    item = AnaliseConsolidadaTests.item
+    analise = AnaliseConsolidadaTests.analise
+    linhas = AnaliseConsolidadaTests.linhas
+
+    def test_queda_rotulada_percentual_e_periodos_sem_mudar_valores(self):
+        from django.template.loader import render_to_string
+        from estoque.tests_relatorios_cobertura import completar_registros
+
+        self.item(q='1', valor='2336.50', custo='100', dia=date(2026, 10, 15))
+        self.item(q='1', valor='1080', custo='100')
+        completar_registros(date(2026, 10, 1), date(2026, 11, 20))
+        r = self.analise()
+        linha = r['atencao']['quedas'][0]
+        self.assertEqual(linha['diferenca'], D('-1256.50'))
+        self.assertEqual(linha['variacao_faturamento'], D('-53.78'))
+        preview = render_to_string('estoque/relatorios/classes_produtos_queda_valores.html', dict(linha=linha))
+        complete = render_to_string('estoque/relatorios/classes_produtos_atencao_lista.html',
+                                    dict(linhas=[linha], comparar=True))
+        self.assertIn(preview, complete)
+        for text in ('Faturamento anterior', 'R$ 2.336,50', 'Faturamento atual',
+                     'R$ 1.080,00', 'Queda no faturamento', 'R$ 1.256,50 (53,8%)'):
+            self.assertIn(text, preview)
+        self.assertNotIn('-R$', preview)
+        self.assertEqual(linha['variacao_faturamento'], D('-53.78'))
+        missing = render_to_string('estoque/relatorios/classes_produtos_queda_valores.html',
+            dict(linha=dict(anterior=D('-10'), atual_comparado=D('-20'),
+                           diferenca=D('-10'), variacao_faturamento=None)))
+        self.assertIn('Percentual sem base para calcular', missing)
+        self.assertNotIn('(0,0%)', missing)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('estoque:relatorios_classes_produtos'), dict(
+            periodo='personalizado', data_inicial='2026-11-01', data_final='2026-11-20', comparacao='anterior'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Anterior: 01/10/2026 a 20/10/2026')
+        self.assertContains(response, 'Atual: 01/11/2026 a 20/11/2026')
+
+    def test_alertas_reutilizam_apresentacoes_limites_e_impacto(self):
+        other = criar_produto(nome='Produto maior receita', categoria='Classe A')
+        self.item(q='1', valor='100', custo='95')
+        self.item(produto=other, q='1', valor='1000', custo='910')
+        self.item(q='1', valor='100', custo='100', unidade='CX')
+        high = criar_produto(nome='Margem dez', categoria='Classe A')
+        self.item(produto=high, q='1', valor='100', custo='90')
+        loss = criar_produto(nome='Negativo', categoria='Classe A')
+        self.item(produto=loss, q='1', valor='100', custo='110')
+        missing = criar_produto(nome='Sem custo', categoria='Classe A')
+        self.item(produto=missing, custo=None)
+        r = self.analise()
+        low = r['atencao']['margens']
+        self.assertEqual([a['margem'] for a in low], [0, 5, 9])
+        self.assertEqual(r['margens_reduzidas'], len(low))
+        self.assertEqual(r['atencao']['margens_principais'][0]['produto_id'], other.pk)
+        rows = self.linhas(r)
+        self.assertTrue(all(any(a is row for row in rows) for a in low))
+        self.assertTrue(all(a['alvo_atencao'] for a in low))
+        self.assertEqual(r['prejuizos'], len(r['atencao']['prejuizos']))
+        self.assertEqual(r['atencao']['prejuizos'][0]['lucro'], -10)
+        filtered = self.analise(pesquisa='maior receita', ordem='nome')
+        self.assertEqual(filtered['margens_reduzidas'], 1)
+        self.assertEqual(filtered['atencao']['margens'][0]['produto_id'], other.pk)
+
+    def test_quedas_incluem_apresentacao_sem_venda_atual_sem_inventar_linha(self):
+        self.item(q='1', valor='200', custo='100', dia=date(2026, 10, 15))
+        self.item(q='1', valor='50', custo='30')
+        absent = criar_produto(nome='Somente anterior', categoria='Classe A')
+        self.item(produto=absent, valor='300', dia=date(2026, 10, 15))
+        from estoque.tests_relatorios_cobertura import completar_registros
+        completar_registros(date(2026, 10, 1), date(2026, 11, 20))
+        r = self.analise()
+        drops = r['atencao']['quedas']
+        self.assertEqual(r['quedas'], len(drops))
+        self.assertEqual([a['diferenca'] for a in drops], [-300, -150])
+        self.assertEqual([a['variacao_faturamento'] for a in drops], [-100, -75])
+        self.assertNotIn('alvo_atencao', drops[0])
+        self.assertEqual(drops[1]['atual_comparado'], 50)
+        self.assertTrue(any(drops[1] is row for row in self.linhas(r)))
+
+    def test_pagina_atencao_antes_tabela_links_e_zeros_sem_listas(self):
+        self.item(q='1', valor='100', custo='95')
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('estoque:relatorios_classes_produtos'), dict(
+            periodo='personalizado', data_inicial='2026-11-01', data_final='2026-11-20', comparacao='anterior'))
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode()
+        self.assertLess(text.index('id="ac-atencao-titulo"'), text.index('id="tabela-consolidada"'))
+        self.assertContains(response, 'data-ac-localizar=')
+        self.assertContains(response, 'Consultar valores')
+        self.assertContains(response, 'Fechar detalhamento')
+        self.assertNotContains(response, 'linhas de produto/unidade')
+        self.assertNotContains(response, 'produtos/apresentações com prejuízo')
+        self.assertContains(response, 'data-ac-ir-classe=')
+
+    def test_atencao_inicia_recolhida_com_resumo_e_tres_topicos(self):
+        from html.parser import HTMLParser
+
+        class Disclosures(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.outer = []
+                self.topics = []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'details':
+                    if 'ac-atencao-gerencial' in attrs.get('class', '').split():
+                        self.outer.append(attrs)
+                    if 'data-ac-insight' in attrs:
+                        self.topics.append(attrs)
+
+        self.item(q='1', valor='100', custo='95')
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('estoque:relatorios_classes_produtos'), dict(
+            periodo='personalizado', data_inicial='2026-11-01', data_final='2026-11-20'))
+        parser = Disclosures()
+        parser.feed(response.content.decode())
+        self.assertEqual(len(parser.outer), 1)
+        self.assertEqual(len(parser.topics), 3)
+        self.assertTrue(all('open' not in attrs for attrs in [*parser.outer, *parser.topics]))
+        self.assertContains(response, '1 margens baixas')
+        self.assertContains(response, 'Margens baixas (1)')
+        self.assertContains(response, 'Prejuízo bruto (0)')
+        self.assertContains(response, 'Quedas de faturamento (')

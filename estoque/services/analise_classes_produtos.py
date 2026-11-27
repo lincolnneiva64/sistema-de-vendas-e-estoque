@@ -6,6 +6,7 @@ validation is shared with the individual product report; no current cost fallbac
 from collections import defaultdict, Counter
 from decimal import Decimal
 from fractions import Fraction
+from hashlib import sha256
 from unicodedata import normalize, combining
 
 from django.db.models import Count, Sum
@@ -310,7 +311,7 @@ def analise_consolidada(inicio, fim, *, hoje, pesquisa='', classe_de='', classe_
     consolidados = {}
     total = _grupo(nome='Total geral do filtro')
     linhas_sem_vendas = []
-    quedas_sem_vendas = 0
+    apresentacoes_sem_vendas = []
     # One selected class is an exact filter; a final class opts into a range.
     minimo, maximo = (nome_ordenacao(rotulo_classe(c)) if c else None
         for c in (classe_de, classe_ate or classe_de))
@@ -326,7 +327,7 @@ def analise_consolidada(inicio, fim, *, hoje, pesquisa='', classe_de='', classe_
         if g['faturamento'] == ZERO and all(q == ZERO for q in g['quantidades'].values()):
             linhas_sem_vendas.append(g['produto_id'])
             if comparavel and g['atual_comparado'] < g['anterior']:
-                quedas_sem_vendas += 1
+                apresentacoes_sem_vendas.append(_finalizar(g, comparavel))
             continue
         classe = classes.setdefault(g['chave'], _grupo(chave=g['chave'], nome=nome, produtos=[]))
         _somar(classe, g)
@@ -367,13 +368,37 @@ def analise_consolidada(inicio, fim, *, hoje, pesquisa='', classe_de='', classe_
         faturamento=Sum('total'), sem_total=Count('pk')-Count('total'))
     produtos = [p for c in linhas for p in c['produtos']]
     apresentacoes=[a for p in produtos for a in p['apresentacoes']]
+    # Use the exact dictionaries rendered in the main table, never recalculate
+    # financial values for alerts. IDs identify presentations even without a FK.
+    for p in produtos:
+        identity = repr((p['chave'], p['produto_id'],
+            p['apresentacoes'][0]['unidade'] if p['produto_id'] is None else ''))
+        anchor = sha256(identity.encode()).hexdigest()[:20]
+        p['alvo_atencao'] = f'ac-produto-alvo-{anchor}'
+        for a in p['apresentacoes']:
+            unit_anchor = sha256(a['unidade'].encode()).hexdigest()[:12]
+            a['alvo_atencao'] = (f'ac-unidade-alvo-{anchor}-{unit_anchor}'
+                if len(p['apresentacoes']) > 1 else p['alvo_atencao'])
+            a['margem_atencao'] = a['margem'] is not None and a['margem'] < 10
+        p['margem_atencao'] = any(a['margem_atencao'] for a in p['apresentacoes'])
+    baixas = [a for a in apresentacoes if a['margem'] is not None and 0 <= a['margem'] < 10]
+    prejuizos = [a for a in apresentacoes if a['lucro'] is not None and a['lucro'] < 0]
+    quedas = [a for a in [*apresentacoes, *apresentacoes_sem_vendas]
+              if a['diferenca'] is not None and a['diferenca'] < 0]
+    for a in quedas:
+        a['variacao_faturamento'] = (a['diferenca'] / a['anterior'] * 100).quantize(CENTAVO) if a['anterior'] > 0 else None
+    atencao = dict(
+        margens=sorted(baixas, key=lambda a: (a['margem'], -a['faturamento'], a['nome'])),
+        margens_principais=sorted(baixas, key=lambda a: (-a['faturamento'], a['lucro'], a['nome']))[:3],
+        prejuizos=sorted(prejuizos, key=lambda a: (a['lucro'], -a['faturamento'], a['nome'])),
+        quedas=sorted(quedas, key=lambda a: (a['diferenca'], a['nome'])))
     return dict(classes=linhas, total=total, desempenho=desempenho, comparavel=comparavel,
                 faturamento_notas=notas['faturamento'] or ZERO, total_itens_periodo=total_itens_periodo,
                 diferenca_notas=(notas['faturamento'] or ZERO)-total_itens_periodo,
                 notas_sem_total=notas['sem_total'], quantidade_linhas=len(apresentacoes),quantidade_produtos=len(produtos),
                 linhas_sem_vendas_omitidas=len(linhas_sem_vendas),
                 produtos_sem_vendas_omitidos=len(set(linhas_sem_vendas)-{p['produto_id'] for p in produtos}),
-                prejuizos=sum(p['lucro'] is not None and p['lucro'] < 0 for p in apresentacoes),
-                margens_reduzidas=sum(p['margem'] is not None and 0 <= p['margem'] < 10 for p in apresentacoes),
-                quedas=quedas_sem_vendas+sum(p['diferenca'] is not None and p['diferenca'] < 0 for p in apresentacoes),
+                atencao=atencao, prejuizos=len(prejuizos),
+                margens_reduzidas=len(baixas),
+                quedas=len(quedas),
                 validacoes_custo={pk:{k:v[k] for k in ('custo','motivo','evidencia')} for pk,v in validacoes.items()})
