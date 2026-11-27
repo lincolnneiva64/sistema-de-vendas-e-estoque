@@ -159,6 +159,21 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
         itens_sem_valor=Count('pk') - Count('valor_total'),
         custo_registrado=Sum('custo_total_snapshot', filter=custo_ok),
     )
+    # Share the same historical validation with class and product reports.
+    # Empty periods keep the existing aggregate-only path.
+    validacoes_custo = {}
+    if custos['total_itens']:
+        from django.db.models.functions import Trim, Upper
+        from .relatorios_produtos_indicadores import validar_custos
+        registros = list(itens.annotate(unidade_comercial=Upper(Trim('unidade'))).values(
+            'pk','produto_id','venda_id','venda__data_venda','quantidade','unidade_comercial','valor_total',
+            'estoque_antes','estoque_depois','estoque_movimentado','estoque_unidade_snapshot',
+            'custo_unitario_snapshot','custo_total_snapshot','custo_unidade_snapshot','custo_origem_snapshot'))
+        validacoes_custo = validar_custos(registros)
+        ids_validados = [pk for pk,v in validacoes_custo.items() if v['custo'] is not None]
+        custo_ok = Q(pk__in=ids_validados)
+        custos['com_custo'] = len(ids_validados)
+        custos['custo_registrado'] = sum((validacoes_custo[pk]['custo'] for pk in ids_validados), ZERO)
     receita_itens = custos['faturamento_itens'] or ZERO
     cmv = custos['custo_registrado'] or ZERO
     divergencia = receita_itens - total
@@ -207,20 +222,20 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
             receita = item.valor_total or ZERO
             custo = item.custo_total_snapshot
 
-            historico_valido = (
-                custo is not None
-                and custo >= ZERO
-                and item.custo_unitario_snapshot is not None
-                and item.custo_unitario_snapshot > ZERO
-                and item.custo_origem_snapshot == "preco_compra_atual"
-                and item.quantidade > ZERO
-                and bool(item.custo_unidade_snapshot)
-            )
+            historico_valido = validacoes_custo.get(item.pk, {}).get('custo') is not None
 
             if historico_valido:
                 registrados += 1
                 custo_historico += custo
                 receita_coberta += receita
+                continue
+
+            # A rejected frozen cost must not become a new estimate based on
+            # today's conversion. Keep the existing September fallback only
+            # for genuinely absent cost snapshots, explicitly marked estimated.
+            if custo is not None:
+                pendentes += 1
+                receita_pendente += receita
                 continue
 
             valor = None
@@ -408,9 +423,16 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
                     'dias_transcorridos': hoje.weekday() + 1,
                 }
 
+    receita_coberta = sum((i['valor_total'] or ZERO for i in registros
+        if validacoes_custo[i['pk']]['custo'] is not None), ZERO) if validacoes_custo else ZERO
+    lucro_coberto = receita_coberta - cmv if custos['com_custo'] else None
     rentabilidade = {
         'disponivel': completo,
         'cmv': cmv,
+        'receita_coberta': receita_coberta,
+        'lucro_coberto': lucro_coberto,
+        'margem_coberta': (lucro_coberto / receita_coberta * 100).quantize(CENTAVO)
+                          if lucro_coberto is not None and receita_coberta > ZERO else None,
         'lucro': total - cmv if completo else None,
         'margem': ((total - cmv) / total * 100).quantize(CENTAVO)
                   if completo and total > ZERO else None,
@@ -418,6 +440,8 @@ def resumo_vendas(inicio, fim, pagina=1, *, modo=None, dia_semana=None, equivale
         'com_custo': custos['com_custo'],
         'divergencia': divergencia,
         'estimativa_setembro': estimativa_setembro,
+        'validacoes_custo': {pk:{k:v[k] for k in ('custo','motivo','evidencia')}
+                            for pk,v in validacoes_custo.items()},
     }
 
     return {

@@ -800,3 +800,7 @@ body:has(.relatorios-produtos) .atalho-despesa-global, body:has(.relatorios-prod
   .relatorios .tabela-ordenavel thead th { display: block; padding: 0; border: 0; text-align: left; }
   .tabela-ordenavel thead a { min-height: 44px; }
 }
+
+/* Valores financeiros e observação em linhas próprias, dentro do cartão. */
+.relatorios-rentabilidade > div { grid-template-rows: 36px minmax(30px, auto) minmax(32px, auto); }
+.relatorios-rentabilidade > div > dd { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

@@ -1,0 +1,11 @@
+{% load relatorios %}
+{% if linha.diferenca != None and linha.diferenca < 0 %}
+<span class="ac-comparacao ac-comparacao-queda">Faturamento caiu {{ linha.diferenca|moeda_br|cut:"-" }}.</span>
+{% elif linha.diferenca != None and linha.diferenca > 0 %}
+<span class="ac-comparacao ac-comparacao-aumento">Faturamento aumentou {{ linha.diferenca|moeda_br }}.</span>
+{% endif %}
+{% if linha.diferenca_quantidade != None and linha.diferenca_quantidade < 0 %}
+<span class="ac-comparacao ac-comparacao-queda">Quantidade caiu {{ linha.diferenca_quantidade|quantidade_br|cut:"-" }} {{ linha.unidade }}.</span>
+{% elif linha.diferenca_quantidade != None and linha.diferenca_quantidade > 0 %}
+<span class="ac-comparacao ac-comparacao-aumento">Quantidade aumentou {{ linha.diferenca_quantidade|quantidade_br }} {{ linha.unidade }}.</span>
+{% endif %}

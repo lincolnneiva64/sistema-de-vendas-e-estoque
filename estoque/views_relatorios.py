@@ -77,6 +77,48 @@ def inicio(request):
     return _resposta(request, 'estoque/relatorios/inicio.html', {}, comeco, TempoSQL())
 
 
+@somente_administrador
+def classes_produtos(request):
+    from .forms_relatorios import AnaliseClassesProdutosForm
+    from .services.analise_classes_produtos import analise_consolidada, categorias_disponiveis
+    from .services.participacao_classes import participacao_classes
+    comeco, sql = perf_counter(), TempoSQL()
+    periodo = PeriodoRankingProdutosForm(request.GET)
+    with connection.execute_wrapper(sql):
+        filtros = AnaliseClassesProdutosForm(request.GET, classes=categorias_disponiveis())
+        contexto = dict(form=periodo, filtros=filtros, periodos_datas=periodo.periodos_datas)
+        if periodo.is_valid() and filtros.is_valid():
+            inicio, fim = periodo.cleaned_data['inicio'], periodo.cleaned_data['fim']
+            dados = filtros.cleaned_data
+            analise = analise_consolidada(inicio, fim, hoje=timezone.localdate(timezone=BELEM),
+                pesquisa=dados['q'], classe_de=dados['classe_de'], classe_ate=dados['classe_ate'],
+                ordem=dados['ordem'], comparacao=dados['comparacao'])
+            participacao = participacao_classes(analise)
+            for classe in analise['classes']:
+                classe['participacao_faturamento'] = participacao['por_classe'].get(classe['chave'])
+            contexto['participacao_classes'] = participacao
+            parametros = request.GET.copy()
+            for nome, valor in dict(periodo=periodo['periodo'].value(),
+                    data_inicial=inicio.isoformat(), data_final=fim.isoformat(), **dados).items():
+                parametros[nome] = valor
+            parametros.pop('pagina', None)
+            retorno = parametros.urlencode()
+            # Reuse the existing product/rentability/buyer reports and their filters.
+            for c in analise['classes']:
+                for p in (linha for grupo in c['produtos'] for linha in [grupo,*grupo['apresentacoes']]):
+                    if p['produto_id'] is not None:
+                        destino = parametros.copy()
+                        for campo in ('classe_de','classe_ate','q','ordem'):
+                            destino.pop(campo, None)
+                        destino['retorno_consolidado'] = retorno
+                        destino['medida'] = 'quantidade' if p['unidade'] else 'faturamento'
+                        destino['unidade'] = p['unidade']
+                        destino.pop('investigar', None)
+                        p['url'] = reverse('estoque:relatorios_produto',args=[p['produto_id']]) + '?' + destino.urlencode()
+            contexto.update(analise=analise, inicio=inicio, fim=fim, filtros_query=retorno)
+    return _resposta(request, 'estoque/relatorios/classes_produtos.html', contexto, comeco, sql)
+
+
 def _opcoes_evolucao(request, form, hoje, *, produto=False):
     padrao = modo_padrao(form.cleaned_data['inicio'], form.cleaned_data['fim'], hoje)
     analise_form = EvolucaoRelatorioForm({

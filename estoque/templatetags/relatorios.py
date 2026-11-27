@@ -16,6 +16,12 @@ def quantidade_br(valor):
     return numero.translate(str.maketrans(',.', '.,'))
 
 
+@register.filter
+def equivalente_br(valor):
+    """Display an equivalent to three places; retain exact operands in service."""
+    return quantidade_br(Decimal(valor).quantize(Decimal('0.001')))
+
+
 class _JSONCompacto(DjangoJSONEncoder):
     def __init__(self, *args, **kwargs):
         kwargs['separators'] = (',', ':')

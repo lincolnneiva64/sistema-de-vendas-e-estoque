@@ -3,6 +3,7 @@
 {% block classe_relatorios %}relatorios-produto{% endblock %}
 {% block relatorio %}
 <link rel="stylesheet" href="{% static 'estoque/relatorios-gerencial-v4.css' %}?v=layout-tabelas-20261126">
+{% if request.GET.retorno_consolidado %}<p><a href="{% url 'estoque:relatorios_classes_produtos' %}?{{ request.GET.retorno_consolidado }}#tabela-consolidada">Voltar à análise por classes e produtos</a></p>{% endif %}
 <p>{% if investigando %}<a href="{{ classes_produto_url }}#produtos-investigados">Voltar aos produtos da classe</a> · <a href="#compradores-produto">Investigar clientes e notas</a>{% else %}<a href="{% url 'estoque:relatorios_produtos' %}?{{ retorno_ranking }}#resultados-produtos">Voltar ao ranking de produtos</a>{% endif %}</p>
 
 

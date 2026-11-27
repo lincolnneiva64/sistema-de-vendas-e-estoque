@@ -3,10 +3,6 @@ from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_EVEN
 from fractions import Fraction
 
-from django.db.models import CharField, Subquery
-from django.db.models.functions import Cast
-
-from inventario.models import DetalheMovimentoEstoque
 from inventario.saldo_documental import provar_atribuicao, unidade, numero
 
 ZERO = Decimal('0')
@@ -59,7 +55,7 @@ def quantidade_fisica(itens, provas):
             total += Fraction(q)
             continue
         p = provas.get(item['pk'])
-        if p is None:
+        if p is None or p.get('legado'):
             return None
         d = p['detalhe']
         # Require a frozen direct relation to physical UN on every packaging
@@ -91,7 +87,9 @@ def custo_item(item, prova):
         return None, 'Snapshot de custo ausente, incompleto ou sem origem reconhecida.'
     if custo_unidade == item['unidade_comercial']:
         quantidade_custeada = Fraction(q)
-    elif prova is not None and unidade(prova['detalhe'].unidade_base) == custo_unidade:
+    elif prova is not None and prova.get('legado') and prova['unidade_base'] == custo_unidade:
+        quantidade_custeada = prova['quantidade_base']
+    elif prova is not None and not prova.get('legado') and unidade(prova['detalhe'].unidade_base) == custo_unidade:
         quantidade_custeada = abs(prova['prova']['exato'])
     else:
         return None, 'Unidade de custo diferente da comercial, sem conversão histórica comprovada no item.'
@@ -100,32 +98,61 @@ def custo_item(item, prova):
     return total, ''
 
 
+def validar_custos(itens, *, incluir_fisicas=False):
+    """Shared frozen-cost decision and evidence, with bounded batch queries."""
+    from .custos_historicos import carregar_provas, conciliar_custos_comerciais
+    itens = list(itens)
+    provas, motivos = carregar_provas(itens, incluir_fisicas=incluir_fisicas)
+    # A managerial frozen cost need not wait for an inventory count predating
+    # the sale. Reconcile independent purchasing and commercial records too.
+    alternativas = conciliar_custos_comerciais(itens, provas, motivos)
+    provas.update(alternativas)
+    resultado = {}
+    for item in itens:
+        prova = provas.get(item['pk'])
+        custo, motivo = custo_item(item, prova)
+        evidencia = None
+        if custo is not None:
+            if prova and prova.get('legado'):
+                evidencia = prova['rastreabilidade']
+            elif prova:
+                evidencia = dict(criterio='detalhe_movimento_historico_v1',
+                    item_id=item['pk'], venda_id=item['venda_id'],
+                    movimento_id=prova['detalhe'].movimento_id,
+                    detalhe_id=prova['detalhe'].pk)
+            else:
+                evidencia = dict(criterio='snapshot_mesma_unidade_v1',
+                    item_id=item['pk'], venda_id=item['venda_id'])
+        elif motivo.startswith('Unidade de custo diferente'):
+            motivo = motivos.get(item['pk'], motivo)
+        resultado[item['pk']] = dict(custo=custo, motivo=motivo, prova=prova, evidencia=evidencia)
+    from .custos_historicos import conciliar_totais_documentados
+    pendentes = [i for i in itens if resultado[i['pk']]['custo'] is None]
+    resultado.update(conciliar_totais_documentados(pendentes, motivos))
+    return resultado
+
+
 def indicadores_produto(itens_periodo, *, unidade_recorte=None):
     """One product/period only; lean rows and one bulk immutable-evidence query."""
-    itens = list(itens_periodo.values('pk', 'produto_id', 'venda_id', 'unidade_comercial',
-        'quantidade', 'valor_total', 'estoque_antes', 'estoque_depois', 'estoque_unidade_snapshot',
+    itens = list(itens_periodo.values('pk', 'produto_id', 'venda_id', 'venda__data_venda', 'unidade_comercial',
+        'quantidade', 'valor_total', 'estoque_antes', 'estoque_depois', 'estoque_movimentado', 'estoque_unidade_snapshot',
         'custo_unitario_snapshot', 'custo_total_snapshot', 'custo_unidade_snapshot', 'custo_origem_snapshot'))
-    por_item = defaultdict(list)
-    if itens:
-        ids = itens_periodo.annotate(_item_texto=Cast('pk', CharField())).values('_item_texto')
-        detalhes = DetalheMovimentoEstoque.objects.filter(documento_tipo='venda',
-            item_referencia__in=Subquery(ids), movimento__produto_id=itens[0]['produto_id']).select_related('movimento')
-        for d in detalhes:
-            por_item[d.item_referencia].append(d)
-    provas = {i['pk']: prova_item(i, por_item[str(i['pk'])]) for i in itens}
+    validacoes = validar_custos(itens, incluir_fisicas=True)
+    provas = {pk:v['prova'] for pk,v in validacoes.items()}
     grupos = {}
     motivos = defaultdict(int)
     for i in itens:
         u = i['unidade_comercial']
         g = grupos.setdefault(u, dict(unidade=u, quantidade=ZERO, faturamento=ZERO,
-            custo_conhecido=ZERO, itens=0, com_custo=0))
+            custo_conhecido=ZERO, quantidade_coberta=ZERO, itens=0, com_custo=0))
         g['quantidade'] += i['quantidade']
         g['faturamento'] += i['valor_total']
         g['itens'] += 1
-        custo, motivo = custo_item(i, provas[i['pk']])
+        custo, motivo = validacoes[i['pk']]['custo'], validacoes[i['pk']]['motivo']
         if custo is not None:
             g['custo_conhecido'] += custo
             g['com_custo'] += 1
+            g['quantidade_coberta'] += i['quantidade']
         elif unidade_recorte is None or unidade_recorte == u:
             motivos[motivo] += 1
     quantidades = [dict(unidade_comercial=u, quantidade=g['quantidade'] if u else None)
@@ -150,4 +177,5 @@ def indicadores_produto(itens_periodo, *, unidade_recorte=None):
         itens=total_itens, com_custo=cobertos, motivos=dict(motivos),
         cmv=conhecido if disponivel else None, custo_conhecido=conhecido,
         lucro=lucro, margem=(lucro/receita*100).quantize(CENTAVO) if lucro is not None and receita > 0 else None,
-        unidade_recorte=unidade_recorte)
+        unidade_recorte=unidade_recorte,
+        validacoes_custo={pk:{k:v[k] for k in ('custo','motivo','evidencia')} for pk,v in validacoes.items()})

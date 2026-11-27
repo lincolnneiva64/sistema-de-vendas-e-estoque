@@ -163,3 +163,42 @@ class PeriodoRankingProdutosForm(PeriodoRelatorioForm):
             required='Escolha o período.', invalid_choice='Escolha um período válido.')
         for nome in ('data_inicial', 'data_final'):
             self.fields[nome].error_messages['invalid'] = 'Informe uma data válida.'
+
+
+class AnaliseClassesProdutosForm(forms.Form):
+    classe_de = forms.ChoiceField(label='Classe', required=False)
+    classe_ate = forms.ChoiceField(label='Até a classe (intervalo)', required=False)
+    q = forms.CharField(label='Produto', required=False, max_length=120,
+        widget=forms.TextInput(attrs={'type':'search', 'placeholder':'Nome ou parte do nome'}))
+    comparacao = forms.ChoiceField(label='Comparar com', choices=(
+        ('anterior','Mês anterior'), ('ano_anterior','Mesmo mês do ano anterior')))
+    ordem = forms.ChoiceField(label='Ordenar por', choices=(
+        ('faturamento','Maior faturamento'), ('faturamento_menor','Menor faturamento'),
+        ('nome','Classe A–Z'), ('nome_desc','Classe Z–A'),
+        ('lucro','Maior lucro bruto'), ('margem','Maior margem bruta'),
+        ('quantidade','Quantidade por unidade'),
+        ('cmv','Maior CMV validado'), ('custo_medio','Maior custo médio na mesma unidade'),
+        ('preco_medio','Maior preço médio na mesma unidade'), ('lucro_unitario','Maior lucro por unidade'),
+        ('queda','Maior queda de faturamento')))
+
+    def __init__(self, data=None, *, classes=(), **kwargs):
+        if data is not None:
+            from .services.investigacao_comercial import normalizar_chave_classe
+            data = data.copy()
+            for campo in ('classe_de','classe_ate'):
+                if campo in data:
+                    data[campo] = normalizar_chave_classe(data[campo])
+            data.setdefault('comparacao','anterior')
+            data.setdefault('ordem','faturamento')
+        super().__init__(data, **kwargs)
+        self.classes = list(classes)
+        self.fields['classe_de'].choices = [('', 'Todas as classes'), *self.classes]
+        self.fields['classe_ate'].choices = [('', 'Só a classe escolhida'), *self.classes]
+
+    def clean(self):
+        dados = super().clean()
+        de, ate = dados.get('classe_de'), dados.get('classe_ate')
+        posicoes = {chave:i for i, (chave, _) in enumerate(self.classes)}
+        if de and ate and de in posicoes and ate in posicoes and posicoes[de] > posicoes[ate]:
+            self.add_error('classe_ate','A classe final deve vir depois da inicial na lista.')
+        return dados

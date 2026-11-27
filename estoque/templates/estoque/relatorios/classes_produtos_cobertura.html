@@ -1,0 +1,7 @@
+{% load relatorios %}
+<span class="ac-sinais">
+{% if not linha.com_custo %}<span class="ac-sem-custo">Custo a conferir</span>{% elif not linha.completa %}<span class="ac-parcial">Custo parcial · {{ linha.com_custo }}/{{ linha.itens }}</span>{% endif %}
+{% if linha.lucro < 0 %}<span class="ac-negativo">Prejuízo bruto{% if not linha.completa %} parcial{% endif %}</span>{% endif %}
+</span>
+{% if linha.motivos %}<details class="ac-variacao"><summary>Motivo do custo a conferir</summary><div>{% for motivo, quantidade in linha.motivos.items %}<p>{{ quantidade }} item(ns): {{ motivo }}</p>{% endfor %}</div></details>{% endif %}
+{% include 'estoque/relatorios/classes_produtos_comparacao.html' %}

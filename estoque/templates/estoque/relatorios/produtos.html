@@ -3,6 +3,7 @@
 {% block classe_relatorios %}relatorios-produtos{% endblock %}
 {% block relatorio %}
 <h1>Vendas por produto</h1>
+<p><a href="{% url 'estoque:relatorios_classes_produtos' %}?{{ request.GET.urlencode }}">Análise consolidada por classes e produtos</a></p>
 <p>Itens das notas comerciais atuais, pela data da venda. Cancelamentos e consumo próprio estão excluídos. Faturamento não representa recebimento.</p>
 <form method="get" action="{% url 'estoque:relatorios_produtos' %}#resultados-produtos" class="relatorios-filtros" id="relatorios-filtros-vendas" data-produtos-sugestoes="{% url 'estoque:relatorios_produtos_sugestoes' %}" data-ranking-pagina="{{ ranking.linhas.number|default:1 }}" data-produto-analise-base="{% url 'estoque:relatorios_produtos' %}">
   {{ form.non_field_errors }}
