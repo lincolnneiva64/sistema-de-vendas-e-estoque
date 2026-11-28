@@ -18,7 +18,8 @@ from .analise_evolucao import modo_padrao
 from django.utils import timezone
 from .services.relatorios import resumo_vendas
 from .services.analise_desempenho import desempenho_comercial
-from .services.inteligencia_clientes import participacao_clientes
+from .services.inteligencia_clientes import participacao_clientes, resumo_balcao_clientes
+from .services.faturamento_negocio import consolidar_faturamento
 from .services.investigacao_comercial import (
     investigar_classes, investigar_produtos, investigar_clientes_produto,
     outros_produtos_somente_atual, chave_classe, ordenar_coluna, COLUNAS_ORDENACAO, normalizar_chave_classe,
@@ -500,6 +501,10 @@ def vendas(request):
                 form.cleaned_data['inicio'], form.cleaned_data['fim'], hoje,
                 opcoes.get('comparacao', 'anterior'))
             contexto['clientes_variacao'] = participacao_clientes(contexto['desempenho'])
+            contexto['origens_comerciais'] = resumo_balcao_clientes(
+                contexto['inicio'], contexto['fim'], contexto['resumo'])
+            contexto['faturamento_negocio'] = consolidar_faturamento(
+                contexto['inicio'], contexto['fim'], contexto['resumo']['faturamento'])
         parametros = request.GET.copy()
         parametros.pop('pagina', None)
         for campo in ('periodo', 'data_inicial', 'data_final'):

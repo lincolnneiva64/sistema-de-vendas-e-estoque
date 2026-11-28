@@ -1,0 +1,42 @@
+{% load relatorios l10n %}
+{% if origens_comerciais %}
+<section class="balcao-clientes" aria-labelledby="balcao-clientes-titulo">
+  <h4 id="balcao-clientes-titulo">Balcão × Clientes cadastrados</h4>
+  <p>{{ origens_comerciais.inicio|date:'d/m/Y' }} a {{ origens_comerciais.fim|date:'d/m/Y' }} · Mesmo período dos indicadores financeiros.</p>
+  {% if origens_comerciais.disponivel %}
+  <div class="relatorios-tabela tabela-comercial clientes-tabela" role="region" aria-label="Balcão e clientes cadastrados" tabindex="0">
+  <table>
+    <caption>Participação no faturamento e lucro bruto</caption>
+    <thead><tr><th scope="col">Origem comercial</th><th scope="col">Faturamento</th><th scope="col">Participação</th><th scope="col">Operações</th><th scope="col">CMV validado</th><th scope="col">Lucro bruto</th><th scope="col">Margem bruta</th></tr></thead>
+    <tbody>{% for grupo in origens_comerciais.grupos %}
+    <tr{% if grupo.chave == 'total' %} class="balcao-total"{% endif %} data-origem="{{ grupo.chave }}">
+      <th scope="row">{{ grupo.nome }}{% if grupo.chave == 'balcao' %}<small>Origem coletiva · #1126</small>{% endif %}{% if grupo.sem_total %}<small>{{ grupo.sem_total }} operação(ões) sem total registrado</small>{% endif %}</th>
+      <td data-label="Faturamento">{{ grupo.faturamento|moeda_br }}</td>
+      <td data-label="Participação">{% if grupo.participacao != None %}{{ grupo.participacao|numero_br }}%{% else %}—{% endif %}</td>
+      <td data-label="Operações">{{ grupo.operacoes }}</td>
+      <td data-label="CMV validado"><span>{% if grupo.completa %}{{ grupo.cmv|moeda_br }}{% elif grupo.com_custo %}{{ grupo.cmv_conhecido|moeda_br }}<small>Parcial</small>{% else %}Indisponível{% endif %}</span></td>
+      <td data-label="Lucro bruto"><span>{% if grupo.completa %}{{ grupo.lucro|moeda_br }}{% elif grupo.lucro_coberto != None %}{{ grupo.lucro_coberto|moeda_br }}<small>Somente parcela coberta</small>{% else %}Indisponível{% endif %}</span></td>
+      <td data-label="Margem bruta"><span>{% if grupo.completa %}{% if grupo.margem != None %}{{ grupo.margem|numero_br }}%{% else %}—{% endif %}{% elif grupo.margem_coberta != None %}{{ grupo.margem_coberta|numero_br }}%<small>Somente parcela coberta</small>{% else %}Indisponível{% endif %}</span></td>
+    </tr>
+    {% if not grupo.completa %}<tr class="balcao-cobertura"><td colspan="7">
+      <strong>{{ grupo.nome }}:</strong> custos validados em {{ grupo.com_custo }} de {{ grupo.itens }} itens, sobre {{ grupo.receita_coberta|moeda_br }} de faturamento{% if grupo.cobertura != None %} ({{ grupo.cobertura|numero_br }}% dos valores dos itens){% endif %}. Lucro e margem acima não representam o resultado total.
+      {% if grupo.divergencia %}Os valores dos itens diferem das notas em {{ grupo.divergencia|moeda_sinal_br }}; resultado total indisponível.{% endif %}
+    </td></tr>{% endif %}
+    {% endfor %}</tbody>
+  </table></div>
+  <p class="balcao-explicacao">O balcão reúne consumidores sem cadastro individual. Vendas à vista de clientes cadastrados permanecem em Clientes cadastrados.</p>
+  <details class="balcao-ranking">
+    <summary>Maiores compradores cadastrados · ranking por faturamento</summary>
+    <div class="relatorios-tabela tabela-comercial clientes-tabela" role="region" aria-label="Maiores clientes por faturamento" tabindex="0">
+    <table><caption>Cinco maiores compradores cadastrados — não é ranking de crescimento</caption>
+      <thead><tr><th scope="col">Posição</th><th scope="col">Cliente / origem</th><th scope="col">Faturamento</th><th scope="col">Participação no faturamento</th><th scope="col">Operações</th></tr></thead>
+      <tbody>{% for cliente in origens_comerciais.maiores %}<tr>
+        <td data-label="Posição">{{ cliente.posicao }}º</td><th scope="row">#{{ cliente.cliente_id|unlocalize }} · {{ cliente.cliente__nome|default:'Nome não informado' }}</th>
+        <td data-label="Faturamento">{{ cliente.faturamento|moeda_br }}</td><td data-label="Participação">{% if cliente.participacao != None %}{{ cliente.participacao|numero_br }}%{% else %}—{% endif %}</td><td data-label="Operações">{{ cliente.operacoes }}</td>
+      </tr>{% empty %}<tr><td colspan="5">Nenhum cliente cadastrado comprou neste período.</td></tr>{% endfor %}</tbody>
+      <tfoot><tr><td data-label="Posição">Sem posição</td><th scope="row">Venda de Balcão · origem coletiva</th><td data-label="Faturamento">{{ origens_comerciais.balcao.faturamento|moeda_br }}</td><td data-label="Participação">{% if origens_comerciais.balcao.participacao != None %}{{ origens_comerciais.balcao.participacao|numero_br }}%{% else %}—{% endif %}</td><td data-label="Operações">{{ origens_comerciais.balcao.operacoes }}</td></tr></tfoot>
+    </table></div>
+  </details>
+  {% else %}<p role="status">{{ origens_comerciais.motivo }}</p>{% endif %}
+</section>
+{% endif %}

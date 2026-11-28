@@ -136,12 +136,12 @@ class ParticipacaoPuraTests(SimpleTestCase):
         r = resumir_clientes(linhas_exemplo(), desempenho(), [4])
         self.assertTrue(r['disponivel'])
         grupos = {g['chave']:g for g in r['grupos']}
-        self.assertEqual([grupos[k]['diferenca'] for k in ('ambos','ausentes','somente_atual','coletivos','sem_cliente')], [-25,-50,40,10,1])
+        self.assertEqual([grupos[k]['diferenca'] for k in ('ambos','ausentes','somente_atual','coletivos','sem_cliente')], [-20,-50,40,5,1])
         self.assertEqual(sum(g['diferenca'] for g in r['grupos']), D('-24.00'))
         self.assertEqual((r['anterior'],r['atual']), (187,163))
-        self.assertEqual(grupos['ambos']['cadastros'], 2)
-        self.assertEqual((r['coletivos'],r['pendentes']), (1,4))
-        self.assertTrue(r['cadastro_1126_pendente'])
+        self.assertEqual(grupos['ambos']['cadastros'], 1)
+        self.assertEqual((r['coletivos'],r['pendentes']), (2,3))
+        self.assertFalse(r['cadastro_1126_pendente'])
         self.assertEqual(grupos['ausentes']['pontos'], (D(-50)/187*100).quantize(D('.01')))
 
     def test_nomes_iguais_nao_unem_ids_e_1126_nao_vira_coletivo_pelo_nome(self):
@@ -149,9 +149,9 @@ class ParticipacaoPuraTests(SimpleTestCase):
                  linha(2,'atual','10',nome='Mesmo Nome'),
                  linha(1126,'anterior','5',nome='Venda A Vista Sta Bárbara')]
         r = resumir_clientes(dados, desempenho('15','10'))
-        self.assertEqual(r['coletivos'],0)
-        self.assertEqual(r['pendentes'],3)
-        self.assertEqual([g['cadastros'] for g in r['grupos'][:3]], [0,2,1])
+        self.assertEqual(r['coletivos'],1)  # Confirmação pelo ID, independentemente do nome.
+        self.assertEqual(r['pendentes'],2)
+        self.assertEqual([g['cadastros'] for g in r['grupos'][:3]], [0,1,1])
 
     def test_presenca_usa_notas_mesmo_com_receita_zero(self):
         r = resumir_clientes([linha(1,'anterior','0'),linha(1,'atual','10')],desempenho('0','10'))
@@ -200,7 +200,7 @@ class ParticipacaoPuraTests(SimpleTestCase):
         self.assertEqual(resumo['problema']['valor'],50)
         self.assertEqual(resumo['positivo']['valor'],40)
         self.assertEqual(resumo['ausentes']['cadastros'],1)
-        self.assertEqual((resumo['ambos']['anterior'],resumo['ambos']['atual']),(110,85))
+        self.assertEqual((resumo['ambos']['anterior'],resumo['ambos']['atual']),(100,80))
         html=self.renderizar(r)
         self.assertIn('-R$ 24,00',html)
         self.assertNotIn('Essas observações vêm das notas registradas',html)
@@ -294,12 +294,12 @@ class ParticipacaoPuraTests(SimpleTestCase):
             linha(1126,'atual','15',nome='Venda A Vista Sta Bárbara')],desempenho('10','15'))
         html=self.renderizar(r)
         self.assertIn('#1126',html)
-        self.assertIn('Vendas ocasionais de balcão',html)
+        self.assertIn('origem comercial coletiva',html)
         self.assertNotIn('falta confirmar',html)
         self.assertNotIn('confira as últimas notas',html.lower())
-        self.assertEqual((r['anterior'],r['atual'],r['coletivos']),(10,15,0))
-        self.assertEqual(r['aumentos'][0]['variacao_percentual'],D('50.00'))
-        self.assertIn('mantendo a mesma quantidade',html)
+        self.assertEqual((r['anterior'],r['atual'],r['coletivos']),(10,15,1))
+        self.assertEqual(r['aumentos'],[])
+        self.assertNotIn('mantendo a mesma quantidade',html)
 
 
 class FixturesClientes:
@@ -356,15 +356,15 @@ class ParticipacaoDBTests(FixturesClientes,PostgreSQLIsoladoTests,TestCase):
         self.assertEqual((r['anterior'],r['atual'],r['diferenca']),(187,163,-24))
         cadastro=next(c for c in r['impactos'] if c['id']==self.c1.pk)
         self.assertEqual((cadastro['notas_anterior'],cadastro['dias_anterior']),(2,1))
-        self.assertEqual((r['coletivos'],r['cadastro_1126_pendente']),(0,True))
+        self.assertEqual((r['coletivos'],r['cadastro_1126_pendente']),(1,False))
 
     def test_coletivo_explicito_por_id_e_pendente_nao_se_sobrepoem(self):
         with override_settings(RELATORIOS_CLIENTES_COLETIVOS_CONFIRMADOS=(self.coletivo.pk,)):
             r=participacao_clientes(self.analisar())
         grupo=next(g for g in r['grupos'] if g['chave']=='coletivos')
-        self.assertEqual((grupo['anterior'],grupo['atual'],grupo['cadastros']),(20,30,1))
+        self.assertEqual((grupo['anterior'],grupo['atual'],grupo['cadastros']),(30,35,2))
         self.assertEqual(sum(g['diferenca'] for g in r['grupos']),-24)
-        self.assertTrue(r['cadastro_1126_pendente'])
+        self.assertFalse(r['cadastro_1126_pendente'])
 
     def test_cobertura_insuficiente_sem_consulta_adicional(self):
         Venda.objects.filter(data_venda=date(2026,10,12)).delete()
@@ -395,7 +395,7 @@ class ParticipacaoDBTests(FixturesClientes,PostgreSQLIsoladoTests,TestCase):
                     alcance='6',semanas_comparacao='4'))
             self.assertEqual(resposta.status_code,200)
             self.assertContains(resposta,'Participação dos clientes na variação')
-            self.assertContains(resposta,'Vendas ocasionais de balcão')
+            self.assertContains(resposta,'origem comercial coletiva')
             self.assertContains(resposta,'data_inicial=2026-11-01')
             self.assertContains(resposta,'semanas_comparacao=4')
             self.assertContains(resposta,'Cálculo completo indisponível')
@@ -514,8 +514,8 @@ class ParticipacaoVisualTests(FixturesClientes,PostgreSQLIsoladoTests,StaticLive
                         self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"),9)
                         self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes a').length"),0)
                         self.assertTrue(tab.evaluate("!!document.querySelector('#participacao-clientes [data-clientes-total]')"))
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes details:not(.cliente-historico)').length"),0)
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes table').length"),4)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes details:not(.cliente-historico)').length"),1)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes table').length"),6)
                         self.assertTrue(tab.evaluate("document.querySelector('#clientes-aumentos').getBoundingClientRect().height > 0"))
                         tab.evaluate("document.getElementById('participacao-clientes').scrollIntoView()")
                         pasta=Path('artifacts/auditoria-clientes-apresentacao'); pasta.mkdir(parents=True,exist_ok=True)

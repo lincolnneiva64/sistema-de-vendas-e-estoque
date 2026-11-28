@@ -2,6 +2,7 @@
 {% if clientes_variacao %}
 <details class="clientes-variacao" id="participacao-clientes">
   <summary>Participação dos clientes na variação</summary>
+  {% include 'estoque/relatorios/balcao_clientes.html' %}
   {% if clientes_variacao.disponivel %}
   <p><strong>Antes:</strong> {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }} · <strong>Agora:</strong> {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}.</p>
   {% with resumo=clientes_variacao.comercial %}
@@ -17,7 +18,7 @@
     <caption>Participação dos clientes nos períodos comparados</caption>
     <thead><tr><th scope="col">Comportamento de compra</th><th scope="col">Antes</th><th scope="col">Agora</th><th scope="col">Diferença (R$)</th></tr></thead>
     <tbody>{% for grupo in clientes_variacao.grupos_visiveis %}<tr>
-      <th scope="row">{{ grupo.descricao }}{% if grupo.cadastros %}<small>{{ grupo.cadastros }} cadastro{{ grupo.cadastros|pluralize }}</small>{% endif %}</th>
+      <th scope="row">{{ grupo.descricao }}{% if grupo.balcao_presente %}<small>Venda de Balcão (#1126) · origem comercial coletiva</small>{% endif %}{% if grupo.cadastros and grupo.chave != 'coletivos' %}<small>{{ grupo.cadastros }} cadastro{{ grupo.cadastros|pluralize }}</small>{% endif %}</th>
       <td data-label="Faturamento antes">{{ grupo.anterior|moeda_br }}</td><td data-label="Faturamento agora">{{ grupo.atual|moeda_br }}</td><td data-label="Diferença em reais">{{ grupo.diferenca|moeda_sinal_br }}</td>
     </tr>{% endfor %}</tbody>
     <tfoot data-clientes-total><tr><th scope="row">Total — confere com o faturamento da loja</th><td data-label="Faturamento antes">{{ clientes_variacao.anterior|moeda_br }}</td><td data-label="Faturamento agora">{{ clientes_variacao.atual|moeda_br }}</td><td data-label="Diferença em reais">{{ clientes_variacao.diferenca|moeda_sinal_br }}</td></tr></tfoot>

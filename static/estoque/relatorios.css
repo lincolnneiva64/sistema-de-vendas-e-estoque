@@ -6,6 +6,29 @@
 .relatorios .clientes-variacao th { white-space: normal; }
 .clientes-variacao th small { display: block; margin-top: 4px; font-weight: 400; }
 .clientes-variacao tfoot { font-weight: 700; }
+.balcao-clientes { margin: 8px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #d6dfe5; }
+.balcao-clientes h4 { margin: 4px 0; }
+.balcao-clientes p { margin: 5px 0; }
+.balcao-clientes td small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; font-weight: 400; }
+.balcao-clientes .balcao-total { font-weight: 700; background: #f2f7f4; }
+.balcao-clientes .balcao-cobertura td { white-space: normal; font-size: 12px; padding-top: 3px; }
+.balcao-ranking > summary { cursor: pointer; min-height: 36px; align-content: center; font-weight: 600; }
+.balcao-ranking > summary:focus-visible { outline: 2px solid #167347; outline-offset: 2px; }
+.faturamento-negocio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 0; }
+.faturamento-negocio > div { min-width: 0; padding: 10px 14px; border-top: 3px solid #397460; border-radius: 5px; background: #eaf4ef; box-sizing: border-box; }
+.faturamento-negocio dt, .faturamento-negocio dd { margin: 0; }
+.faturamento-negocio dt { color: #46596a; font-size: .875rem; font-weight: 600; line-height: 18px; min-height: 36px; }
+.faturamento-negocio dd { color: #174c3a; font-size: clamp(1.125rem, 1.7vw, 1.5rem); line-height: 30px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.faturamento-negocio > .faturamento-negocio-locacoes { background: #edf2f8; border-color: #667e9b; }
+.faturamento-negocio-locacoes dd { color: #304f75; }
+.faturamento-negocio > .faturamento-negocio-total { background: #dceee3; border-color: #166534; }
+.faturamento-negocio dd.faturamento-negocio-legenda { color: #46596a; font-size: .75rem; font-weight: 400; line-height: 16px; white-space: normal; }
+.relatorios .faturamento-negocio-escopo { margin: 4px 0 10px; font-size: 12px; color: #526575; }
+@media (max-width: 600px) {
+  .faturamento-negocio { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .faturamento-negocio > div { padding: 8px 12px; }
+  .faturamento-negocio dt { min-height: 0; }
+}
 .investigacao-ordem { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 16px 0; }
 .investigacao-ordem a { display: inline-flex; align-items: center; min-height: 44px; }
 .investigacao-ordem a[aria-current] { font-weight: 700; text-decoration-thickness: 3px; }

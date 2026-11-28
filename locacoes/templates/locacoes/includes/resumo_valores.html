@@ -1,9 +1,15 @@
+{% load relatorios %}
 <div id="resumo-valores">
       {% if datas_financeiras_invalidas %}
         <p class="alert alert-warning" role="alert">Resumo indisponível. {{ erro_periodo_financeiro }}</p>
       {% else %}
-        <p class="muted resumo-periodo">{% if resumo_inicio or resumo_fim %}Período: {{ resumo_financeiro.inicio|date:"d/m/Y"|default:"início do histórico" }} a {{ resumo_financeiro.fim|date:"d/m/Y"|default:"sem limite final" }}.{% else %}Todo o histórico elegível, sem limite de datas.{% endif %} Cadastro para contratos; data do pagamento para recebimentos. Os filtros da tabela não alteram este resumo.</p>
+        <p class="muted resumo-periodo">{% if resumo_inicio or resumo_fim %}Período: {{ resumo_financeiro.inicio|date:"d/m/Y"|default:"início do histórico" }} a {{ resumo_financeiro.fim|date:"d/m/Y"|default:"sem limite final" }}.{% else %}Todo o histórico elegível, sem limite de datas.{% endif %} Entrega para faturamento; cadastro para contratos; data do pagamento para recebimentos. Os filtros da tabela não alteram este resumo.</p>
         {% if resumo_financeiro.restricoes %}<p class="filtros-ativos"><strong>Valores restritos:</strong> {{ resumo_financeiro.restricoes|join:" · " }}.</p>{% endif %}
+        <dl class="resumo-faturamento-entrega" aria-label="Faturamento por data de entrega">
+          <div><dt>Faturamento de locações no período</dt><dd>{{ resumo_financeiro.entrega.faturamento|moeda_br }}</dd></div>
+          <div><dt>Quantidade de locações no período</dt><dd>{{ resumo_financeiro.entrega.quantidade }}</dd></div>
+        </dl>
+        <p class="muted resumo-explicacao">Pela data de entrega do contrato até hoje, inclusive, sem canceladas ou entregas futuras. Não depende da confirmação operacional e não altera os checklists.</p>
         <dl class="resumo-financeiro-blocos">
           <div><dt>Locações cadastradas no período</dt><dd>{% if resumo_financeiro.somente_canceladas %}{{ resumo_financeiro.canceladas_quantidade }}{% else %}{{ resumo_financeiro.quantidade }}{% endif %}</dd></div>
           <div><dt>Total contratado no período</dt><dd>R$ {% if resumo_financeiro.somente_canceladas %}{{ resumo_financeiro.canceladas_contratado|floatformat:"2g" }}{% else %}{{ resumo_financeiro.contratado|floatformat:"2g" }}{% endif %}</dd></div>

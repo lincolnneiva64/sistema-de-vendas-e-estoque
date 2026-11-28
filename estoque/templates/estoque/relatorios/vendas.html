@@ -20,9 +20,17 @@
 </nav>
 <p><strong>{{ inicio|date:'d/m/Y' }} até {{ fim|date:'d/m/Y' }}</strong> · Datas de Belém</p>
 <p>Valores pela data da venda. Faturamento não representa recebimento nem lucro. Vendas canceladas estão excluídas.</p>
+{% if faturamento_negocio %}
+<dl class="faturamento-negocio" aria-label="Faturamento da Santa Bárbara">
+  <div><dt>Faturamento de mercadorias</dt><dd>{{ faturamento_negocio.mercadorias|moeda_br }}</dd></div>
+  <div class="faturamento-negocio-locacoes"><dt>Faturamento de locações de mesas e cadeiras</dt><dd>{{ faturamento_negocio.locacoes.faturamento|moeda_br }}</dd><dd class="faturamento-negocio-legenda">{{ faturamento_negocio.locacoes.quantidade }} locaç{{ faturamento_negocio.locacoes.quantidade|pluralize:'ão,ões' }} no período</dd></div>
+  <div class="faturamento-negocio-total"><dt>Faturamento total da Santa Bárbara</dt><dd>{{ faturamento_negocio.total|moeda_br }}</dd></div>
+</dl>
+<p class="faturamento-negocio-escopo">Locações pela data de entrega do contrato até hoje, sem canceladas; independe da confirmação operacional. Indicadores e análises abaixo: somente mercadorias.</p>
+{% endif %}
 {% if resumo.sem_valor %}<p role="status" class="relatorios-aviso">Há {{ resumo.sem_valor }} venda(s) sem total registrado. Faturamento e ticket médio podem estar incompletos.</p>{% endif %}
 <dl class="relatorios-indicadores">
-  <div class="indicador-faturamento"><dt>Faturamento comercial</dt><dd>{{ resumo.faturamento|moeda_br }}</dd></div>
+  <div class="indicador-faturamento"><dt>Faturamento de mercadorias</dt><dd>{{ resumo.faturamento|moeda_br }}</dd></div>
   <div class="indicador-quantidade"><dt>Quantidade de vendas</dt><dd>{{ resumo.quantidade }}</dd></div>
   <div class="indicador-ticket"><dt>Ticket médio</dt><dd>{{ resumo.ticket_medio|moeda_br }}</dd></div>
   <div class="indicador-media-diaria"><dt>Faturamento médio diário</dt>
@@ -33,16 +41,16 @@
   <div class="indicador-prazo"><dt>Vendas a prazo</dt><dd>{{ resumo.prazo.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.prazo.percentual|numero_br }}% do faturamento</span><span>{{ resumo.prazo.quantidade }} venda(s)</span></dd></div>
 </dl>
 
-<dl class="relatorios-indicadores relatorios-rentabilidade">
-  <div><dt>CMV gerencial</dt>
+<dl class="relatorios-indicadores relatorios-rentabilidade" aria-label="Rentabilidade das mercadorias">
+  <div><dt>CMV das mercadorias</dt>
     <dd>{% if resumo.rentabilidade.estimativa_setembro %}{{ resumo.rentabilidade.estimativa_setembro.cmv_parcial|moeda_br }}{% elif resumo.rentabilidade.com_custo %}{{ resumo.rentabilidade.cmv|moeda_br }}{% else %}Indisponível{% endif %}</dd>
     {% if resumo.rentabilidade.estimativa_setembro or not resumo.rentabilidade.disponivel and resumo.rentabilidade.com_custo %}<dd class="indicador-legenda">Parcial</dd>{% endif %}
   </div>
-  <div><dt>Lucro bruto gerencial</dt>
+  <div><dt>Lucro bruto das mercadorias</dt>
     <dd>{% if resumo.rentabilidade.estimativa_setembro %}{{ resumo.rentabilidade.estimativa_setembro.lucro_parcial|moeda_br }}{% elif resumo.rentabilidade.disponivel %}{{ resumo.rentabilidade.lucro|moeda_br }}{% elif resumo.rentabilidade.lucro_coberto != None %}{{ resumo.rentabilidade.lucro_coberto|moeda_br }}{% else %}Indisponível{% endif %}</dd>
     {% if resumo.rentabilidade.estimativa_setembro or not resumo.rentabilidade.disponivel and resumo.rentabilidade.com_custo %}<dd class="indicador-legenda">Parcial</dd>{% endif %}
   </div>
-  <div><dt>Margem bruta</dt>
+  <div><dt>Margem bruta das mercadorias</dt>
     <dd>{% if resumo.rentabilidade.estimativa_setembro %}{% if resumo.rentabilidade.estimativa_setembro.margem_parcial != None %}{{ resumo.rentabilidade.estimativa_setembro.margem_parcial|numero_br }}%{% else %}Indisponível{% endif %}{% elif resumo.rentabilidade.margem != None %}{{ resumo.rentabilidade.margem|numero_br }}%{% elif resumo.rentabilidade.margem_coberta != None %}{{ resumo.rentabilidade.margem_coberta|numero_br }}%{% else %}Indisponível{% endif %}</dd>
     {% if resumo.rentabilidade.estimativa_setembro or not resumo.rentabilidade.disponivel and resumo.rentabilidade.com_custo %}<dd class="indicador-legenda">Parcial</dd>{% endif %}
   </div>

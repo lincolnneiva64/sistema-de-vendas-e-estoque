@@ -10,8 +10,27 @@ MARCO_OPERACIONAL = date(2026, 10, 1)
 ABAS = (("entregas", "Entregas"), ("recolhimentos", "Recolhimentos"))
 
 
+def faturamento_locacoes(inicio=None, fim=None, *, contratos=None):
+    """Competência gerencial por entrega, sem alterar a situação operacional.
+
+    Usa o total integral armazenado uma única vez por contrato, até hoje inclusive.
+    Os limites abertos são úteis à consulta histórica, sem exigir datas artificiais.
+    """
+    from decimal import Decimal
+    from django.db.models import Count, Sum
+
+    base = Locacao.objects.all() if contratos is None else contratos
+    base = base.exclude(status=Locacao.STATUS_CANCELADA).filter(data_entrega__lte=timezone.localdate())
+    if inicio:
+        base = base.filter(data_entrega__gte=inicio)
+    if fim:
+        base = base.filter(data_entrega__lte=fim)
+    return base.order_by().aggregate(quantidade=Count('pk'),
+        faturamento=Sum('total', default=Decimal('0.00')))
+
+
 def resumo_financeiro_locacoes(cliente="", status="", financeiro="", inicio=None, fim=None):
-    """Duas agregações independentes, sem filas operacionais ou paginação."""
+    """Competência de entrega, cadastro e recebimentos separados; sem paginação."""
     from datetime import datetime, time
     from decimal import Decimal
     from django.db.models import Count, Q, Sum
@@ -52,6 +71,7 @@ def resumo_financeiro_locacoes(cliente="", status="", financeiro="", inicio=None
         canceladas_recebido=Sum("valor", filter=cancelada, default=Decimal("0.00")),
     ))
     valores["somente_canceladas"] = status == Locacao.STATUS_CANCELADA
+    valores["entrega"] = faturamento_locacoes(inicio, fim, contratos=contratos)
     valores["inicio"] = inicio
     valores["fim"] = fim
     restricoes = []

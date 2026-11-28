@@ -20,7 +20,8 @@ from django.utils import timezone
 from estoque.models import Cliente, MovimentoFinanceiro
 from estoque.views import _criar_operacao_recebimento_cliente, _desfazer_operacao_recebimento_cliente
 from offline.browser_support import Chrome
-from .consulta import resumo_financeiro_locacoes
+from .consulta import resumo_financeiro_locacoes, faturamento_locacoes
+from estoque.tests_relatorios import PostgreSQLIsoladoTests
 from .models import ConfiguracaoLocacao, FaixaPrecoLocacao, Locacao
 
 
@@ -57,6 +58,10 @@ class DadosResumo:
 
 
 class ResumoFinanceiroTests(DadosResumo, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser('consulta-resumo-fixture','','fixture-only'))
+
     def resumo(self, **campos):
         resposta = self.consultar(**campos)
         self.assertEqual(resposta.status_code, 200)
@@ -170,12 +175,12 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
             self.assertEqual(self.resumo(**filtros), padrao)
         self.assertEqual(len(self.consultar().context["locacoes"]), 25)
 
-    def test_duas_consultas_sem_multiplicar_contratos_por_parcelas(self):
+    def test_tres_consultas_sem_multiplicar_contratos_por_parcelas(self):
         for _ in range(12):
             locacao = self.criar()
             for _ in range(3):
                 self.pagar(locacao, 10)
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             r = resumo_financeiro_locacoes(inicio=date(2026, 10, 1), fim=date(2026, 10, 31))
         self.assertEqual((r["quantidade"], r["contratado"], r["recebido"], r["saldo"]), (12, 1200, 360, 840))
 
@@ -190,11 +195,66 @@ class ResumoFinanceiroTests(DadosResumo, TestCase):
         self.assertEqual(antes, {m: list(m.objects.order_by("pk").values()) for m in modelos})
 
 
+class ConciliacaoFaturamentoTests(DadosResumo, PostgreSQLIsoladoTests, TestCase):
+    def setUp(self):
+        super().setUp()
+        relogio=patch('locacoes.consulta.timezone.localdate',return_value=date(2026,11,28))
+        relogio.start()
+        self.addCleanup(relogio.stop)
+        admin=get_user_model().objects.create_superuser('conciliacao-ficticia','','fixture-only')
+        self.client.force_login(admin)
+
+    def test_duas_paginas_mesmas_datas_mesmos_contratos_sem_misturar_cadastro(self):
+        anterior=self.criar('2026-09-01',total=125,status='reservada',data_entrega=date(2026,10,5))
+        self.pagar(anterior,25,'2026-11-02')
+        self.pagar(anterior,30,'2026-11-03')
+        self.criar('2026-10-01',total=70,status='saiu_para_entrega',data_entrega=date(2026,11,27))
+        self.criar('2026-11-01',total=100,status='reservada',data_entrega=date(2026,11,28))
+        self.criar('2026-10-01',total=500,status='entregue',data_entrega=date(2026,11,29))
+        self.criar('2026-10-01',total=300,status='cancelada',data_entrega=date(2026,10,5))
+        for inicio,fim,valor,quantidade in [('2026-10-01','2026-10-31',125,1),
+                ('2026-11-01','2026-11-27',70,1),('2026-11-01','2026-11-30',170,2),
+                ('2026-10-05','2026-11-28',295,3),('2025-01-01','2025-01-31',0,0)]:
+            consulta=self.client.get(reverse('locacoes:lista'),dict(resumo_inicio=inicio,resumo_fim=fim))
+            gerencial=self.client.get('/relatorios/vendas/',dict(periodo='personalizado',data_inicial=inicio,data_final=fim))
+            self.assertEqual((consulta.status_code,gerencial.status_code),(200,200))
+            faturado=consulta.context['resumo_financeiro']['entrega']
+            self.assertEqual(faturado,gerencial.context['faturamento_negocio']['locacoes'])
+            self.assertEqual(faturado,dict(quantidade=quantidade,faturamento=Decimal(valor)))
+            self.assertContains(consulta,'Faturamento de locações no período')
+            self.assertContains(consulta,'Total contratado no período')
+        anterior.refresh_from_db()
+        self.assertEqual(anterior.status,'reservada')
+
+    def test_limites_abertos_e_filtros_preservados_sem_incluir_canceladas(self):
+        self.criar(total=40,status='reservada',data_entrega=date(2026,10,1))
+        self.criar(total=50,status='reservada',data_entrega=date(2026,11,28))
+        self.criar(total=60,status='reservada',data_entrega=date(2026,11,29))
+        self.assertEqual(faturamento_locacoes()['faturamento'],90)
+        self.assertEqual(faturamento_locacoes(inicio=date(2026,11,1))['faturamento'],50)
+        self.assertEqual(faturamento_locacoes(fim=date(2026,10,1))['faturamento'],40)
+        restrito=resumo_financeiro_locacoes(status='cancelada')
+        self.assertEqual(restrito['entrega']['quantidade'],0)
+
+    def test_fragmento_financeiro_atualiza_faturamento_e_preserva_recebimentos(self):
+        locacao=self.criar('2026-09-01',total=120,status='reservada')
+        self.pagar(locacao,20)
+        resposta=self.consultar(fragmento_financeiro='1').json()
+        self.assertIn('Faturamento de locações no período',resposta['periodo'])
+        self.assertIn('120,00',resposta['periodo'])
+        self.assertIn('Recebido no período',resposta['periodo'])
+        self.assertIn('20.00',resposta['periodo'])
+
+
 CHROME = Path("C:/Program Files/Google/Chrome/Application/chrome.exe")
 
 
 @skipUnless(CHROME.exists(), "Chrome necessário")
 class ResumoFinanceiroBrowserTests(DadosResumo, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(get_user_model().objects.create_superuser('consulta-resumo-fixture','','fixture-only'))
+
     def test_previa_desktop_mobile_e_posicao(self):
         nova = self.criar(total=3600)
         self.pagar(nova, 2200)
@@ -218,7 +278,7 @@ class ResumoFinanceiroBrowserTests(DadosResumo, TestCase):
                     tab.call("Emulation.setDeviceMetricsOverride", {"width": largura, "height": 1100, "deviceScaleFactor": 1, "mobile": largura < 600})
                     tab.call("Page.setDocumentContent", {"frameId": tab.call("Page.getFrameTree")["frameTree"]["frame"]["id"], "html": html})
                     tab.wait('!!document.querySelector(".resumo-financeiro-blocos")')
-                    medidas = tab.evaluate('''(()=>{const r=document.querySelector('.resumo-financeiro'),b=r.querySelector('dl'),f=document.querySelector('#filtros-locacoes').closest('section'),n=document.querySelector('.consulta-operacional');return {colunas:getComputedStyle(b).gridTemplateColumns.split(' ').length,ordem:r.getBoundingClientRect().bottom<=f.getBoundingClientRect().top&&f.getBoundingClientRect().bottom<=n.getBoundingClientRect().top,semOverflow:document.documentElement.scrollWidth<=innerWidth,texto:r.textContent}})()''')
+                    medidas = tab.evaluate('''(()=>{const r=document.querySelector('.resumo-financeiro'),b=r.querySelector('.resumo-financeiro-blocos'),f=document.querySelector('#filtros-locacoes').closest('section'),n=document.querySelector('.consulta-operacional');return {colunas:getComputedStyle(b).gridTemplateColumns.split(' ').length,ordem:r.getBoundingClientRect().bottom<=f.getBoundingClientRect().top&&f.getBoundingClientRect().bottom<=n.getBoundingClientRect().top,semOverflow:document.documentElement.scrollWidth<=innerWidth,texto:r.textContent}})()''')
                     self.assertEqual(medidas["colunas"], colunas)
                     self.assertTrue(medidas["ordem"])
                     self.assertTrue(medidas["semOverflow"])

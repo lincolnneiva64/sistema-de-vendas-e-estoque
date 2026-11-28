@@ -185,14 +185,15 @@ def investigar_clientes_produto(desempenho, produto_id, *, pagina=1, direcao='im
     linhas = list(base.values('venda__cliente_id', 'venda__cliente__nome').annotate(**medidas(anterior, atual, contagens=True)).order_by())
     if any(sum((l[p] for l in linhas), ZERO) != resumo[p] for p in ('anterior', 'atual')):
         return dict(disponivel=False, motivo='As compras por cadastro não conferem com os valores do produto. Consulte novamente.')
-    confirmados = set(getattr(settings, 'RELATORIOS_CLIENTES_COLETIVOS_CONFIRMADOS', ()))
+    from .inteligencia_clientes import coletivos_confirmados
+    confirmados = coletivos_confirmados()
     ausentes = 0
     for linha in linhas:
         linha.update(id=linha.pop('venda__cliente_id'), nome=linha.pop('venda__cliente__nome') or 'Sem cliente vinculado')
         completar(linha)
         if not linha['notas_atual']:
             linha['comportamento'] = 'Sem compras deste produto no período atual'
-            ausentes += int(linha['id'] is not None)
+            ausentes += int(linha['id'] is not None and linha['id'] not in confirmados)
         elif not linha['notas_anterior']:
             linha['comportamento'] = 'Comprou este produto somente no período atual'
         else:

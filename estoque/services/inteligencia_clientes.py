@@ -7,11 +7,98 @@ from django.db.models import Case, CharField, Count, Max, Min, Q, Sum, Value, Wh
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
-from .relatorios_produtos import vendas_comerciais
+from .relatorios_produtos import vendas_comerciais, itens_comerciais
 
 
 ZERO = Decimal('0.00')
 CENTAVO = Decimal('0.01')
+# Confirmação comercial por ID; nomes antigos e novos não mudam a classificação.
+CLIENTE_BALCAO_ID = 1126
+
+
+def coletivos_confirmados():
+    return {CLIENTE_BALCAO_ID, *getattr(settings, 'RELATORIOS_CLIENTES_COLETIVOS_CONFIRMADOS', ())}
+
+
+def resumo_balcao_clientes(inicio, fim, resumo):
+    """Duas consultas estreitas; reutiliza os custos já validados no resumo geral.
+
+    Faturamento/operações vêm das notas, nunca de um join com os itens. Custos
+    e cobertura vêm dos mesmos itens e validações do Resumo de Vendas.
+    """
+    confirmados = coletivos_confirmados()
+    notas = list(vendas_comerciais().filter(data_venda__range=(inicio, fim))
+        .values('cliente_id', 'cliente__nome').annotate(faturamento=Sum('total'),
+            operacoes=Count('pk'), sem_total=Count('pk')-Count('total')).order_by())
+    grupos = {chave: dict(chave=chave, nome=nome, faturamento=ZERO, operacoes=0,
+        sem_total=0, receita_itens=ZERO, receita_coberta=ZERO, cmv_conhecido=ZERO,
+        itens=0, com_custo=0, itens_sem_valor=0) for chave, nome in (
+            ('balcao', 'Venda de Balcão'), ('cadastrados', 'Clientes cadastrados'),
+            ('outros_coletivos', 'Outras origens coletivas'),
+            ('sem_cliente', 'Sem cliente vinculado'), ('total', 'Total geral'))}
+
+    def grupo_id(pk):
+        return ('balcao' if pk == CLIENTE_BALCAO_ID else 'sem_cliente' if pk is None
+                else 'outros_coletivos' if pk in confirmados else 'cadastrados')
+
+    for nota in notas:
+        nota['faturamento'] = nota['faturamento'] or ZERO
+        for chave in (grupo_id(nota['cliente_id']), 'total'):
+            for campo in ('faturamento', 'operacoes', 'sem_total'):
+                grupos[chave][campo] += nota[campo]
+    total = grupos['total']['faturamento']
+    if total != resumo['faturamento'] or grupos['total']['operacoes'] != resumo['quantidade']:
+        return dict(disponivel=False, inicio=inicio, fim=fim,
+            motivo='Os grupos não conferem com o Resumo de Vendas. Consulte novamente.')
+
+    validacoes = resumo['rentabilidade']['validacoes_custo']
+    itens = itens_comerciais().filter(venda__data_venda__range=(inicio, fim)).values(
+        'pk', 'venda__cliente_id', 'valor_total')
+    for item in itens:
+        custo = validacoes.get(item['pk'], {}).get('custo')
+        for chave in (grupo_id(item['venda__cliente_id']), 'total'):
+            grupo = grupos[chave]
+            grupo['itens'] += 1
+            grupo['itens_sem_valor'] += int(item['valor_total'] is None)
+            grupo['receita_itens'] += item['valor_total'] or ZERO
+            if custo is not None:
+                grupo['com_custo'] += 1
+                grupo['cmv_conhecido'] += custo
+                grupo['receita_coberta'] += item['valor_total'] or ZERO
+
+    for grupo in grupos.values():
+        vazio = grupo['operacoes'] == 0
+        grupo['participacao'] = (grupo['faturamento']/total*100).quantize(CENTAVO) if total > ZERO else None
+        grupo['divergencia'] = grupo['receita_itens']-grupo['faturamento']
+        grupo['completa'] = vazio or (grupo['itens'] > 0
+            and grupo['com_custo'] == grupo['itens'] and not grupo['itens_sem_valor']
+            and not grupo['sem_total'] and grupo['divergencia'] == ZERO)
+        grupo['cmv'] = grupo['cmv_conhecido'] if grupo['completa'] else None
+        grupo['lucro'] = grupo['faturamento']-grupo['cmv_conhecido'] if grupo['completa'] else None
+        grupo['margem'] = (grupo['lucro']/grupo['faturamento']*100).quantize(CENTAVO) if (
+            grupo['completa'] and grupo['faturamento'] > ZERO) else None
+        grupo['lucro_coberto'] = grupo['receita_coberta']-grupo['cmv_conhecido'] if grupo['com_custo'] else None
+        grupo['margem_coberta'] = (grupo['lucro_coberto']/grupo['receita_coberta']*100).quantize(CENTAVO) if (
+            grupo['com_custo'] and grupo['receita_coberta'] > ZERO) else None
+        grupo['cobertura'] = (grupo['receita_coberta']/grupo['receita_itens']*100).quantize(CENTAVO) if grupo['receita_itens'] > ZERO else None
+
+    geral = grupos['total']
+    rentabilidade = resumo['rentabilidade']
+    if (geral['com_custo'] != rentabilidade['com_custo']
+            or geral['cmv_conhecido'] != rentabilidade['cmv']
+            or geral['itens'] != rentabilidade['quantidade']):
+        return dict(disponivel=False, inicio=inicio, fim=fim,
+            motivo='A cobertura dos custos mudou durante a consulta. Consulte novamente.')
+    maiores = nsmallest(5, (n for n in notas if n['cliente_id'] is not None
+                            and n['cliente_id'] not in confirmados),
+                       key=lambda n: (-n['faturamento'], n['cliente_id']))
+    for posicao, nota in enumerate(maiores, 1):
+        nota['posicao'] = posicao
+        nota['participacao'] = (nota['faturamento']/total*100).quantize(CENTAVO) if total > ZERO else None
+    return dict(disponivel=True, inicio=inicio, fim=fim, balcao=grupos['balcao'],
+        total=geral, maiores=maiores,
+        grupos=[grupos[k] for k in ('balcao', 'cadastrados', 'outros_coletivos', 'sem_cliente', 'total')
+                if k in ('balcao', 'cadastrados', 'total') or grupos[k]['operacoes']])
 
 
 def nome_periodo(inicio, fim):
@@ -75,6 +162,8 @@ def resumo_comercial(grupos, diferenca, impactos, aumentos, desempenho):
 
 def comportamento_cliente(cadastro):
     """Descreve notas observadas; não presume visitas ou causas comerciais."""
+    if cadastro.get('id') == CLIENTE_BALCAO_ID:
+        return 'Origem comercial coletiva: reúne consumidores sem cadastro individual.'
     antes, agora = cadastro['notas_anterior'], cadastro['notas_atual']
     subiu = cadastro['diferenca'] > ZERO
     if not antes:
@@ -100,7 +189,7 @@ def resumir_clientes(linhas, desempenho, coletivos_confirmados=()):
         return dict(disponivel=False, motivo=desempenho.get('motivo') or
                     'Sem dias encerrados comparáveis no intervalo selecionado.')
 
-    confirmados = set(coletivos_confirmados)
+    confirmados = {CLIENTE_BALCAO_ID, *coletivos_confirmados}
     cadastros = {}
     for linha in linhas:
         if linha['sem_total']:
@@ -157,16 +246,17 @@ def resumir_clientes(linhas, desempenho, coletivos_confirmados=()):
     for grupo in grupos.values():
         grupo['diferenca'] = grupo['atual'] - grupo['anterior']
         grupo['pontos'] = pontos(grupo['diferenca'])
+    grupos['coletivos']['balcao_presente'] = CLIENTE_BALCAO_ID in cadastros
 
     diferenca = sum((g['diferenca'] for g in grupos.values()), ZERO)
     if diferenca != desempenho['diferenca']:
         return dict(disponivel=False, motivo='Conciliação por cadastro indisponível. Consulte novamente.')
     # Apenas as cinco maiores contribuições negativas; nomes não viram chaves ou links.
     impactos = nsmallest(5, (c for c in cadastros.values()
-                            if c['id'] is not None and c['diferenca'] < ZERO),
+                          if c['id'] is not None and c['id'] not in confirmados and c['diferenca'] < ZERO),
                         key=lambda c: (c['diferenca'], c['id']))
     aumentos = nsmallest(5, (c for c in cadastros.values()
-                           if c['id'] is not None and c['diferenca'] > ZERO),
+                           if c['id'] is not None and c['id'] not in confirmados and c['diferenca'] > ZERO),
                         key=lambda c: (-c['diferenca'], c['id']))
     ausentes = sorted((c for c in cadastros.values() if c['id'] is not None
                        and c['id'] not in confirmados and c['notas_anterior'] and not c['notas_atual']),
@@ -254,8 +344,7 @@ def participacao_clientes(desempenho):
         .annotate(faturamento=Sum('total'), notas=Count('pk'),
                   dias=Count('data_venda', distinct=True), sem_total=Count('pk')-Count('total'))
         .order_by())
-    # Lista vazia até existir confirmação operacional explícita por ID.
-    confirmados = getattr(settings, 'RELATORIOS_CLIENTES_COLETIVOS_CONFIRMADOS', ())
+    confirmados = coletivos_confirmados()
     resultado = resumir_clientes(linhas, desempenho, confirmados)
     if resultado['disponivel']:
         historico_ausencias(resultado, desempenho)
