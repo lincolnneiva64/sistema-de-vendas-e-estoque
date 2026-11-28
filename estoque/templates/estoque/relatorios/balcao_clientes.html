@@ -1,7 +1,7 @@
 {% load relatorios l10n %}
 {% if origens_comerciais %}
-<section class="balcao-clientes" aria-labelledby="balcao-clientes-titulo">
-  <h4 id="balcao-clientes-titulo">Balcão × Clientes cadastrados</h4>
+<section class="balcao-clientes clientes-analise-bloco" aria-labelledby="balcao-clientes-titulo">
+  <header class="clientes-analise-cabecalho"><h4 id="balcao-clientes-titulo">Balcão × Clientes cadastrados</h4></header>
   <p>{{ origens_comerciais.inicio|date:'d/m/Y' }} a {{ origens_comerciais.fim|date:'d/m/Y' }} · Mesmo período dos indicadores financeiros.</p>
   {% if origens_comerciais.disponivel %}
   <div class="relatorios-tabela tabela-comercial clientes-tabela" role="region" aria-label="Balcão e clientes cadastrados" tabindex="0">
@@ -25,7 +25,10 @@
     {% endfor %}</tbody>
   </table></div>
   <p class="balcao-explicacao">O balcão reúne consumidores sem cadastro individual. Vendas à vista de clientes cadastrados permanecem em Clientes cadastrados.</p>
-  <details class="balcao-ranking">
+  {% else %}<p role="status">{{ origens_comerciais.motivo }}</p>{% endif %}
+</section>
+  {% if origens_comerciais.disponivel %}
+  <details class="balcao-ranking clientes-analise-bloco">
     <summary>Maiores compradores cadastrados · ranking por faturamento</summary>
     <div class="relatorios-tabela tabela-comercial clientes-tabela" role="region" aria-label="Maiores clientes por faturamento" tabindex="0">
     <table><caption>Cinco maiores compradores cadastrados — não é ranking de crescimento</caption>
@@ -37,6 +40,5 @@
       <tfoot><tr><td data-label="Posição">Sem posição</td><th scope="row">Venda de Balcão · origem coletiva</th><td data-label="Faturamento">{{ origens_comerciais.balcao.faturamento|moeda_br }}</td><td data-label="Participação">{% if origens_comerciais.balcao.participacao != None %}{{ origens_comerciais.balcao.participacao|numero_br }}%{% else %}—{% endif %}</td><td data-label="Operações">{{ origens_comerciais.balcao.operacoes }}</td></tr></tfoot>
     </table></div>
   </details>
-  {% else %}<p role="status">{{ origens_comerciais.motivo }}</p>{% endif %}
-</section>
+  {% endif %}
 {% endif %}

@@ -216,7 +216,7 @@ class ParticipacaoPuraTests(SimpleTestCase):
         self.assertIsNone(r['comercial']['problema'])
         html=self.renderizar(r)
         self.assertIn('+R$ 50,00',html)
-        self.assertIn('Não houve redução nas vendas',html)
+        self.assertIn('Nenhuma contribuição negativa.',html)
         self.assertNotIn('O faturamento caiu',html)
         self.assertEqual([c['id'] for c in r['aumentos']],[1,2])
 
@@ -265,7 +265,7 @@ class ParticipacaoPuraTests(SimpleTestCase):
         self.assertIn('Total — confere com o faturamento da loja',html)
         self.assertIn('+R$ 40,00',html)
         self.assertIn('-R$ 50,00',html)
-        self.assertLess(html.index('Maior redução'),html.index('<table>'))
+        self.assertLess(html.index('Maior contribuição negativa para a variação'),html.index('<table>'))
 
     def test_tabela_resumida_quatro_colunas_sem_linhas_vazias_preserva_conciliacao(self):
         dados=[linha(1,'anterior','100'),linha(1,'atual','80'),linha(2,'anterior','50'),linha(3,'atual','40')]

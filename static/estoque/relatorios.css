@@ -6,7 +6,35 @@
 .relatorios .clientes-variacao th { white-space: normal; }
 .clientes-variacao th small { display: block; margin-top: 4px; font-weight: 400; }
 .clientes-variacao tfoot { font-weight: 700; }
-.balcao-clientes { margin: 8px 0 12px; padding-bottom: 8px; border-bottom: 1px solid #d6dfe5; }
+.clientes-variacao > .clientes-analise-bloco { margin: 16px 0 0; padding: 12px; border: 1px solid #97a9b8; outline: 1.5px solid #97a9b8; outline-offset: -1px; border-radius: 5px; min-width: 0; background: #fff; }
+.clientes-analise-cabecalho { margin: -12px -12px 12px; padding: 12px; background: #f3f6f8; border-bottom: 1px solid #dce3e8; border-radius: 5px 5px 0 0; }
+.clientes-analise-cabecalho h4 { margin: 0; line-height: 1.4; }
+.clientes-analise-cabecalho p { margin: 5px 0 0; color: #46596a; }
+.clientes-contribuicoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 8px; }
+.clientes-contribuicoes > div { padding: 10px 12px; background: #f6f8fa; border-left: 3px solid #97a9b7; min-width: 0; }
+.clientes-contribuicoes dt { font-size: .875rem; color: #46596a; font-weight: 600; line-height: 1.4; }
+.clientes-contribuicoes dd { margin: 6px 0 0; line-height: 1.45; }
+.clientes-contribuicoes dd strong, .clientes-contribuicoes dd span { display: block; }
+.clientes-contribuicoes dd strong { margin-bottom: 3px; font-size: 1.125rem; }
+.clientes-contribuicoes .clientes-contribuicao-negativa { border-left-color: #a87764; }
+.clientes-contribuicao-negativa dd strong { color: #854b36; }
+.clientes-contribuicoes .clientes-contribuicao-positiva { border-left-color: #678b78; }
+.clientes-contribuicao-positiva dd strong { color: #306148; }
+.clientes-contribuicoes-legenda { font-size: .875rem; color: #46596a; }
+.clientes-periodos { display: flex; flex-wrap: wrap; gap: 4px 24px; margin: 12px 0; }
+.clientes-periodos p { margin: 0; }
+.clientes-variacao > .balcao-ranking { padding: 0; }
+.balcao-ranking > summary { padding: 10px 12px; background: #f3f6f8; border-radius: 5px; }
+.balcao-ranking[open] > summary { border-bottom: 1px solid #dce3e8; border-radius: 5px 5px 0 0; }
+.balcao-ranking > .relatorios-tabela { margin: 12px; }
+@media (max-width: 640px) {
+  .clientes-variacao { padding: 10px; }
+  .clientes-variacao > .clientes-analise-bloco { padding: 10px; }
+  .clientes-analise-cabecalho { margin: -10px -10px 10px; padding: 10px; }
+  .clientes-contribuicoes { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .clientes-variacao > .balcao-ranking { padding: 0; }
+  .balcao-ranking > .relatorios-tabela { margin: 10px; }
+}
 .balcao-clientes h4 { margin: 4px 0; }
 .balcao-clientes p { margin: 5px 0; }
 .balcao-clientes td small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.3; font-weight: 400; }

@@ -4,15 +4,29 @@
   <summary>Participação dos clientes na variação</summary>
   {% include 'estoque/relatorios/balcao_clientes.html' %}
   {% if clientes_variacao.disponivel %}
-  <p><strong>Antes:</strong> {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }} · <strong>Agora:</strong> {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}.</p>
+  <section class="clientes-analise-bloco" aria-labelledby="clientes-comportamento-titulo">
+  <header class="clientes-analise-cabecalho">
+    <h4 id="clientes-comportamento-titulo">Como as compras dos clientes influenciaram o faturamento</h4>
+    <p>Comparação do comportamento de compra entre dois períodos.</p>
+  </header>
   {% with resumo=clientes_variacao.comercial %}
-  <p>{% if resumo.problema %}<strong>Maior redução:</strong> {{ resumo.problema.rotulo }}{% if resumo.problema.tipo == 'cadastro' %} (#{{ resumo.problema.id|unlocalize }}){% endif %}, {{ resumo.problema.valor|moeda_br }} a menos.{% else %}Não houve redução nas vendas.{% endif %}
-  {% if resumo.positivo %}<strong>Maior aumento:</strong> {{ resumo.positivo.rotulo }}{% if resumo.positivo.tipo == 'cadastro' %} (#{{ resumo.positivo.id|unlocalize }}){% endif %}, {{ resumo.positivo.valor|moeda_br }} a mais.{% endif %}</p>
+  <dl class="clientes-contribuicoes">
+    <div class="clientes-contribuicao-negativa"><dt>Maior contribuição negativa para a variação</dt>
+      <dd>{% if resumo.problema %}<strong>{{ resumo.problema.valor|moeda_br }} a menos</strong><span>{{ resumo.problema.rotulo }}{% if resumo.problema.tipo == 'cadastro' %} (#{{ resumo.problema.id|unlocalize }}){% endif %}</span>{% else %}Nenhuma contribuição negativa.{% endif %}</dd>
+    </div>
+    <div class="clientes-contribuicao-positiva"><dt>Maior contribuição positiva para a variação</dt>
+      <dd>{% if resumo.positivo %}<strong>{{ resumo.positivo.valor|moeda_br }} a mais</strong><span>{{ resumo.positivo.rotulo }}{% if resumo.positivo.tipo == 'cadastro' %} (#{{ resumo.positivo.id|unlocalize }}){% endif %}</span>{% else %}Nenhuma contribuição positiva.{% endif %}</dd>
+    </div>
+  </dl>
   {% endwith %}
+  <p class="clientes-contribuicoes-legenda">A variação total da loja é o resultado de todas as contribuições e está na última linha da tabela.</p>
+  <div class="clientes-periodos">
+    <p><strong>Antes:</strong> {{ desempenho.referencia_inicio|date:'d/m/Y' }} a {{ desempenho.referencia_fim|date:'d/m/Y' }}</p>
+    <p><strong>Agora:</strong> {{ desempenho.inicio|date:'d/m/Y' }} a {{ desempenho.fim|date:'d/m/Y' }}</p>
+  </div>
   {% if clientes_variacao.sem_cliente.notas_anterior or clientes_variacao.sem_cliente.notas_atual %}
   <p role="alert" class="relatorios-aviso"><strong>Notas sem cliente vinculado:</strong> {{ clientes_variacao.sem_cliente.notas_anterior }} antes e {{ clientes_variacao.sem_cliente.notas_atual }} agora. Os valores estão incluídos no total, mas não podem ser atribuídos a um cliente.</p>
   {% endif %}
-  <h4>Como as compras dos clientes influenciaram o faturamento</h4>
   <div class="relatorios-tabela tabela-comercial clientes-tabela" role="region" aria-label="Comportamento de compra dos clientes" tabindex="0">
   <table>
     <caption>Participação dos clientes nos períodos comparados</caption>
@@ -23,22 +37,31 @@
     </tr>{% endfor %}</tbody>
     <tfoot data-clientes-total><tr><th scope="row">Total — confere com o faturamento da loja</th><td data-label="Faturamento antes">{{ clientes_variacao.anterior|moeda_br }}</td><td data-label="Faturamento agora">{{ clientes_variacao.atual|moeda_br }}</td><td data-label="Diferença em reais">{{ clientes_variacao.diferenca|moeda_sinal_br }}</td></tr></tfoot>
   </table></div>
-  <h4 id="clientes-atencao">Clientes que merecem atenção</h4>
+  </section>
+  <section class="clientes-analise-bloco" aria-labelledby="clientes-atencao">
+  <header class="clientes-analise-cabecalho"><h4 id="clientes-atencao">Clientes que merecem atenção</h4></header>
   {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.impactos titulo='Cinco maiores reduções em reais' vazio='Nenhum cadastro reduziu o valor de suas compras nestes períodos.' %}
-  <h4 id="clientes-aumentos">Clientes que estão comprando mais</h4>
+  </section>
+  <section class="clientes-analise-bloco" aria-labelledby="clientes-aumentos">
+  <header class="clientes-analise-cabecalho"><h4 id="clientes-aumentos">Clientes que estão comprando mais</h4></header>
   {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.aumentos titulo='Cinco maiores aumentos em reais' vazio='Nenhum cadastro aumentou o valor de suas compras nestes períodos.' %}
+  </section>
   {% if clientes_variacao.ausentes %}
-  <h4 id="clientes-ausentes">{{ clientes_variacao.comercial.ausentes.descricao }} — {{ clientes_variacao.ausentes|length }} cadastro{{ clientes_variacao.ausentes|length|pluralize }}</h4>
+  <section class="clientes-analise-bloco" aria-labelledby="clientes-ausentes">
+  <header class="clientes-analise-cabecalho"><h4 id="clientes-ausentes">{{ clientes_variacao.comercial.ausentes.descricao }} — {{ clientes_variacao.ausentes|length }} cadastro{{ clientes_variacao.ausentes|length|pluralize }}</h4></header>
   <p>Total comprado antes: <strong>{{ clientes_variacao.comercial.ausentes.anterior|moeda_br }}</strong>. Lista completa, por valor comprado.</p>
   {% with historico=clientes_variacao.historico_ausencias %}{% if historico %}
   <p>Histórico anterior a {{ clientes_variacao.comercial.periodo_atual }}: <strong>{{ historico.contagem.recorrentes }}</strong> com compras recorrentes; <strong>{{ historico.contagem.ocasionais }}</strong> com compras ocasionais; <strong>{{ historico.contagem.insuficientes }}</strong> com histórico insuficiente para avaliar a frequência.</p>
   {% if historico.prioridades %}<p><strong>Prioridades entre os compradores recorrentes:</strong> {% for cadastro in historico.prioridades %}#{{ cadastro.id|unlocalize }} · {{ cadastro.nome }} ({{ cadastro.anterior|moeda_br }}){% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
   {% endif %}{% endwith %}
   {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.ausentes mostrar_historico=True titulo=clientes_variacao.comercial.ausentes.descricao vazio='Nenhuma ausência nestes períodos.' %}
+  </section>
   {% endif %}
   {% else %}
-  <h4>Ainda não é possível comparar as compras com segurança</h4>
+  <section class="clientes-analise-bloco" aria-labelledby="clientes-comparacao-indisponivel">
+  <header class="clientes-analise-cabecalho"><h4 id="clientes-comparacao-indisponivel">Ainda não é possível comparar as compras com segurança</h4></header>
   <p>{{ clientes_variacao.motivo }}</p>
+  </section>
   {% endif %}
 </details>
 {% endif %}

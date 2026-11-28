@@ -1,4 +1,5 @@
 ﻿{% extends 'estoque/base.html' %}{% load horarios_documentos horarios_recebimentos %}
+{% load relatorios %}
 {% block title %}Receber do cliente{% endblock %}
 {% block content %}
 <p class="rc-aviso-horario" style="font-size:12px;color:#334155">Horário de Belém (PA). Datas comerciais/informadas permanecem separadas dos registros no sistema.</p>
@@ -1561,6 +1562,22 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
   padding: 4px 7px; margin-bottom: 4px; line-height: 1.3;
 }
 
+.rc-cliente-consulta { min-width: 0; grid-area: client; }
+.rc-dividas-vencidas { color: #9a3412; font-size: .75rem; font-weight: 700; }
+.rc-maior-atraso { font-size: inherit; }
+.rc-consulta-dividas { margin: 0 0 6px; font-size: .8125rem; }
+.rc-consulta-dividas > summary { cursor: pointer; color: #475569; padding: 5px 2px; width: fit-content; }
+.rc-consulta-dividas > summary:focus-visible,
+.rc-consulta-lista:focus-visible { outline: 2px solid #15803d; outline-offset: 2px; }
+.rc-consulta-painel { padding: 10px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; }
+.rc-consulta-titulo { font-weight: 800; }
+.rc-consulta-painel p { margin: 0 0 6px; }
+.rc-consulta-totais, .rc-consulta-valores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0 0 8px; }
+.rc-consulta-painel dt { color: #475569; font-weight: 400; }
+.rc-consulta-painel dd { margin: 0; font-weight: 700; }
+.rc-consulta-lista { max-height: 320px; overflow: auto; overscroll-behavior: contain; }
+.rc-consulta-conta { border-top: 1px solid #e2e8f0; padding-top: 8px; overflow-wrap: anywhere; }
+.rc-consulta-conta p { margin-top: 4px; }
 </style>
 
 <div class="receber-cliente-page {% if feedback_recebimento %}recebimento-confirmado{% endif %}{% if cliente %} rc-cliente-selecionado{% endif %}">
@@ -1868,10 +1885,11 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
     <div id="receberClienteCarregando" class="rc-carregando-cliente" role="status" aria-live="polite">Carregando contas...</div>
 
     <div class="rc-pos-confirmacao-layout">
+      <div class="rc-cliente-consulta">
       <section class="rc-summary rc-cliente-faixa" aria-label="Resumo do cliente">
         <div class="rc-card cliente">
           <span class="rc-cliente-faixa-status">{% if cliente %}Cliente selecionado{% else %}Sem cliente{% endif %}</span>
-          <span class="rc-label">Cliente</span>
+          <span class="rc-label">Cliente{% if resumo_dividas.vencidas %} <small class="rc-dividas-vencidas rc-maior-atraso">· Maior atraso: {{ resumo_dividas.maior_atraso }} dias</small>{% endif %}</span>
           <span class="rc-value">{% if cliente %}{{ cliente.nome }}{% else %}Nenhum cliente selecionado{% endif %}</span>
         </div>
         <div class="rc-card">
@@ -1880,13 +1898,43 @@ body:has(.receber-cliente-page) .ambiente-sistema { grid-area: ambiente; }
         </div>
         <div class="rc-card">
           <span class="rc-label">Contas abertas</span>
-          <span class="rc-value">{{ total_contas }}</span>
+          <span class="rc-value">{{ total_contas }}{% if resumo_dividas.vencidas %} <small class="rc-dividas-vencidas">· {{ resumo_dividas.vencidas }} vencida{{ resumo_dividas.vencidas|pluralize }}</small>{% endif %}</span>
         </div>
         <div class="rc-card total">
           <span class="rc-label">Total em aberto</span>
           <span class="rc-value green">R$ {{ total_em_aberto|floatformat:2 }}</span>
         </div>
       </section>
+      {% if cliente %}
+      <details class="rc-consulta-dividas">
+        <summary>Detalhar dívidas</summary>
+        <div class="rc-consulta-painel">
+          <p class="rc-consulta-titulo">Contas de vendas em aberto</p>
+          {% if locacoes_abertas %}<p>Este detalhamento inclui as contas de vendas. O total do cartão também inclui locações.</p>{% endif %}
+          <dl class="rc-consulta-totais">
+            <div><dt>Valor original</dt><dd>{{ resumo_dividas.original|moeda_br }}</dd></div>
+            <div><dt>Já abatido</dt><dd>{{ resumo_dividas.pago|moeda_br }}</dd></div>
+            <div><dt>Saldo em aberto</dt><dd>{{ resumo_dividas.saldo|moeda_br }}</dd></div>
+            <div><dt>Contas vencidas</dt><dd>{{ resumo_dividas.vencidas }}</dd></div>
+          </dl>
+          <div class="rc-consulta-lista" tabindex="0" role="region" aria-label="Consulta resumida das contas abertas">
+            {% for conta in resumo_dividas.contas %}
+            <article class="rc-consulta-conta">
+              <strong>Conta #{{ conta.id }} · {% if conta.venda_id %}Venda #{{ conta.venda_id }}{% else %}Sem venda vinculada{% endif %}</strong>
+              <p><strong>Compra:</strong> {{ conta.data_compra|date:"d/m/Y"|default:"Não informada" }}<br>
+              <strong>Vencimento:</strong> {{ conta.vencimento|date:"d/m/Y"|default:"Não informado" }}{% if conta.dias_atraso %} <span class="rc-dividas-vencidas">· {{ conta.dias_atraso }} dia{{ conta.dias_atraso|pluralize }} de atraso</span>{% endif %}</p>
+              <dl class="rc-consulta-valores">
+                <div><dt>Original</dt><dd>{{ conta.original|moeda_br }}</dd></div>
+                <div><dt>Pago / abatido</dt><dd>{{ conta.pago|moeda_br }}</dd></div>
+                <div><dt>Saldo</dt><dd>{{ conta.saldo|moeda_br }}</dd></div>
+              </dl>
+            </article>
+            {% empty %}<p>Nenhuma conta de venda em aberto.</p>{% endfor %}
+          </div>
+        </div>
+      </details>
+      {% endif %}
+      </div>
 
       <div class="rc-pos-confirmacao-esquerda">
         <form method="post" id="formReceberCliente" {% if cliente %}action="{% url 'estoque:receber_cliente' cliente.id %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}"{% endif %}>

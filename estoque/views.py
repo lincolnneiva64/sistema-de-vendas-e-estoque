@@ -18639,7 +18639,12 @@ def receber_cliente(request, cliente_id):
         "Outro",
     )
 
-    contas = list(_contas_receber_abertas_cliente_qs(cliente.id, hoje))
+    contas = list(
+        _contas_receber_abertas_cliente_qs(cliente.id, hoje)
+        .annotate(data_compra_venda=F("venda__data_venda"))
+    )
+    from .services.resumo_dividas_cliente import resumir_dividas_cliente
+    resumo_dividas = resumir_dividas_cliente(contas)
     locacoes_abertas = list(_locacoes_abertas_cliente_qs(cliente.id))
 
     total_contas_em_aberto = sum(
@@ -18940,6 +18945,7 @@ def receber_cliente(request, cliente_id):
         "retorno_recebimento_url": reverse("estoque:receber_cliente_escolher"),
         "contas": contas,
         "locacoes_abertas": locacoes_abertas,
+        "resumo_dividas": resumo_dividas,
         "contas_preview": contas_preview,
         "total_contas": len(contas) + len(locacoes_abertas),
         "total_em_aberto": total_em_aberto,
