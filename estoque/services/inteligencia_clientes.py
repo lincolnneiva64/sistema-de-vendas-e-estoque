@@ -4,7 +4,7 @@ from heapq import nsmallest
 
 from django.conf import settings
 from django.db.models import Case, CharField, Count, Max, Min, Q, Sum, Value, When
-from django.db.models.functions import TruncMonth
+from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone
 
 from .relatorios_produtos import vendas_comerciais, itens_comerciais
@@ -298,40 +298,139 @@ def classificar_frequencia(dias, meses, primeira, ultima):
 
 
 def historico_ausencias(resultado, desempenho):
-    """Uma agregação adicional apenas para ausentes; não altera valores do recorte."""
+    """Histórico explicativo em lote; critérios/prioridades de ausências preservados."""
     ausentes = resultado['ausentes']
-    if not ausentes:
+    cadastros = {c['id']: c for c in resultado['impactos'] + ausentes}
+    if not cadastros:
         return
     inicio = desempenho['inicio']
     antes = Q(data_venda__lt=inicio)
+    atual = Q(data_venda__range=(inicio, desempenho['fim']))
+    observados = antes | atual
     # Hoje pode comprovar uma compra posterior, mas nunca integra a comparação.
     hoje = timezone.localdate()
-    linhas = (vendas_comerciais().filter(cliente_id__in=[c['id'] for c in ausentes],
+    linhas = (vendas_comerciais().filter(cliente_id__in=cadastros,
                                         data_venda__lte=hoje)
-        .values('cliente_id').annotate(
+        .annotate(mes=TruncMonth('data_venda'), semana=TruncWeek('data_venda')).values('cliente_id', 'mes', 'semana').annotate(
             dias=Count('data_venda', distinct=True, filter=antes),
-            meses=Count(TruncMonth('data_venda'), distinct=True, filter=antes),
+            notas=Count('pk', filter=observados),
+            dias_observados=Count('data_venda', distinct=True, filter=observados),
+            primeira_observada=Min('data_venda', filter=observados), ultima_observada=Max('data_venda', filter=observados),
+            primeira_atual=Min('data_venda', filter=atual), ultima_atual=Max('data_venda', filter=atual),
             primeira=Min('data_venda', filter=antes), ultima=Max('data_venda', filter=antes),
             anterior_recorte=Max('data_venda', filter=Q(data_venda__lt=desempenho['referencia_inicio'])),
-            posterior=Min('data_venda', filter=Q(data_venda__gt=desempenho['fim']))).order_by())
-    por_id = {l['cliente_id']: l for l in linhas}
+            posterior=Min('data_venda', filter=Q(data_venda__gt=desempenho['fim']))).order_by('cliente_id', 'mes', 'semana'))
+    def vazio():
+        return dict(dias=0, meses=0, meses_com_compras=[], primeira=None, ultima=None,
+                    anterior_recorte=None, posterior=None, notas_observadas=0, dias_observados=0,
+                    semanas_com_compras=set(), meses_observados=set(), primeira_observada=None, ultima_observada=None,
+                    primeira_atual=None, ultima_atual=None)
+    por_id = {}
+    for linha in linhas:
+        h = por_id.setdefault(linha['cliente_id'], vazio())
+        h['cliente_id'] = linha['cliente_id']
+        h['dias'] += linha['dias']
+        h['dias_observados'] += linha['dias_observados']
+        h['notas_observadas'] += linha['notas']
+        if linha['dias_observados']:
+            h['semanas_com_compras'].add(linha['semana'])
+            h['meses_observados'].add(linha['mes'])
+        if linha['dias'] and linha['mes'] not in h['meses_com_compras']:
+            h['meses_com_compras'].append(linha['mes'])
+            h['meses'] += 1
+        for campo, escolher in (('primeira', min), ('ultima', max), ('anterior_recorte', max), ('posterior', min),
+                                ('primeira_observada', min), ('ultima_observada', max), ('primeira_atual', min), ('ultima_atual', max)):
+            if linha[campo] is not None:
+                h[campo] = escolher(h[campo], linha[campo]) if h[campo] is not None else linha[campo]
     contagem = dict(recorrentes=0, ocasionais=0, insuficientes=0)
+    leitura_contagem = dict(frequentes=0, mensais=0, ocasionais=0, insuficiente=0)
     prioridades = []
-    for cadastro in ausentes:
-        h = por_id.get(cadastro['id'], dict(dias=0, meses=0, primeira=None, ultima=None,
-                                            anterior_recorte=None, posterior=None))
+    ids_ausentes = {c['id'] for c in ausentes}
+    for cadastro in cadastros.values():
+        h = por_id.get(cadastro['id'], vazio())
+        h['semanas_com_compras'] = sorted(h['semanas_com_compras'])
+        h['meses_observados'] = sorted(h['meses_observados'])
+        h['leitura_frequencia'] = interpretar_frequencia_compras(h, cadastro)
         chave, descricao = classificar_frequencia(h['dias'], h['meses'], h['primeira'], h['ultima'])
         h.update(chave=chave, descricao=descricao)
         cadastro['historico'] = h
+        h['explicacao'] = explicar_historico_compras(h, cadastro, desempenho, hoje)
+        if cadastro['id'] not in ids_ausentes:
+            continue
         contagem[chave] += 1
+        leitura_contagem[h['leitura_frequencia']['chave']] += 1
         if chave == 'recorrentes' and h['posterior'] is None and cadastro['anterior'] > ZERO:
             prioridades.append(cadastro)
-    resultado['historico_ausencias'] = dict(contagem=contagem, prioridades=prioridades[:3],
-                                            limite_posterior=hoje)
+    if ausentes:
+        resultado['historico_ausencias'] = dict(contagem=contagem, leitura_contagem=leitura_contagem, prioridades=prioridades[:3],
+                                                limite_posterior=hoje)
+
+
+def interpretar_frequencia_compras(h, cadastro):
+    """Leitura explicativa; não substitui a classificação usada nas ausências.
+
+    Oito dias distintos, com ao menos um dia de compra por sete dias de amplitude,
+    evidenciam atividade frequente. Não implica comprar toda semana ou todo mês.
+    Avalia antes, período atual e união observada, sem exigir vários meses.
+    """
+    def frequente(dias, primeira, ultima):
+        return bool(dias >= 8 and primeira and ultima and dias * 7 >= (ultima - primeira).days + 1)
+    if any((frequente(h['dias'], h['primeira'], h['ultima']),
+            frequente(cadastro.get('dias_atual', 0), h['primeira_atual'], h['ultima_atual']),
+            frequente(h['dias_observados'], h['primeira_observada'], h['ultima_observada']))):
+        return dict(chave='frequentes', rotulo='Cliente frequente e ativo.' if cadastro['notas_atual'] else 'Compras frequentes no histórico observado.')
+    meses = h['meses_observados']
+    if len(meses) >= 2 and all(b.year * 12 + b.month == a.year * 12 + a.month + 1 for a,b in zip(meses, meses[1:])):
+        return dict(chave='mensais', rotulo='Cliente ativo com compras em meses consecutivos.' if cadastro['notas_atual'] else 'Compras em meses consecutivos.')
+    if h['dias_observados'] >= 2:
+        return dict(chave='ocasionais', rotulo='Cliente ocasional e ativo.' if cadastro['notas_atual'] else 'Compras ocasionais no histórico observado.')
+    return dict(chave='insuficiente', rotulo='Histórico insuficiente para definir frequência.')
+
+
+def explicar_historico_compras(historico, cadastro, desempenho, hoje):
+    """Síntese dos registros e do movimento no recorte, sem redefinir critérios."""
+    h = historico
+    inicio, fim = desempenho['inicio'], desempenho['fim']
+    frases = []
+    meses = h['meses_observados']
+    if meses:
+        nomes = [nome_periodo(m, m) for m in meses]
+        consecutivos = all(b.year * 12 + b.month == a.year * 12 + a.month + 1 for a, b in zip(meses, meses[1:]))
+        mesmo_ano = all(m.year == meses[0].year for m in meses)
+        if mesmo_ano:
+            nomes = [nome.removesuffix(f' de {meses[0].year}') for nome in nomes]
+        if len(meses) > 2 and consecutivos:
+            periodo = 'entre ' + nomes[0] + ' e ' + nomes[-1]
+        else:
+            periodo = 'em ' + (nomes[0] if len(nomes) == 1 else ', '.join(nomes[:-1]) + ' e ' + nomes[-1])
+        if mesmo_ano:
+            periodo += f' de {meses[0].year}'
+        dias, semanas = h['dias_observados'], len(h['semanas_com_compras'])
+        if dias == 1:
+            frases.append(f'Realizou compras em 1 dia, {periodo}.')
+        else:
+            unidade = 'semana' if semanas == 1 else 'semanas'
+            frases.append(f'Realizou compras em {dias} dias diferentes, distribuídos por {semanas} {unidade}, {periodo}.')
+    else:
+        frases.append('Não há compras registradas no histórico observado.')
+    if cadastro['notas_atual']:
+        percentual = cadastro.get('variacao_percentual')
+        if percentual is not None and percentual < 0:
+            valor = format(abs(percentual), '.2f').replace('.', ',')
+            frases.append(f"Continua comprando, mas apresentou redução de {valor}% no faturamento do período comparado.")
+        else:
+            frases.append(f"Compras registradas no período consultado, de {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}.")
+    elif not h['posterior'] and inicio.day == 1 and (inicio.year, inicio.month) == (hoje.year, hoje.month):
+        frases.append(f"Não foram identificadas novas compras em {nome_periodo(inicio, inicio)}, até {hoje:%d/%m/%Y}.")
+    else:
+        frases.append(f"Sem compras no período consultado, de {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}.")
+    if h['posterior']:
+        frases.append(f"Comprou novamente em {h['posterior']:%d/%m/%Y}, após o período consultado.")
+    return frases
 
 
 def participacao_clientes(desempenho):
-    """Uma agregação dos recortes + uma do histórico se há ausentes; zero se incomparáveis."""
+    """Recortes, histórico e dívidas em lote; zero consultas se incomparáveis."""
     if not desempenho.get('comparavel'):
         return resumir_clientes([], desempenho)
     atual = (desempenho['inicio'], desempenho['fim'])
@@ -348,4 +447,32 @@ def participacao_clientes(desempenho):
     resultado = resumir_clientes(linhas, desempenho, confirmados)
     if resultado['disponivel']:
         historico_ausencias(resultado, desempenho)
+        situacao_financeira_clientes(resultado, confirmados)
     return resultado
+
+
+def situacao_financeira_clientes(resultado, confirmados=()):
+    """Enriquece atenção/ausências sem alterar rankings ou critérios comerciais."""
+    from .resumo_dividas_cliente import resumir_dividas_clientes
+
+    excluidos = {CLIENTE_BALCAO_ID, *confirmados}
+    cadastros = [c for c in resultado['impactos'] + resultado['ausentes']
+                 if c['id'] is not None and c['id'] not in excluidos]
+    resumos = resumir_dividas_clientes(c['id'] for c in cadastros)
+    for cadastro in cadastros:
+        financeiro = resumos[cadastro['id']]
+        cadastro['financeiro'] = financeiro
+        sem_compras = not cadastro['notas_atual']
+        situacao = 'Sem compras no período atual' if sem_compras else 'Redução de compras'
+        cadastro['situacao_financeira'] = situacao + (
+            ' · dívida vencida.' if financeiro['vencidas'] else ' · sem dívida vencida.')
+        historico = cadastro.get('historico', {})
+        leitura = historico.get('leitura_frequencia')
+        insuficiente = sem_compras and (leitura['chave'] == 'insuficiente' if leitura else historico.get('chave') == 'insuficientes')
+        cadastro['historico_insuficiente_ausencia'] = insuficiente
+        cadastro['prioridade_acompanhamento'] = (
+            'Priorizar cobrança e acompanhamento comercial.' if financeiro['vencidas'] else
+            'Acompanhar próximas compras; histórico insuficiente para avaliar ausência habitual.' if insuficiente else
+            'Acompanhamento comercial: conferir o histórico e as próximas compras.')
+    if resumos:
+        resultado['financeiro_data_referencia'] = next(iter(resumos.values()))['data_referencia']

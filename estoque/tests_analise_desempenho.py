@@ -147,7 +147,7 @@ class AnaliseVisualTests(PostgreSQLIsoladoTests, StaticLiveServerTestCase):
                         deviceScaleFactor=1, mobile=largura < 600))
                     tab.call('Page.navigate', {'url': self.live_server_url + '/relatorios/vendas/?periodo=personalizado&data_inicial=2026-11-01&data_final=2026-11-19&modo=mensal'})
                     tab.wait("document.readyState==='complete' && !!document.getElementById('analise-desempenho')")
-                    self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"), 9)
+                    self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"), 10)
                     self.assertTrue(tab.evaluate("document.documentElement.scrollWidth <= innerWidth"))
                     self.assertTrue(tab.evaluate("!!document.querySelector('a[href*=\"evolucao-diaria\"]')"))
                     tab.evaluate("document.getElementById('analise-desempenho').scrollIntoView()")

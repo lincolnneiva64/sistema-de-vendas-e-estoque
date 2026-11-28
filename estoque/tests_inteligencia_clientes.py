@@ -348,7 +348,7 @@ class ParticipacaoDBTests(FixturesClientes,PostgreSQLIsoladoTests,TestCase):
         analise=self.analisar()
         with CaptureQueriesContext(connection) as queries:
             r=participacao_clientes(analise)
-        self.assertEqual(len(queries),2)  # Recortes + histórico agregado das ausências.
+        self.assertEqual(len(queries),3)  # Recortes + histórico + dívidas atuais agregadas.
         self.assertTrue(queries[0]['sql'].lstrip().upper().startswith('SELECT'))
         self.assertNotIn('estoque_itemvenda',queries[0]['sql'])
         self.assertTrue(queries[1]['sql'].lstrip().upper().startswith('SELECT'))
@@ -439,10 +439,10 @@ class ParticipacaoDBTests(FixturesClientes,PostgreSQLIsoladoTests,TestCase):
         self.assertEqual(depois['historico_ausencias']['prioridades'],[])
         self.assertEqual((depois['anterior'],depois['atual']),(187,163))
 
-    def test_sem_ausencias_nao_consulta_historico_e_coletivo_nao_vira_ausente_individual(self):
+    def test_sem_ausencias_historico_da_atencao_nao_conta_coletivo_como_ausente(self):
         analise=self.analisar()
         with override_settings(RELATORIOS_CLIENTES_COLETIVOS_CONFIRMADOS=(self.c2.pk,)):
-            with self.assertNumQueries(1):
+            with self.assertNumQueries(3):
                 r=participacao_clientes(analise)
         self.assertEqual(r['ausentes'],[])
         self.assertNotIn('historico_ausencias',r)
@@ -458,7 +458,7 @@ class ParticipacaoDBTests(FixturesClientes,PostgreSQLIsoladoTests,TestCase):
             with CaptureQueriesContext(connection) as queries:
                 r=participacao_clientes(analise)
             tempos.append((perf_counter()-inicio)*1000)
-            self.assertEqual(len(queries),2)
+            self.assertEqual(len(queries),3)
             self.assertEqual(r['diferenca'],-24)
         request=RequestFactory().get('/relatorios/vendas/',dict(periodo='personalizado',
             data_inicial='2026-11-01',data_final='2026-11-24',modo='semanal'))
@@ -511,10 +511,10 @@ class ParticipacaoVisualTests(FixturesClientes,PostgreSQLIsoladoTests,StaticLive
                         tab.wait("document.getElementById('participacao-clientes').open")
                         self.assertTrue(tab.evaluate("document.documentElement.scrollWidth <= innerWidth"))
                         self.assertTrue(tab.evaluate("[...document.querySelectorAll('#participacao-clientes .relatorios-tabela')].every(e=>e.scrollWidth <= e.clientWidth + 1)"))
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"),9)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"),10)
                         self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes a').length"),0)
                         self.assertTrue(tab.evaluate("!!document.querySelector('#participacao-clientes [data-clientes-total]')"))
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes details:not(.cliente-historico)').length"),1)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes details:not(.cliente-historico):not(.cliente-financeiro)').length"),1)
                         self.assertEqual(tab.evaluate("document.querySelectorAll('#participacao-clientes table').length"),6)
                         self.assertTrue(tab.evaluate("document.querySelector('#clientes-aumentos').getBoundingClientRect().height > 0"))
                         tab.evaluate("document.getElementById('participacao-clientes').scrollIntoView()")

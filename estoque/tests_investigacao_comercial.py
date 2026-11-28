@@ -469,7 +469,7 @@ class InvestigacaoVisualTests(CenarioInvestigacao, PostgreSQLIsoladoTests, Stati
                         tab.call('Emulation.setDeviceMetricsOverride',dict(width=largura,height=900,deviceScaleFactor=1,mobile=largura<600))
                         tab.call('Page.navigate',{'url':self.live_server_url+'/relatorios/vendas/?'+urlencode(FILTROS)})
                         tab.wait("document.readyState==='complete' && !!document.getElementById('analise-desempenho')")
-                        self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"),9)
+                        self.assertEqual(tab.evaluate("document.querySelectorAll('.relatorios-indicadores > div').length"),10)
                         tab.evaluate("document.querySelector('nav[aria-label=\"Investigar vendas\"] a').focus()")
                         self.assertEqual(tab.evaluate("document.activeElement.textContent"),'Investigar vendas por classes e produtos')
                         self.assertTrue(tab.evaluate("document.activeElement.getBoundingClientRect().bottom<=innerHeight"))

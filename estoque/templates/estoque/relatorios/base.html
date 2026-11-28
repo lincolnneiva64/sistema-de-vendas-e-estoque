@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Relatórios e Análises Gerenciais{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'estoque/relatorios.css' %}?v=clientes-blocos-20261128">
+<link rel="stylesheet" href="{% static 'estoque/relatorios.css' %}?v=resultado-simulado-20261128">
 <main class="relatorios {% block classe_relatorios %}{% endblock %}">
   <nav aria-label="Navegação dos relatórios"><a href="{% url 'estoque:home' %}">Início</a> / <a href="{% url 'estoque:relatorios_inicio' %}">Relatórios</a></nav>
   {% block relatorio %}{% endblock %}

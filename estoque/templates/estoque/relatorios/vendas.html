@@ -23,8 +23,11 @@
 {% if faturamento_negocio %}
 <dl class="faturamento-negocio" aria-label="Faturamento da Santa Bárbara">
   <div><dt>Faturamento de mercadorias</dt><dd>{{ faturamento_negocio.mercadorias|moeda_br }}</dd></div>
-  <div class="faturamento-negocio-locacoes"><dt>Faturamento de locações de mesas e cadeiras</dt><dd>{{ faturamento_negocio.locacoes.faturamento|moeda_br }}</dd><dd class="faturamento-negocio-legenda">{{ faturamento_negocio.locacoes.quantidade }} locaç{{ faturamento_negocio.locacoes.quantidade|pluralize:'ão,ões' }} no período</dd></div>
-  <div class="faturamento-negocio-total"><dt>Faturamento total da Santa Bárbara</dt><dd>{{ faturamento_negocio.total|moeda_br }}</dd></div>
+  <div class="faturamento-negocio-locacoes"><dt>Faturamento de locações de mesas e cadeiras</dt><dd>{{ faturamento_negocio.locacoes.faturamento|moeda_br }}</dd><dd class="faturamento-negocio-legenda">{{ faturamento_negocio.locacoes.quantidade }} locaç{{ faturamento_negocio.locacoes.quantidade|pluralize:'ão,ões' }} no período · {{ faturamento_negocio.participacao_locacoes|numero_br }}% do faturamento total</dd></div>
+  <div class="faturamento-negocio-total"><dt>Faturamento total da Santa Bárbara</dt><dd>{{ faturamento_negocio.total|moeda_br }}</dd>
+    <dd class="faturamento-resultado-titulo">Resultado bruto combinado simulado{% if margem_geral_simulada.parcial %} · Parcial{% endif %}</dd>
+    <dd class="faturamento-resultado-valor">{% if margem_geral_simulada.resultado_bruto != None %}{{ margem_geral_simulada.resultado_bruto|moeda_br }}{% else %}Indisponível{% endif %}</dd>
+  </div>
 </dl>
 <p class="faturamento-negocio-escopo">Locações pela data de entrega do contrato até hoje, sem canceladas; independe da confirmação operacional. Indicadores e análises abaixo: somente mercadorias.</p>
 {% endif %}
@@ -35,13 +38,13 @@
   <div class="indicador-ticket"><dt>Ticket médio</dt><dd>{{ resumo.ticket_medio|moeda_br }}</dd></div>
   <div class="indicador-media-diaria"><dt>Faturamento médio diário</dt>
     <dd{% if resumo.media_diaria.valor == None %} class="indicador-sem-periodo"{% endif %}>{% if resumo.media_diaria.valor != None %}{{ resumo.media_diaria.valor|moeda_br }}{% else %}Sem período encerrado{% endif %}</dd>
-    {% if resumo.media_diaria.inclui_hoje %}<dd class="indicador-legenda">Média calculada até ontem. O dia atual não entra no cálculo</dd>{% endif %}
+    {% if resumo.media_diaria.inclui_hoje %}<dd class="indicador-legenda">Média até ontem, sem o dia atual.</dd>{% endif %}
   </div>
   <div class="indicador-vista"><dt>Vendas à vista</dt><dd>{{ resumo.vista.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.vista.percentual|numero_br }}% do faturamento</span><span>{{ resumo.vista.quantidade }} venda(s)</span></dd></div>
   <div class="indicador-prazo"><dt>Vendas a prazo</dt><dd>{{ resumo.prazo.valor|moeda_br }}</dd><dd class="indicador-legenda"><span>{{ resumo.prazo.percentual|numero_br }}% do faturamento</span><span>{{ resumo.prazo.quantidade }} venda(s)</span></dd></div>
 </dl>
 
-<dl class="relatorios-indicadores relatorios-rentabilidade" aria-label="Rentabilidade das mercadorias">
+<dl class="relatorios-indicadores relatorios-rentabilidade" aria-label="Rentabilidade das mercadorias e simulação geral">
   <div><dt>CMV das mercadorias</dt>
     <dd>{% if resumo.rentabilidade.estimativa_setembro %}{{ resumo.rentabilidade.estimativa_setembro.cmv_parcial|moeda_br }}{% elif resumo.rentabilidade.com_custo %}{{ resumo.rentabilidade.cmv|moeda_br }}{% else %}Indisponível{% endif %}</dd>
     {% if resumo.rentabilidade.estimativa_setembro or not resumo.rentabilidade.disponivel and resumo.rentabilidade.com_custo %}<dd class="indicador-legenda">Parcial</dd>{% endif %}
@@ -54,7 +57,12 @@
     <dd>{% if resumo.rentabilidade.estimativa_setembro %}{% if resumo.rentabilidade.estimativa_setembro.margem_parcial != None %}{{ resumo.rentabilidade.estimativa_setembro.margem_parcial|numero_br }}%{% else %}Indisponível{% endif %}{% elif resumo.rentabilidade.margem != None %}{{ resumo.rentabilidade.margem|numero_br }}%{% elif resumo.rentabilidade.margem_coberta != None %}{{ resumo.rentabilidade.margem_coberta|numero_br }}%{% else %}Indisponível{% endif %}</dd>
     {% if resumo.rentabilidade.estimativa_setembro or not resumo.rentabilidade.disponivel and resumo.rentabilidade.com_custo %}<dd class="indicador-legenda">Parcial</dd>{% endif %}
   </div>
+  <div class="indicador-margem-simulada"><dt>Margem simulada com locações</dt>
+    <dd>{% if margem_geral_simulada.valor != None %}{{ margem_geral_simulada.valor|numero_br }}%{% else %}Indisponível{% endif %}</dd>
+    <dd class="indicador-legenda">Mercadorias + mesas e cadeiras{% if margem_geral_simulada.parcial %} · Parcial{% endif %}</dd>
+  </div>
 </dl>
+<p class="grafico-nota margem-simulada-nota">Simulação: usa o lucro gerencial exibido das mercadorias e a receita integral das locações, sem custos operacionais ou depreciação das locações. Não representa lucro líquido nem margem consolidada efetivamente apurada.</p>
 
 {% if resumo.rentabilidade.estimativa_setembro %}
 {% if resumo.rentabilidade.estimativa_setembro.periodo_misto %}

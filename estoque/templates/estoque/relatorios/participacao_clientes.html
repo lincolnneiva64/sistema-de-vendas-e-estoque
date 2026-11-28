@@ -40,7 +40,8 @@
   </section>
   <section class="clientes-analise-bloco" aria-labelledby="clientes-atencao">
   <header class="clientes-analise-cabecalho"><h4 id="clientes-atencao">Clientes que merecem atenção</h4></header>
-  {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.impactos titulo='Cinco maiores reduções em reais' vazio='Nenhum cadastro reduziu o valor de suas compras nestes períodos.' %}
+  {% if clientes_variacao.financeiro_data_referencia %}<p class="clientes-financeiro-referencia">Contas de vendas: situação atual em {{ clientes_variacao.financeiro_data_referencia|date:'d/m/Y' }} (Belém), independente dos períodos comparados. Dívida vencida não comprova o motivo da redução das compras.</p>{% endif %}
+  {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.impactos mostrar_financeiro=True mostrar_historico=True titulo='Cinco maiores reduções em reais' vazio='Nenhum cadastro reduziu o valor de suas compras nestes períodos.' %}
   </section>
   <section class="clientes-analise-bloco" aria-labelledby="clientes-aumentos">
   <header class="clientes-analise-cabecalho"><h4 id="clientes-aumentos">Clientes que estão comprando mais</h4></header>
@@ -51,10 +52,11 @@
   <header class="clientes-analise-cabecalho"><h4 id="clientes-ausentes">{{ clientes_variacao.comercial.ausentes.descricao }} — {{ clientes_variacao.ausentes|length }} cadastro{{ clientes_variacao.ausentes|length|pluralize }}</h4></header>
   <p>Total comprado antes: <strong>{{ clientes_variacao.comercial.ausentes.anterior|moeda_br }}</strong>. Lista completa, por valor comprado.</p>
   {% with historico=clientes_variacao.historico_ausencias %}{% if historico %}
-  <p>Histórico anterior a {{ clientes_variacao.comercial.periodo_atual }}: <strong>{{ historico.contagem.recorrentes }}</strong> com compras recorrentes; <strong>{{ historico.contagem.ocasionais }}</strong> com compras ocasionais; <strong>{{ historico.contagem.insuficientes }}</strong> com histórico insuficiente para avaliar a frequência.</p>
-  {% if historico.prioridades %}<p><strong>Prioridades entre os compradores recorrentes:</strong> {% for cadastro in historico.prioridades %}#{{ cadastro.id|unlocalize }} · {{ cadastro.nome }} ({{ cadastro.anterior|moeda_br }}){% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
+  <p>Leitura do histórico observado: <strong>{{ historico.leitura_contagem.frequentes }}</strong> com compras frequentes; <strong>{{ historico.leitura_contagem.mensais }}</strong> com compras em meses consecutivos; <strong>{{ historico.leitura_contagem.ocasionais }}</strong> com compras ocasionais; <strong>{{ historico.leitura_contagem.insuficiente }}</strong> com histórico insuficiente.</p>
+  {% if historico.prioridades %}<p><strong>Acompanhamento entre clientes com compras repetidas no histórico:</strong> {% for cadastro in historico.prioridades %}#{{ cadastro.id|unlocalize }} · {{ cadastro.nome }} ({{ cadastro.anterior|moeda_br }}){% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
   {% endif %}{% endwith %}
-  {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.ausentes mostrar_historico=True titulo=clientes_variacao.comercial.ausentes.descricao vazio='Nenhuma ausência nestes períodos.' %}
+  {% if clientes_variacao.financeiro_data_referencia %}<p class="clientes-financeiro-referencia">Contas de vendas: situação atual em {{ clientes_variacao.financeiro_data_referencia|date:'d/m/Y' }} (Belém), independente dos períodos comparados. A ausência de compras neste intervalo não comprova sua causa nem uma perda definitiva do cliente.</p>{% endif %}
+  {% include 'estoque/relatorios/clientes_variacao_lista.html' with lista=clientes_variacao.ausentes mostrar_historico=True mostrar_financeiro=True titulo=clientes_variacao.comercial.ausentes.descricao vazio='Nenhuma ausência nestes períodos.' %}
   </section>
   {% endif %}
   {% else %}

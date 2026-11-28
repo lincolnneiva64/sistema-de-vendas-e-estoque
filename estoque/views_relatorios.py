@@ -19,7 +19,7 @@ from django.utils import timezone
 from .services.relatorios import resumo_vendas
 from .services.analise_desempenho import desempenho_comercial
 from .services.inteligencia_clientes import participacao_clientes, resumo_balcao_clientes
-from .services.faturamento_negocio import consolidar_faturamento
+from .services.faturamento_negocio import consolidar_faturamento, simular_margem_geral
 from .services.investigacao_comercial import (
     investigar_classes, investigar_produtos, investigar_clientes_produto,
     outros_produtos_somente_atual, chave_classe, ordenar_coluna, COLUNAS_ORDENACAO, normalizar_chave_classe,
@@ -505,6 +505,8 @@ def vendas(request):
                 contexto['inicio'], contexto['fim'], contexto['resumo'])
             contexto['faturamento_negocio'] = consolidar_faturamento(
                 contexto['inicio'], contexto['fim'], contexto['resumo']['faturamento'])
+            contexto['margem_geral_simulada'] = simular_margem_geral(
+                contexto['faturamento_negocio'], contexto['resumo']['rentabilidade'])
         parametros = request.GET.copy()
         parametros.pop('pagina', None)
         for campo in ('periodo', 'data_inicial', 'data_final'):

@@ -1,0 +1,16 @@
+{% load relatorios %}
+{% if cadastro.financeiro.saldo > 0 %}
+<small class="cliente-financeiro-situacao{% if cadastro.financeiro.vencidas %} cliente-divida-vencida{% endif %}">{{ cadastro.situacao_financeira }}</small>
+{% if cadastro.historico_insuficiente_ausencia %}<small>Histórico insuficiente para avaliar ausência habitual.</small>{% endif %}
+<details class="cliente-financeiro">
+  <summary{% if cadastro.financeiro.vencidas %} class="cliente-divida-vencida"{% endif %}>{% if cadastro.financeiro.vencidas %}Contas vencidas · {{ cadastro.financeiro.vencido|moeda_br }} em atraso{% else %}Contas em aberto · {{ cadastro.financeiro.saldo|moeda_br }} · sem vencidas{% endif %}</summary>
+  <dl class="cliente-financeiro-valores">
+    <div><dt>Em aberto</dt><dd>{{ cadastro.financeiro.saldo|moeda_br }}</dd></div>
+    <div><dt>Vencido e não pago</dt><dd{% if cadastro.financeiro.vencidas %} class="cliente-divida-vencida"{% endif %}>{{ cadastro.financeiro.vencido|moeda_br }}</dd></div>
+    <div><dt>Contas vencidas</dt><dd>{{ cadastro.financeiro.vencidas }}</dd></div>
+    <div><dt>Maior atraso</dt><dd{% if cadastro.financeiro.vencidas %} class="cliente-divida-vencida"{% endif %}>{{ cadastro.financeiro.maior_atraso }} dia{{ cadastro.financeiro.maior_atraso|pluralize }}</dd></div>
+  </dl>
+  <small>{% if cadastro.financeiro.parciais %}{{ cadastro.financeiro.parciais }} conta{{ cadastro.financeiro.parciais|pluralize }} aberta{{ cadastro.financeiro.parciais|pluralize }} com pagamento/abatimento parcial.{% else %}Sem pagamento/abatimento parcial nas contas abertas.{% endif %}</small>
+  <small>{{ cadastro.prioridade_acompanhamento }}</small>
+</details>
+{% endif %}
