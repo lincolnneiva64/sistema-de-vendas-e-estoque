@@ -2074,7 +2074,8 @@ td:first-child {
                 <button type="button" id="btnProximoVencimentoVenda" class="venda-proximo-mobile" aria-label="Continuar após Vencimento">Próximo</button>
             </div>
             <select id="tipoVenda">
-                <option selected>À vista</option>
+                <option value="" selected>Selecione</option>
+                <option>À vista</option>
                 <option>A prazo</option>
             </select>
             <select id="operadorVenda" title="Operador">
@@ -3556,7 +3557,7 @@ function atualizarOpcoesConsumoProprio() {
     } else if (!permitido && opcao) {
         opcao.remove();
     }
-    if (!tipoVenda.value) tipoVenda.value = "À vista";
+    if (!clienteId.value && !vendaEdicaoVenda?.id) tipoVenda.value = "";
     window.atualizarSelectsBonitosVenda?.();
 }
 
@@ -3848,7 +3849,7 @@ function atualizarVencimentoAutomaticoMobile() {
     vencimentoVenda.value = vencimentoAutomaticoMobile;
 }
 
-function atualizarPrazoEVencimentoCliente() {
+function atualizarPrazoEVencimentoCliente(aplicarCondicaoPadrao = false) {
     if (!clienteSelecionado) return;
 
     const prazo = parseInt(clienteSelecionado.prazo || "0", 10);
@@ -3856,7 +3857,7 @@ function atualizarPrazoEVencimentoCliente() {
 
     if (garantirTipoVendaEdicaoConsumoProprio()) return;
 
-    if (vendaEdicaoVenda?.id) return;
+    if (vendaEdicaoVenda?.id || !aplicarCondicaoPadrao) return;
 
     if (clientesConsumoProprioVenda.has(String(clienteSelecionado.id || ""))) {
         if (!usarVencimentoAutomaticoMobile()) vencimentoVenda.value = "";
@@ -3865,10 +3866,9 @@ function atualizarPrazoEVencimentoCliente() {
         return;
     }
 
+    tipoVenda.value = String(clienteSelecionado.id) === "1126" ? "À vista" : "A prazo";
     if (usarVencimentoAutomaticoMobile()) atualizarVencimentoAutomaticoMobile();
     else vencimentoVenda.value = calcularVencimentoCliente();
-
-    tipoVenda.value = "À vista";
     tipoVenda.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
@@ -4430,6 +4430,8 @@ for (const campo of [tipoVenda, vencimentoVenda]) {
 function preencherResumoCliente(cliente, carregarDetalheCompleto = false, preservarCondicoesPagamento = false) {
     clearTimeout(clienteBuscaTimer);
     clienteBuscaAbortController?.abort();
+    const mudouCliente = String(clienteId.value || "") !== String(cliente.id || "")
+        || String(clienteSelecionado?.id || "") !== String(cliente.id || "");
     clienteSelecionado = cliente;
     clienteResumoSuspenso = false;
     clienteId.value = cliente.id || "";
@@ -4437,7 +4439,7 @@ function preencherResumoCliente(cliente, carregarDetalheCompleto = false, preser
     clienteBusca.value = cliente.nome || "";
     guardarClienteSelecionado(cliente);
     atualizarCabecalhoCliente(cliente, false, carregarDetalheCompleto);
-    if (!preservarCondicoesPagamento) atualizarPrazoEVencimentoCliente();
+    if (!preservarCondicoesPagamento || mudouCliente) atualizarPrazoEVencimentoCliente(mudouCliente);
     atualizarHistoricoProdutoCliente();
     clienteSugestoesBox.style.display = "none";
     clienteIndexAtivo = -1;
@@ -5432,7 +5434,8 @@ function mostrarAviso(mensagem, campo = null, selecionar = false) {
 function limparTipoPagamentoVenda() {
     if (!tipoVenda) return;
     if (garantirTipoVendaEdicaoConsumoProprio()) return;
-    tipoVenda.value = "À vista";
+    if (vendaEdicaoVenda?.id) return;
+    tipoVenda.value = "";
     atualizarOpcoesConsumoProprio();
     tipoVenda.dispatchEvent(new Event("change"));
 }
